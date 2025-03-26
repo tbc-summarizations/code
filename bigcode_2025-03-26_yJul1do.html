@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+ <html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Circle Escape Simulation</title>
+  <style>
+   body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: sans-serif;
+   }
+
+   #simulationContainer {
+    position: relative;
+   }
+
+   canvas {
+    border: 1px solid #000;
+    background-color: #fff;
+    display: block; /* Prevent scrollbar in some cases */
+   }
+
+   #resetButton {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    padding: 8px 15px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #eee;
+    cursor: pointer;
+    font-size: 1em;
+   }
+
+   #resetButton:hover {
+    background-color: #ddd;
+   }
+
+   #gameTitle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 1.5em;
+    color: #333;
+   }
+  </style>
+ </head>
+ <body>
+  <div id="simulationContainer">
+   <canvas id="simulationCanvas"></canvas>
+   <button id="resetButton">Reset</button>
+   <div id="gameTitle">Circle Escape</div>
+  </div>
+
+  <script>
+   const canvas = document.getElementById('simulationCanvas');
+   const ctx = canvas.getContext('2d');
+   const resetButton = document.getElementById('resetButton');
+
+   canvas.width = 800;
+   canvas.height = 600;
+
+   const numBigCircles = 100;
+   let bigCircles = [];
+   let smallCircle;
+   const gravity = 0.05; // Reduced gravity for slower fall
+   const bounceFactor = 0.7;
+   let animationFrameId;
+   let gameActive = true;
+
+   class Circle {
+    constructor(x, y, radius, color, isSmall) {
+     this.x = x;
+     this.y = y;
+     this.radius = radius;
+     this.color = color;
+     this.isSmall = isSmall;
+     this.xVelocity = 0;
+     this.yVelocity = 0;
+     this.rotationAngle = 0;
+     this.rotationSpeed = isSmall ? 0 : (Math.random() * 0.005 - 0.0025); // Slower rotation
+    }
+
+    draw() {
+     ctx.beginPath();
+     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+     ctx.fillStyle = this.color;
+     ctx.fill();
+     ctx.closePath();
+    }
+
+    update() {
+     this.x += this.xVelocity;
+     this.y += this.yVelocity;
+    }
+   }
+
+   class BigCircle extends Circle {
+    constructor(x, y, radius, holeAngleStart, holeAngleEnd) {
+     super(x, y, radius, 'black', false);
+     this.holeAngleStart = holeAngleStart;
+     this.holeAngleEnd = holeAngleEnd;
+     this.isBroken = false;
+    }
+
+    draw() {
+     ctx.save();
+     ctx.translate(this.x, this.y);
+     ctx.rotate(this.rotationAngle);
+
+     ctx.beginPath();
+     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+     ctx.strokeStyle = this.color;
+     ctx.lineWidth = 2;
+     ctx.stroke();
+
+     ctx.beginPath();
+     ctx.arc(0, 0, this.radius, this.holeAngleStart, this.holeAngleEnd);
+     ctx.strokeStyle = 'white';
+     ctx.lineWidth = 4; // Make hole slightly thicker for visibility
+     ctx.stroke();
+     ctx.closePath();
+
+     ctx.restore();
+    }
+
+    update() {
+     this.rotationAngle += this.rotationSpeed;
+    }
+   }
+
+   function initializeCircles() {
+    bigCircles = [];
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    let radius = Math.min(canvas.width, canvas.height) / 2 * 0.9; // Start radius, using 90% of half canvas dimension
+    const radiusDecrement = radius / numBigCircles;
+
+    for (let i = 0; i < numBigCircles; i++) {
+     const holeAngleStart = Math.random() * Math.PI * 2;
+     const holeAngleEnd = holeAngleStart + Math.PI / 6; // Hole size reduced to 30 degrees for slightly harder gameplay
+     bigCircles.push(new BigCircle(centerX, centerY, radius, holeAngleStart, holeAngleEnd));
+     radius -= radiusDecrement;
+    }
+
+    smallCircle = new Circle(centerX, centerY, 5, 'red', true); // Very small circle, radius 5
+   }
+
+   function checkHoleEscape() {
+    if (bigCircles.length === 0) return false;
+    const currentBigCircle = bigCircles[bigCircles.length - 1];
+
+    const dx = smallCircle.x - currentBigCircle.x;
+    const dy = smallCircle.y - currentBigCircle.y;
+    let angle = Math.atan2(dy, dx) - currentBigCircle.rotationAngle;
+
+    if (angle < 0) {
+     angle += Math.PI * 2;
+    }
+
+    const normalizedHoleStart = currentBigCircle.holeAngleStart % (2 * Math.PI);
+    const normalizedHoleEnd = currentBigCircle.holeAngleEnd % (2 * Math.PI);
+
+    if (normalizedHoleStart > normalizedHoleEnd) {
+     return angle >= normalizedHoleStart || angle <= normalizedHoleEnd;
+    } else {
+     return angle >= normalizedHoleStart && angle <= normalizedHoleEnd;
+    }
+   }
+
+   function updateGame() {
+    if (!gameActive) return;
+
+    smallCircle.yVelocity += gravity;
+    smallCircle.x += smallCircle.xVelocity;
+    smallCircle.y += smallCircle.yVelocity;
+
+    if (smallCircle.x + smallCircle.radius > canvas.width || smallCircle.x - smallCircle.radius < 0) {
+     smallCircle.xVelocity = -smallCircle.xVelocity * bounceFactor;
+    }
+    if (smallCircle.y + smallCircle.radius > canvas.height || smallCircle.y - smallCircle.radius < 0) {
+     smallCircle.yVelocity = -smallCircle.yVelocity * bounceFactor;
+    }
+
+    if (bigCircles.length > 0 && checkHoleEscape()) {
+     bigCircles.pop();
+     smallCircle.radius = Math.min(20, smallCircle.radius + 0.05); // Gradual increase, max radius 20 to prevent it becoming too large
+    }
+
+    if (bigCircles.length === 0) {
+     gameActive = false;
+     alert("You escaped all circles!");
+     return;
+    }
+
+    bigCircles.forEach(circle => circle.update());
+   }
+
+   function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    bigCircles.forEach(circle => circle.draw());
+
+    smallCircle.draw();
+   }
+
+   function gameLoop() {
+    updateGame();
+    draw();
+    animationFrameId = requestAnimationFrame(gameLoop);
+   }
+
+   function resetGame() {
+    gameActive = true;
+    initializeCircles();
+    smallCircle.xVelocity = 0;
+    smallCircle.yVelocity = 0;
+    smallCircle.radius = 5; // Reset small circle radius
+    cancelAnimationFrame(animationFrameId);
+    gameLoop();
+   }
+
+   resetButton.addEventListener('click', resetGame);
+
+   initializeCircles();
+   gameLoop();
+
+   canvas.addEventListener('mousemove', function(event) {
+    if (!gameActive) return; // Only allow mouse control when game is active
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    smallCircle.xVelocity = (mouseX - smallCircle.x) * 0.02; // Even slower response
+    smallCircle.yVelocity = (mouseY - smallCircle.y) * 0.02;
+   });
+  </script>
+ </body>
+ </html>

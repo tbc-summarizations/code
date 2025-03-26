@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>HENRY X PILLOW: The Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { margin: 0; overflow: hidden; background-color: #222; color: #eee; font-family: monospace; }
+  canvas { display: block; }
+  #ui { position: absolute; top: 10px; left: 10px; }
+  #dialogueBox { position: absolute; bottom: 10px; left: 10px; background-color: rgba(0, 0, 0, 0.8); color: #eee; padding: 10px; border-radius: 5px; }
+  #controls { position: absolute; bottom: 10px; right: 10px; display: flex; }
+  .control-button { background-color: rgba(50, 50, 50, 0.8); color: #eee; border: none; padding: 15px; margin: 5px; border-radius: 50%; font-size: 1em; }
+  .control-button:active { background-color: rgba(80, 80, 80, 0.8); }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<div id="ui">
+  <div id="dialogueBox"></div>
+</div>
+<div id="controls">
+  <button id="upButton" class="control-button">▲</button>
+  <button id="downButton" class="control-button">▼</button>
+  <button id="leftButton" class="control-button">◀</button>
+  <button id="rightButton" class="control-button">▶</button>
+  <button id="actionButton" class="control-button">Action</button>
+</div>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const dialogueBox = document.getElementById('dialogueBox');
+
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  let player = { x: 50, y: canvas.height / 2, size: 20, color: 'white', speed: 5, isAttacking: false, attackCooldown: 0 };
+  let enemies = [];
+  let projectiles = [];
+  let currentStage = 0;
+  let dialogueIndex = 0;
+  let gameActive = true;
+  let bossActive = false;
+  let boss;
+  let footballCannons = [];
+  let cannonTimer = 0;
+
+  const stages = [
+    {
+      name: "Tutorial",
+      dialogue: [
+        "Henry: I want to take pillow.",
+        "Clyde: You can't do that, Henry!",
+        "Clyde is trying to stop you...",
+        "Tutorial Boss: Clyde"
+      ],
+      boss: { name: "Clyde", health: 50, x: canvas.width - 100, y: canvas.height / 2, size: 30, color: 'blue', type: 'clyde' }
+    },
+    {
+      name: "World 1",
+      dialogue: [
+        "Clyde is defeated...",
+        "Parts of Clyde are still roaming...",
+        "Use 'Action' to activate Special Attack (N-Gun)."
+      ],
+      enemies: [{ type: 'clyde', count: 5 }],
+    },
+    {
+      name: "Meeththexep Stage",
+      dialogue: [
+        "...",
+        "First Boss: Meeththexep (The Best Friend)"
+      ],
+      boss: { name: "Meeththexep", health: 80, x: canvas.width - 100, y: canvas.height / 2, size: 40, color: 'green', type: 'meeth' }
+    },
+    {
+      name: "World 2",
+      dialogue: [
+        "No changes to the map...",
+        "More Clydes approach..."
+      ],
+      enemies: [{ type: 'clyde', count: 7 }],
+    },
+    {
+      name: "SC0J Stage",
+      dialogue: [
+        "Second Boss: SC0J (The Unknown BFCS Member)",
+        "SC0J: Please, don't do this Henry...",
+        "SC0J: Pillow isn't bad...",
+        "SC0J tries to reason with you..."
+      ],
+      boss: { name: "SC0J", health: 60, x: canvas.width - 100, y: canvas.height / 2, size: 40, color: 'purple', type: 'scoj' }
+    },
+    {
+      name: "World 3",
+      dialogue: [
+        "You start to understand...",
+        "Clyde is a bit resistant to the N-Gun now..."
+      ],
+      enemies: [{ type: 'clyde_resistant', count: 5 }],
+    },
+    {
+      name: "Frank Stage",
+      dialogue: [
+        "Third Boss: Frank (???)"
+      ],
+      boss: { name: "Frank", health: 90, x: canvas.width - 100, y: canvas.height / 2, size: 45, color: 'orange', type: 'frank' }
+    },
+     {
+      name: "World 4",
+      dialogue: [
+        "...",
+        "Prepare for Football Cannons..."
+      ],
+      enemies: [{ type: 'clyde_resistant', count: 6 }],
+    },
+    {
+      name: "Admiral Stage",
+      dialogue: [
+        "Fourth Boss: Admiral (The Football Fan)",
+        "Football Cannons are now active!"
+      ],
+      boss: { name: "Admiral", health: 100, x: canvas.width - 100, y: canvas.height / 2, size: 50, color: 'red', type: 'admiral' },
+      cannons: true
+    },
+     {
+      name: "World 5",
+      dialogue: [
+        "Avoid the Football Cannons!"
+      ],
+      enemies: [{ type: 'clyde_resistant', count: 4 }],
+      cannonsActive: true
+    },
+    {
+      name: "BDYT Stage",
+      dialogue: [
+        "Fifth Boss: BDYT (The Siren Enthusiast.)"
+      ],
+      boss: { name: "BDYT", health: 110, x: canvas.width - 100, y: canvas.height / 2, size: 50, color: 'cyan', type: 'bdyt' }
+    },
+    {
+      name: "Memo Stage",
+      dialogue: [
+        "Sixth Boss: Memo (???)"
+      ],
+      boss: { name: "Memo", health: 120, x: canvas.width - 100, y: canvas.height / 2, size: 55, color: 'lime', type: 'memo' }
+    },
+    {
+      name: "Adam Stage",
+      dialogue: [
+        "Seventh Boss: Adam (The Programmer)"
+      ],
+      boss: { name: "Adam", health: 130, x: canvas.width - 100, y: canvas.height / 2, size: 55, color: 'magenta', type: 'adam' }
+    },
+    {
+      name: "HappyMan Stage",
+      dialogue: [
+        "Eighth Boss: HappyMan (The Strongest Chicken)"
+      ],
+      boss: { name: "HappyMan", health: 150, x: canvas.width - 100, y: canvas.height / 2, size: 60, color: 'yellow', type: 'happyman' }
+    },
+    {
+      name: "Alan Stage",
+      dialogue: [
+        "Ninth Boss: Alan (???)"
+      ],
+      boss: { name: "Alan", health: 140, x: canvas.width - 100, y: canvas.height / 2, size: 60, color: 'silver', type: 'alan' }
+    },
+    {
+      name: "Dekoder Stage",
+      dialogue: [
+        "Tenth Boss: Dekoder (The Half-Life Enthusiast)"
+      ],
+      boss: { name: "Dekoder", health: 160, x: canvas.width - 100, y: canvas.height / 2, size: 65, color: 'teal', type: 'dekoder' }
+    },
+    {
+      name: "Nagg Stage",
+      dialogue: [
+        "Eleventh Boss: Nagg (The Most Annoying BFCS Member)"
+      ],
+      boss: { name: "Nagg", health: 170, x: canvas.width - 100, y: canvas.height / 2, size: 65, color: 'aqua', type: 'nagg' }
+    },
+    {
+      name: "Uami Bosim Stage",
+      dialogue: [
+        "Twelfth Boss: Uami Bosim (The BFCS Host - Your Own Creation Goes Against You.)"
+      ],
+      boss: { name: "Uami Bosim", health: 200, x: canvas.width - 100, y: canvas.height / 2, size: 70, color: 'fuchsia', type: 'uami' }
+    },
+    {
+      name: "Final Stage",
+      dialogue: [
+        "Final Boss: KAMRAN IBRAHIM ABDULLAH (THE BEST FRIEND MAKES A RETURN TO SAVE HENRY.)"
+      ],
+      boss: { name: "Kamran", health: 250, x: canvas.width - 100, y: canvas.height / 2, size: 75, color: 'gold', type: 'kamran' }
+    }
+  ];
+
+  function startGame() {
+    currentStage = 0;
+    player.health = 100;
+    nextStage();
+  }
+
+  function nextStage() {
+    stage = stages[currentStage];
+    dialogueIndex = 0;
+    enemies = [];
+    projectiles = [];
+    boss = null;
+    bossActive = false;
+    footballCannons = [];
+    cannonTimer = 0;
+
+    if (!stage) {
+      gameActive = false;
+      dialogueBox.textContent = "You Win! ... Game Over.";
+      return;
+    }
+
+    dialogueBox.textContent = stage.dialogue[dialogueIndex];
+    if (stage.boss) {
+      boss = { ...stage.boss };
+      bossActive = true;
+    }
+    if (stage.enemies) {
+      stage.enemies.forEach(enemyGroup => {
+        for (let i = 0; i < enemyGroup.count; i++) {
+          enemies.push(createEnemy(enemyGroup.type));
+        }
+      });
+    }
+    if (stage.cannons) {
+      setupFootballCannons();
+    }
+    if (stage.cannonsActive) {
+      startFootballCannons();
+    }
+  }
+
+  function setupFootballCannons() {
+    footballCannons = [];
+    for (let i = 0; i < 5; i++) {
+      footballCannons.push({ x: canvas.width / 6 * (i + 1), y: 50, width: 20, height: 30, firing: false, fireTimer: 0 });
+      footballCannons.push({ x: canvas.width / 6 * (i + 1), y: canvas.height - 50, width: 20, height: 30, firing: false, fireTimer: 0 });
+    }
+  }
+  function startFootballCannons(){
+      footballCannons.forEach(cannon => {
+          cannon.firing = true;
+      });
+  }
+
+  function createEnemy(type) {
+    let color = 'red';
+    let size = 20;
+    let health = 20;
+    let speed = 2;
+    if (type === 'clyde') { color = 'blue'; size = 25; health = 25; }
+    if (type === 'clyde_resistant') { color = 'darkblue'; size = 25; health = 30; speed = 1.5; }
+
+    return {
+      x: canvas.width + size,
+      y: Math.random() * canvas.height,
+      size: size,
+      color: color,
+      speed: speed,
+      health: health,
+      type: type
+    };
+  }
+
+  function handleDialogue() {
+    dialogueIndex++;
+    if (stage.dialogue && dialogueIndex < stage.dialogue.length) {
+      dialogueBox.textContent = stage.dialogue[dialogueIndex];
+    } else {
+      dialogueBox.textContent = "";
+    }
+  }
+
+  function movePlayer(direction) {
+    if (!gameActive) return;
+    switch (direction) {
+      case 'up': player.y -= player.speed; break;
+      case 'down': player.y += player.speed; break;
+      case 'left': player.x -= player.speed; break;
+      case 'right': player.x += player.speed; break;
+    }
+    player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+    player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+  }
+
+  function playerAttack() {
+    if (!gameActive || player.isAttacking) return;
+    player.isAttacking = true;
+    player.attackCooldown = 60; // Cooldown in frames (1 second at 60fps)
+    projectiles.push({ x: player.x, y: player.y, speedX: 10, speedY: 0, size: 10, color: 'yellow' });
+  }
+
+  function updateGame() {
+    if (!gameActive) return;
+
+    // Player cooldown
+    if (player.attackCooldown > 0) {
+      player.attackCooldown--;
+      if (player.attackCooldown === 0) {
+        player.isAttacking = false;
+      }
+    }
+
+    // Enemy movement and collision
+    enemies.forEach((enemy, enemyIndex) => {
+      enemy.x -= enemy.speed;
+      if (enemy.x < -enemy.size) {
+        enemies.splice(enemyIndex, 1); // Remove enemy if off-screen
+      }
+
+      // Enemy collision with player
+      const dx = player.x - enemy.x;
+      const dy = player.y - enemy.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance < player.size + enemy.size) {
+        enemies.splice(enemyIndex, 1);
+        //player.health -= 10; // Player takes damage - Removed for simplicity
+        //if (player.health <= 0) {
+        //  gameActive = false;
+        //  dialogueBox.textContent = "Game Over.";
+        //}
+      }
+    });
+
+    // Projectile movement and collision
+    projectiles.forEach((projectile, projectileIndex) => {
+      projectile.x += projectile.speedX;
+      projectile.y += projectile.speedY;
+
+      if (projectile.x > canvas.width || projectile.x < 0 || projectile.y > canvas.height || projectile.y < 0) {
+        projectiles.splice(projectileIndex, 1);
+        return;
+      }
+
+      enemies.forEach((enemy, enemyIndex) => {
+        const dx = projectile.x - enemy.x;
+        const dy = projectile.y - enemy.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < projectile.size + enemy.size) {
+          enemies.splice(enemyIndex, 1);
+          projectiles.splice(projectileIndex, 1);
+        }
+      });
+      if (bossActive && boss) {
+          const dx = projectile.x - boss.x;
+          const dy = projectile.y - boss.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance < projectile.size + boss.size) {
+              boss.health -= 10;
+              projectiles.splice(projectileIndex, 1);
+              if (boss.health <= 0) {
+                  bossActive = false;
+                  boss = null;
+                  currentStage++;
+                  handleDialogue();
+                  setTimeout(nextStage, 2000);
+              }
+          }
+      }
+    });
+
+    if (bossActive && boss) {
+        // Boss movement (simple for now)
+        if (boss.x > canvas.width - 150) {
+            boss.x -= 1;
+        }
+    } else if (!bossActive && stage.enemies && enemies.length === 0 && !boss && stage.name.startsWith("World")) {
+        currentStage++;
+        handleDialogue();
+        setTimeout(nextStage, 2000);
+    }
+
+
+    // Cannon logic
+    if (stage.cannonsActive) {
+        cannonTimer++;
+        if (cannonTimer % 120 === 0) { // Fire every 2 seconds
+            footballCannons.forEach(cannon => {
+                if (cannon.firing) {
+                    projectiles.push({
+                        x: cannon.x,
+                        y: cannon.y + cannon.height,
+                        speedX: 0,
+                        speedY: 5,
+                        size: 15,
+                        color: 'brown',
+                        type: 'cannonball'
+                    });
+                }
+            });
+        }
+    }
+
+    projectiles.forEach((projectile, projectileIndex) => {
+        if (projectile.type === 'cannonball') {
+            const dx = player.x - projectile.x;
+            const dy = player.y - projectile.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < player.size + projectile.size) {
+                projectiles.splice(projectileIndex, 1);
+                // player.health -= 20; // Cannonball damage - Removed for simplicity
+                // if (player.health <= 0) {
+                //     gameActive = false;
+                //     dialogueBox.textContent = "Game Over - Cannon.";
+                // }
+            }
+        }
+    });
+
+
+    drawGame();
+    requestAnimationFrame(updateGame);
+  }
+
+  function drawGame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw player
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x - player.size, player.y - player.size, player.size * 2, player.size * 2);
+
+    // Draw enemies
+    enemies.forEach(enemy => {
+      ctx.fillStyle = enemy.color;
+      ctx.fillRect(enemy.x - enemy.size, enemy.y - enemy.size, enemy.size * 2, enemy.size * 2);
+    });
+
+    // Draw projectiles
+    projectiles.forEach(projectile => {
+      ctx.fillStyle = projectile.color;
+      ctx.beginPath();
+      ctx.arc(projectile.x, projectile.y, projectile.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Draw Boss
+    if (bossActive && boss) {
+        ctx.fillStyle = boss.color;
+        ctx.fillRect(boss.x - boss.size, boss.y - boss.size, boss.size * 2, boss.size * 2);
+        ctx.fillStyle = 'white';
+        ctx.font = '12px monospace';
+        ctx.fillText(boss.name + " HP: " + boss.health, boss.x - boss.size, boss.y - boss.size - 15);
+    }
+
+    // Draw Cannons
+    if (stage.cannonsActive || stage.cannons) {
+        footballCannons.forEach(cannon => {
+            ctx.fillStyle = 'gray';
+            ctx.fillRect(cannon.x - cannon.width / 2, cannon.y, cannon.width, cannon.height);
+        });
+    }
+  }
+
+  // Mobile controls
+  document.getElementById('upButton').addEventListener('touchstart', () => movePlayer('up'));
+  document.getElementById('downButton').addEventListener('touchstart', () => movePlayer('down'));
+  document.getElementById('leftButton').addEventListener('touchstart', () => movePlayer('left'));
+  document.getElementById('rightButton').addEventListener('touchstart', () => movePlayer('right'));
+  document.getElementById('actionButton').addEventListener('touchstart', playerAttack);
+
+  startGame();
+  updateGame();
+</script>
+
+</body>
+</html>

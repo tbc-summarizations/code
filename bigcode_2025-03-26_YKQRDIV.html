@@ -1,0 +1,526 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kazakhstan Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 20px;
+        }
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            max-width: 800px;
+            margin: auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #playerInfo {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        #playerInfo p {
+            margin: 5px 0;
+        }
+        #actionMenu {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        #actionMenu button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #actionMenu button:hover {
+            background-color: #0056b3;
+        }
+        #actionMenu button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #eventLog {
+            border: 1px solid #ddd;
+            padding: 15px;
+            height: 150px;
+            overflow-y: scroll;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        #eventLog p {
+            margin: 5px 0;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        #gameClock {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        #gameClock p {
+            margin: 5px 0;
+        }
+        .game-title {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #222;
+        }
+        .game-title h1 {
+            margin-bottom: 5px;
+        }
+        .game-title p {
+            font-style: italic;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div class="game-title">
+            <h1>Kazakhstan Life Simulator</h1>
+            <p>Experience life in Kazakhstan!</p>
+        </div>
+
+        <div id="playerInfo">
+            <p>Name: <span id="playerName"></span></p>
+            <p>Age: <span id="playerAge"></span></p>
+            <p>Money: <span id="playerMoney"></span> Tenge</p>
+            <p>Health: <span id="playerHealth"></span>%</p>
+            <p>Education: <span id="playerEducation"></span></p>
+            <p>Happiness: <span id="playerHappiness"></span>%</p>
+            <p>Political Standing: <span id="playerPoliticalStanding"></span></p>
+            <p>Criminal Record: <span id="playerCriminalRecord"></span></p>
+            <p>Location: <span id="playerLocation"></span></p>
+            <p>Job: <span id="playerJob"></span></p>
+        </div>
+
+        <div id="actionMenu">
+            <button onclick="getJob()">Get Job</button>
+            <button onclick="study()">Study</button>
+            <button onclick="migrateToCity()">Migrate to City</button>
+            <button onclick="goFestivals()">Go to Festival</button>
+            <button onclick="commitCrime('pettyTheft')">Commit Petty Theft</button>
+            <button onclick="supportPoliticalParty()">Support Political Party</button>
+            <button onclick="nextTurn()">Next Turn</button>
+        </div>
+
+        <div id="eventLog">
+        </div>
+
+        <div id="gameClock">
+            <p>Year: <span id="currentYear"></span></p>
+            <p>Season: <span id="currentSeason"></span></p>
+        </div>
+    </div>
+
+    <script>
+        let player = {
+            name: "Bauyrzhan",
+            age: 18,
+            money: 1000,
+            health: 100,
+            education: 0, // 0: None, 1: School, 2: Trade School, 3: University
+            happiness: 50,
+            politicalStanding: 0, // 0: Neutral, -100 to 100 range
+            criminalRecord: 0, // 0 to 100 (100 = maximum criminal activity)
+            location: "Village", // Starting location
+            job: "Unemployed"
+        };
+
+        let currentYear = 2024;
+        let currentSeason = "Spring";
+        let isStudying = false;
+        let studyTurnsRemaining = 0;
+        let desiredEducationLevel = 0;
+
+        let jobs = {
+            Village: {
+                uneducated: {
+                    "Shepherd": { salary: 150, educationRequirement: 0 },
+                    "Farmer": { salary: 180, educationRequirement: 0 }
+                },
+                educated: {
+                    "Teacher": { salary: 300, educationRequirement: 1 } // requires Education level 1 (School)
+                }
+            },
+            Almaty: {
+               uneducated: {
+                 "Construction Worker": { salary: 200, educationRequirement: 0 },
+                 "Street Vendor": {salary: 220, educationRequirement: 0}
+               },
+               educated: {
+                   "Accountant": { salary: 500, educationRequirement: 3 }, //Requires Education level 3 (University)
+                   "Programmer": { salary: 700, educationRequirement: 3 } //Requires Education level 3 (University)
+               }
+            },
+            Astana: {
+                uneducated: {
+                    "Driver": { salary: 180, educationRequirement: 0 },
+                    "Cleaner": { salary: 200, educationRequirement: 0 }
+                },
+                educated: {
+                    "Engineer": { salary: 600, educationRequirement: 3 },
+                    "Civil Servant": { salary: 450, educationRequirement: 2 }
+                }
+            }
+        };
+
+        let festivals = {
+            Spring: "Nauryz Meyramy",
+            Summer: "Summer Festival",
+            Autumn: "Apple Festival",
+            Winter: "New Year Celebration"
+        };
+
+
+        function updateMoney(amount) {
+            player.money += amount;
+            updateDisplay();
+        }
+
+        function updateHealth(amount) {
+            player.health += amount;
+            if (player.health > 100) player.health = 100;
+            if (player.health < 0) {
+                player.health = 0;
+                checkGameOver();
+            }
+            updateDisplay();
+        }
+
+        function updateEducationDisplay() {
+            let educationLevelText = ["None", "School", "Trade School", "University"];
+            document.getElementById("playerEducation").textContent = educationLevelText[player.education];
+        }
+
+
+        function updateHappiness(amount) {
+          player.happiness += amount;
+          if (player.happiness > 100) player.happiness = 100;
+          if (player.happiness < 0) player.happiness = 0;
+          updateDisplay();
+        }
+
+        function updatePoliticalStanding(amount) {
+            player.politicalStanding += amount;
+            if (player.politicalStanding > 100) player.politicalStanding = 100;
+            if (player.politicalStanding < -100) player.politicalStanding = -100;
+            updateDisplay();
+        }
+
+        function updateCriminalRecord(amount) {
+          player.criminalRecord += amount;
+          if (player.criminalRecord > 100) {
+              player.criminalRecord = 100;
+              checkGameOver();
+          }
+          if (player.criminalRecord < 0) player.criminalRecord = 0;
+          updateDisplay();
+        }
+
+        function updateDisplay() {
+            document.getElementById("playerName").textContent = player.name;
+            document.getElementById("playerAge").textContent = player.age;
+            document.getElementById("playerMoney").textContent = player.money;
+            document.getElementById("playerHealth").textContent = player.health;
+            updateEducationDisplay();
+            document.getElementById("playerHappiness").textContent = player.happiness;
+            document.getElementById("playerPoliticalStanding").textContent = player.politicalStanding;
+            document.getElementById("playerCriminalRecord").textContent = player.criminalRecord;
+            document.getElementById("playerLocation").textContent = player.location;
+            document.getElementById("playerJob").textContent = player.job;
+        }
+
+        function updateClockDisplay() {
+            document.getElementById("currentYear").textContent = currentYear;
+            document.getElementById("currentSeason").textContent = currentSeason;
+        }
+
+        function nextTurn() {
+            currentYear++;
+            switch (currentSeason) {
+                case "Spring": currentSeason = "Summer"; break;
+                case "Summer": currentSeason = "Autumn"; break;
+                case "Autumn": currentSeason = "Winter"; break;
+                case "Winter": currentSeason = "Spring"; break;
+            }
+            agePlayer();
+            randomEvents();
+            earnIncome();
+            if(isStudying){
+              studyProgress()
+            }
+            updateDisplay();
+            updateClockDisplay();
+            checkGameOver();
+        }
+
+        function agePlayer() {
+            player.age++;
+            if (player.age > 70) {
+                updateHealth(-5);
+                logEvent("You feel the aches of old age.");
+            }
+            if (player.age >= 18 && player.age < 30 && Math.random() < 0.05) {
+                logEvent("You feel pressure to get married and start a family!");
+                // Expansion: Add marriage and family logic later
+            }
+        }
+
+        function migrateToCity() {
+            let cityChoice = prompt("Choose city to migrate to: Almaty, Astana (Cost: 500 Tenge, Education Level 1 required)");
+            if (cityChoice && (cityChoice.toLowerCase() === "almaty" || cityChoice.toLowerCase() === "astana")) {
+                if (player.money >= 500 && player.education >= 1) {
+                    player.location = cityChoice.charAt(0).toUpperCase() + cityChoice.slice(1).toLowerCase();
+                    player.money -= 500;
+                    logEvent("You have migrated to " + player.location + "!");
+                } else {
+                    logEvent("You need more money and some education to migrate to the city.");
+                }
+            } else if (cityChoice) {
+                logEvent("Invalid city choice or cancelled migration.");
+            }
+            updateDisplay();
+        }
+
+        function getJob() {
+          let availableJobs = [];
+          let jobCategory = (player.education === 0 && jobs[player.location].uneducated) ? jobs[player.location].uneducated : (jobs[player.location].educated ? jobs[player.location].educated : {});
+
+          for(let job in jobCategory){
+            availableJobs.push(job)
+          }
+
+            if(availableJobs.length === 0) {
+                logEvent("No jobs available in your location with your education level.");
+                return;
+            }
+
+            let jobChoice = prompt("Available jobs in " + player.location + ": " + availableJobs.join(", ") + ".  Enter job name:");
+            if(jobChoice && jobCategory[jobChoice] !== undefined)
+            {
+              player.job = jobChoice;
+              logEvent("You are now a " + player.job);
+            }else if (jobChoice){
+              logEvent("Invalid Job Choice or no job selected.");
+            } else {
+              logEvent("No job selected.");
+            }
+            updateDisplay();
+        }
+
+        function earnIncome(){
+          if(player.job !== "Unemployed") {
+            let jobCategory = (player.education === 0 && jobs[player.location].uneducated) ? jobs[player.location].uneducated : (jobs[player.location].educated ? jobs[player.location].educated : {});
+            if(jobCategory[player.job]) {
+              updateMoney(jobCategory[player.job].salary);
+            }
+          }
+        }
+
+        function study() {
+          let educationChoice = prompt("Choose your place of study:\n1: School (200 Tenge, Education Level 1)\n2: Trade School (500 Tenge, Education Level 2)\n3: University (1000 Tenge, Education Level 3)");
+            let cost = 0;
+            let turnsToComplete = 0;
+
+            switch (educationChoice) {
+                case "1":
+                    cost = 200;
+                    turnsToComplete = 3;
+                    desiredEducationLevel = 1;
+                    break;
+                case "2":
+                    cost = 500;
+                    turnsToComplete = 5;
+                    desiredEducationLevel = 2;
+                    break;
+                case "3":
+                    cost = 1000;
+                    turnsToComplete = 8;
+                    desiredEducationLevel = 3;
+                    break;
+                default:
+                    logEvent("Invalid Choice or study cancelled.")
+                    return;
+            }
+
+            if (player.money >= cost) {
+                player.money -= cost;
+                logEvent("You started studying. This will take " + turnsToComplete + " turns for " + getEducationName(desiredEducationLevel) + ".");
+                isStudying = true;
+                studyTurnsRemaining = turnsToComplete;
+
+            } else {
+                logEvent("You don't have enough money to study.");
+            }
+            updateDisplay();
+        }
+
+        function getEducationName(level) {
+            switch(level) {
+                case 1: return "School";
+                case 2: return "Trade School";
+                case 3: return "University";
+                default: return "Unknown Education Level";
+            }
+        }
+
+
+        function studyProgress() {
+          studyTurnsRemaining--;
+          logEvent("Studying... Turns remaining: " + studyTurnsRemaining);
+          if(studyTurnsRemaining <= 0) {
+            isStudying = false;
+            player.education = desiredEducationLevel;
+            logEvent("You finished your studies at " + getEducationName(desiredEducationLevel) + "!");
+            updateEducationDisplay();
+          }
+        }
+
+        function randomEvents() {
+            let randomNumber = Math.random();
+
+            if (randomNumber < 0.08) {
+                logEvent("Good weather and a small bonus from your relatives!");
+                updateMoney(250);
+                updateHappiness(5);
+            } else if (randomNumber < 0.16) {
+                logEvent("A minor illness. Visited a local знахарь (folk healer). Health slightly decreased.");
+                updateHealth(-8);
+                updateMoney(-20); //paid for healer
+            } else if (randomNumber < 0.22 && player.location === "Almaty") {
+                logEvent("Political discussions and rallies are happening in Almaty. Political standing slightly affected.");
+                updatePoliticalStanding(Math.random() > 0.5 ? -5 : 5);
+            } else if (randomNumber < 0.28 && player.location === "Village") {
+              logEvent("Wolf attack on the village sheep herd! Lost some income.");
+              updateMoney(-80);
+            } else if (randomNumber < 0.32 && player.age > 60) {
+              logEvent("You receive a pension payment from the government.");
+              updateMoney(300);
+            } else if (randomNumber < 0.36) {
+                logEvent("Found some old coins while walking! Small amount of money found.");
+                updateMoney(30 + Math.floor(Math.random() * 20));
+            } else if (randomNumber < 0.40 && player.happiness < 50) {
+                logEvent("Feeling lonely and a bit down. Happiness decreased slightly.");
+                updateHappiness(-3);
+            } else if (randomNumber < 0.44 && player.health < 60) {
+                logEvent("You feel weak, probably need to eat better. Health decreased slightly.");
+                updateHealth(-4);
+            }
+        }
+
+        function commitCrime(crimeType) {
+            if (crimeType === "pettyTheft") {
+                if (player.location === "Village"){
+                    logEvent("Petty theft in a small village is too risky, everyone knows everyone.");
+                    updateHappiness(-5); //discouraged attempt
+                    return;
+                }
+                let chanceOfSuccess = Math.random();
+                if (chanceOfSuccess > 0.4) {
+                    let stolenAmount = Math.floor(Math.random() * 80) + 20;
+                    updateMoney(stolenAmount);
+                    logEvent("You successfully stole " + stolenAmount + " Tenge.");
+                } else {
+                    updateCriminalRecord(15);
+                    logEvent("You were caught stealing! Your criminal record increases significantly.");
+                    updateHappiness(-10); //caught and stressed
+                }
+            }
+            updateDisplay();
+        }
+
+        function supportPoliticalParty() {
+          let supportAmount = parseInt(prompt("How much money do you want to donate to support the political process?"));
+          if (!isNaN(supportAmount) && supportAmount > 0 && player.money >= supportAmount) {
+              player.money -= supportAmount;
+              updatePoliticalStanding(supportAmount / 50);
+              logEvent("You donated " + supportAmount + " Tenge to support political activities.");
+              updateHappiness(2); //feeling of civic duty
+          } else if (!isNaN(supportAmount)) {
+              logEvent("Invalid donation amount or insufficient funds.");
+          } else {
+              logEvent("Donation cancelled.");
+          }
+          updateDisplay();
+      }
+
+      function goFestivals() {
+        let festivalName = festivals[currentSeason];
+        if(festivalName) {
+          logEvent("You went to " + festivalName + "! Enjoyed the festivities.");
+          updateHappiness(10);
+        } else {
+          logEvent("No special festival this season, but you enjoyed a day out.");
+          updateHappiness(5);
+        }
+        updateMoney(-30); //spent money on festival
+        updateDisplay();
+      }
+
+
+        function checkGameOver() {
+            if (player.health <= 0) {
+                logEvent("Game Over! You died due to poor health.");
+                disableActions();
+            } else if (player.criminalRecord >= 100) {
+                logEvent("Game Over! You have a maximum criminal record and are imprisoned.");
+                disableActions();
+            } else if (player.money < -2000) {
+                logEvent("Game Over! You are completely bankrupt and destitute.");
+                disableActions();
+            } else if (player.happiness <= 0) {
+                logEvent("Game Over! Overwhelmed by despair, you could not continue.");
+                disableActions();
+            } else if (player.age >= 100) {
+                logEvent("Congratulations! You lived a full life in Kazakhstan and reached 100 years old. You win!");
+                disableActions(); // considered a win condition
+            }
+        }
+
+        function disableActions() {
+            let buttons = document.querySelectorAll("#actionMenu button");
+            buttons.forEach(button => button.disabled = true);
+            let actionMenu = document.getElementById("actionMenu");
+            actionMenu.innerHTML += "<p><b>Game Over</b>. Refresh the page to play again.</p>";
+        }
+
+        function logEvent(message) {
+            let eventLog = document.getElementById("eventLog");
+            let newEvent = document.createElement("p");
+            newEvent.textContent = message;
+            eventLog.appendChild(newEvent);
+            eventLog.scrollTop = eventLog.scrollHeight; // Scroll to bottom
+        }
+
+        window.onload = startGame;
+
+        function startGame() {
+            player.name = prompt("Enter your name:");
+            if (!player.name) {
+                player.name = "Bauyrzhan"; // Default name if user cancels prompt
+            }
+            updateDisplay();
+            updateClockDisplay();
+            logEvent("Welcome to Kazakhstan Life Simulator, " + player.name + "! Start your life journey.");
+        }
+    </script>
+
+</body>
+</html>

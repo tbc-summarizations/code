@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>HENRY X PILLOW: The Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #f0f0f0;
+    font-family: sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  #gameCanvas {
+    background-color: #e0e0e0;
+    border: 2px solid black;
+  }
+  #messageBox {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background-color: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    border: 1px solid black;
+    display: none;
+  }
+  #controls {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    display: flex;
+    gap: 10px;
+  }
+  .control-button {
+    width: 50px;
+    height: 50px;
+    background-color: #ccc;
+    border: 1px solid black;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
+    cursor: pointer;
+  }
+  .obstacle {
+    background-color: red;
+    position: absolute;
+  }
+</style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="messageBox"></div>
+  <div id="controls">
+    <div class="control-button" id="upButton">▲</div>
+    <div class="control-button" id="downButton">▼</div>
+    <div class="control-button" id="leftButton">◀</div>
+    <div class="control-button" id="rightButton">▶</div>
+    <div class="control-button" id="actionButton">Action</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const messageBox = document.getElementById('messageBox');
+
+    canvas.width = 400;
+    canvas.height = 600;
+
+    let player = {
+      x: canvas.width / 2,
+      y: canvas.height - 50,
+      size: 20,
+      speed: 5,
+      health: 100
+    };
+
+    let enemies = [];
+    let bosses = [];
+    let obstacles = [];
+    let currentStage = 0;
+    let messageQueue = [];
+    let isMessageVisible = false;
+    let enemySpawnInterval = 100;
+    let enemySpawnCounter = 0;
+    let bossIndex = 0;
+    let obstacleIndex = 0;
+    let score = 0;
+
+    const stages = [
+      {
+        messages: [
+          "HENRY X PILLOW: The Game",
+          "Henry: I want to get the pillow!",
+          "Enemy 1: Stop Henry!",
+          "Tutorial Boss: Enemy 1"
+        ],
+        boss: { name: "Enemy 1", health: 100, size: 30, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        obstacleType: null
+      },
+      {
+        messages: [
+          "After defeating Enemy 1...",
+          "Enemy 1 Parts are roaming around!",
+          "Walk around and fight enemies."
+        ],
+        boss: { name: "Enemy 2", health: 150, size: 35, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        obstacleType: null
+      },
+      {
+        messages: [
+          "First Boss: Enemy 2 (The Best Friend)",
+          "Continue on your path."
+        ],
+        boss: { name: "Enemy 2", health: 150, size: 35, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        obstacleType: null
+      },
+      {
+        messages: [
+          "Second Boss: Enemy 3 (The Unknown)",
+          "Enemy 3: Please stop!",
+          "You get a small idea why the pillow isn't bad."
+        ],
+        boss: { name: "Enemy 3", health: 120, size: 32, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: null
+      },
+      {
+        messages: [
+          "Third Boss: Enemy 4",
+          "..."
+        ],
+        boss: { name: "Enemy 4", health: 160, size: 36, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: null
+      },
+      {
+        messages: [
+          "Fourth Boss: Enemy 5 (The Fan)",
+          "Football Cannons are being deployed!"
+        ],
+        boss: { name: "Enemy 5", health: 180, size: 38, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Fifth Boss: Enemy 6 (The Enthusiast)"
+        ],
+        boss: { name: "Enemy 6", health: 200, size: 40, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Sixth Boss: Enemy 7"
+        ],
+        boss: { name: "Enemy 7", health: 220, size: 42, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Seventh Boss: Enemy 8 (The Programmer)"
+        ],
+        boss: { name: "Enemy 8", health: 240, size: 44, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Eighth Boss: Enemy 9 (The Chicken)"
+        ],
+        boss: { name: "Enemy 9", health: 260, size: 46, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Ninth Boss: Enemy 10"
+        ],
+        boss: { name: "Enemy 10", health: 280, size: 48, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Tenth Boss: Enemy 11 (The Enthusiast)"
+        ],
+        boss: { name: "Enemy 11", health: 300, size: 50, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Eleventh Boss: Enemy 12 (The Annoying)"
+        ],
+        boss: { name: "Enemy 12", health: 320, size: 52, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Twelfth Boss: Enemy 13 (The Host)",
+          "Your own creation goes against you!"
+        ],
+        boss: { name: "Enemy 13", health: 350, size: 55, speed: 2 },
+        enemyType: "Enemy 1 Part",
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      },
+      {
+        messages: [
+          "Final Boss: Enemy 14 (The Best Friend Returns!)",
+          "Final Battle!"
+        ],
+        boss: { name: "Enemy 14", health: 400, size: 60, speed: 3 },
+        enemyType: null,
+        enemyKillMessage: "Zap!",
+        enemyResistance: true,
+        obstacleType: "cannon"
+      }
+    ];
+
+    function displayMessage(message) {
+      messageQueue.push(message);
+      if (!isMessageVisible) {
+        showMessage();
+      }
+    }
+
+    function showMessage() {
+      if (messageQueue.length > 0) {
+        isMessageVisible = true;
+        messageBox.textContent = messageQueue.shift();
+        messageBox.style.display = 'block';
+        setTimeout(hideMessage, 3000);
+      }
+    }
+
+    function hideMessage() {
+      messageBox.style.display = 'none';
+      isMessageVisible = false;
+      showMessage();
+    }
+
+    function spawnEnemy() {
+      if (stages[currentStage].enemyType && enemySpawnCounter % enemySpawnInterval === 0) {
+        let enemySize = 15;
+        enemies.push({
+          x: Math.random() * (canvas.width - enemySize),
+          y: 0,
+          size: enemySize,
+          speed: 1,
+          type: stages[currentStage].enemyType,
+          resistant: stages[currentStage].enemyResistance || false
+        });
+      }
+      enemySpawnCounter++;
+      if (enemySpawnInterval > 20) {
+        enemySpawnInterval = Math.max(20, 100 - currentStage * 5);
+      }
+    }
+
+    function spawnBoss() {
+      let bossData = stages[currentStage].boss;
+      bosses.push({
+        name: bossData.name,
+        x: canvas.width / 2,
+        y: 50,
+        size: bossData.size,
+        health: bossData.health,
+        maxHealth: bossData.health,
+        speed: bossData.speed
+      });
+    }
+
+    function spawnObstacles() {
+      if (stages[currentStage].obstacleType === 'cannon') {
+        if (obstacleIndex % 60 === 0) {
+          obstacles.push({
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 40,
+            speed: 3,
+            active: true,
+            type: 'cannon'
+          });
+          obstacles.push({
+            x: canvas.width - 20,
+            y: 100,
+            width: 20,
+            height: 40,
+            speed: 3,
+            active: true,
+            type: 'cannon'
+          });
+           obstacles.push({
+            x: canvas.width / 2 - 10,
+            y: 200,
+            width: 20,
+            height: 40,
+            speed: 3,
+            active: true,
+            type: 'cannon'
+          });
+        }
+        obstacleIndex++;
+      }
+    }
+
+
+    function drawPlayer() {
+      ctx.fillStyle = 'blue';
+      ctx.fillRect(player.x - player.size / 2, player.y - player.size / 2, player.size, player.size);
+    }
+
+    function drawEnemies() {
+      enemies.forEach(enemy => {
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.moveTo(enemy.x, enemy.y - enemy.size / 2);
+        ctx.lineTo(enemy.x - enemy.size / 2, enemy.y + enemy.size / 2);
+        ctx.lineTo(enemy.x + enemy.size / 2, enemy.y + enemy.size / 2);
+        ctx.closePath();
+        ctx.fill();
+      });
+    }
+
+    function drawBosses() {
+      bosses.forEach(boss => {
+        ctx.fillStyle = 'purple';
+        ctx.fillRect(boss.x - boss.size / 2, boss.y - boss.size / 2, boss.size, boss.size);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(boss.x - boss.size / 2, boss.y - boss.size / 2 - 10, boss.size * (boss.health / boss.maxHealth), 5);
+      });
+    }
+
+    function drawObstacles() {
+      obstacles.forEach(obstacle => {
+        ctx.fillStyle = obstacle.active ? 'orange' : 'gray';
+        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+      });
+    }
+
+    function updatePlayer() {
+      if (player.x < player.size / 2) player.x = player.size / 2;
+      if (player.x > canvas.width - player.size / 2) player.x = canvas.width - player.size / 2;
+      if (player.y < player.size / 2) player.y = player.size / 2;
+      if (player.y > canvas.height - player.size / 2) player.y = canvas.height - player.size / 2;
+    }
+
+    function updateEnemies() {
+      enemies.forEach(enemy => {
+        enemy.y += enemy.speed;
+      });
+      enemies = enemies.filter(enemy => enemy.y < canvas.height);
+    }
+
+    function updateBosses() {
+      bosses.forEach(boss => {
+        // Simple boss movement
+        if (boss.x < player.x) {
+          boss.x += boss.speed;
+        } else if (boss.x > player.x) {
+          boss.x -= boss.speed;
+        }
+      });
+    }
+
+    function updateObstacles() {
+      obstacles.forEach(obstacle => {
+        if (obstacle.type === 'cannon') {
+          obstacle.y += obstacle.speed;
+          if (obstacle.y > canvas.height) {
+            obstacle.y = -obstacle.height;
+            obstacle.active = !obstacle.active;
+          }
+        }
+      });
+      obstacles = obstacles.filter(obstacle => obstacle.y < canvas.height + obstacle.height);
+    }
+
+    function checkCollisions() {
+      enemies.forEach((enemy, enemyIndex) => {
+        let dx = player.x - enemy.x;
+        let dy = player.y - enemy.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < player.size / 2 + enemy.size / 2) {
+          enemies.splice(enemyIndex, 1);
+          player.health -= 5;
+          if (player.health <= 0) {
+            gameOver();
+          }
+        }
+      });
+
+      bosses.forEach(boss => {
+        let dx = player.x - boss.x;
+        let dy = player.y - boss.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < player.size / 2 + boss.size / 2) {
+          player.health -= 1;
+           if (player.health <= 0) {
+              gameOver();
+            }
+        }
+      });
+
+      obstacles.forEach(obstacle => {
+        if (obstacle.active) {
+          let collisionX = player.x + player.size / 2 > obstacle.x && player.x - player.size / 2 < obstacle.x + obstacle.width;
+          let collisionY = player.y + player.size / 2 > obstacle.y && player.y - player.size / 2 < obstacle.y + obstacle.height;
+          if (collisionX && collisionY) {
+            player.health = 0;
+            gameOver();
+          }
+        }
+      });
+    }
+
+    function checkEnemyHits() {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        let enemy = enemies[i];
+        let dx = player.x - enemy.x;
+        let dy = player.y - enemy.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < player.size / 2 + enemy.size / 2) { //Simple hit detection, can be improved
+          enemies.splice(i, 1);
+          displayMessage(stages[currentStage].enemyKillMessage);
+          score += 10;
+        }
+      }
+    }
+
+    function checkBossHits() {
+       for (let i = bosses.length - 1; i >= 0; i--) {
+        let boss = bosses[i];
+        let dx = player.x - boss.x;
+        let dy = player.y - boss.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < player.size / 2 + boss.size / 2) { //Simple hit detection, can be improved
+          bosses[i].health -= 10;
+          displayMessage(stages[currentStage].enemyKillMessage);
+          score += 50;
+          if (bosses[i].health <= 0) {
+            bosses.splice(i, 1);
+            currentStage++;
+            bossIndex = 0;
+            obstacleIndex = 0;
+            enemies = [];
+            obstacles = [];
+            enemySpawnCounter = 0;
+            if (currentStage < stages.length) {
+              stages[currentStage].messages.forEach(msg => displayMessage(msg));
+              setTimeout(spawnBoss, 3500);
+            } else {
+              gameWin();
+            }
+          }
+        }
+      }
+    }
+
+
+    function gameOver() {
+      displayMessage("Game Over!");
+      player.health = 0;
+      enemies = [];
+      bosses = [];
+      obstacles = [];
+      currentStage = -1; // Stop game updates
+    }
+
+    function gameWin() {
+      displayMessage("You Win! Game Completed!");
+      currentStage = -1; // Stop game updates
+    }
+
+    function handleInput() {
+      const moveSpeed = player.speed;
+      if (input.up) player.y -= moveSpeed;
+      if (input.down) player.y += moveSpeed;
+      if (input.left) player.x -= moveSpeed;
+      if (input.right) player.x += moveSpeed;
+      if (input.action) {
+        checkEnemyHits();
+        checkBossHits();
+        input.action = false; // Reset action after use
+      }
+    }
+
+    let input = { up: false, down: false, left: false, right: false, action: false };
+
+    document.getElementById('upButton').addEventListener('touchstart', function() { input.up = true; });
+    document.getElementById('upButton').addEventListener('touchend', function() { input.up = false; });
+    document.getElementById('downButton').addEventListener('touchstart', function() { input.down = true; });
+    document.getElementById('downButton').addEventListener('touchend', function() { input.down = false; });
+    document.getElementById('leftButton').addEventListener('touchstart', function() { input.left = true; });
+    document.getElementById('leftButton').addEventListener('touchend', function() { input.left = false; });
+    document.getElementById('rightButton').addEventListener('touchstart', function() { input.right = true; });
+    document.getElementById('rightButton').addEventListener('touchend', function() { input.right = false; });
+    document.getElementById('actionButton').addEventListener('touchstart', function() { input.action = true; });
+    document.getElementById('actionButton').addEventListener('touchend', function() { input.action = false; });
+
+
+    function gameLoop() {
+      if (currentStage >= 0 && currentStage < stages.length) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        handleInput();
+        updatePlayer();
+        spawnEnemy();
+        updateEnemies();
+        spawnObstacles();
+        updateObstacles();
+        updateBosses();
+        checkCollisions();
+
+        drawObstacles();
+        drawEnemies();
+        drawBosses();
+        drawPlayer();
+
+        // UI Display
+        ctx.fillStyle = 'black';
+        ctx.font = '14px sans-serif';
+        ctx.fillText('Health: ' + player.health, 20, 30);
+        ctx.fillText('Stage: ' + (currentStage + 1) + '/' + stages.length, 20, 50);
+        ctx.fillText('Score: ' + score, 20, 70);
+        if (bosses.length > 0) {
+          ctx.fillText('Boss Health: ' + bosses[0].health, canvas.width - 150, 30);
+        }
+
+
+        if (bosses.length === 0 && enemies.length === 0 && enemySpawnCounter > 200 && currentStage < stages.length -1) {
+          currentStage++;
+          bossIndex = 0;
+          obstacleIndex = 0;
+          enemySpawnCounter = 0;
+          stages[currentStage].messages.forEach(msg => displayMessage(msg));
+          setTimeout(spawnBoss, 3500);
+
+        } else if (bosses.length === 0 && enemies.length === 0 && enemySpawnCounter > 200 && currentStage == stages.length -1 ) {
+          gameWin();
+        }
+
+
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Start game
+    stages[0].messages.forEach(msg => displayMessage(msg));
+    setTimeout(spawnBoss, 3500);
+    gameLoop();
+  </script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Circular Ascent</title>
+ <style>
+  body {
+   margin: 0;
+   overflow: hidden;
+   background-color: #ADD8E6; /* Light Blue Background */
+  }
+
+  canvas {
+   display: block;
+  }
+ </style>
+</head>
+<body>
+ <canvas id="gameCanvas"></canvas>
+
+ <script>
+  // 1. Canvas Setup and Initialization
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Set canvas dimensions to fill the viewport
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  // Adjust canvas size on window resize
+  window.addEventListener('resize', () => {
+   canvas.width = window.innerWidth;
+   canvas.height = window.innerHeight;
+   initializeGame(); // Re-initialize the game on resize
+  });
+
+  // 2. Game World Definition
+  let mountainRadius;
+  let mountainCenter;
+  const mountainColor = '#8B4513';
+  const mountainRoughness = 0.02;
+  let mountainPoints = []; // Store {x, y} coordinates of mountain edge
+
+  // Player Properties
+  let playerX;
+  let playerY;
+  const playerRadius = 15;
+  const playerColor = 'red';
+  const moveSpeed = 2;
+  const playerAscentSpeed = 0.5;
+
+  // Game Over/Win Flags
+  let gameOver = false;
+  let gameWon = false;
+  const gameWinHeightThreshold = 50; // Distance to center to win
+
+  // 3. Mountain Generation and Drawing
+
+  // 3.1 generateMountain() - Core logic for generating the mountain's edge points.
+  function generateMountain() {
+   mountainPoints = []; // Reset existing points
+   const startAngle = 90; // Start drawing at the "top"
+
+   for (let angle = startAngle; angle <= startAngle + 360; angle += 1) {
+    const rad = angle * Math.PI / 180;
+    const roughnessOffset = (Math.random() - 0.5) * mountainRadius * mountainRoughness;
+    const x = mountainCenter.x + (mountainRadius + roughnessOffset) * Math.cos(rad);
+    const y = mountainCenter.y + (mountainRadius + roughnessOffset) * Math.sin(rad);
+
+    mountainPoints.push({ x: x, y: y }); // Store point for collision detection
+   }
+  }
+
+
+  // 3.2 drawMountain() -  Drawing the mountain to the canvas using the generated points.
+  function drawMountain() {
+   generateMountain(); // Generate mountain points FIRST
+   ctx.beginPath();
+
+   //Start drawing at the first point in the array
+   if (mountainPoints.length > 0) {
+    ctx.moveTo(mountainPoints[0].x, mountainPoints[0].y);
+
+    for (let i = 1; i < mountainPoints.length; i++) {
+     ctx.lineTo(mountainPoints[i].x, mountainPoints[i].y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = mountainColor;
+    ctx.fill();
+   }
+  }
+
+  // 4. Player Rendering
+  function drawPlayer() {
+   ctx.beginPath();
+   ctx.arc(playerX, playerY, playerRadius, 0, 2 * Math.PI);
+   ctx.fillStyle = playerColor;
+   ctx.fill();
+  }
+
+  // 5. Input Handling (Movement)
+  let moveLeft = false;
+  let moveRight = false;
+  let moveUp = false;
+
+  document.addEventListener('keydown', (event) => {
+   if (event.key === 'ArrowLeft') {
+    moveLeft = true;
+   } else if (event.key === 'ArrowRight') {
+    moveRight = true;
+   } else if (event.key === 'ArrowUp') {
+    moveUp = true;
+   }
+  });
+
+  document.addEventListener('keyup', (event) => {
+   if (event.key === 'ArrowLeft') {
+    moveLeft = false;
+   } else if (event.key === 'ArrowRight') {
+    moveRight = false;
+   } else if (event.key === 'ArrowUp') {
+    moveUp = false;
+   }
+  });
+
+  // 6. Update Game State - Core Logic
+
+  function update() {
+   if (gameOver || gameWon) return;
+
+   // 6.1 Player Movement
+   if (moveLeft)  playerX -= moveSpeed;
+   if (moveRight) playerX += moveSpeed;
+
+   // 6.2 Player Ascent (Towards Center)
+   if (moveUp) {
+    const dx = mountainCenter.x - playerX;
+    const dy = mountainCenter.y - playerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Normalize the direction vector
+    const directionX = dx / distance;
+    const directionY = dy / distance;
+
+    playerX += directionX * playerAscentSpeed;
+    playerY += directionY * playerAscentSpeed;
+   }
+
+   // 6.3 Boundary Keeping -  Most important and complex part
+
+   // 6.3.1 Calculate Closest Distance to Mountain Edge
+   let closestDistance = Infinity;
+   for (let i = 0; i < mountainPoints.length; i++) {
+    const dx = playerX - mountainPoints[i].x;
+    const dy = playerY - mountainPoints[i].y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    closestDistance = Math.min(closestDistance, distance);
+   }
+
+   // 6.3.2 Reposition Player if Out of Bounds
+   if (closestDistance > playerRadius * 2) { // Adjust the factor as needed
+    // Simple fallback: Gently nudge the player back towards the center.
+    const dx = mountainCenter.x - playerX;
+    const dy = mountainCenter.y - playerY;
+    playerX += dx * 0.01; //  Small nudge.  Adjust as needed.  Experiment with values.
+    playerY += dy * 0.01;
+   }
+
+   // 6.4 Win Condition
+   const distanceToCenter = Math.sqrt(Math.pow(playerX - mountainCenter.x, 2) + Math.pow(playerY - mountainCenter.y, 2));
+   if (distanceToCenter < gameWinHeightThreshold) {
+    gameWon = true;
+    console.log("Game Won!");
+   }
+  }
+
+  // 7. Render - Drawing everything on the screen
+  function render() {
+   ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear
+
+   drawMountain();
+   drawPlayer();
+
+   if (gameOver) {
+    ctx.font = '48px sans-serif';
+    ctx.fillStyle = 'black';
+    ctx.textAlign = 'center';
+    ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2);
+   }
+
+   if (gameWon) {
+    ctx.font = '48px sans-serif';
+    ctx.fillStyle = 'green';
+    ctx.textAlign = 'center';
+    ctx.fillText('You Won!', canvas.width / 2, canvas.height / 2);
+   }
+  }
+
+  // 8. Game Loop - Calls update() and render() repeatedly.
+  function gameLoop() {
+   update();
+   render();
+   requestAnimationFrame(gameLoop);
+  }
+
+  // 9. Initialize Game - Sets initial values
+  function initializeGame() {
+   mountainRadius = Math.min(canvas.width, canvas.height) * 0.4;
+   mountainCenter = { x: canvas.width / 2, y: canvas.height / 2 };
+   playerX = mountainCenter.x - mountainRadius * 0.9;
+   playerY = mountainCenter.y;
+   gameOver = false;
+   gameWon = false;
+  }
+
+  // Start the Game
+  initializeGame();
+  gameLoop();
+ </script>
+</body>
+</html>

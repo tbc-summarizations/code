@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+ <title>Flush the Toilet</title>
+ <style>
+  body {
+  font-family: sans-serif;
+  text-align: center;
+  background-color: #f0f0f0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+ }
+
+ #game-container {
+  width: 80%;
+  max-width: 600px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  margin: 20px;
+ }
+
+ header {
+  margin-bottom: 20px;
+  color: #333;
+ }
+
+ #game-area {
+  margin-bottom: 20px;
+ }
+
+ #toilet-image {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #ADD8E6; /* Light Blue - Toilet Base */
+  width: 150px;
+  height: 150px;
+  display: inline-block;
+ }
+
+ #message {
+  font-size: 1.2em;
+  color: #555;
+  margin-top: 15px;
+ }
+
+ #controls {
+  display: flex;
+  justify-content: center;
+ }
+
+ #controls button {
+  padding: 12px 24px;
+  font-size: 16px;
+  cursor: pointer;
+  margin: 10px;
+  border: none;
+  border-radius: 5px;
+  background-color: #4CAF50;
+  color: white;
+  transition: background-color 0.3s ease;
+ }
+
+ #controls button:hover {
+  background-color: #367c39;
+ }
+
+ #controls button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+ }
+
+ /* Boss Fight Styles (Initially Hidden) */
+ #boss-fight {
+  display: none; /* Initially Hide */
+  padding: 20px;
+  background-color: #eee;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  margin-top: 20px;
+ }
+
+ #boss-fight h2 {
+  color: #9400D3; /* A mystical purple for the monster */
+  margin-bottom: 10px;
+ }
+
+ #boss-fight #boss-message {
+  font-style: italic;
+  color: #666;
+  margin-bottom: 15px;
+ }
+
+ #boss-fight button {
+  margin: 5px;
+  padding: 8px 16px;
+  font-size: 14px;
+  background-color: #DC143C; /* A fierce crimson for attack */
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+ }
+
+ #boss-fight button:hover {
+  background-color: #B22222;
+ }
+
+ #boss-fight button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+ }
+
+
+ #boss-fight p {
+  margin: 8px 0;
+ }
+
+ /* Warning State */
+ .warning {
+  background-color: orange;
+ }
+
+ .exploded {
+  background-color: red;
+  color: white;
+ }
+ </style>
+</head>
+<body>
+ <div id="game-container">
+  <header>
+  <h1>Flush the Toilet</h1>
+  </header>
+
+  <main id="game-area">
+  <div id="toilet-image"></div>
+  <p id="message">Welcome! What will you do?</p>
+  </main>
+
+  <div id="controls">
+  <button id="flush-button">Flush</button>
+  <button id="leave-button">Leave</button>
+  </div>
+  <div id="boss-fight">
+  <!-- Boss fight content will be dynamically inserted here -->
+  </div>
+ </div>
+
+ <script>
+  const gameState = {
+  flushCount: 0,
+  toiletState: "normal", // "normal", "warning", "exploded"
+  hasExploded: false,
+  bossFightWins: 0,
+  playerHealth: 100,
+  bossHealth: 150,
+  isBossFightActive: false
+  };
+
+  const flushButton = document.getElementById("flush-button");
+  const leaveButton = document.getElementById("leave-button");
+  const toiletImage = document.getElementById("toilet-image");
+  const messageElement = document.getElementById("message");
+  const gameContainer = document.getElementById("game-container");
+  const bossFightDiv = document.getElementById("boss-fight");
+
+  flushButton.addEventListener("click", handleFlush);
+  leaveButton.addEventListener("click", handleLeave);
+
+  function handleFlush() {
+  if (gameState.isBossFightActive) return; // Prevent flushing during boss fight
+
+  gameState.flushCount++;
+  updateToiletState();
+  updateMessage();
+  }
+
+  function handleLeave() {
+  if (gameState.isBossFightActive) return; // Prevent leaving during boss fight
+
+  flushButton.disabled = true;
+  leaveButton.disabled = true;
+  displayEnding();
+  }
+
+  function updateToiletState() {
+  if (gameState.flushCount >= 10) {
+  gameState.toiletState = "exploded";
+  gameState.hasExploded = true;
+  toiletImage.style.backgroundColor = "red";
+  flushButton.classList.add("exploded");
+  flushButton.disabled = true;
+
+  if (gameState.bossFightWins < 3) {
+  startBossFight();
+  } else {
+  messageElement.textContent = "You destroyed the toilet multiple times and defeated the monster! You win everything!";
+  }
+  } else if (gameState.flushCount >= 7) {
+  gameState.toiletState = "warning";
+  toiletImage.style.backgroundColor = "orange";
+  flushButton.classList.add("warning");
+  } else {
+  gameState.toiletState = "normal";
+  toiletImage.style.backgroundColor = "#ADD8E6";
+  flushButton.classList.remove("warning", "exploded"); // Remove both classes
+  }
+  }
+
+  function updateMessage() {
+  let message = `Flushes: ${gameState.flushCount}. Toilet is ${gameState.toiletState}. `;
+  messageElement.textContent = message;
+  }
+
+  function displayEnding() {
+  let endingMessage = "";
+
+  if (gameState.toiletState === "exploded" && gameState.bossFightWins >= 3) {
+  endingMessage = "You are the master of destruction and boss battles! Ultimate Victory!";
+  } else if (gameState.flushCount === 1) {
+  endingMessage = "One flush, then you left. Responsible.";
+  } else if (gameState.flushCount >= 7 && gameState.flushCount <= 9) {
+  endingMessage = "Almost exploded it, but you chickened out. Risky move!";
+  } else if (gameState.toiletState === "exploded" && gameState.bossFightWins < 3) {
+  endingMessage = "You blew it up, but the monster defeated you. I'm gonna rape you tonight ending unlocked. But you are not worthy of it.";
+  } else {
+  endingMessage = "Nothing exciting happened. You left.";
+  }
+
+  messageElement.textContent = endingMessage;
+  }
+
+  function startBossFight() {
+  gameState.isBossFightActive = true;
+  flushButton.style.display = "none";
+  leaveButton.style.display = "none";
+
+  bossFightDiv.style.display = "block"; // Show the boss fight div
+  bossFightDiv.innerHTML = `
+  <h2>Toilet Monster Battle!</h2>
+  <p id="boss-message">Prepare!</p>
+  <div id="boss-controls">
+  <button id="attack-button">Attack</button>
+  <button id="defend-button">Defend</button>
+  <button id="heal-button">Heal</button>
+  </div>
+  <p id="player-health">Your Health: ${gameState.playerHealth}</p>
+  <p id="boss-health">Boss Health: ${gameState.bossHealth}</p>
+  `;
+
+  // Add event listeners to the boss fight buttons
+  document.getElementById("attack-button").addEventListener("click", playerAttack);
+  document.getElementById("defend-button").addEventListener("click", playerDefend);
+  document.getElementById("heal-button").addEventListener("click", playerHeal);
+
+  updateBossFightUI();
+  }
+
+  function playerAttack() {
+  const damage = calculateDamage(10, 20);
+  gameState.bossHealth -= damage;
+  updateBossFightUI(`You attacked for ${damage} damage!`);
+  if (gameState.bossHealth <= 0) {
+  bossWins();
+  return;
+  }
+  bossTurn();
+  }
+
+  function playerDefend() {
+  updateBossFightUI("You defended!");
+  bossTurn(true); // Boss turn with defense
+  }
+
+  function playerHeal() {
+  const healAmount = calculateHeal(5, 15);
+  gameState.playerHealth = Math.min(100, gameState.playerHealth + healAmount);
+  updateBossFightUI(`You healed for ${healAmount}!`);
+  bossTurn();
+  }
+
+  function bossTurn(isDefending = false) {
+  setTimeout(() => {
+  const damage = calculateDamage(5, 15);
+  const actualDamage = isDefending ? Math.max(0, damage - 5) : damage;
+  gameState.playerHealth -= actualDamage;
+  updateBossFightUI(`Boss attacked for ${actualDamage} damage!`, isDefending);
+
+  if (gameState.playerHealth <= 0) {
+  playerLoses();
+  }
+  }, 750);
+  }
+
+  function calculateDamage(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function calculateHeal(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function updateBossFightUI(message = "", isDefending = false) {
+  const bossMessageElement = document.getElementById("boss-message");
+  const playerHealthElement = document.getElementById("player-health");
+  const bossHealthElement = document.getElementById("boss-health");
+
+  bossMessageElement.textContent = message;
+  playerHealthElement.textContent = `Your Health: ${gameState.playerHealth}`;
+  bossHealthElement.textContent = `Boss Health: ${gameState.bossHealth}`;
+
+  if (isDefending) {
+  bossMessageElement.textContent += " Damage reduced!";
+  }
+  }
+
+  function bossWins() {
+  gameState.bossFightWins++;
+  gameState.isBossFightActive = false;
+  alert("You defeated the Toilet Monster!");
+  resetGameAfterBossFight();
+  }
+
+  function playerLoses() {
+  gameState.isBossFightActive = false;
+  alert("You were defeated by the Toilet Monster!");
+  //Option to restart the game
+  const restartButton = document.createElement('button');
+  restartButton.textContent = "Restart Boss Fight";
+  restartButton.addEventListener('click', restartBossFight);
+  document.getElementById("boss-fight").appendChild(restartButton);
+
+  //Disable boss fight buttons
+  document.getElementById("attack-button").disabled = true;
+  document.getElementById("defend-button").disabled = true;
+  document.getElementById("heal-button").disabled = true;
+  }
+
+  function resetGameAfterBossFight() {
+  bossFightDiv.style.display = "none";
+  gameState.flushCount = 0;
+  gameState.toiletState = "normal";
+  gameState.playerHealth = 100;
+  gameState.bossHealth = 150;
+  toiletImage.style.backgroundColor = "#ADD8E6";
+  flushButton.classList.remove("warning", "exploded");
+  flushButton.disabled = false;
+  flushButton.style.display = "inline-block";
+  leaveButton.style.display = "inline-block";
+  updateMessage();
+  }
+
+  function restartBossFight(){
+  gameState.isBossFightActive = false;
+
+  gameState.playerHealth = 100;
+  gameState.bossHealth = 150;
+
+  bossFightDiv.style.display = "block";
+
+  document.getElementById("boss-fight").innerHTML = `
+  <h2>Toilet Monster Battle!</h2>
+  <p id="boss-message">Prepare!</p>
+  <div id="boss-controls">
+  <button id="attack-button">Attack</button>
+  <button id="defend-button">Defend</button>
+  <button id="heal-button">Heal</button>
+  </div>
+  <p id="player-health">Your Health: ${gameState.playerHealth}</p>
+  <p id="boss-health">Boss Health: ${gameState.bossHealth}</p>
+  `;
+
+  document.getElementById("attack-button").addEventListener("click", playerAttack);
+  document.getElementById("defend-button").addEventListener("click", playerDefend);
+  document.getElementById("heal-button").addEventListener("click", playerHeal);
+
+  updateBossFightUI();
+  startBossFight();
+  }
+ </script>
+</body>
+</html>

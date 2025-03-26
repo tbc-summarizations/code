@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circle Simulation</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #canvas {
+            background-color: #f0f0f0;
+            display: block; /* Prevent scrollbars */
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <script>
+        // 1. Initialization
+        // 1.1. Canvas Setup
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            draw(); // Redraw canvas on resize
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // Initial canvas size
+
+        // 1.2. Circle Parameters
+        const NUM_BIG_CIRCLES = 100;
+        let bigCircles = [];
+        let smallCircle = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 10,
+            dy: 0, // Vertical velocity for gravity
+            color: 'red'
+        };
+        const GRAVITY = 0.5;
+        const FRICTION = 0.9;
+        let animationFrameId; // To store animation frame ID
+
+        // 2. Big Circle Generation
+        function generateBigCircles() {
+            let radius = Math.min(canvas.width, canvas.height) * 0.4; // Starting radius, responsive to canvas size
+            const radiusDecrement = (radius - 50) / NUM_BIG_CIRCLES;
+
+            for (let i = 0; i < NUM_BIG_CIRCLES; i++) {
+                bigCircles.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    radius: Math.max(radius, 5), // Ensure radius doesn't go below a minimum
+                    hole: generateHole(Math.max(radius, 5)),
+                    color: `rgba(0, 128, 255, ${0.05 + (0.95/NUM_BIG_CIRCLES)*i})`, // More subtle fading blue
+                    broken: false
+                });
+                radius -= radiusDecrement;
+            }
+        }
+
+        // 2.1 Hole Generation
+        function generateHole(radius) {
+            const angle = Math.random() * 2 * Math.PI;
+            const distance = radius * 0.7; // Hole closer to center
+
+            return {
+                x: canvas.width / 2 + Math.cos(angle) * distance,
+                y: canvas.height / 2 + Math.sin(angle) * distance,
+                radius: radius / 6 // Slightly smaller holes
+            };
+        }
+
+        // 3. Drawing Functions
+        // 3.1 Draw Big Circles
+        function drawBigCircles() {
+            bigCircles.forEach(circle => {
+                if (!circle.broken) {
+                    ctx.beginPath();
+                    ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = circle.color;
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // Draw Hole
+                    ctx.beginPath();
+                    ctx.arc(circle.hole.x, circle.hole.y, circle.hole.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#f0f0f0';
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.fill();
+                    ctx.globalCompositeOperation = 'source-over';
+                    ctx.closePath();
+                }
+            });
+        }
+
+        // 3.2 Draw Small Circle
+        function drawSmallCircle() {
+            ctx.beginPath();
+            ctx.arc(smallCircle.x, smallCircle.y, smallCircle.radius, 0, Math.PI * 2);
+            ctx.fillStyle = smallCircle.color;
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        // 4. Collision Detection
+        // 4.1 Hole Collision
+        function checkHoleCollision(circle) {
+            const dx = smallCircle.x - circle.hole.x;
+            const dy = smallCircle.y - circle.hole.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < (smallCircle.radius + circle.hole.radius);
+        }
+
+        // 4.2 Circle Containment Check
+        function isSmallCircleInside(circle) {
+            const dx = smallCircle.x - circle.x;
+            const dy = smallCircle.y - circle.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance + smallCircle.radius < circle.radius;
+        }
+
+        // 5. Game Logic
+        // 5.1 Update Function
+        function update() {
+            if (bigCircles.every(circle => circle.broken)) {
+                cancelAnimationFrame(animationFrameId);
+                console.log("All circles broken! Small circle escaped!");
+                return; // Stop updating if all circles are broken
+            }
+
+            smallCircle.dy += GRAVITY;
+            smallCircle.y += smallCircle.dy;
+            smallCircle.dy *= FRICTION;
+
+            // Boundary Collision (Top, Bottom, Sides - for more dynamic escape feel)
+            if (smallCircle.y + smallCircle.radius > canvas.height) {
+                smallCircle.y = canvas.height - smallCircle.radius;
+                smallCircle.dy = -Math.abs(smallCircle.dy * 0.8);
+            } else if (smallCircle.y - smallCircle.radius < 0) {
+                smallCircle.y = smallCircle.radius;
+                smallCircle.dy = Math.abs(smallCircle.dy * 0.8);
+            }
+            if (smallCircle.x + smallCircle.radius > canvas.width) {
+                smallCircle.x = canvas.width - smallCircle.radius;
+                smallCircle.dx = -Math.abs(smallCircle.dx * 0.8) || -2; // Simple horizontal bounce, initialize if no dx
+            } else if (smallCircle.x - smallCircle.radius < 0) {
+                smallCircle.x = smallCircle.radius;
+                smallCircle.dx = Math.abs(smallCircle.dx * 0.8) || 2; // Simple horizontal bounce, initialize if no dx
+            }
+
+
+            for (let i = 0; i < bigCircles.length; i++) {
+                if (!bigCircles[i].broken && checkHoleCollision(bigCircles[i])) {
+                    bigCircles[i].broken = true;
+                }
+            }
+        }
+
+        // 5.2 Draw Function
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBigCircles();
+            drawSmallCircle();
+        }
+
+        // 5.3 Animation Loop
+        function animate() {
+            update();
+            draw();
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // 6. Start Game
+        function startGame() {
+            generateBigCircles();
+
+            let isInsideAll = false;
+            let attempts = 0;
+            const maxAttempts = 1000; // Prevent infinite loop if impossible to place inside
+
+            while (!isInsideAll && attempts < maxAttempts) {
+                isInsideAll = true;
+                smallCircle.x = Math.random() * canvas.width;
+                smallCircle.y = Math.random() * canvas.height * 0.5; // Start from top half for better gravity effect
+                for (let i = 0; i < bigCircles.length; i++) {
+                    if (!isSmallCircleInside(bigCircles[i])) {
+                        isInsideAll = false;
+                        break;
+                    }
+                }
+                attempts++;
+            }
+
+            if (attempts >= maxAttempts) {
+                console.warn("Could not place small circle inside all big circles after multiple attempts.");
+                smallCircle.x = canvas.width / 2; // Default position if placement fails
+                smallCircle.y = canvas.height / 2;
+            }
+            animate();
+        }
+
+        startGame();
+    </script>
+</body>
+</html>

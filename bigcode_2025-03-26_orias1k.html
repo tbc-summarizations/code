@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Five Nights at Freddy's (HTML/CSS/JS)</title>
+    <style>
+        body {
+            background-color: #222;
+            color: #eee;
+            font-family: monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        #game-container {
+            width: 800px;
+            background-color: #333;
+            border: 5px solid #555;
+            padding: 20px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        #camera-view {
+            width: 100%;
+            height: 400px;
+            background-color: #444;
+            border: 3px solid #666;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        #camera-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block; /* Prevents gap below image */
+        }
+
+        #monitor-interface {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #monitor-interface button {
+            padding: 8px 15px;
+            margin: 5px;
+            background-color: #777;
+            color: #eee;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #monitor-interface button:hover {
+            background-color: #888;
+        }
+
+        #door-controls, #light-controls {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 15px;
+        }
+
+        #door-controls > div, #light-controls > div {
+            text-align: center;
+            width: 45%;
+        }
+
+        #door-controls button, #light-controls button {
+            padding: 8px 12px;
+            margin-top: 5px;
+            background-color: #777;
+            color: #eee;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #door-controls button:hover, #light-controls button:hover {
+            background-color: #888;
+        }
+
+        #power-indicator, #clock {
+            text-align: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            text-align: center;
+            padding-top: 150px;
+            z-index: 100;
+            display: none;
+        }
+
+        #game-over-screen h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+
+        #game-over-screen button {
+            padding: 10px 20px;
+            font-size: 1.2em;
+            background-color: #900;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #game-over-screen button:hover {
+            background-color: #a00;
+        }
+
+        .door-status-closed {
+            color: #f44;
+        }
+
+        .light-status-on {
+            color: #ff0;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="camera-view">
+            <img id="camera-image" src="images/camera1.png" alt="Camera View">
+        </div>
+
+        <div id="monitor-interface">
+            <button onclick="changeCamera('camera1')">Camera 1</button>
+            <button onclick="changeCamera('camera2')">Camera 2</button>
+            <button onclick="changeCamera('camera3')">Camera 3</button>
+            <button onclick="changeCamera('camera4')">Camera 4</button>
+            <button onclick="changeCamera('camera5')">Camera 5</button>
+            <button onclick="changeCamera('camera6')">Camera 6</button>
+            <button onclick="changeCamera('camera7')">Camera 7</button>
+        </div>
+
+        <div id="door-controls">
+            <div>Left Door: <span id="left-door-status">OPEN</span>
+                <button onclick="toggleLeftDoor()">Toggle</button>
+            </div>
+            <div>Right Door: <span id="right-door-status">OPEN</span>
+                <button onclick="toggleRightDoor()">Toggle</button>
+            </div>
+        </div>
+
+        <div id="light-controls">
+            <div>Left Light: <span id="left-light-status">OFF</span>
+                <button onclick="toggleLeftLight()">Toggle</button>
+            </div>
+            <div>Right Light: <span id="right-light-status">OFF</span>
+                <button onclick="toggleRightLight()">Toggle</button>
+            </div>
+        </div>
+
+        <div id="power-indicator">
+            Power Remaining: <span id="power-level">100%</span>
+        </div>
+
+        <div id="clock">
+            Night: <span id="night-number">1</span> - <span id="time">12 AM</span>
+        </div>
+
+        <div id="game-over-screen">
+            <h1>GAME OVER</h1>
+            <button onclick="restartGame()">Restart</button>
+        </div>
+    </div>
+
+    <script>
+        let currentCamera = "camera1";
+        let leftDoorOpen = true;
+        let rightDoorOpen = true;
+        let leftLightOn = false;
+        let rightLightOn = false;
+        let powerLevel = 100;
+        let gameOver = false;
+        let night = 1;
+        let time = 0;
+        let enemyLocation = "camera7";
+        let powerInterval;
+        let enemyMoveInterval;
+        let enemyCheckInterval;
+        let timeInterval;
+
+        function changeCamera(cameraName) {
+            if (gameOver) return;
+            currentCamera = cameraName;
+            document.getElementById("camera-image").src = "images/camera" + cameraName.slice(-1) + ".png"; // Corrected image path
+        }
+
+        function toggleLeftDoor() {
+            if (gameOver) return;
+            leftDoorOpen = !leftDoorOpen;
+            document.getElementById("left-door-status").textContent = leftDoorOpen ? "OPEN" : "CLOSED";
+            document.getElementById("left-door-status").className = leftDoorOpen ? "" : "door-status-closed"; // Update class
+        }
+
+        function toggleRightDoor() {
+            if (gameOver) return;
+            rightDoorOpen = !rightDoorOpen;
+            document.getElementById("right-door-status").textContent = rightDoorOpen ? "OPEN" : "CLOSED";
+            document.getElementById("right-door-status").className = rightDoorOpen ? "" : "door-status-closed"; // Update class
+        }
+
+        function toggleLeftLight() {
+            if (gameOver) return;
+            leftLightOn = !leftLightOn;
+            document.getElementById("left-light-status").textContent = leftLightOn ? "ON" : "OFF";
+            document.getElementById("left-light-status").className = leftLightOn ? "light-status-on" : ""; // Update class
+            powerConsumption();
+        }
+
+        function toggleRightLight() {
+            if (gameOver) return;
+            rightLightOn = !rightLightOn;
+            document.getElementById("right-light-status").textContent = rightLightOn ? "ON" : "OFF";
+            document.getElementById("right-light-status").className = rightLightOn ? "light-status-on" : ""; // Update class
+            powerConsumption();
+        }
+
+        function powerConsumption() {
+            if (leftLightOn) powerLevel -= 0.3; // Example power drain for lights, adjust as needed
+            if (rightLightOn) powerLevel -= 0.3;
+            if (!leftDoorOpen) powerLevel -= 0.5; // Example power drain for closed doors
+            if (!rightDoorOpen) powerLevel -= 0.5;
+
+            powerLevel = Math.max(0, powerLevel); // Ensure powerLevel doesn't go below 0
+            document.getElementById("power-level").textContent = powerLevel.toFixed(0) + "%";
+
+            if(powerLevel <= 0) {
+                gameOverFunc();
+            }
+        }
+
+        function gameOverFunc() {
+            gameOver = true;
+            document.getElementById("game-over-screen").style.display = "block";
+            clearInterval(powerInterval);
+            clearInterval(enemyMoveInterval);
+            clearInterval(enemyCheckInterval);
+            clearInterval(timeInterval);
+			alert("You ran out of Power! Game Over!");
+        }
+
+        function restartGame() {
+            gameOver = false;
+            document.getElementById("game-over-screen").style.display = "none";
+            currentCamera = "camera1";
+            leftDoorOpen = true;
+            rightDoorOpen = true;
+            leftLightOn = false;
+            rightLightOn = false;
+            powerLevel = 100;
+            night = 1;
+            time = 0;
+            enemyLocation = "camera7";
+
+            document.getElementById("camera-image").src = "images/camera1.png";
+            document.getElementById("left-door-status").textContent = "OPEN";
+            document.getElementById("right-door-status").textContent = "OPEN";
+            document.getElementById("left-light-status").textContent = "OFF";
+            document.getElementById("right-light-status").textContent = "OFF";
+            document.getElementById("power-level").textContent = "100%";
+            document.getElementById("night-number").textContent = night;
+            document.getElementById("time").textContent = "12 AM";
+            document.getElementById("left-door-status").className = "";
+            document.getElementById("right-door-status").className = "";
+            document.getElementById("left-light-status").className = "";
+            document.getElementById("right-light-status").className = "";
+
+            init(); // Restart intervals
+        }
+
+        function moveEnemy() {
+            if (gameOver) return;
+            const possibleLocations = ["camera1", "camera2", "camera3", "camera4", "camera5", "camera6", "camera7", "leftDoor", "rightDoor"];
+            let weights = [1, 1, 1, 1, 1, 1, 1];
+            if (night > 2) {
+                weights = [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]; // Reduced prob for cameras, increased for doors
+                possibleLocations.push("leftDoor");
+                possibleLocations.push("rightDoor");
+                weights.push(2); // Higher weight for doors
+                weights.push(2);
+            }
+
+            let nextLocation;
+            let totalWeight = weights.reduce((a, b) => a + b, 0);
+            let randomNum = Math.random() * totalWeight;
+            let weightSum = 0;
+
+            for (let i = 0; i < possibleLocations.length; i++) {
+                weightSum += weights[i] || 1; // Default weight if not defined
+                if (randomNum <= weightSum) {
+                    nextLocation = possibleLocations[i];
+                    break;
+                }
+            }
+            enemyLocation = nextLocation;
+            console.log("Enemy moved to:", enemyLocation); // For debugging
+        }
+
+
+        function checkEnemyPosition() {
+            if (gameOver) return;
+            if (leftLightOn && enemyLocation === "leftDoor") {
+                gameOverFunc();
+                alert("Enemy got you from the left door!");
+            }
+            if (rightLightOn && enemyLocation === "rightDoor") {
+                gameOverFunc();
+                alert("Enemy got you from the right door!");
+            }
+        }
+
+        function updateTime() {
+            if(gameOver) return;
+        }
+
+        function incrementTime() {
+            if(gameOver) return;
+            time++;
+            if(time > 23) {
+                nightComplete();
+                return; // Stop incrementing for this night
+            }
+            let displayTime = time;
+            let period = "AM";
+            if(time > 11) {
+                period = "PM";
+            }
+            if(time > 12) {
+                displayTime = time - 12;
+            }
+            if(time == 0 || time == 24) { // Midnight
+                displayTime = 12;
+                period = "AM";
+            } else if (time == 12) { // Noon
+                displayTime = 12;
+                period = "PM";
+            }
+
+
+            document.getElementById("time").textContent = displayTime + " " + period;
+        }
+
+
+        function nightComplete() {
+            clearInterval(powerInterval);
+            clearInterval(enemyMoveInterval);
+            clearInterval(enemyCheckInterval);
+            clearInterval(timeInterval);
+            alert("Night " + night + " complete! You survived!");
+            night++;
+            document.getElementById("night-number").textContent = night;
+            time = 0;
+            document.getElementById("time").textContent = "12 AM";
+            powerLevel = 100;
+            document.getElementById("power-level").textContent = "100%";
+            init(); // Start the next night
+        }
+
+
+        function init() {
+             powerInterval = setInterval(powerConsumption, 1000);
+             enemyMoveInterval = setInterval(moveEnemy, 15000);
+             enemyCheckInterval = setInterval(checkEnemyPosition, 500);
+             timeInterval = setInterval(incrementTime, 10000);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

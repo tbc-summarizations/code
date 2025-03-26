@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Circle Break Simulation</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+        #gameCanvas { background-color: #e0e0e0; border: 2px solid #ccc; }
+        #controls { margin-top: 20px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 5px; }
+        button:hover { background-color: #45a049; }
+        #message-container { margin-top: 20px; font-size: 20px; font-weight: bold; color: #333; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <button id="resetButton">Reset</button>
+    </div>
+    <div id="message-container"></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const resetButton = document.getElementById('resetButton');
+        const messageContainer = document.getElementById('message-container');
+
+        let canvasWidth = canvas.width;
+        let canvasHeight = canvas.height;
+
+        let circles = [];
+        let smallCircle;
+
+        const gravity = 0.3;
+        const bounceDamping = 0.7;
+        const circleCount = 100;
+        let gameRunning = true;
+
+        class Circle {
+            constructor(x, y, radius, color, holeX, holeY, holeRadius) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.color = color;
+                this.holeX = holeX;
+                this.holeY = holeY;
+                this.holeRadius = holeRadius;
+                this.isBroken = false;
+            }
+
+            draw() {
+                if (this.isBroken) return;
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(this.holeX, this.holeY, this.holeRadius, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fillStyle = '#e0e0e0'; // Hole color matches canvas background
+                ctx.fill();
+            }
+
+            isColliding(x, y, radius) {
+                if (this.isBroken) return false;
+
+                const dx = x - this.x;
+                const dy = y - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                const holeDx = x - this.holeX;
+                const holeDy = y - this.holeY;
+                const holeDistance = Math.sqrt(holeDx * holeDx + holeDy * holeDy);
+
+                return (distance < this.radius + radius) && (holeDistance > this.holeRadius + radius);
+            }
+        }
+
+        class SmallCircle {
+            constructor(x, y, radius, color) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.color = color;
+                this.velocityX = (Math.random() - 0.5) * 4;
+                this.velocityY = 0;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.closePath();
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
+
+            update() {
+                if (!gameRunning) return;
+
+                this.velocityY += gravity;
+                this.x += this.velocityX;
+                this.y += this.velocityY;
+
+                if (this.x + this.radius > canvasWidth) {
+                    this.velocityX = -Math.abs(this.velocityX) * bounceDamping;
+                    this.x = canvasWidth - this.radius;
+                } else if (this.x - this.radius < 0) {
+                    this.velocityX = Math.abs(this.velocityX) * bounceDamping;
+                    this.x = this.radius;
+                }
+
+                if (this.y + this.radius > canvasHeight) {
+                    this.velocityY = -Math.abs(this.velocityY) * bounceDamping;
+                    this.y = canvasHeight - this.radius;
+                } else if (this.y - this.radius < 0) {
+                    this.velocityY = Math.abs(this.velocityY) * bounceDamping;
+                    this.y = this.radius;
+                }
+
+
+                for (let i = 0; i < circles.length; i++) {
+                    const circle = circles[i];
+                    if (!circle.isBroken && circle.isColliding(this.x, this.y, this.radius)) {
+                        circle.isBroken = true;
+                        circles.splice(i, 1);
+                        i--;
+                        if (circles.length === 0) {
+                            gameRunning = false;
+                            messageContainer.textContent = "Escaped!";
+                        }
+                    }
+                }
+            }
+        }
+
+        function init() {
+            circles = [];
+            gameRunning = true;
+            messageContainer.textContent = "";
+
+            let startRadius = Math.min(canvasWidth, canvasHeight) / 2 * 0.9;
+            let radiusDecrement = startRadius / circleCount;
+
+            for (let i = 0; i < circleCount; i++) {
+                let radius = startRadius - i * radiusDecrement;
+                let x = canvasWidth / 2;
+                let y = canvasHeight / 2;
+                let color = `hsl(${Math.random() * 360}, 70%, 60%)`;
+
+                let holeRadius = Math.max(radius / 5, 5);
+                let angle = Math.random() * Math.PI * 2;
+                let holeDistance = radius * 0.6 * Math.random();
+                let holeX = x + Math.cos(angle) * holeDistance;
+                let holeY = y + Math.sin(angle) * holeDistance;
+
+
+                const circle = new Circle(x, y, radius, color, holeX, holeY, holeRadius);
+                circles.push(circle);
+            }
+
+            smallCircle = new SmallCircle(canvasWidth / 2, canvasHeight / 4, 8, 'red');
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            for (let i = 0; i < circles.length; i++) {
+                circles[i].draw();
+            }
+
+            smallCircle.update();
+            smallCircle.draw();
+
+            if (!gameRunning && circles.length > 0 && smallCircle.y < canvasHeight) {
+                messageContainer.textContent = "Game Over!";
+            } else if (!gameRunning && circles.length === 0) {
+                // Message already set to "Escaped!" in update function
+            }
+        }
+
+        resetButton.addEventListener('click', function() {
+            init();
+            gameRunning = true;
+            animate();
+        });
+
+        init();
+        animate();
+    </script>
+</body>
+</html>

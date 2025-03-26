@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Climbing Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            border: 0;
+        }
+
+        body {
+            overflow: hidden; /* Prevent scrollbars */
+            background-color: #77b5fe; /* Slightly nicer sky color */
+        }
+
+        #gameCanvas {
+            width: 800px;
+            height: 600px;
+            background-color: #ADD8E6; /* Light Blue */
+            display: block;
+            margin: 0 auto; /* Center the canvas horizontally */
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        const gameState = {
+            canvas: document.getElementById('gameCanvas'),
+            ctx: document.getElementById('gameCanvas').getContext('2d'),
+            player: {
+                x: 100,
+                y: 500,
+                lastX: 100,
+                lastY: 500,
+                width: 30,
+                height: 60,
+                velocityX: 0,
+                velocityY: 0,
+                onGround: false,
+                mass: 10,
+            },
+            hammer: {
+                angle: 0,
+                length: 75,
+                originOffsetX: 0,
+                originOffsetY: -30,
+                rotationSpeed: 0.05,
+            },
+            mountain: [
+                { x1: 0, y1: 540, x2: 200, y2: 400 },
+                { x1: 200, y1: 400, x2: 400, y2: 300 },
+                { x1: 400, y1: 300, x2: 600, y2: 450 },
+                { x1: 600, y1: 450, x2: 800, y2: 540 },
+            ],
+            keys: {}, // Key state object (pressed or not)
+            camera: {
+                x: 0,
+                y: 0,
+                lerpSpeed: 0.1, // Camera smoothing
+            },
+            gravity: 9.81,
+            groundFriction: 0.7,
+            airResistance: 0.01,
+            groundLevel: 540,
+            hammerForce: 200,
+            swingCooldown: 300,
+            canSwing: true,
+            fixedTimeStep: 1 / 60,
+            accumulatedTime: 0,
+        };
+
+        const utils = {
+            lineIntersect: function (x1, y1, x2, y2, x3, y3, x4, y4) {
+                const det = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+                if (det === 0) {
+                    return null; // Lines are parallel or coincident
+                }
+
+                const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / det;
+                const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / det;
+
+                if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+                    return {
+                        x: x1 + t * (x2 - x1),
+                        y: y1 + t * (y2 - y1)
+                    };
+                }
+
+                return null; // No intersection
+            },
+
+            vectorNormalize: function (x, y) {
+                const length = Math.sqrt(x * x + y * y);
+                if (length === 0) {
+                    return { x: 0, y: 0 }; // Avoid division by zero
+                }
+                return { x: x / length, y: y / length };
+            },
+
+            vectorDistance: function (x1, y1, x2, y2) {
+              return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+            }
+        };
+
+        function updatePlayer(gameState, deltaTime) {
+            const player = gameState.player;
+            const gravity = gameState.gravity;
+            const airResistance = gameState.airResistance;
+            const groundFriction = gameState.groundFriction;
+            const groundLevel = gameState.groundLevel;
+
+            // Air Resistance
+            const speed = Math.sqrt(player.velocityX * player.velocityX + player.velocityY * player.velocityY);
+            const dragForceX = -airResistance * player.velocityX * speed;
+            const dragForceY = -airResistance * player.velocityY * speed;
+
+            // Apply forces as acceleration
+            player.velocityY += (gravity + dragForceY / player.mass) * deltaTime;
+            player.velocityX += (dragForceX / player.mass) * deltaTime;
+
+            //Save Last Position
+            player.lastX = player.x;
+            player.lastY = player.y;
+            player.x += player.velocityX * deltaTime;
+            player.y += player.velocityY * deltaTime;
+
+            if (player.y > groundLevel - player.height) {
+                player.y = groundLevel - player.height;
+                player.velocityY = 0;
+                player.onGround = true;
+                player.velocityX *= groundFriction; // Apply ground friction
+            } else {
+                player.onGround = false;
+            }
+        }
+
+        function drawPlayer(gameState) {
+            const ctx = gameState.ctx;
+            const player = gameState.player;
+            ctx.fillStyle = 'red';
+            ctx.fillRect(player.x - player.width / 2 - gameState.camera.x, player.y - player.height - gameState.camera.y, player.width, player.height);
+        }
+
+        function drawHammer(gameState) {
+            const ctx = gameState.ctx;
+            const player = gameState.player;
+            const hammer = gameState.hammer;
+
+            ctx.save();
+            ctx.translate(player.x - gameState.camera.x, player.y - gameState.camera.y); // Translate to player's center bottom
+            ctx.rotate(hammer.angle);
+
+            ctx.beginPath();
+            ctx.moveTo(hammer.originOffsetX, hammer.originOffsetY); // Start at the calculated origin
+            ctx.lineTo(hammer.originOffsetX + hammer.length, hammer.originOffsetY);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 7;
+            ctx.lineCap = 'round'; // Round ends for better visuals
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function swingHammer(gameState) {
+            const player = gameState.player;
+            const hammer = gameState.hammer;
+            const hammerForce = gameState.hammerForce;
+
+            if (gameState.canSwing) {
+                const forceX = Math.cos(hammer.angle) * hammerForce;
+                const forceY = Math.sin(hammer.angle) * hammerForce;
+
+                player.velocityX += forceX / player.mass;
+                player.velocityY += forceY / player.mass;
+
+                gameState.canSwing = false;
+                setTimeout(() => {
+                    gameState.canSwing = true;
+                }, gameState.swingCooldown);
+            }
+        }
+
+        function handleInput(gameState) {
+            const keys = gameState.keys;
+            const hammer = gameState.hammer;
+
+            if (keys['ArrowLeft']) {
+                hammer.angle -= hammer.rotationSpeed;
+            }
+            if (keys['ArrowRight']) {
+                hammer.angle += hammer.rotationSpeed;
+            }
+            // Normalize angle smoothly to -PI to PI
+            hammer.angle = (hammer.angle + Math.PI) % (2 * Math.PI) - Math.PI;
+
+            if (keys[' ']) {
+                swingHammer(gameState);
+            }
+        }
+
+        function drawMountain(gameState) {
+            const ctx = gameState.ctx;
+            const mountain = gameState.mountain;
+            const camera = gameState.camera;
+
+            ctx.strokeStyle = 'brown';
+            ctx.lineWidth = 10;
+            ctx.lineCap = 'round'; // Smooth line joins
+            ctx.beginPath();
+            mountain.forEach(segment => {
+                ctx.moveTo(segment.x1 - camera.x, segment.y1 - camera.y);
+                ctx.lineTo(segment.x2 - camera.x, segment.y2 - camera.y);
+            });
+            ctx.stroke();
+        }
+
+        function handleCollisions(gameState) {
+            const player = gameState.player;
+            const hammer = gameState.hammer;
+            const mountain = gameState.mountain;
+            const ctx = gameState.ctx;
+
+            // Calculate the hammer's endpoint coordinates
+            const hammerEndX = player.x + hammer.originOffsetX + Math.cos(hammer.angle) * hammer.length;
+            const hammerEndY = player.y + hammer.originOffsetY + Math.sin(hammer.angle) * hammer.length;
+
+            mountain.forEach(segment => {
+                const intersection = utils.lineIntersect(
+                    player.x + hammer.originOffsetX, player.y + hammer.originOffsetY, hammerEndX, hammerEndY,
+                    segment.x1, segment.y1, segment.x2, segment.y2
+                );
+
+                if (intersection) {
+                    // Calculate penetration depth (basic example)
+                    const dx = intersection.x - hammerEndX;
+                    const dy = intersection.y - hammerEndY;
+                    const penetrationDepth = Math.sqrt(dx * dx + dy * dy);
+
+                    // Apply reaction force (proportional to penetration depth)
+                    const normal = utils.vectorNormalize(-(segment.y2 - segment.y1), (segment.x2 - segment.x1));
+                    const stiffness = 0.2; // Adjust for "stickiness"
+
+                    player.velocityX += normal.x * penetrationDepth * stiffness;
+                    player.velocityY += normal.y * penetrationDepth * stiffness;
+
+                    //Visualise the point of collision:
+                    ctx.beginPath();
+                    ctx.arc(intersection.x - gameState.camera.x, intersection.y - gameState.camera.y, 5, 0, 2 * Math.PI);
+                    ctx.fillStyle = "green";
+                    ctx.fill();
+                }
+            });
+        }
+
+        function updateCamera(gameState) {
+            const player = gameState.player;
+            const camera = gameState.camera;
+            const lerpSpeed = camera.lerpSpeed;
+            const canvasWidth = gameState.canvas.width;
+            const canvasHeight = gameState.canvas.height;
+
+            // Center the camera on the player
+            const targetX = player.x - canvasWidth / 2;
+            const targetY = player.y - canvasHeight / 2;
+
+            // Linear interpolation (lerp) for smooth camera movement
+            camera.x += (targetX - camera.x) * lerpSpeed;
+            camera.y += (targetY - camera.y) * lerpSpeed;
+
+            //Clamp Camera to the world bounds:
+            camera.x = Math.max(0, Math.min(camera.x, 1000 - canvasWidth));
+            camera.y = Math.max(0, Math.min(camera.y, gameState.groundLevel - canvasHeight));
+        }
+
+        function gameLoop(currentTime) {
+            const gameState = window.gameState; //Access via global scope
+            currentTime /= 1000;
+            const deltaTime = currentTime - (gameState.lastTime || 0);
+            gameState.lastTime = currentTime;
+
+            gameState.accumulatedTime += deltaTime;
+
+            while (gameState.accumulatedTime >= gameState.fixedTimeStep) {
+                handleInput(gameState);
+                updatePlayer(gameState, gameState.fixedTimeStep);
+                handleCollisions(gameState);
+                updateCamera(gameState);
+                gameState.accumulatedTime -= gameState.fixedTimeStep;
+            }
+
+            const ctx = gameState.ctx;
+            ctx.clearRect(0, 0, gameState.canvas.width, gameState.canvas.height);
+            drawMountain(gameState);
+            drawPlayer(gameState);
+            drawHammer(gameState);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Attach event listeners to the document
+        document.addEventListener('keydown', (event) => {
+            gameState.keys[event.key] = true;
+        });
+
+        document.addEventListener('keyup', (event) => {
+            gameState.keys[event.key] = false;
+        });
+
+        // Set the gameState as a property of the window object
+        window.gameState = gameState;
+
+        // Start the game loop
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

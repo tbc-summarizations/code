@@ -1,0 +1,624 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+<title>HENRY X PILLOW: The Game</title>
+<style>
+body {
+    font-family: monospace;
+    background-color: #f0f0f0;
+    color: #333;
+    text-align: center;
+}
+#game-container {
+    width: 80%;
+    margin: 20px auto;
+    padding: 20px;
+    border: 2px solid #ccc;
+    background-color: #fff;
+}
+#game-title {
+    font-size: 2em;
+    margin-bottom: 20px;
+}
+#story-text {
+    margin-bottom: 20px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    background-color: #eee;
+    height: 100px;
+    overflow-y: auto;
+}
+#game-area {
+    width: 100%;
+    height: 300px;
+    border: 1px solid #ccc;
+    margin-bottom: 20px;
+    position: relative;
+    background-color: #ddd;
+}
+.player {
+    width: 20px;
+    height: 20px;
+    background-color: blue;
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.enemy {
+    width: 20px;
+    height: 20px;
+    background-color: red;
+    position: absolute;
+    top: 10px;
+    left: 20%;
+}
+.clyde-enemy {
+    width: 15px;
+    height: 15px;
+    background-color: orange;
+    position: absolute;
+    top: 50px;
+    left: 70%;
+}
+.boss {
+    width: 40px;
+    height: 40px;
+    background-color: purple;
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.football-cannon {
+    width: 10px;
+    height: 50px;
+    background-color: brown;
+    position: absolute;
+    bottom: 0;
+    left: 10%;
+}
+#controls button {
+    padding: 10px 20px;
+    margin: 5px;
+    cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="game-title">___HENRY X PILLOW: The Game.___</div>
+    <div id="story-text">
+        Game starts...
+    </div>
+    <div id="game-area">
+        <div class="player"></div>
+    </div>
+    <div id="controls">
+        <button onclick="game.action('start')">Start</button>
+        <button onclick="game.action('special')">Special Attack</button>
+        <button onclick="game.action('continue')">Continue</button>
+    </div>
+</div>
+
+<script>
+const storyTextElement = document.getElementById('story-text');
+const gameAreaElement = document.getElementById('game-area');
+const controlsElement = document.getElementById('controls');
+
+const game = {
+    stage: 0,
+    enemies: [],
+    bosses: ['Clyde', 'Meeththexep', 'SC0J', 'Frank', 'Admiral', 'BDYT', 'Memo', 'Adam', 'HappyMan', 'Alan', 'Dekoder', 'Nagg', 'Uami Bosim', 'Kamran Ibrahim Abdullah'],
+    currentBossIndex: 0,
+    clydeEnemiesActive: false,
+    footballCannonsActive: false,
+    specialAttackReady: true,
+
+    stages: [
+        {
+            text: "The Game starts by Henry telling Clyde 'I want to...' Clyde will try to stop you. Henry takes the idea seriously.",
+            enemies: [],
+            boss: 'Clyde',
+            bossText: "Tutorial Boss: Clyde appears!",
+            onStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Clyde');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("After you defeat Clyde, parts of him are still alive and will roam around as enemies.");
+                game.clydeEnemiesActive = true;
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Walk around the world and fight little enemies before you reach the next bossfight.",
+            enemies: ['clyde-enemy', 'clyde-enemy', 'clyde-enemy'],
+            boss: 'Meeththexep',
+            bossText: "First Boss: Meeththexep (The Best Friend) approaches!",
+            onStart: function() {
+                game.clearGameArea();
+                if (game.clydeEnemiesActive) {
+                    game.spawnEnemies('clyde-enemy', 5);
+                }
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("You continue fighting Clyde enemies...");
+                if (game.enemies.length === 0) {
+                    game.story("You have cleared the area. Prepare for the next boss.");
+                    game.stage++;
+                    game.nextStage();
+                } else {
+                    game.story("Clyde enemies remain!");
+                }
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Meeththexep');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("After you defeat Meeth, there are no map changes. Continue on a normal path.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Continue fighting more Clydes until you reach the next boss.",
+            enemies: ['clyde-enemy', 'clyde-enemy', 'clyde-enemy'],
+            boss: 'SC0J',
+            bossText: "Second Boss: SC0J (The Unknown BFCS Member) appears!",
+            onStart: function() {
+                game.clearGameArea();
+                game.spawnEnemies('clyde-enemy', 3);
+                game.updateControls(['continue']);
+            },
+             onContinue: function() {
+                game.story("You fight more Clyde enemies...");
+                if (game.enemies.length === 0) {
+                    game.story("Area cleared. Prepare for the next boss.");
+                    game.stage++;
+                    game.nextStage();
+                } else {
+                    game.story("Clyde enemies are still present.");
+                }
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('SC0J');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("SC0J barely fights, trying to convince you not to proceed. You get a small idea why it's not good. Clyde becomes slightly resistant to Special Attacks.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: Frank (idk)",
+            enemies: ['clyde-enemy', 'clyde-enemy'],
+            boss: 'Frank',
+            bossText: "Third Boss: Frank appears!",
+            onStart: function() {
+                game.clearGameArea();
+                game.spawnEnemies('clyde-enemy', 2);
+                game.updateControls(['continue']);
+            },
+             onContinue: function() {
+                game.story("Fighting continues...");
+                if (game.enemies.length === 0) {
+                    game.story("Area clear. Next boss approaching.");
+                    game.stage++;
+                    game.nextStage();
+                } else {
+                    game.story("Enemies remain.");
+                }
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Frank');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("Frank is defeated. Moving to the next area.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: Admiral (The Football Fan)",
+            enemies: ['clyde-enemy'],
+            boss: 'Admiral',
+            bossText: "Fourth Boss: Admiral (The Football Fan) appears!",
+            onStart: function() {
+                game.clearGameArea();
+                game.spawnEnemies('clyde-enemy', 1);
+                game.updateControls(['continue']);
+            },
+             onContinue: function() {
+                game.story("Engaging enemies...");
+                if (game.enemies.length === 0) {
+                    game.story("Area cleared. Boss fight next.");
+                    game.stage++;
+                    game.nextStage();
+                } else {
+                    game.story("Enemies still active.");
+                }
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Admiral');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("After this fight, Football cannons will be laid out in the map.");
+                game.footballCannonsActive = true;
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Football cannons are now active. Time your movements!",
+            enemies: [],
+            boss: 'BDYT',
+            bossText: "Fifth Boss: BDYT (The Siren Enthusiast) appears!",
+            onStart: function() {
+                game.clearGameArea();
+                if (game.footballCannonsActive) {
+                    game.spawnFootballCannons(3);
+                }
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("Navigating football cannons...");
+                 game.stage++;
+                 game.nextStage(); // Skip enemy phase for cannon stage for now
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.clearFootballCannons();
+                game.spawnBoss('BDYT');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("BDYT defeated. Progressing further.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: Memo (idk)",
+            enemies: [],
+            boss: 'Memo',
+            bossText: "Sixth Boss: Memo appears!",
+            onStart: function() {
+                game.clearGameArea();
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("Preparing for the next challenge...");
+                game.stage++;
+                game.nextStage();
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Memo');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("Memo is defeated. Continuing journey.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: Adam (The Programmer)",
+            enemies: [],
+            boss: 'Adam',
+            bossText: "Seventh Boss: Adam (The Programmer) appears!",
+             onStart: function() {
+                game.clearGameArea();
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("Advancing towards the programmer...");
+                game.stage++;
+                game.nextStage();
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Adam');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("Adam, the programmer, is defeated.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: HappyMan (The Strongest Chicken)",
+            enemies: [],
+            boss: 'HappyMan',
+            bossText: "Eighth Boss: HappyMan (The Strongest Chicken) appears!",
+             onStart: function() {
+                game.clearGameArea();
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("Facing the strongest chicken...");
+                game.stage++;
+                game.nextStage();
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('HappyMan');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("HappyMan, the strongest chicken, is defeated!");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: Alan (idk)",
+            enemies: [],
+            boss: 'Alan',
+            bossText: "Ninth Boss: Alan appears!",
+             onStart: function() {
+                game.clearGameArea();
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("Preparing for Alan...");
+                game.stage++;
+                game.nextStage();
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Alan');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("Alan is defeated. Approaching the final stages.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: Dekoder (The Half-Life Enthusiast)",
+            enemies: [],
+            boss: 'Dekoder',
+            bossText: "Tenth Boss: Dekoder (The Half-Life Enthusiast) appears!",
+             onStart: function() {
+                game.clearGameArea();
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("Facing a Half-Life enthusiast...");
+                game.stage++;
+                game.nextStage();
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Dekoder');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("Dekoder, the Half-Life Enthusiast, is defeated.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: Nagg (The Most Annoying BFCS Member)",
+            enemies: [],
+            boss: 'Nagg',
+            bossText: "Eleventh Boss: Nagg (The Most Annoying BFCS Member) appears!",
+             onStart: function() {
+                game.clearGameArea();
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("Dealing with the most annoying member...");
+                game.stage++;
+                game.nextStage();
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Nagg');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("Nagg, the most annoying member, is defeated. Almost at the end.");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Next Boss: Uami Bosim (The BFCS Host - Your Own Creation Goes Against You.)",
+            enemies: [],
+            boss: 'Uami Bosim',
+            bossText: "Twelfth Boss: Uami Bosim (The BFCS Host - Your Own Creation Goes Against You) appears!",
+             onStart: function() {
+                game.clearGameArea();
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("Facing your own creation...");
+                game.stage++;
+                game.nextStage();
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Uami Bosim');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("Uami Bosim, your own creation, is defeated!");
+                game.stage++;
+                game.nextStage();
+            }
+        },
+        {
+            text: "Final Boss: KAMRAN IBRAHIM ABDULLAH (THE BEST FRIEND MAKES A RETURN TO SAVE HENRY.)",
+            enemies: [],
+            boss: 'Kamran Ibrahim Abdullah',
+            bossText: "Final Boss: KAMRAN IBRAHIM ABDULLAH (THE BEST FRIEND) returns!",
+            onStart: function() {
+                game.clearGameArea();
+                game.updateControls(['continue']);
+            },
+            onContinue: function() {
+                game.story("The best friend returns for the final confrontation...");
+                game.stage++;
+                game.nextStage();
+            },
+            onBossStart: function() {
+                game.clearGameArea();
+                game.spawnBoss('Kamran Ibrahim Abdullah');
+                game.updateControls(['special']);
+            },
+            onBossDefeat: function() {
+                game.story("Congratulations! You have completed HENRY X PILLOW: The Game.");
+                game.updateControls([]);
+            }
+        }
+    ],
+
+    init: function() {
+        game.story("Welcome to HENRY X PILLOW: The Game.");
+        game.updateControls(['start']);
+    },
+
+    startStage: function() {
+        const currentStage = game.stages[game.stage];
+        if (currentStage && currentStage.onStart) {
+            currentStage.onStart();
+            game.story(currentStage.text);
+        } else if (game.currentBossIndex < game.bosses.length) {
+            game.startBossFight();
+        } else {
+            game.story("Game Over or Completed.");
+            game.updateControls([]);
+        }
+    },
+
+    nextStage: function() {
+        if (game.stage < game.stages.length) {
+            game.startStage();
+        } else {
+            game.story("Game Completed!");
+            game.updateControls([]);
+        }
+    },
+
+    startBossFight: function() {
+        const currentStage = game.stages[game.stage];
+        if (currentStage && currentStage.boss) {
+            game.story(currentStage.bossText);
+            if (currentStage.onBossStart) {
+                currentStage.onBossStart();
+            }
+        }
+    },
+
+    action: function(actionType) {
+        const currentStage = game.stages[game.stage];
+        switch (actionType) {
+            case 'start':
+                game.stage = 0;
+                game.nextStage();
+                break;
+            case 'continue':
+                if (currentStage && currentStage.onContinue) {
+                    currentStage.onContinue();
+                }
+                break;
+            case 'special':
+                if (game.specialAttackReady) {
+                    game.story("Used Special Attack!");
+                    game.specialAttackReady = false;
+                    setTimeout(() => { game.specialAttackReady = true; game.story("Special Attack Ready!"); }, 5000); // Cooldown
+                    game.defeatBoss(); // For demo, instant boss defeat with special attack
+                } else {
+                    game.story("Special Attack is not ready yet!");
+                }
+                break;
+        }
+    },
+
+    defeatBoss: function() {
+        const currentStage = game.stages[game.stage];
+        if (currentStage && currentStage.onBossDefeat) {
+            currentStage.onBossDefeat();
+        }
+    },
+
+    story: function(text) {
+        storyTextElement.innerHTML += "<p>" + text + "</p>";
+        storyTextElement.scrollTop = storyTextElement.scrollHeight; // Auto scroll to bottom
+    },
+
+    updateControls: function(buttons) {
+        controlsElement.innerHTML = '';
+        if (buttons.includes('start')) {
+            controlsElement.innerHTML += '<button onclick="game.action(\'start\')">Start</button>';
+        }
+        if (buttons.includes('special')) {
+            controlsElement.innerHTML += '<button onclick="game.action(\'special\')">Special Attack</button>';
+        }
+        if (buttons.includes('continue')) {
+            controlsElement.innerHTML += '<button onclick="game.action(\'continue\')">Continue</button>';
+        }
+    },
+
+    clearGameArea: function() {
+        gameAreaElement.innerHTML = '<div class="player"></div>'; // Keep player
+        game.enemies = []; // Clear enemy array
+        game.clearFootballCannons(); // Clear cannons as well when clearing area
+    },
+
+    spawnEnemies: function(enemyType, count) {
+        for (let i = 0; i < count; i++) {
+            const enemy = document.createElement('div');
+            enemy.className = 'enemy ' + enemyType;
+            enemy.style.left = (Math.random() * 90 + 5) + '%'; // Random horizontal position
+            gameAreaElement.appendChild(enemy);
+            game.enemies.push(enemy); // Add to enemies array to track
+        }
+    },
+
+    spawnBoss: function(bossName) {
+        const boss = document.createElement('div');
+        boss.className = 'boss';
+        boss.textContent = bossName.substring(0, 4); // Shorten boss name for display
+        gameAreaElement.appendChild(boss);
+    },
+
+    spawnFootballCannons: function(count) {
+        for (let i = 0; i < count; i++) {
+            const cannon = document.createElement('div');
+            cannon.className = 'football-cannon';
+            cannon.style.left = ((i + 1) * (100 / (count + 1))) + '%'; // Evenly spaced cannons
+            gameAreaElement.appendChild(cannon);
+        }
+    },
+
+    clearFootballCannons: function() {
+        const cannons = gameAreaElement.querySelectorAll('.football-cannon');
+        cannons.forEach(cannon => cannon.remove());
+    }
+};
+
+game.init();
+</script>
+
+</body>
+</html>

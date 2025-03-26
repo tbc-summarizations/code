@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Boring Club Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+
+        #simulator-container {
+            display: flex;
+            width: 80%;
+            max-width: 900px;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 600px;
+        }
+
+        #member-list {
+            width: 250px;
+            border-right: 1px solid #ccc;
+            padding: 15px;
+            background-color: #f9f9f9;
+            box-sizing: border-box;
+        }
+
+        #member-list h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.2em;
+        }
+
+        #member-list ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #member-list li {
+            padding: 8px 0;
+            border-bottom: 1px dashed #eee;
+            color: #555;
+        }
+
+        #member-list li:last-child {
+            border-bottom: none;
+        }
+
+        #chat-area {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        #chat-messages {
+            flex-grow: 1;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            background-color: #e0e0e0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            word-wrap: break-word;
+        }
+        .message:nth-child(odd) {
+            background-color: #f0f0f0;
+        }
+
+
+        #input-area {
+            padding: 15px;
+            border-top: 1px solid #ccc;
+            background-color: #fff;
+            display: flex;
+            box-sizing: border-box;
+        }
+
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px;
+            font-size: 1em;
+        }
+
+        #send-button {
+            padding: 10px 15px;
+            border: none;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        #send-button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="simulator-container">
+        <div id="member-list">
+            <h3>Members</h3>
+            <ul id="members">
+            </ul>
+        </div>
+        <div id="chat-area">
+            <div id="chat-messages">
+            </div>
+        </div>
+        <div id="input-area">
+            <input type="text" id="message-input" placeholder="Type a message...">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const members = [
+            "Mindset",
+            "AJ Transport Hub",
+            "AdamMady",
+            "AndrejTB",
+            "BDYT",
+            "Finomano",
+            "HappyManOfficial",
+            "HenryTheKazakh",
+            "Meethexep",
+            "Salle"
+        ];
+
+        const membersList = document.getElementById("members");
+        members.forEach(member => {
+            const listItem = document.createElement("li");
+            listItem.textContent = member;
+            membersList.appendChild(listItem);
+        });
+
+        const messageInput = document.getElementById("message-input");
+        const sendButton = document.getElementById("send-button");
+        const chatMessages = document.getElementById("chat-messages");
+
+        function loadMessageHistory() {
+            const storedMessages = localStorage.getItem("chatHistory");
+            if (storedMessages) {
+                const messages = JSON.parse(storedMessages);
+                messages.forEach(message => {
+                    const messageDiv = document.createElement("div");
+                    messageDiv.classList.add("message");
+                    messageDiv.innerHTML = message; // Use innerHTML to render sender name properly
+                    chatMessages.appendChild(messageDiv);
+                });
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        function saveMessageHistory() {
+            const messages = Array.from(chatMessages.children).map(node => node.innerHTML); // Save innerHTML to keep sender name format
+            localStorage.setItem("chatHistory", JSON.stringify(messages));
+        }
+
+
+        const autoResponses = {
+            "boring": [
+                "This is indeed boring.",
+                "Couldn't agree more.",
+                "Zzz...",
+                "Yep, nothing happening.",
+                "Another day, another boring moment."
+            ],
+            "transport": [
+                "All aboard!",
+                "Next stop...",
+                "Choo choo!",
+                "Where are we going today?",
+                "Transporting boredom to new levels."
+            ],
+            "hello": [
+                "Hello there!",
+                "Hi!",
+                "Hey!",
+                "Greetings!",
+                "Yo!"
+            ],
+            "how are you": [
+                "Bored.",
+                "Still bored.",
+                "As boring as ever.",
+                "Can't complain, just existing boringly.",
+                "Predictably boring."
+            ]
+        };
+
+        function getRandomResponse(keyword) {
+            if (autoResponses[keyword]) {
+                const responses = autoResponses[keyword];
+                return responses[Math.floor(Math.random() * responses.length)];
+            }
+            return null;
+        }
+
+        sendButton.addEventListener("click", () => {
+            const messageText = messageInput.value.trim();
+            if (messageText !== "") {
+                const sender = members[Math.floor(Math.random() * members.length)];
+                const messageDiv = document.createElement("div");
+                messageDiv.classList.add("message");
+                messageDiv.innerHTML = `<strong>${sender}:</strong> ${messageText}`; // Use innerHTML for bold sender name
+                chatMessages.appendChild(messageDiv);
+                messageInput.value = "";
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                saveMessageHistory();
+
+                const lowerMessageText = messageText.toLowerCase();
+                for (const keyword in autoResponses) {
+                    if (lowerMessageText.includes(keyword)) {
+                        setTimeout(() => {
+                            const randomMember = members[Math.floor(Math.random() * members.length)];
+                            const response = getRandomResponse(keyword);
+                            if (response) {
+                                const responseDiv = document.createElement("div");
+                                responseDiv.classList.add("message");
+                                responseDiv.innerHTML = `<strong>${randomMember}:</strong> ${response}`; // Use innerHTML for bold sender name in response
+                                chatMessages.appendChild(responseDiv);
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                                saveMessageHistory();
+                            }
+                        }, 500 + Math.random() * 1500); // Reduced delay, random between 0.5 and 2 seconds
+                        break;
+                    }
+                }
+            }
+        });
+
+        window.addEventListener("load", loadMessageHistory);
+    </script>
+</body>
+</html>

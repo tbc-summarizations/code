@@ -1,0 +1,492 @@
+html
+ <!DOCTYPE html>
+ <html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Platformer Game</title>
+  <style>
+  body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #ADD8E6;
+  font-family: sans-serif;
+  }
+
+  #game-container {
+  width: 800px;
+  height: 600px;
+  margin: 20px auto;
+  position: relative;
+  background: linear-gradient(to bottom, #87CEEB, #00BFFF); /* Sky gradient */
+  border: 2px solid black;
+  overflow: hidden; /* Clip scenery */
+  }
+
+  /* Scenery elements - mountains, clouds, trees (simplified) */
+  .mountain {
+  position: absolute;
+  border-bottom: 100px solid #696969;
+  border-left: 50px solid transparent;
+  border-right: 50px solid transparent;
+  bottom: 0;
+  z-index: 0; /* Behind platforms */
+  }
+
+  .cloud {
+  position: absolute;
+  width: 60px;
+  height: 25px;
+  background-color: white;
+  border-radius: 20px;
+  z-index: 0;
+  }
+
+  .tree {
+  position: absolute;
+  width: 30px;
+  height: 40px;
+  background-color: brown;
+  bottom: 0;
+  z-index: 0;
+  }
+  .tree::after {
+  content: '';
+  position: absolute;
+  top: -20px;
+  left: -10px;
+  width: 50px;
+  height: 40px;
+  background-color: green;
+  border-radius: 50%;
+  }
+
+
+  #player {
+  width: 20px;
+  height: 40px;
+  background-color: red;
+  position: absolute;
+  bottom: 0;
+  left: 50px;
+  z-index: 1; /* Player on top of scenery */
+  }
+
+  .platform {
+  width: 100px;
+  height: 20px;
+  background-color: green;
+  position: absolute;
+  z-index: 1; /* Platforms on top of scenery */
+  }
+
+  #controls {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2; /* Controls on top of everything */
+  }
+
+  .arrow {
+  width: 60px; /* Larger arrows */
+  height: 60px;
+  background-color: rgba(200, 200, 200, 0.5); /* Semi-transparent arrows */
+  border: 2px solid gray;
+  display: inline-flex; /* Use flex for better alignment */
+  justify-content: center; /* Center content horizontally */
+  align-items: center; /* Center content vertically */
+  font-size: 1.5em; /* Larger arrow symbols */
+  cursor: pointer;
+  user-select: none; /* Prevent text selection on click */
+  margin: 0 5px; /* Spacing between arrows */
+  border-radius: 10px; /* Rounded corners for arrows */
+  }
+  .arrow:active {
+  background-color: rgba(150, 150, 150, 0.7); /* Darker on click */
+  }
+
+  #level-display {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: black;
+  font-size: 1.2em;
+  z-index: 2;
+  }
+
+  #game-message {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 1.5em;
+  z-index: 3;
+  display: none; /* Hidden by default */
+  }
+  #game-message button {
+  padding: 10px 20px;
+  font-size: 1em;
+  cursor: pointer;
+  }
+
+  </style>
+ </head>
+ <body>
+
+  <div id="game-container">
+  <div id="level-display">Level: 1</div>
+  <div id="game-message">
+  <h2 id="message-text"></h2>
+  <button id="restart-button">Restart</button>
+  </div>
+  <div id="player"></div>
+  <!-- Scenery will be dynamically added by JavaScript -->
+  </div>
+
+  <div id="controls">
+  <div class="arrow" id="left-arrow">&larr;</div>
+  <div class="arrow" id="up-arrow">&uarr;</div>
+  <div class="arrow" id="right-arrow">&rarr;</div>
+  </div>
+
+  <script>
+  const gameContainer = document.getElementById('game-container');
+  const player = document.getElementById('player');
+  const leftArrow = document.getElementById('left-arrow');
+  const rightArrow = document.getElementById('right-arrow');
+  const upArrow = document.getElementById('up-arrow');
+  const levelDisplay = document.getElementById('level-display');
+  const gameMessage = document.getElementById('game-message');
+  const messageText = document.getElementById('message-text');
+  const restartButton = document.getElementById('restart-button');
+
+  let playerX = 50;
+  let playerY = 0;
+  let playerSpeed = 5;
+  let jumpSpeed = 10;
+  let isJumping = false;
+  let gravity = 0.5;
+  let velocityY = 0;
+  let currentLevel = 1;
+  let platforms = [];
+  let sceneryElements = []; // Array to hold scenery elements
+  let levelComplete = false;
+
+  function clearLevel() {
+  platforms.forEach(platform => platform.element.remove());
+  platforms = [];
+  sceneryElements.forEach(element => element.remove()); // Clear scenery
+  sceneryElements = [];
+  levelComplete = false;
+  }
+
+  function createScenery(levelNumber) {
+  // Example scenery - customize for each level for "nice scenery"
+  switch (levelNumber) {
+  case 1:
+  createMountain(100, "darkgray");
+  createCloud(200, 50);
+  createTree(650);
+  break;
+  case 2:
+  createMountain(500, "gray");
+  createCloud(400, 80);
+  createTree(100);
+  break;
+  case 3:
+  createMountain(250, "lightgray");
+  createCloud(100, 20);
+  createTree(400);
+  break;
+  case 4:
+  createMountain(600, "dimgray");
+  createCloud(550, 60);
+  createTree(200);
+  break;
+  case 5:
+  createMountain(50, "silver");
+  createCloud(300, 40);
+  createTree(700);
+  break;
+  case 6:
+  createMountain(400, "gray");
+  createCloud(650, 70);
+  createTree(500);
+  break;
+  case 7:
+  createMountain(700, "darkgray");
+  createCloud(50, 30);
+  createTree(300);
+  break;
+  case 8:
+  createMountain(150, "lightgray");
+  createCloud(700, 90);
+  createTree(550);
+  break;
+  }
+  }
+
+  function createMountain(xPos, color) {
+  const mountain = document.createElement('div');
+  mountain.classList.add('mountain');
+  mountain.style.left = xPos + 'px';
+  mountain.style.borderBottomColor = color;
+  gameContainer.appendChild(mountain);
+  sceneryElements.push(mountain);
+  }
+
+  function createCloud(xPos, yPos) {
+  const cloud = document.createElement('div');
+  cloud.classList.add('cloud');
+  cloud.style.left = xPos + 'px';
+  cloud.style.top = yPos + 'px';
+  gameContainer.appendChild(cloud);
+  sceneryElements.push(cloud);
+  }
+  function createTree(xPos) {
+  const tree = document.createElement('div');
+  tree.classList.add('tree');
+  tree.style.left = xPos + 'px';
+  gameContainer.appendChild(tree);
+  sceneryElements.push(tree);
+  }
+
+
+  function createLevel(levelNumber) {
+  clearLevel();
+  createScenery(levelNumber);
+  levelDisplay.textContent = `Level: ${levelNumber}`;
+
+  switch (levelNumber) {
+  case 1:
+  createPlatform(100, 400, 150);
+  createPlatform(400, 300, 100);
+  createPlatform(600, 500, 150);
+  break;
+  case 2:
+  createPlatform(50, 500, 100);
+  createPlatform(250, 400, 100);
+  createPlatform(450, 300, 100);
+  createPlatform(650, 200, 100);
+  createPlatform(750, 500, 50); // Added platform to right side
+  break;
+  case 3:
+  createPlatform(150, 500, 100);
+  createPlatform(350, 400, 100);
+  createPlatform(550, 300, 100);
+  createPlatform(750, 200, 100);
+  createPlatform(10, 200, 80); // Added platform to left side, high up
+  break;
+  case 4:
+  createPlatform(50, 450, 100);
+  createPlatform(250, 350, 100);
+  createPlatform(450, 250, 100);
+  createPlatform(650, 150, 100);
+  createPlatform(350, 550, 200); // Lower platform
+  break;
+  case 5:
+  createPlatform(100, 500, 100);
+  createPlatform(300, 400, 100);
+  createPlatform(500, 300, 100);
+  createPlatform(700, 200, 100);
+  createPlatform(50, 200, 50); // High left platform
+  createPlatform(750, 450, 50); // Mid right platform
+  break;
+  case 6:
+  createPlatform(150, 450, 100);
+  createPlatform(350, 350, 100);
+  createPlatform(550, 250, 100);
+  createPlatform(750, 150, 100);
+  createPlatform(20, 550, 80); // Very low left
+  createPlatform(600, 450, 150); // Mid right longer
+  break;
+  case 7:
+  createPlatform(50, 550, 100);
+  createPlatform(250, 450, 100);
+  createPlatform(450, 350, 100);
+  createPlatform(650, 250, 100);
+  createPlatform(300, 200, 100); // Higher mid platform
+  createPlatform(700, 500, 80); // Lower right
+  break;
+  case 8:
+  createPlatform(100, 500, 100);
+  createPlatform(300, 400, 100);
+  createPlatform(500, 300, 100);
+  createPlatform(700, 200, 100);
+  createPlatform(200, 250, 100); // Mid left
+  createPlatform(600, 550, 200); // Very low right long
+  createPlatform(400, 100, 80); // Very high mid
+  break;
+  default:
+  console.log("Invalid level number");
+  }
+  }
+
+  function createPlatform(x, y, width) {
+  const platform = document.createElement('div');
+  platform.classList.add('platform');
+  platform.style.left = x + 'px';
+  platform.style.top = y + 'px';
+  platform.style.width = width + 'px';
+  gameContainer.appendChild(platform);
+
+  platforms.push({
+  x: x,
+  y: y,
+  width: width,
+  height: 20,
+  element: platform
+  });
+  }
+
+  createLevel(currentLevel);
+
+  function checkCollision(playerX, playerY, playerWidth, playerHeight, platform) {
+  return (
+  playerX < platform.x + platform.width &&
+  playerX + playerWidth > platform.x &&
+  playerY < platform.y + platform.height &&
+  playerY + playerHeight > platform.y
+  );
+  }
+
+  function gameLoop() {
+  if(levelComplete) return; // Stop game loop if level completed
+
+  // Horizontal Movement
+  if (keys['ArrowLeft']) {
+  playerX -= playerSpeed;
+  }
+  if (keys['ArrowRight']) {
+  playerX += playerSpeed;
+  }
+
+  // Vertical Movement (Jumping and Gravity)
+  if (isJumping) {
+  playerY += velocityY;
+  velocityY += gravity;
+
+  if (velocityY > 0) {
+  isJumping = !checkPlatformCollision();
+  }
+  } else {
+  if (!checkPlatformCollision()) {
+  playerY += gravity * 5;
+  }
+  }
+
+  // Keep player within bounds
+  if (playerX < 0) {
+  playerX = 0;
+  playerX = 0; // Ensure player position is exactly 0
+  }
+  if (playerX > gameContainer.offsetWidth - player.offsetWidth) {
+  playerX = gameContainer.offsetWidth - player.offsetWidth;
+  playerX = gameContainer.offsetWidth - player.offsetWidth; // Ensure exact position at right edge
+  }
+
+  // Keep player from falling off the bottom
+  if (playerY > gameContainer.offsetHeight - player.offsetHeight) {
+  playerY = gameContainer.offsetHeight - player.offsetHeight;
+  velocityY = 0;
+  isJumping = false;
+  playerY = gameContainer.offsetHeight - player.offsetHeight; // Ensure exact position at bottom
+  }
+
+  // Update Player Position
+  player.style.left = playerX + 'px';
+  player.style.bottom = playerY + 'px';
+
+  // Level Completion Check - Reached right edge
+  if (playerX > gameContainer.offsetWidth - player.offsetWidth - 5) {
+  levelComplete = true;
+  currentLevel++;
+  if (currentLevel > 8) {
+  currentLevel = 8; // Stay on level 8 after completing it
+  messageText.textContent = "You Win! Game Completed!";
+  } else {
+  messageText.textContent = `Level ${currentLevel - 1} Completed!`;
+  }
+  gameMessage.style.display = 'block'; // Show game message
+  }
+
+  requestAnimationFrame(gameLoop);
+  }
+
+  function checkPlatformCollision() {
+  let onPlatform = false;
+  for (const platform of platforms) {
+  if (checkCollision(playerX, playerY, player.offsetWidth, player.offsetHeight, platform)) {
+  onPlatform = true;
+  playerY = platform.y - player.offsetHeight;
+  velocityY = 0;
+  isJumping = false;
+  return onPlatform;
+  }
+  }
+  return onPlatform;
+  }
+
+  let keys = {};
+
+  document.addEventListener('keydown', (e) => {
+  keys[e.code] = true;
+  if (e.code === 'ArrowUp' && !isJumping) {
+  isJumping = true;
+  velocityY = -jumpSpeed;
+  }
+  });
+
+  document.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+  });
+
+  leftArrow.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  keys['ArrowLeft'] = true;
+  });
+  leftArrow.addEventListener('touchend', () => {
+  keys['ArrowLeft'] = false;
+  });
+
+  rightArrow.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  keys['ArrowRight'] = true;
+  });
+  rightArrow.addEventListener('touchend', () => {
+  keys['ArrowRight'] = false;
+  });
+
+  upArrow.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (!isJumping) {
+  isJumping = true;
+  velocityY = -jumpSpeed;
+  }
+  });
+  upArrow.addEventListener('touchend', () => {
+  });
+
+  restartButton.addEventListener('click', () => {
+  gameMessage.style.display = 'none';
+  if (currentLevel > 8) currentLevel = 1; // Reset level to 1 if game was won
+  createLevel(currentLevel);
+  playerX = 50;
+  playerY = 0;
+  player.style.left = playerX + 'px';
+  player.style.bottom = playerY + 'px';
+  isJumping = false;
+  velocityY = 0;
+  levelComplete = false;
+  gameLoop(); // Restart game loop
+  });
+
+  gameLoop();
+  </script>
+ </body>
+ </html>

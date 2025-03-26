@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Functioning Element Identifier</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .element {
+            width: 60px;
+            height: 60px;
+            border: 2px solid black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            cursor: pointer;
+            background-color: #eee;
+            border-radius: 5px;
+            transition: border-color 0.3s ease;
+        }
+        .element:hover {
+            border-color: blue;
+        }
+        .broken {
+            background-color: #fdd;
+            border-color: #f00;
+            color: #800;
+            opacity: 0.7;
+            cursor: not-allowed;
+            text-decoration: line-through;
+        }
+        .broken:hover {
+            border-color: #f00; /* Keep red border on hover when broken */
+        }
+        #startButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        #result {
+            font-weight: bold;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            min-height: 20px;
+            text-align: center;
+        }
+        .functioning {
+            border: 4px solid green;
+        }
+        .functioning:hover {
+            border-color: darkgreen;
+        }
+    </style>
+</head>
+<body>
+    <h1>Identify the Functioning Element</h1>
+    <div id="container">
+        <!-- Elements will be generated here -->
+    </div>
+    <button id="startButton">Start Test</button>
+    <div id="result"></div>
+
+    <script>
+        // --- Element Generation ---
+        function generateElements(numElements) {
+            const container = document.getElementById("container");
+            container.innerHTML = ''; // Clear previous elements
+            for (let i = 0; i < numElements; i++) {
+                const element = document.createElement("div");
+                element.classList.add("element");
+                element.id = "element-" + i;
+                element.textContent = "Element " + (i + 1);
+                container.appendChild(element);
+            }
+        }
+
+        // --- Failure Simulation (Ensuring only ONE functioning element) ---
+        function simulateFailures(numElements) {
+            const elements = document.querySelectorAll(".element");
+            let indices = Array.from({ length: numElements }, (_, i) => i);
+
+            // Shuffle indices to randomize broken elements
+            for (let i = indices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+
+            // Break all elements except one (the last one after shuffling)
+            for (let i = 0; i < numElements - 1; i++) {
+                const elementIndex = indices[i];
+                const element = elements[elementIndex];
+                element.classList.add("broken");
+                element.textContent = "BROKEN";
+            }
+        }
+
+        // --- Testing Function (Checks if element is broken) ---
+        function testElement(element) {
+            return element.classList.contains("broken");
+        }
+
+        // --- Identification Logic (Finds the single functioning element) ---
+        function identifyFunctioningElement() {
+            const elements = document.querySelectorAll(".element");
+            let functioningElements = [];
+
+            for (let i = 0; i < elements.length; i++) {
+                const element = elements[i];
+                if (!testElement(element)) { // If NOT broken
+                    functioningElements.push(element);
+                }
+            }
+
+            if (functioningElements.length === 0) {
+                alert("ERROR: All elements are broken!");
+                return null;
+            } else if (functioningElements.length > 1) {
+                alert("ERROR: More than one element is functioning! Simulation Error.");
+                return null;
+            } else {
+                return functioningElements[0]; // Return the single functioning element
+            }
+        }
+
+        // --- Result Display (Highlights the functioning element and shows result) ---
+        function displayResult(element) {
+            const resultDiv = document.getElementById("result");
+            const elements = document.querySelectorAll(".element");
+
+            // Reset previous highlighting
+            elements.forEach(el => el.classList.remove("functioning"));
+
+            if (element) {
+                resultDiv.textContent = "Functioning Element Identified: " + element.id;
+                element.classList.add("functioning"); // Highlight the functioning element
+            } else {
+                resultDiv.textContent = "Error: No functioning element found.";
+            }
+        }
+
+        // --- Initial Setup and Event Listener ---
+        let numElements = 5; // Number of elements to test
+        generateElements(numElements);
+        simulateFailures(numElements);
+
+
+        const startButton = document.getElementById("startButton");
+        startButton.addEventListener("click", function() {
+            simulateFailures(numElements); // Re-simulate failures on each test run for variety.
+            const functioningElement = identifyFunctioningElement();
+            displayResult(functioningElement);
+        });
+    </script>
+</body>
+</html>

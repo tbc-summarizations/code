@@ -1,0 +1,268 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Save George Floyd Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        #simulator-container {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            width: 450px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #scene {
+            width: 400px;
+            height: 300px;
+            border: 2px solid #555;
+            position: relative;
+            margin-bottom: 20px;
+            background-color: #e0e0e0;
+        }
+
+        #floyd {
+            width: 40px;
+            height: 60px;
+            background-color: blue;
+            position: absolute;
+            bottom: 10px;
+            left: 50px;
+            border-radius: 5px;
+        }
+
+        #officer {
+            width: 50px;
+            height: 70px;
+            background-color: red;
+            position: absolute;
+            bottom: 10px;
+            right: 40px;
+            border-radius: 5px;
+        }
+
+        #controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        #controls button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 16px;
+        }
+
+        #controls button:hover {
+            background-color: #45a049;
+        }
+
+        #status {
+            margin-top: 10px;
+            text-align: left;
+            width: 100%;
+        }
+
+        #status p {
+            margin: 5px 0;
+        }
+
+        #sceneDescription {
+            text-align: center;
+            margin-bottom: 10px;
+            font-style: italic;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div id="simulator-container">
+        <h1>Save George Floyd Simulator</h1>
+
+        <div id="scene">
+            <div id="floyd"></div>
+            <div id="officer"></div>
+        </div>
+
+        <p id="sceneDescription">Scene: A lone officer is detaining George Floyd.</p>
+
+        <div id="controls">
+            <button id="intervene">Intervene</button>
+            <button id="callHelp">Call for Help</button>
+        </div>
+
+        <div id="status">
+            <p id="floydHealth">Floyd's Health: 100%</p>
+            <p id="officerAggression">Officer's Aggression: Low</p>
+            <p id="moralityScore">Morality Score: 50</p>
+        </div>
+    </div>
+
+    <script>
+        let floydHealth = 100;
+        let officerAggression = 20;
+        let sceneState = "initial";
+        let moralityScore = 50;
+        let currentScene = "initial";
+        let frameCount = 0;
+        let gameActive = true;
+
+        function updateFloydHealth() {
+            if (!gameActive) return;
+            if (sceneState === "initial") {
+                floydHealth -= officerAggression * 0.01;
+            } else if (sceneState === "intervention") {
+                floydHealth += 5;
+            }
+
+            if (floydHealth <= 0) {
+                floydHealth = 0;
+                gameOver("Floyd has died.");
+            } else if (floydHealth >= 150) {
+                gameOver("Floyd is safe and recovering!", true);
+            }
+        }
+
+        function updateOfficerAggression() {
+            if (!gameActive) return;
+            if(sceneState === "call_help") {
+                officerAggression -=5
+            } else {
+                officerAggression += 0.5; //Reduced base aggression increase for better balance
+            }
+
+            if(officerAggression >= 100) {
+                officerAggression = 100;
+            }
+        }
+
+        function updateScene() {
+            if (!gameActive) return;
+            let sceneDescriptionText = "";
+            if (currentScene === "initial") {
+                sceneDescriptionText = "A lone officer is detaining George Floyd.";
+            } else if (currentScene === "bystanders") {
+                sceneDescriptionText = "Bystanders have arrived. People are watching.";
+            } else if (sceneState === "intervention") {
+                sceneDescriptionText = "You are attempting to intervene.";
+            } else if (sceneState === "calling_help") {
+                sceneDescriptionText = "You are calling for help.";
+            }
+            document.getElementById("sceneDescription").textContent = "Scene: " + sceneDescriptionText;
+
+            if (currentScene === "bystanders" && sceneState === "intervention") {
+                if (Math.random() > 0.4) { //Slightly adjusted success chance
+                    officerAggression -= 15;
+                    floydHealth += 20;
+                    alert("Intervention successful due to bystanders! Officer is backing down.");
+                    moralityScore += 10;
+                    sceneState = "initial";
+                } else {
+                    officerAggression += 10;
+                    floydHealth -= 10;
+                    alert("Intervention failed, even with bystanders. Officer is becoming more aggressive.");
+                    moralityScore -= 5;
+                    sceneState = "initial";
+                }
+            }
+        }
+
+        function updateStatusDisplay() {
+            if (!gameActive) return;
+            document.getElementById("floydHealth").textContent = `Floyd's Health: ${floydHealth.toFixed(2)}%`;
+            document.getElementById("officerAggression").textContent = `Officer's Aggression: ${officerAggression.toFixed(2)}`;
+            document.getElementById("moralityScore").textContent = `Morality Score: ${moralityScore}`;
+        }
+
+        function intervene() {
+            if (!gameActive) return;
+            sceneState = "intervention";
+
+            if (currentScene === "bystanders") {
+                updateScene();
+            } else {
+                if (Math.random() > 0.5) {
+                    officerAggression -= 10;
+                    floydHealth += 15;
+                    alert("Intervention successful! Officer is backing down.");
+                    moralityScore += 5;
+                } else {
+                    officerAggression += 15;
+                    floydHealth -= 20;
+                    alert("Intervention failed! Officer is becoming more aggressive.");
+                    moralityScore -= 10;
+                }
+            }
+        }
+
+        function callHelp() {
+            if (!gameActive) return;
+            sceneState = "calling_help";
+            officerAggression -= 20;
+            alert("Calling for help. Officer is becoming more cautious.");
+        }
+
+        function gameOver(message, win = false) {
+            gameActive = false;
+            let finalMessage = message + " Game Over. Morality Score: " + moralityScore;
+            if(win) {
+                finalMessage = message + " You successfully saved George Floyd! Morality Score: " + moralityScore;
+            }
+            alert(finalMessage);
+            cancelAnimationFrame(gameLoop);
+        }
+
+        function gameLoop() {
+            if (!gameActive) return;
+            frameCount++;
+
+            updateFloydHealth();
+            updateOfficerAggression();
+            updateScene();
+            updateStatusDisplay();
+
+            if (frameCount % 300 === 0) {
+                officerAggression += 3; //Slightly reduced escalation rate for balance
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.getElementById("intervene").addEventListener("click", intervene);
+        document.getElementById("callHelp").addEventListener("click", callHelp);
+
+        requestAnimationFrame(gameLoop);
+
+        setTimeout(() => {
+            if(gameActive) {
+                currentScene = "bystanders";
+                alert("Bystanders have arrived on the scene!");
+                updateScene(); // Update scene description immediately
+            }
+        }, 15000); // Bystanders arrive after 15 seconds instead of 10 for a bit more initial time
+    </script>
+</body>
+</html>

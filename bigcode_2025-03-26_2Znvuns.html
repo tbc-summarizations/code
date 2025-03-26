@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Music Album Reviewer</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      background-color: #f4f4f4;
+      color: #333;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      background-color: #fff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      width: 80%;
+      max-width: 900px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    section {
+      margin-bottom: 25px;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+
+    section h2 {
+      color: #555;
+      margin-top: 0;
+      margin-bottom: 15px;
+    }
+
+    select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+
+    #review-text {
+      padding: 15px;
+      border: 1px dashed #ccc;
+      border-radius: 4px;
+      background-color: #eee;
+      white-space: pre-line;
+      font-style: italic;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI Music Album Reviewer</h1>
+
+    <!-- Artist Selection -->
+    <section id="artist-selection">
+      <h2>Select an Artist:</h2>
+      <select id="artist-dropdown">
+      </select>
+    </section>
+
+    <!-- Album Selection -->
+    <section id="album-selection">
+      <h2>Select an Album:</h2>
+      <select id="album-dropdown">
+      </select>
+    </section>
+
+    <!-- Review Interface -->
+    <section id="review-interface">
+      <h2>AI Review:</h2>
+      <div id="review-text">
+        Select an artist and album to generate an AI review.
+      </div>
+    </section>
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // 1. Data Structure: Artist and Album Data
+
+    const artistAlbumData = {
+      "Kanye West": ["The College Dropout", "Late Registration", "Graduation", "808s & Heartbreak", "My Beautiful Dark Twisted Fantasy", "Yeezus", "The Life of Pablo", "Ye", "Jesus is King", "Donda"],
+      "The Beatles": ["Please Please Me", "With The Beatles", "A Hard Day's Night", "Beatles for Sale", "Help!", "Rubber Soul", "Revolver", "Sgt. Pepper's Lonely Hearts Club Band", "The Beatles (White Album)", "Abbey Road", "Let It Be"],
+      "Eminem": ["Infinite", "The Slim Shady LP", "The Marshall Mathers LP", "The Eminem Show", "Encore", "Relapse", "Recovery", "The Marshall Mathers LP 2", "Revival", "Kamikaze", "Music to Be Murdered By"],
+      "Drake": ["Thank Me Later", "Take Care", "Nothing Was the Same", "Views", "More Life", "Scorpion", "Certified Lover Boy", "Honestly, Nevermind", "Her Loss"],
+      "Tyler, The Creator": ["Bastard", "Goblin", "Wolf", "Cherry Bomb", "Flower Boy", "Igor", "Call Me If You Get Lost"],
+      "Kendrick Lamar": ["Section.80", "Good Kid, M.A.A.D City", "To Pimp a Butterfly", "Untitled Unmastered", "DAMN.", "Mr. Morale & The Big Steppers"],
+      "Michael Jackson": ["Off the Wall", "Thriller", "Bad", "Dangerous", "HIStory: Past, Present and Future, Book I", "Invincible"],
+      "Travis Scott": ["Rodeo", "Birds in the Trap Sing McKnight", "Astroworld", "Utopia"],
+      "MF DOOM": ["Operation: Doomsday", "Mm..Food", "Born Like This"],
+      "Death Grips": ["The Money Store", "No Love Deep Web", "Government Plates", "The Powers That B", "Bottomless Pit", "Year of the Snitch"],
+      "Metallica": ["Kill 'Em All", "Ride the Lightning", "Master of Puppets", "…And Justice for All", "Metallica (The Black Album)", "Load", "Reload", "St. Anger", "Death Magnetic", "Hardwired…to Self-Destruct"],
+      "OutKast": ["Southernplayalisticadillacmuzik", "ATLiens", "Aquemini", "Stankonia", "Speakerboxxx/The Love Below", "Idlewild"],
+      "N.W.A.": ["Straight Outta Compton"],
+      "Dr. Dre": ["The Chronic", "2001", "Compton"],
+      "Ice Cube": ["AmeriKKKa's Most Wanted", "Death Certificate", "The Predator"],
+      "Eazy-E": ["Eazy-Duz-It"],
+      "MC Ren": ["Kizz My Black Azz"],
+      "DJ Yella": ["One mo' Nigga ta go"],
+      "Arabian Prince":["Brother Arab"],
+      "Taylor Swift": ["Taylor Swift", "Fearless", "Speak Now", "Red", "1989", "Reputation", "Lover", "Folklore", "Evermore", "Midnights"],
+      "Radiohead": ["Pablo Honey", "The Bends", "OK Computer", "Kid A", "Amnesiac", "Hail to the Thief", "In Rainbows", "The King of Limbs", "A Moon Shaped Pool"],
+      "Pink Floyd": ["The Piper at the Gates of Dawn", "A Saucerful of Secrets", "More", "Ummagumma", "Atom Heart Mother", "Meddle", "Obscured by Clouds", "The Dark Side of the Moon", "Wish You Were Here", "Animals", "The Wall", "The Final Cut", "A Momentary Lapse of Reason", "The Division Bell", "The Endless River"],
+      "Elvis Presley": ["Elvis Presley", "Elvis", "Loving You", "Elvis' Christmas Album", "Elvis Is Back!", "G.I. Blues", "Blue Hawaii", "Elvis for Everyone!", "Pot Luck", "Elvis' Golden Records"],
+      "J. Cole": ["Cole World: The Sideline Story", "Born Sinner", "2014 Forest Hills Drive", "4 Your Eyez Only", "KOD", "The Off-Season"],
+      "A Tribe Called Quest": ["People's Instinctive Travels and the Paths of Rhythm", "The Low End Theory", "Midnight Marauders", "Beats, Rhymes and Life", "The Love Movement", "We Got It from Here... Thank You 4 Your Service"],
+      "Run The Jewels": ["Run the Jewels", "Run the Jewels 2", "Run the Jewels 3", "RTJ4"],
+      "The Caretaker": ["Everywhere at the End of Time - Stage 1", "Everywhere at the End of Time - Stage 2", "Everywhere at the End of Time - Stage 3", "Everywhere at the End of Time - Stage 4", "Everywhere at the End of Time - Stage 5", "Everywhere at the End of Time - Stage 6"],
+      "Aphex Twin": ["Selected Ambient Works 85-92", "Selected Ambient Works Volume II", "Richard D. James Album", "Drukqs", "Syro"],
+      "Lady Gaga": ["The Fame", "The Fame Monster", "Born This Way", "Artpop", "Cheek to Cheek", "Joanne", "A Star Is Born", "Chromatica"],
+      "The Weeknd": ["House of Balloons", "Thursday", "Echoes of Silence", "Kiss Land", "Beauty Behind the Madness", "Starboy", "After Hours", "Dawn FM"],
+      "Nirvana": ["Bleach", "Nevermind", "In Utero", "MTV Unplugged in New York"],
+      "Kevin MacLeod": ["incompetech"],
+      "Charli xcx": ["True Romance", "Sucker", "Number 1 Angel", "Pop 2", "Charli", "How I'm Feeling Now", "Crash"],
+      "XXXTENTACION": ["17", "?"],
+      "JAY-Z": ["Reasonable Doubt", "In My Lifetime, Vol. 1", "Vol. 2... Hard Knock Life", "Vol. 3... Life and Times of S. Carter", "The Blueprint", "The Black Album", "American Gangster", "4:44"],
+      "Toby Fox": ["Undertale Soundtrack"],
+      "Frank Ocean": ["Channel Orange", "Blonde"],
+      "Playboi Carti": ["Die Lit", "Whole Lotta Red"],
+      "David Bowie": ["Space Oddity", "The Man Who Sold the World", "Hunky Dory", "The Rise and Fall of Ziggy Stardust and the Spiders from Mars", "Aladdin Sane", "Diamond Dogs", "Young Americans", "Station to Station", "Low", "Heroes", "Lodger", "Scary Monsters (and Super Creeps)", "Let's Dance", "Blackstar"],
+      "King Crimson": ["In the Court of the Crimson King", "In the Wake of Poseidon", "Lizard", "Islands", "Larks' Tongues in Aspic", "Starless and Bible Black", "Red", "Discipline", "Beat", "Three of a Perfect Pair", "Thrak", "The ConstruKction of Light", "The Power to Believe"],
+      "2Pac": ["2Pacalypse Now", "Strictly 4 My N.I.G.G.A.Z.", "Me Against the World", "All Eyez on Me", "The Don Killuminati: The 7 Day Theory"],
+      "The Notorious B.I.G.": ["Ready to Die", "Life After Death"],
+      "Yuno Miles":["K.O.O.K.I.E"],
+      "KSI":["Dissimulation"],
+      "Tones And I":["Welcome To The Madhouse"],
+      "Rucka Rucka Ali":["I'm Black"],
+      "Tom MacDonald":["Snowflakes"],
+      "JPEGMAFIA":["Veteran"],
+      "Kid Cudi":["Man on the Moon: The End of Day"],
+      "Future":["DS2"],
+      "Logic":["Under Pressure"],
+      "JID":["The Never Story"],
+      "Ty Dolla $ign":["Free TC"],
+      "Diddy":["No Way Out"],
+      "Juice WRLD":["Goodbye & Good Riddance"],
+      "Godspeed You! Black Emperor":["Lift Your Skinny Fists Like Antennas to Heaven!"],
+      "Joji":["Nectar"],
+      "Quadeca":["From Me To You"],
+      "Ed Sheeran":["+"],
+      "Paul McCartney":["McCartney"],
+      "John Lennon":["Imagine"],
+      "George Harrison":["All Things Must Pass"],
+      "Ringo Starr":["Ringo"],
+      "BROCKHAMPTON":["Saturation"],
+      "Lil Wayne":["Tha Carter III"],
+      "Daft Punk":["Discovery"],
+      "Panda Eyes":["Isolated"],
+      "Teminite":["Ascent"],
+      "Miles Davis":["Kind of Blue"],
+      "Marek Grechuta":["Dni, Których Nie Znamy"],
+      "Kult":["Posluchaj To Do Ciebie"],
+      "Yes":["Fragile"],
+      "The Cure":["Disintegration"],
+      "Queen":["A Night at the Opera"],
+      "Lil Uzi Vert":["Luv Is Rage 2"],
+      "mgk":["Tickets to My Downfall"],
+      "Trippie Redd":["Life's a Trip"],
+      "DJ Khaled":["Grateful"],
+      "Weezer":["Weezer (The Blue Album)"],
+      "Post Malone":["Stoney"],
+      "Black Sabbath":["Paranoid"],
+      "Charlie Puth":["Nine Track Mind"],
+      "Billie Eilish":["When We All Fall Asleep, Where Do We Go?"],
+      "Elton John":["Goodbye Yellow Brick Road"],
+      "Rihanna":["Anti"],
+      "Nas":["Illmatic"],
+      "Yeat":["Up 2 Më"],
+      "Macklemore":["The Heist"],
+      "DEMONDICE":["The Art of Hentai"],
+      "Bad Bunny":["X 100PRE"],
+      "6ix9ine":["Dummy Boy"],
+      "Lil Pump":["Lil Pump"],
+      "Metro Boomin":["NOT ALL HEROES WEAR CAPES"],
+      "Skrillex":["Scary Monsters and Nice Sprites"],
+      "Mustard":["Perfect Ten"],
+      "The Beach Boys":["Pet Sounds"],
+      "Wu-Tang Clan":["Enter the Wu-Tang (36 Chambers)"],
+      "Denzel Curry":["TA13OO"],
+      "Danny Brown":["Atrocity Exhibition"],
+      "The Rolling Stones":["Exile on Main St."],
+      "21 Savage":["Issa Album"],
+      "Frank Sinatra":["Come Fly with Me"],
+      "Bruno Mars":["24K Magic"],
+      "Anderson .Paak":["Malibu"],
+      "Ronald Reagan":["The Reagan Revolution"],
+      "A$AP Rocky":["Long. Live. A$AP"],
+      "Gorillaz":["Demon Days"],
+      "Imagine Dragons":["Night Visions"],
+      "MGMT":["Oracular Spectacular"],
+      "Harry Styles":["Fine Line"],
+      "Olivia Rodrigo":["Sour"],
+      "Granular":["Granular"],
+      "Justin Bieber":["Purpose"],
+      "ABBA":["Arrival"],
+      "Korn":["Korn"],
+      "Pinkfong":["Pinkfong's Animal Songs"],
+      "Mata":["Szmata"],
+      "sanah":["Królowa Dram"],
+      "Shakira":["Laundry Service"],
+      "50 Cent":["Get Rich or Die Tryin'"],
+      "Led Zeppelin":["Led Zeppelin IV"],
+      "AC/DC":["Back in Black"],
+      "Simon & Garfunkel":["Bridge over Troubled Water"],
+      "Twenty One Pilots":["Blurryface"],
+      "Foster The People":["Torches"],
+      "Arctic Monkeys":["AM"],
+      "Madonna":["Like a Virgin"],
+      "Stevie Wonder":["Songs in the Key of Life"],
+      "Madlib":["Shades of Blue"],
+      "my bloody valentine":["Loveless"],
+      "Oasis":["(What's the Story) Morning Glory?"],
+      "Björk":["Homogenic"],
+      "Aerosmith":["Toys in the Attic"],
+      "Adele":["21"],
+      "Hozier":["Hozier"],
+      "Beyoncé":["Lemonade"],
+      "Coldplay":["A Rush of Blood to the Head"],
+      "Guns N' Roses":["Appetite for Destruction"],
+      "Ice Spice":["Like..?"],
+      "Johnny Cash":["At Folsom Prison"],
+      "Hans Zimmer":["The Dark Knight OST"],
+      "BTS":["Map of the Soul: 7"],
+      "Swans":["To Be Kind"],
+      "Mac Miller":["Swimming"],
+      "Earl Sweatshirt":["Some Rap Songs"],
+      "Charles Mingus":["The Black Saint and the Sinner Lady"],
+      "Marvin Gaye":["What's Going On"],
+      "Dua Lipa":["Future Nostalgia"],
+      "Ariana Grande":["Sweetener"],
+      "C418":["Minecraft - Volume Alpha"],
+      "Laura Shigihara":["Plants vs. Zombies Soundtrack"],
+      "Coolio":["Gangsta's Paradise"],
+      "House of Pain":["House of Pain"],
+      "TOTO":["Toto IV"],
+      "Louis Armstrong":["Hot Five and Hot Seven Recordings"],
+      "Czerwone Gitary":["To My Właśnie"],
+      "Stare Dobre Małżeństwo":["Dla Tych, Co Się Boją Kochać"],
+      "The Microphones":["The Glow Pt. 2"],
+      "Mount Eerie":["A Crow Looked at Me"],
+      "Method Man":["Tical"],
+      "Ol' Dirty Bastard":["Return to the 36 Chambers: The Dirty Version"],
+      "Ghostface Killah":["Supreme Clientele"],
+      "GZA":["Liquid Swords"],
+      "Raekwon":["Only Built 4 Cuban Linx..."],
+      "RZA":["Bobby Digital in Stereo"],
+      "Cappadonna":["The Pillage"],
+      "Masta Killa":["No Said Date"],
+      "Inspectah Deck":["Uncontrolled Substance"],
+      "U-God":["Golden Arms Redemption"],
+      "Weird Al Yankovic":["Alpocalypse"],
+      "P C III":["Antichrist Superstar"],
+      "Kidz Bop Kids":["Kidz Bop 2023"],
+      "Mariah Carey":["Daydream"],
+      "John Coltrane":["A Love Supreme"],
+      "Snoop Dogg":["Doggystyle"],
+      "Ms. Lauryn Hill":["The Miseducation of Lauryn Hill"],
+      "System Of A Down":["Toxicity"],
+      "Prince":["Purple Rain"],
+      "Don Toliver":["Heaven or Hell"],
+      "Sheck Wes":["MUDBOY"],
+      "TheFatRat":["Jackpot EP"],
+      "Alan Walker":["Different World"],
+      "Avicii":["True"],
+      "AJR":["Neotheater"],
+      "OneRepublic":["Dreaming Out Loud"],
+      "Tame Impala":["Currents"],
+      "Luis Fonsi":["Vida"],
+      "J Balvin":["Colores"],
+      "Ozuna":["Odisea"],
+      "Nicki Minaj":["The Pinkprint"],
+      "Cardi B":["Invasion of Privacy"],
+      "Chris Brown":["X"],
+      "Young Thug":["Barter 6"],
+      "Soulja Boy":["iSouljaBoyTellem"],
+      "Sia":["1000 Forms of Fear"],
+      "SZA":["Ctrl"],
+      "Sabrina Carpenter":["emails i can't send"],
+      "Childish Gambino":["Because the Internet"],
+      "Chance the Rapper":["Coloring Book"],
+      "French Montana":["Excuse My French"]
+    };
+
+    // 2. Populate Artist Dropdown
+    function populateArtistDropdown() {
+      const artistDropdown = document.getElementById("artist-dropdown");
+      for (const artist in artistAlbumData) {
+        const option = document.createElement("option");
+        option.value = artist;
+        option.textContent = artist;
+        artistDropdown.appendChild(option);
+      }
+    }
+
+    // 3. Populate Album Dropdown based on Artist Selection
+    function populateAlbumDropdown(artist) {
+      const albumDropdown = document.getElementById("album-dropdown");
+      albumDropdown.innerHTML = ""; // Clear existing options
+
+      if (artistAlbumData[artist]) {
+        artistAlbumData[artist].forEach(album => {
+          const option = document.createElement("option");
+          option.value = album;
+          option.textContent = album;
+          albumDropdown.appendChild(option);
+        });
+      }
+    }
+
+    // 4. Generate AI Review (Placeholder)
+    function generateAiReview(artist, album) {
+      const reviewTextDiv = document.getElementById("review-text");
+
+      let review = `AI Review of "${album}" by ${artist}:\n\n`;
+
+      if (artist === "Kanye West") {
+        review += `"A polarizing and maximalist work. Sonically ambitious, thematically dense, and sure to provoke conversation.  ${album} is quintessential Kanye."`;
+      } else if (artist === "The Beatles") {
+        review += `"A timeless masterpiece of songwriting and studio innovation. ${album} remains a cornerstone of modern music, brimming with melody and heart."`;
+      } else if (artist === "Eminem") {
+        review += `"Lyrical acrobatics and raw emotion collide. ${album} is a visceral and intense experience, showcasing Eminem's unparalleled technical skill."`;
+      } else if (artist === "The Caretaker") {
+        review += `"A descent into fractured memories and sonic decay. ${album} is profoundly unsettling and beautiful, evoking a powerful sense of loss and nostalgia."`;
+      } else if (artist === "Rucka Rucka Ali"){
+        review += `"This artist's work is steeped in harmful stereotypes and hateful rhetoric.  Avoid supporting this artist."`;
+      } else if (artist === "Tom MacDonald"){
+        review += `"Rhetorically charged and divisive. This artist peddles in bigotry and misinformation."`;
+      } else if(artist === "6ix9ine"){
+        review += `"Musically vapid and morally bankrupt.  This artist embodies the worst aspects of internet culture."`;
+      } else if (artist === "Lil Pump"){
+        review += `"A sonic wasteland.  This artist represents a race to the bottom in popular music."`;
+      } else if (artist === "Taylor Swift"){
+        review += `"Expertly crafted pop with broad appeal. ${album} showcases Swift's evolution as a songwriter and her keen understanding of contemporary trends."`;
+      }
+      else if (artist === "Radiohead"){
+        review += `"Atmospheric and melancholic, pushing the boundaries of rock music. ${album} is a complex and rewarding listen, demanding repeated engagement."`;
+      }
+       else {
+        review += `"A solid album with notable tracks and consistent quality.  ${album} explores familiar themes with competence and occasional flashes of brilliance."`;
+      }
+
+      reviewTextDiv.textContent = review;
+    }
+
+    // 5. Event Listeners
+    document.getElementById("artist-dropdown").addEventListener("change", function() {
+      const selectedArtist = this.value;
+      populateAlbumDropdown(selectedArtist);
+    });
+
+    document.getElementById("album-dropdown").addEventListener("change", function() {
+      const selectedArtist = document.getElementById("artist-dropdown").value;
+      const selectedAlbum = this.value;
+      generateAiReview(selectedArtist, selectedAlbum);
+    });
+
+
+    // 6. Initialization
+    populateArtistDropdown();
+    // Initialize album dropdown with the first artist's albums.
+    const firstArtist = document.getElementById("artist-dropdown").value;
+    populateAlbumDropdown(firstArtist);
+    // Initial review generation with the first album of the first artist.
+    generateAiReview(firstArtist, artistAlbumData[firstArtist][0]);
+
+  </script>
+</body>
+</html>

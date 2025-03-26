@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Battle for Caspian Sea</title>
+    <style>
+        body {
+            background-color: #f0f0f0;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        #game-container {
+            width: 800px;
+            height: 650px; /* Increased height to accommodate message log better */
+            margin: 20px auto;
+            position: relative;
+            border: 1px solid #ccc;
+            background-color: #e0e0e0;
+            display: flex;
+            flex-direction: column; /* Arrange canvas and UI panel vertically */
+            align-items: center; /* Center items horizontally in container */
+        }
+
+        #game-canvas {
+            background-color: darkblue;
+            display: block;
+        }
+
+        #ui-panel {
+            width: 100%; /* Full width of game container */
+            background-color: rgba(0, 0, 0, 0.7); /* Darker UI panel */
+            color: white;
+            padding: 15px;
+            border-radius: 0 0 5px 5px; /* Rounded bottom corners */
+            box-sizing: border-box; /* Include padding in width calculation */
+            display: flex;
+            justify-content: space-between; /* Space between message log and button */
+            align-items: center;
+            font-family: sans-serif; /* More readable font */
+        }
+
+        #message-log {
+            flex-grow: 1; /* Allow message log to take up available space */
+            margin: 0 10px 0 0; /* Add some right margin */
+            overflow: hidden; /* Prevent text from overflowing */
+            text-overflow: ellipsis; /* Ellipsis for long messages */
+            white-space: nowrap; /* Prevent wrapping */
+        }
+
+        #attack-button {
+            padding: 8px 15px; /* Slightly larger button */
+            cursor: pointer;
+            background-color: #5cb85c; /* Green button */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.3s ease; /* Smooth hover effect */
+        }
+
+        #attack-button:hover {
+            background-color: #4cae4c; /* Darker green on hover */
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="800" height="600"></canvas>
+        <div id="ui-panel">
+            <p id="message-log">Game started! Player turn.</p>
+            <button id="attack-button">Attack</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const messageLog = document.getElementById('message-log');
+        const attackButton = document.getElementById('attack-button');
+
+        function logMessage(message) {
+            messageLog.textContent = message;
+        }
+
+        let gameState = {
+            playerFleet: [],
+            enemyFleet: [],
+            seaWidth: 800,
+            seaHeight: 600,
+            turn: 1, // Start at turn 1
+            gameOver: false,
+            currentPlayer: 'player'
+        };
+
+        function createShip(x, y, type, owner) {
+            return {
+                x: x,
+                y: y,
+                type: type,
+                owner: owner,
+                health: 100,
+                attackPower: 20,
+                range: 100,
+                isSunk: false,
+                canMove: true,
+                isSelected: false, // Added isSelected property
+                draw: function(context) {
+                    context.fillStyle = (this.owner === 'player') ? (this.isSelected ? 'lightgreen' : 'green') : (this.isSelected ? 'salmon' : 'red'); // Visual feedback for selection
+                    context.fillRect(this.x - 10, this.y - 10, 20, 20);
+                    context.strokeStyle = 'black'; // Add border for better visibility
+                    context.lineWidth = 1;
+                    context.strokeRect(this.x - 10, this.y - 10, 20, 20);
+                }
+            };
+        }
+
+        function initializeFleets() {
+            gameState.playerFleet = [
+                createShip(100, 100, 'battleship', 'player'),
+                createShip(150, 150, 'destroyer', 'player')
+            ];
+
+            gameState.enemyFleet = [
+                createShip(700, 500, 'battleship', 'enemy'),
+                createShip(650, 450, 'destroyer', 'enemy')
+            ];
+        }
+
+        function drawWorld() {
+            ctx.clearRect(0, 0, gameState.seaWidth, gameState.seaHeight);
+
+            gameState.playerFleet.forEach(ship => ship.draw(ctx));
+            gameState.enemyFleet.forEach(ship => ship.draw(ctx));
+        }
+
+        function gameLoop() {
+            drawWorld();
+
+            if (!gameState.gameOver) {
+                requestAnimationFrame(gameLoop);
+            } else {
+                logMessage("Game Over!");
+            }
+        }
+
+        let selectedShip = null;
+
+        function selectShip(ship) {
+            if (selectedShip) {
+                selectedShip.isSelected = false; // Deselect previously selected ship
+            }
+            selectedShip = ship;
+            selectedShip.isSelected = true; // Select new ship
+            logMessage("Selected ship: " + ship.type);
+        }
+
+        function moveShip(x, y) {
+            if (!selectedShip) {
+                logMessage("No ship selected.");
+                return;
+            }
+
+            if (!selectedShip.canMove) {
+                logMessage("This ship cannot move this turn.");
+                return;
+            }
+
+            selectedShip.x = x;
+            selectedShip.y = y;
+            selectedShip.canMove = false;
+            logMessage("Ship moved to " + x + ", " + y);
+            selectedShip.isSelected = false; // Deselect after moving
+            selectedShip = null;
+        }
+
+        canvas.addEventListener('click', (event) => {
+            if (gameState.currentPlayer !== 'player') {
+                logMessage("Not your turn!");
+                return;
+            }
+
+            const x = event.offsetX;
+            const y = event.offsetY;
+
+            let shipClicked = false;
+            gameState.playerFleet.forEach(ship => {
+                if (x >= ship.x - 10 && x <= ship.x + 10 && y >= ship.y - 10 && y <= ship.y + 10) {
+                    selectShip(ship);
+                    shipClicked = true;
+                }
+            });
+
+            if (!shipClicked && selectedShip) {
+                moveShip(x, y);
+            }
+        });
+
+        function findNearestEnemy(ship) {
+            let nearestEnemy = null;
+            let minDistance = Infinity;
+
+            gameState.enemyFleet.forEach(enemy => {
+                if (!enemy.isSunk) {
+                    const distance = Math.sqrt(Math.pow(ship.x - enemy.x, 2) + Math.pow(ship.y - enemy.y, 2));
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestEnemy = enemy;
+                    }
+                }
+            });
+
+            return nearestEnemy;
+        }
+
+        function attack(attacker, target) {
+            if (!target || target.isSunk) {
+                logMessage("Invalid target.");
+                return;
+            }
+
+            if (Math.sqrt(Math.pow(attacker.x - target.x, 2) + Math.pow(attacker.y - target.y, 2)) > attacker.range) {
+                logMessage("Target out of range.");
+                return;
+            }
+
+            let damage = attacker.attackPower;
+            target.health -= damage;
+            logMessage(attacker.owner + "'s " + attacker.type + " attacks " + target.owner + "'s " + target.type + " for " + damage + " damage.");
+
+            if (target.health <= 0) {
+                target.isSunk = true;
+                logMessage(target.owner + "'s " + target.type + " has been sunk!");
+                checkGameOver();
+            }
+        }
+
+        attackButton.addEventListener('click', () => {
+            if (gameState.currentPlayer !== 'player') {
+                logMessage("Not your turn!");
+                return;
+            }
+
+            if (!selectedShip) {
+                logMessage("No ship selected.");
+                return;
+            }
+
+            const target = findNearestEnemy(selectedShip);
+            if (target) {
+                attack(selectedShip, target);
+                endTurn();
+            } else {
+                logMessage("No enemies in range.");
+            }
+        });
+
+        function endTurn() {
+            gameState.turn++;
+            logMessage("Turn " + gameState.turn + " ended. Enemy turn."); // Updated log message
+            gameState.playerFleet.forEach(ship => ship.canMove = true);
+            gameState.currentPlayer = 'enemy';
+            selectedShip = null; //Deselect ship at end of turn
+            enemyTurn();
+            checkGameOver();
+        }
+
+         function findNearestPlayerShip(ship) {
+            let nearestPlayerShip = null;
+            let minDistance = Infinity;
+
+            gameState.playerFleet.forEach(playerShip => {
+                if (!playerShip.isSunk) {
+                    const distance = Math.sqrt(Math.pow(ship.x - playerShip.x, 2) + Math.pow(ship.y - playerShip.y, 2));
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestPlayerShip = playerShip;
+                    }
+                }
+            });
+
+            return nearestPlayerShip;
+        }
+
+        function enemyTurn() {
+            logMessage("Enemy's turn.");
+
+            gameState.enemyFleet.forEach(enemy => {
+                if (!enemy.isSunk) {
+                    let target = findNearestPlayerShip(enemy);
+                    if (target) {
+                        if (Math.sqrt(Math.pow(enemy.x - target.x, 2) + Math.pow(enemy.y - target.y, 2)) <= enemy.range) {
+                            attack(enemy, target);
+                        } else {
+                             // Simple movement towards the player
+                            let dx = target.x - enemy.x;
+                            let dy = target.y - enemy.y;
+
+                            // Normalize the direction vector
+                            let distance = Math.sqrt(dx * dx + dy * dy);
+                            if (distance > 0) {
+                                dx /= distance;
+                                dy /= distance;
+                            }
+
+                            // Move 50 units towards the target
+                            let moveX = enemy.x + dx * 50;
+                            let moveY = enemy.y + dy * 50;
+
+                            enemy.x = Math.max(0, Math.min(moveX, gameState.seaWidth));
+                            enemy.y = Math.max(0, Math.min(moveY, gameState.seaHeight));
+                        }
+                    }
+                }
+            });
+            gameState.currentPlayer = 'player';
+            logMessage("Enemy turn ended. Player turn."); // Log enemy turn end
+            endTurn(); // End turn to start player's turn again - fixed: should not call endTurn, should just set currentPlayer back to player and allow player to take action
+            gameState.playerFleet.forEach(ship => ship.canMove = true); // Reset player ships movement at start of player turn. Moved here from endTurn.
+        }
+
+        function endTurn() { // Modified endTurn to only handle turn counter and log message, and switch to enemy turn. Player turn reset moved to end of enemyTurn.
+            gameState.turn++;
+            logMessage("Turn " + gameState.turn + " started. Player turn."); // Log player turn start
+        }
+
+        function checkGameOver() {
+            const playerShipsRemaining = gameState.playerFleet.filter(ship => !ship.isSunk).length;
+            const enemyShipsRemaining = gameState.enemyFleet.filter(ship => !ship.isSunk).length;
+
+            if (playerShipsRemaining === 0) {
+                gameState.gameOver = true;
+                logMessage("Enemy wins!");
+            } else if (enemyShipsRemaining === 0) {
+                gameState.gameOver = true;
+                logMessage("Player wins!");
+            }
+        }
+
+        initializeFleets();
+        gameLoop();
+    </script>
+</body>
+</html>

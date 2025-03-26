@@ -1,0 +1,233 @@
+html
+ <!DOCTYPE html>
+ <html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I Can't Breathe Simulator</title>
+  <style>
+  body {
+  font-family: 'Arial', sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  margin: 0;
+  background-color: #f4f4f4;
+  color: #333;
+  }
+  h1 {
+  margin-bottom: 20px;
+  color: #c0392b; /* A slightly alarming red */
+  }
+  #simulator-container {
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  text-align: center;
+  width: 400px;
+  }
+  .display-box {
+  background-color: #e0e0e0;
+  padding: 15px;
+  margin-bottom: 15px;
+  border-radius: 8px;
+  font-size: 1.2em;
+  }
+  .button-container {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 20px;
+  }
+  button {
+  padding: 10px 15px;
+  font-size: 1em;
+  border: none;
+  border-radius: 5px;
+  background-color: #3498db; /* Blue button */
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  }
+  button:hover {
+  background-color: #2980b9;
+  }
+  button:active {
+  background-color: #21618C;
+  }
+  #start-button {
+  background-color: #2ecc71; /* Green start button */
+  }
+  #start-button:hover {
+  background-color: #27ae60;
+  }
+  #start-button:active {
+  background-color: #1e8449;
+  }
+  #increase-pressure {
+  background-color: #e67e22; /* Orange pressure increase */
+  }
+  #increase-pressure:hover {
+  background-color: #d35400;
+  }
+  #increase-pressure:active {
+  background-color: #ba4a00;
+  }
+  #decrease-pressure {
+  background-color: #9b59b6; /* Purple pressure decrease */
+  }
+  #decrease-pressure:hover {
+  background-color: #8e44ad;
+  }
+  #decrease-pressure:active {
+  background-color: #7d3c98;
+  }
+  #results {
+  margin-top: 20px;
+  font-weight: bold;
+  color: #c0392b;
+  }
+  </style>
+ </head>
+ <body>
+  <div id="simulator-container">
+  <h1>I Can't Breathe Simulator</h1>
+  <div id="pressure-display" class="display-box">Pressure: 0</div>
+  <div id="timer-display" class="display-box">Time: 0 seconds</div>
+  <div id="health-display" class="display-box">Health: 100</div>
+  <div class="button-container">
+  <button id="start-button">Start Simulation</button>
+  </div>
+  <div class="button-container">
+  <button id="increase-pressure">Increase Pressure</button>
+  <button id="decrease-pressure">Decrease Pressure</button>
+  </div>
+  <div id="results"></div>
+  </div>
+  <script>
+  // 1. Initialization
+  let pressure = 0;
+  let time = 0;
+  let health = 100;
+  let timerInterval;
+  let simulationRunning = false;
+  const pressureDisplay = document.getElementById('pressure-display');
+  const timerDisplay = document.getElementById('timer-display');
+  const healthDisplay = document.getElementById('health-display');
+  const startButton = document.getElementById('start-button');
+  const increasePressureButton = document.getElementById('increase-pressure');
+  const decreasePressureButton = document.getElementById('decrease-pressure');
+  const resultsDiv = document.getElementById('results');
+
+  // 2. Pressure Control Functions
+  function updatePressureDisplay() {
+  pressureDisplay.textContent = `Pressure: ${pressure}`;
+  }
+
+  function increasePressure() {
+  if (simulationRunning) {
+  pressure += 5;
+  if (pressure > 100) {
+  pressure = 100;
+  }
+  updatePressureDisplay();
+  }
+  }
+
+  function decreasePressure() {
+  if (simulationRunning) {
+  pressure -= 5;
+  if (pressure < 0) {
+  pressure = 0;
+  }
+  updatePressureDisplay();
+  }
+  }
+
+  increasePressureButton.addEventListener('click', increasePressure);
+  decreasePressureButton.addEventListener('click', decreasePressure);
+
+  // 3. Timer Functionality
+  function updateTimerDisplay() {
+  timerDisplay.textContent = `Time: ${time} seconds`;
+  }
+
+  function updateHealthDisplay() {
+  healthDisplay.textContent = `Health: ${health}`;
+  }
+
+  function startTimer() {
+  timerInterval = setInterval(() => {
+  time++;
+  updateTimerDisplay();
+  checkSimulationConditions();
+  }, 1000);
+  }
+
+  function stopTimer() {
+  clearInterval(timerInterval);
+  }
+
+  // 4. Simulation Start/Stop
+  function startSimulation() {
+  simulationRunning = true;
+  pressure = 0;
+  time = 0;
+  health = 100;
+  updatePressureDisplay();
+  updateTimerDisplay();
+  updateHealthDisplay();
+  startTimer();
+  startButton.textContent = 'Stop Simulation';
+  startButton.style.backgroundColor = '#e74c3c'; // Change to red for stop
+  }
+
+  function stopSimulation() {
+  simulationRunning = false;
+  stopTimer();
+  startButton.textContent = 'Start Simulation';
+  startButton.style.backgroundColor = '#2ecc71'; // Change back to green for start
+  displayResults();
+  }
+
+  startButton.addEventListener('click', () => {
+  if (simulationRunning) {
+  stopSimulation();
+  } else {
+  startSimulation();
+  }
+  });
+
+  // 5. Simulation Logic and Conditions
+  function checkSimulationConditions() {
+  let effectSeverity = pressure / 100;
+  let healthDecrease = effectSeverity * (time / 20); // Adjusted time scaling for faster impact
+
+  health -= healthDecrease;
+  if (health < 0) {
+  health = 0;
+  }
+  updateHealthDisplay();
+
+  if (health <= 0) {
+  stopSimulation();
+  displayResults("Simulation Failed: Health depleted!");
+  } else if (time > 30 && pressure > 80) {
+  stopSimulation();
+  displayResults("Simulation Failed: Prolonged high pressure!");
+  } else if (time > 60 && pressure > 50) {
+  stopSimulation();
+  displayResults("Simulation Failed: Prolonged medium pressure!");
+  }
+  }
+
+  // 6. Results Display
+  function displayResults(message = "Simulation Completed") {
+  resultsDiv.textContent = message + ` - Time: ${time} seconds, Final Pressure: ${pressure}, Final Health: ${health}`;
+  }
+
+  </script>
+ </body>
+ </html>

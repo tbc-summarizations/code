@@ -1,0 +1,279 @@
+html
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Ramadan Simulator</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        #simulator-container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 90%;
+            max-width: 600px;
+        }
+
+        .status-display {
+            margin-bottom: 15px;
+            font-size: 18px;
+            color: #555;
+        }
+
+        .status-display strong {
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        button {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #27ae60;
+        }
+
+        #activityLog {
+            margin-top: 25px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            text-align: left;
+            height: 150px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            font-size: 14px;
+            color: #666;
+        }
+
+        #activityLog p {
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Ramadan Simulator</h1>
+
+    <div id="simulator-container">
+        <div id="timeDisplay" class="status-display"><strong>Time:</strong> 00:00</div>
+        <div id="hungerStatus" class="status-display"><strong>Hunger:</strong> 0</div>
+        <div id="thirstStatus" class="status-display"><strong>Thirst:</strong> 0</div>
+        <div id="prayerStatus" class="status-display"><strong>Next Prayer:</strong> Fajr</div>
+
+        <button id="eatButton">Eat (Iftar)</button>
+        <button id="drinkButton">Drink (Iftar)</button>
+        <button id="prayButton">Pray</button>
+        <button id="workButton">Work</button>
+
+        <div id="activityLog">
+            <p>Welcome to the Ramadan Simulator!</p>
+        </div>
+    </div>
+
+    <script>
+        let currentTime = 0;
+        let timerInterval;
+        let hunger = 0;
+        let thirst = 0;
+        let prayersCompleted = { fajr: false, dhuhr: false, asr: false, maghrib: false, isha: false };
+        let prayerTimingsDisplay = { fajr: "4:00 AM", dhuhr: "1:00 PM", asr: "5:00 PM", maghrib: "7:00 PM", isha: "9:00 PM" };
+
+        const prayerTimes = {
+            fajr: 240,
+            dhuhr: 780,
+            asr: 1020,
+            maghrib: 1140,
+            isha: 1260
+        };
+
+        function startTimer() {
+            timerInterval = setInterval(updateTime, 1000);
+        }
+
+        function updateTime() {
+            currentTime++;
+            displayTime();
+            updateHungerAndThirst();
+            checkPrayerTime();
+        }
+
+        function displayTime() {
+            const hours = Math.floor(currentTime / 60) % 24;
+            const minutes = currentTime % 60;
+            document.getElementById("timeDisplay").innerText = `Time: ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        }
+
+        function updateHungerAndThirst() {
+            if (isFasting()) {
+                hunger += 1;
+                thirst += 1;
+            }
+
+            hunger = Math.min(hunger, 100);
+            thirst = Math.min(thirst, 100);
+
+            document.getElementById("hungerStatus").innerText = `<strong>Hunger:</strong> ${hunger}`;
+            document.getElementById("thirstStatus").innerText = `<strong>Thirst:</strong> ${thirst}`;
+        }
+
+        function isFasting() {
+            const currentHour = Math.floor(currentTime / 60) % 24;
+            return currentHour >= 4 && currentHour < 19;
+        }
+
+        function eat() {
+            if (!isFasting()) {
+                hunger = 0;
+                logActivity("Ate Iftar! Hunger satisfied.");
+                document.getElementById("hungerStatus").innerText = `<strong>Hunger:</strong> ${hunger}`;
+            } else {
+                logActivity("Cannot eat, you are fasting!");
+            }
+        }
+
+        function drink() {
+            if (!isFasting()) {
+                thirst = 0;
+                logActivity("Drank at Iftar! Thirst quenched.");
+                document.getElementById("thirstStatus").innerText = `<strong>Thirst:</strong> ${thirst}`;
+            } else {
+                logActivity("Cannot drink, you are fasting!");
+            }
+        }
+
+        function checkPrayerTime() {
+            let nextPrayer = null;
+            let nextPrayerTime = Infinity;
+            let prayersArray = Object.keys(prayerTimes);
+
+            for (const prayer of prayersArray) {
+                const prayerTime = prayerTimes[prayer];
+                const timeDifference = prayerTime - (currentTime % 1440);
+
+                if (timeDifference > 0 && timeDifference < nextPrayerTime && !prayersCompleted[prayer]) {
+                    nextPrayerTime = timeDifference;
+                    nextPrayer = prayer;
+                }
+            }
+
+            if (nextPrayer) {
+                const hoursToPrayer = Math.floor(nextPrayerTime / 60);
+                const minutesToPrayer = nextPrayerTime % 60;
+                document.getElementById("prayerStatus").innerText = `<strong>Next Prayer:</strong> ${nextPrayer} in ${hoursToPrayer}h ${minutesToPrayer}m (${prayerTimingsDisplay[nextPrayer]}) `;
+            } else {
+                const remainingPrayers = prayersArray.filter(prayer => !prayersCompleted[prayer]);
+                if (remainingPrayers.length > 0) {
+                    nextPrayer = remainingPrayers[0];
+                    const timeDifference = prayerTimes[nextPrayer] - (currentTime % 1440) + 1440; // Time until next day's prayer
+                    const hoursToPrayer = Math.floor(timeDifference / 60);
+                    const minutesToPrayer = timeDifference % 60;
+
+                    document.getElementById("prayerStatus").innerText = `<strong>Next Prayer:</strong> ${nextPrayer} tomorrow in ${hoursToPrayer}h ${minutesToPrayer}m (${prayerTimingsDisplay[nextPrayer]}) `;
+                } else {
+                    document.getElementById("prayerStatus").innerText = `<strong>Prayers:</strong> All prayers completed for today.`;
+                }
+            }
+        }
+
+
+        function pray() {
+            let nextPrayer = null;
+            let nextPrayerTime = Infinity;
+            let prayersArray = Object.keys(prayerTimes);
+
+            for (const prayer of prayersArray) {
+                const prayerTime = prayerTimes[prayer];
+                const timeDifference = prayerTime - (currentTime % 1440);
+
+                if (timeDifference > 0 && timeDifference < nextPrayerTime && !prayersCompleted[prayer]) {
+                    nextPrayerTime = timeDifference;
+                    nextPrayer = prayer;
+                }
+            }
+
+            if (nextPrayer) {
+                if (nextPrayerTime <= 15 && nextPrayerTime >= -5) {
+                    logActivity(`You prayed ${nextPrayer} on time!`);
+                    prayersCompleted[nextPrayer] = true;
+                    document.getElementById("prayerStatus").innerText = `<strong>Next Prayer:</strong> Prayed ${nextPrayer}.`;
+                    checkPrayerTime(); // Update next prayer display
+                }
+                 else if (nextPrayerTime > 15) {
+                    logActivity(`You can pray ${nextPrayer} soon.`);
+                }
+                else if (nextPrayerTime < -5 && !prayersCompleted[nextPrayer]){
+                     logActivity(`You are late for ${nextPrayer}. Try to pray it as soon as possible.`);
+                     prayersCompleted[nextPrayer] = true;
+                     checkPrayerTime();
+                }
+            } else {
+                logActivity("No upcoming prayers for now.");
+            }
+        }
+
+
+        function work() {
+            if (isFasting()) {
+                hunger += 5;
+                thirst += 5;
+                logActivity("Worked hard while fasting, increased hunger and thirst.");
+            } else {
+                logActivity("Worked, increased hunger and thirst slightly.");
+                hunger += 2;
+                thirst += 2;
+            }
+            hunger = Math.min(hunger, 100);
+            thirst = Math.min(thirst, 100);
+
+            document.getElementById("hungerStatus").innerText = `<strong>Hunger:</strong> ${hunger}`;
+            document.getElementById("thirstStatus").innerText = `<strong>Thirst:</strong> ${thirst}`;
+        }
+
+        function logActivity(message) {
+            const logEntry = document.createElement("p");
+            logEntry.innerText = message;
+            const activityLog = document.getElementById("activityLog");
+            activityLog.appendChild(logEntry);
+            activityLog.scrollTop = activityLog.scrollHeight;
+        }
+
+        document.getElementById("eatButton").addEventListener("click", eat);
+        document.getElementById("drinkButton").addEventListener("click", drink);
+        document.getElementById("prayButton").addEventListener("click", pray);
+        document.getElementById("workButton").addEventListener("click", work);
+
+        window.onload = startTimer;
+    </script>
+</body>
+
+</html>

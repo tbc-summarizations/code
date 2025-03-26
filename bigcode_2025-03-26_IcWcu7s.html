@@ -1,0 +1,397 @@
+html
+ <!DOCTYPE html>
+ <html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Flush the Toilet</title>
+  <style>
+  body {
+  font-family: sans-serif;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  background-color: #f0f0f0;
+  }
+
+  #gameContainer {
+  width: 90%;
+  max-width: 600px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  position: relative; /* For absolute positioning of plunger */
+  }
+
+  #toilet {
+  width: 100px;
+  height: 150px;
+  background-color: #ddd;
+  margin: 20px auto;
+  border-radius: 10px;
+  position: relative;
+  }
+
+  #water {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: #aaf;
+  border-radius: 0 0 10px 10px;
+  height: 20%;
+  transition: height 0.5s ease-in-out;
+  }
+
+  #button {
+  width: 80px;
+  height: 40px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 10px;
+  }
+
+  #button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+  }
+
+  #leaveButton {
+  width: 80px;
+  height: 40px;
+  background-color: #008CBA;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 10px;
+  }
+
+  #message {
+  margin-top: 20px;
+  font-size: 1.2em;
+  }
+
+  /* Boss Fight Styles */
+  #bossFightContainer {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  color: white;
+  text-align: center;
+  padding-top: 50px;
+  }
+
+  #boss {
+  width: 100px;
+  height: 100px;
+  background-color: red;
+  margin: 20px auto;
+  border-radius: 50%; /* Make boss round */
+  }
+
+  #attackButton {
+  width: 80px;
+  height: 40px;
+  background-color: darkred;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin: 10px;
+  }
+  #plunger {
+  width: 30px;
+  height: 60px;
+  background-color: brown;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: none;
+  border-radius: 5px;
+  }
+  #plunger:hover {
+  cursor: pointer;
+  }
+  #bossHealthBar {
+  width: 200px;
+  height: 10px;
+  background-color: grey;
+  margin: 10px auto;
+  border-radius: 5px;
+  overflow: hidden; /* Clip content that overflows */
+  }
+
+  #bossHealth {
+  height: 10px;
+  background-color: green;
+  width: 100%; /* Initial full health */
+  border-radius: 5px;
+  transition: width 0.3s ease; /* Smooth width transition */
+  }
+  #playerHealthBar {
+  width: 200px;
+  height: 10px;
+  background-color: grey;
+  margin: 10px auto;
+  border-radius: 5px;
+  overflow: hidden;
+  }
+
+  #playerHealth {
+  height: 10px;
+  background-color: blue;
+  width: 100%;
+  border-radius: 5px;
+  transition: width 0.3s ease;
+  }
+
+  </style>
+ </head>
+ <body>
+
+ <div id="gameContainer">
+  <h2>Flush the Toilet</h2>
+  <div id="toilet">
+  <div id="water"></div>
+  <div id="plunger"></div>
+  </div>
+  <button id="button">Flush</button>
+  <button id="leaveButton">Leave</button>
+  <div id="message"></div>
+ </div>
+
+ <div id="bossFightContainer">
+  <h2>Boss Fight!</h2>
+  <div id="bossHealthBar"><div id="bossHealth"></div></div>
+  <div id="boss"></div>
+  <p id="bossMessage"></p>
+  <div id="playerHealthBar"><div id="playerHealth"></div></div>
+  <button id="attackButton">Attack</button>
+ </div>
+
+ <script>
+  // Game state
+  let flushCount = 0;
+  let toiletState = 'normal';
+  let gameState = 'playing';
+  let hasPlunger = false;
+  let usedPlunger = false;
+  let waterLevel = 20;
+  let bossFightCount = 0;
+  let playerHealth = 100;
+  let bossHealth = 100;
+  let specialItemFound = false;
+  let usedSpecialItem = false;
+
+  // Elements
+  const button = document.getElementById('button');
+  const leaveButton = document.getElementById('leaveButton');
+  const toilet = document.getElementById('toilet');
+  const water = document.getElementById('water');
+  const message = document.getElementById('message');
+  const bossFightContainer = document.getElementById('bossFightContainer');
+  const boss = document.getElementById('boss');
+  const attackButton = document.getElementById('attackButton');
+  const bossMessage = document.getElementById('bossMessage');
+  const plunger = document.getElementById('plunger');
+  const bossHealthElem = document.getElementById('bossHealth');
+  const playerHealthElem = document.getElementById('playerHealth');
+
+  // Event Listeners
+  button.addEventListener('click', flush);
+  leaveButton.addEventListener('click', leave);
+  attackButton.addEventListener('click', attackBoss);
+  plunger.addEventListener('click', usePlunger);
+
+  // Function to handle flushing
+  function flush() {
+  if (gameState !== 'playing') return;
+
+  flushCount++;
+
+  if (flushCount >= 9) {
+  button.style.backgroundColor = 'orange';
+  }
+
+  if (flushCount >= 10) {
+  explodeToilet();
+  return;
+  }
+
+  waterLevel = Math.min(waterLevel + 10, 100);
+  water.style.height = waterLevel + '%';
+
+  updateMessage("You flushed the toilet. Flush count: " + flushCount + ". Health: " + playerHealth);
+  }
+
+  // Function to explode the toilet
+  function explodeToilet() {
+  toiletState = 'exploded';
+  toilet.style.backgroundColor = 'red';
+  updateMessage("The toilet exploded! Disaster! Health: " + playerHealth);
+  button.disabled = true;
+  water.style.height = '0%';
+
+  bossFightCount++;
+  if (bossFightCount >= 3) {
+  startFinalBossFight();
+  } else {
+  endGame("Disaster Ending: You exploded the toilet in a fit of rage.");
+  }
+  }
+
+  // Function to handle leaving
+  function leave() {
+  if (gameState !== 'playing') return;
+
+  if (flushCount === 1) {
+  endGame("Careful Ending: One flush and done, a responsible citizen.");
+  } else if (flushCount >= 9 && toiletState !== 'exploded') {
+  endGame("Risky but Caring Ending: You flirted with disaster but showed restraint.");
+  } else {
+  // Complex Endings
+  if (hasPlunger && !usedPlunger) {
+  endGame("Plunger's Regret Ending: You found a plunger but left without using it, a missed opportunity.");
+  } else if (flushCount === 0) {
+  endGame("The Unflushed Ending: You came, you saw, you didn't flush. Why bother?");
+  } else if (flushCount > 1 && flushCount <= 3) {
+  endGame("Casual Flusher Ending: A few flushes, then boredom. You're easily distracted.");
+  } else if (flushCount > 3 && flushCount <= 6) {
+  endGame("Persistent Flusher Ending: You flushed a fair bit, showing some commitment to... flushing.");
+  } else if (flushCount > 6 && flushCount < 9) {
+  endGame("Edge of Chaos Ending: You pushed the toilet to its limits but backed off. A true tease.");
+  } else if (specialItemFound && !usedSpecialItem) {
+   endGame("Special Item Unused Ending: You found a rare item, pondered its use, then... nothing. Intriguing inaction.");
+  }
+  else if (playerHealth < 20) {
+   endGame("Health Neglect Ending: Ignoring your own well-being to flush a toilet? Priorities, man!");
+  }
+  else if (bossFightCount > 0 && bossFightCount < 3) {
+   endGame("Premature Boss Evader Ending: You triggered boss potential but ran. Cowardly or wise?");
+  }
+  else {
+  endGame("Standard Departure Ending: You flushed, you left. The mundane path.");
+  }
+  }
+  }
+
+  // Function to update the message
+  function updateMessage(text) {
+  message.textContent = text;
+  }
+
+  // Function to endGame
+  function endGame(endingMessage) {
+  gameState = 'ended';
+  updateMessage(endingMessage + " Game Over.");
+  button.disabled = true;
+  leaveButton.disabled = true;
+  }
+
+  // Plunger logic
+  if (Math.random() < 0.4) {
+  hasPlunger = true;
+  plunger.style.display = 'block';
+  updateMessage(message.textContent + " You found a plunger!");
+  }
+
+  // Special Item Logic
+  if (Math.random() < 0.2) {
+   specialItemFound = true;
+   updateMessage(message.textContent + " You found a Mysterious Triangle! What could it do?");
+  }
+
+
+  function usePlunger() {
+  if (hasPlunger && !usedPlunger && toiletState === 'exploded') {
+  toiletState = 'normal';
+  toilet.style.backgroundColor = '#ddd';
+  water.style.height = '20%';
+  waterLevel = 20;
+  button.disabled = false;
+  usedPlunger = true;
+  plunger.style.display = 'none';
+  updateMessage("You used the plunger and fixed the toilet!");
+  } else if (hasPlunger && !usedPlunger) {
+  usedPlunger = true;
+  plunger.style.display = 'none';
+  updateMessage("You pocketed the plunger for later... or maybe not. Plunger status: carried.");
+  } else if (usedPlunger) {
+   updateMessage("You already used the plunger or decided to keep it. No more plunger action here.");
+  } else {
+  updateMessage("You don't have a plunger to use!");
+  }
+  }
+
+
+  // Boss Fight Functions
+  function startFinalBossFight() {
+  gameState = 'bossFight';
+  bossFightContainer.style.display = 'block';
+  bossHealth = 100;
+  bossHealthElem.style.width = '100%';
+  playerHealth = 100;
+  playerHealthElem.style.width = '100%';
+  updateBossMessage("The Toilet Monster emerges! Prepare for the Flushdown!");
+  }
+
+  function attackBoss() {
+  if (gameState !== 'bossFight') return;
+
+  let attackDamage = Math.floor(Math.random() * 20) + 10;
+  bossHealth -= attackDamage;
+  bossHealthElem.style.width = bossHealth + '%';
+  if (bossHealth < 0) bossHealth = 0; // Ensure health doesn't go below 0
+  bossHealthElem.style.width = bossHealth + '%';
+
+
+  updateBossMessage("You attacked the Toilet Monster for " + attackDamage + " damage! Boss Health: " + bossHealth);
+
+  if (bossHealth <= 0) {
+  endBossFight("You vanquished the Toilet Monster! The plumbing is safe thanks to you!");
+  } else {
+  bossAttack();
+  }
+  }
+
+  function bossAttack() {
+  let bossDamage = Math.floor(Math.random() * 15) + 5;
+  playerHealth -= bossDamage;
+  playerHealthElem.style.width = playerHealth + '%';
+  if (playerHealth < 0) playerHealth = 0; // Ensure health doesn't go below 0
+  playerHealthElem.style.width = playerHealth + '%';
+
+
+  updateMessage("The Toilet Monster retaliates for " + bossDamage + " damage! Your Health: " + playerHealth);
+
+  if (playerHealth <= 0) {
+  endGame("Defeated by the Toilet Monster! Plumbing prevails, you do not. Flushed Away Ending.");
+  }
+  }
+
+  function updateBossMessage(text) {
+  bossMessage.textContent = text;
+  }
+
+  function endBossFight(endingMessage) {
+  gameState = 'ended';
+  bossFightContainer.style.display = 'none';
+  updateMessage(endingMessage + " You Win!");
+  button.disabled = true;
+  leaveButton.disabled = true;
+  }
+
+ </script>
+ </body>
+ </html>

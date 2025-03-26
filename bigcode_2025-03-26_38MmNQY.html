@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Network Graph Analyzer (NGA)</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        #network-graph { border: 1px solid #ccc; }
+        .container { display: flex; }
+        .column { flex: 1; padding: 20px; }
+        .controls-column { max-width: 300px; }
+        .editor-column { max-width: 350px; }
+        .graph-column { flex-grow: 2; }
+        h2, h3 { margin-top: 0; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="text"], input[type="number"], select { width: calc(100% - 12px); padding: 6px; margin-bottom: 10px; border: 1px solid #ddd; box-sizing: border-box; }
+        button { padding: 8px 15px; border: none; background-color: #007bff; color: white; cursor: pointer; margin-right: 5px; }
+        button:hover { background-color: #0056b3; }
+        #network-stats > div { margin-bottom: 15px; padding: 10px; border: 1px solid #eee; }
+        #congestion-report p, #bottleneck-report p { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h1>Network Graph Analyzer (NGA)</h1>
+
+    <div class="container">
+        <div class="column editor-column">
+            <h2>Network Editor</h2>
+            <div id="network-editor">
+                <h3>Node Creation</h3>
+                <button id="add-node">Add Node</button><br><br>
+                <label for="node-name">Node Name:</label>
+                <input type="text" id="node-name" placeholder="NodeA"><br>
+                <label for="node-ip">Node IP:</label>
+                <input type="text" id="node-ip" placeholder="192.168.1.1"><br>
+                <label for="node-location">Node Location:</label>
+                <input type="text" id="node-location" placeholder="City"><br>
+                <label for="node-status">Node Status:</label>
+                <input type="text" id="node-status" placeholder="active"><br>
+
+                <h3>Edge Creation</h3>
+                <label for="source-node">Source Node:</label>
+                <select id="source-node"></select><br>
+                <label for="target-node">Target Node:</label>
+                <select id="target-node"></select><br>
+                <label for="edge-bandwidth">Edge Bandwidth:</label>
+                <input type="number" id="edge-bandwidth" value="100" min="0"><br>
+                <label for="edge-latency">Edge Latency:</label>
+                <input type="number" id="edge-latency" value="10" min="0"><br>
+                <button id="add-edge">Add Edge</button>
+            </div>
+        </div>
+
+        <div class="column graph-column">
+            <h2>Network Graph</h2>
+            <canvas id="network-graph" width="800" height="600"></canvas>
+        </div>
+
+        <div class="column controls-column">
+            <h2>Network Controls</h2>
+            <div id="network-controls">
+                <label for="routing-algorithm">Routing Algorithm:</label>
+                <select id="routing-algorithm">
+                    <option value="shortest-path">Shortest Path</option>
+                    <option value="random-path">Random Path</option>
+                </select><br><br>
+                <button id="start-simulation">Start Simulation</button>
+                <button id="stop-simulation">Stop Simulation</button><br><br>
+                <label for="simulation-rate">Simulation Rate (ms):</label>
+                <input type="number" id="simulation-rate" value="1000" min="100">
+            </div>
+
+            <h2>Network Statistics</h2>
+            <div id="network-stats">
+                <h3>Congestion Report</h3>
+                <div id="congestion-report"></div>
+                <h3>Latency Report</h3>
+                <div id="latency-report"></div>
+                <h3>Bottleneck Report</h3>
+                <div id="bottleneck-report"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const network = {
+            nodes: {},
+            edges: []
+        };
+
+        function addNode() {
+            const name = document.getElementById('node-name').value.trim();
+            const ip = document.getElementById('node-ip').value.trim();
+            const location = document.getElementById('node-location').value.trim();
+            const status = document.getElementById('node-status').value.trim();
+
+            if (!name) { alert("Node name cannot be empty."); return; }
+            if (network.nodes[name]) { alert("Node name already exists."); return; }
+
+            const canvas = document.getElementById('network-graph');
+            const x = Math.random() * (canvas.width - 40) + 20;
+            const y = Math.random() * (canvas.height - 40) + 20;
+
+            network.nodes[name] = { name, ip, location, status, x, y };
+
+            updateNodeDropdowns();
+            drawGraph();
+            clearNodeInputFields();
+        }
+
+        function clearNodeInputFields() {
+            document.getElementById('node-name').value = '';
+            document.getElementById('node-ip').value = '';
+            document.getElementById('node-location').value = '';
+            document.getElementById('node-status').value = '';
+        }
+
+        function updateNodeDropdowns() {
+            const sourceNodeSelect = document.getElementById('source-node');
+            const targetNodeSelect = document.getElementById('target-node');
+
+            sourceNodeSelect.innerHTML = '<option value="">Select Source Node</option>';
+            targetNodeSelect.innerHTML = '<option value="">Select Target Node</option>';
+
+            for (const nodeName in network.nodes) {
+                const option = document.createElement('option');
+                option.value = nodeName;
+                option.textContent = nodeName;
+                sourceNodeSelect.appendChild(option.cloneNode(true));
+                targetNodeSelect.appendChild(option);
+            }
+        }
+
+        function addEdge() {
+            const source = document.getElementById('source-node').value;
+            const target = document.getElementById('target-node').value;
+            const bandwidth = parseFloat(document.getElementById('edge-bandwidth').value);
+            const latency = parseFloat(document.getElementById('edge-latency').value);
+
+            if (!source || !target) { alert("Please select source and target nodes."); return; }
+            if (!network.nodes[source] || !network.nodes[target]) { alert("Invalid source or target node."); return; }
+            if (source === target) { alert("Source and target nodes cannot be the same."); return; }
+            if (isNaN(bandwidth) || bandwidth < 0) { alert("Bandwidth must be a non-negative number."); return; }
+            if (isNaN(latency) || latency < 0) { alert("Latency must be a non-negative number."); return; }
+
+            const edgeExists = network.edges.some(e => (e.source === source && e.target === target) || (e.source === target && e.target === source));
+            if (edgeExists) { alert("An edge already exists between these nodes."); return; }
+
+
+            const edge = { source, target, bandwidth, latency, traffic: 0 };
+            network.edges.push(edge);
+
+            drawGraph();
+            clearEdgeInputFields();
+        }
+
+        function clearEdgeInputFields() {
+            document.getElementById('source-node').value = '';
+            document.getElementById('target-node').value = '';
+            document.getElementById('edge-bandwidth').value = '100';
+            document.getElementById('edge-latency').value = '10';
+        }
+
+        function drawGraph() {
+            const canvas = document.getElementById('network-graph');
+            const ctx = canvas.getContext('2d');
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Edges
+            network.edges.forEach(edge => {
+                const sourceNode = network.nodes[edge.source];
+                const targetNode = network.nodes[edge.target];
+
+                if (!sourceNode || !targetNode) return;
+
+                ctx.beginPath();
+                ctx.moveTo(sourceNode.x, sourceNode.y);
+                ctx.lineTo(targetNode.x, targetNode.y);
+
+                ctx.lineWidth = Math.max(1, edge.bandwidth / 50);
+                const trafficIntensity = Math.min(edge.traffic / edge.bandwidth, 1);
+                const colorValue = Math.floor(trafficIntensity * 255);
+                ctx.strokeStyle = `rgb(${colorValue},0,${255 - colorValue})`;
+                ctx.stroke();
+
+                // Draw Bandwidth near edge
+                const midX = (sourceNode.x + targetNode.x) / 2;
+                const midY = (sourceNode.y + targetNode.y) / 2;
+                ctx.font = '10px Arial';
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${edge.bandwidth} BW, ${edge.latency} Lat`, midX, midY - 5);
+            });
+
+            // Draw Nodes
+            for (const nodeName in network.nodes) {
+                const node = network.nodes[nodeName];
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 15, 0, 2 * Math.PI);
+                ctx.fillStyle = (node.status === 'active') ? 'green' : 'red';
+                ctx.fill();
+                ctx.strokeStyle = 'black';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = 'black';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText(node.name, node.x + 18, node.y + 5);
+            }
+        }
+
+        let simulationInterval;
+
+        function startSimulation() {
+            const routingAlgorithm = document.getElementById('routing-algorithm').value;
+            const simulationRate = parseInt(document.getElementById('simulation-rate').value);
+
+            if (isNaN(simulationRate) || simulationRate < 100) {
+                alert("Invalid simulation rate. Please enter a positive number greater than or equal to 100.");
+                return;
+            }
+
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+            }
+
+            simulationInterval = setInterval(() => {
+                simulateStep(routingAlgorithm);
+            }, simulationRate);
+            document.getElementById('start-simulation').disabled = true;
+            document.getElementById('stop-simulation').disabled = false;
+        }
+
+        function stopSimulation() {
+            clearInterval(simulationInterval);
+            simulationInterval = null;
+            document.getElementById('start-simulation').disabled = false;
+            document.getElementById('stop-simulation').disabled = true;
+        }
+        document.getElementById('stop-simulation').disabled = true; // Initially disabled stop button
+
+        function simulateStep(routingAlgorithm) {
+            const sourceNodes = Object.keys(network.nodes);
+            const targetNodes = Object.keys(network.nodes);
+
+            if (sourceNodes.length < 2) return;
+
+            const source = sourceNodes[Math.floor(Math.random() * sourceNodes.length)];
+            let target = targetNodes[Math.floor(Math.random() * targetNodes.length)];
+            while (target === source) {
+                target = targetNodes[Math.floor(Math.random() * targetNodes.length)];
+            }
+
+            const maxTraffic = 50;
+            const trafficAmount = Math.random() * maxTraffic;
+
+            let path = [];
+            switch (routingAlgorithm) {
+                case 'shortest-path':
+                    path = shortestPath(source, target);
+                    break;
+                case 'random-path':
+                    path = randomPath(source, target);
+                    break;
+                default:
+                    console.warn("Unknown routing algorithm:", routingAlgorithm);
+                    return;
+            }
+
+            if (path.length > 1) {
+                for (let i = 0; i < path.length - 1; i++) {
+                    const edge = network.edges.find(e => (e.source === path[i] && e.target === path[i + 1]) || (e.source === path[i+1] && e.target === path[i]));
+                    if (edge) {
+                        edge.traffic += trafficAmount;
+                        edge.traffic = Math.min(edge.traffic, edge.bandwidth * 1.2);
+                    }
+                }
+            }
+
+            updateNetworkStats();
+            drawGraph();
+        }
+
+        function shortestPath(startNode, endNode) {
+            const distances = {};
+            const previous = {};
+            const visited = new Set();
+            const allNodes = Object.keys(network.nodes);
+
+            allNodes.forEach(node => { distances[node] = Infinity; });
+            distances[startNode] = 0;
+
+            function findClosestNode(distances, visited) {
+                let closestNode = null;
+                let shortestDistance = Infinity;
+                for (const node in distances) {
+                    if (!visited.has(node) && distances[node] < shortestDistance) {
+                        closestNode = node;
+                        shortestDistance = distances[node];
+                    }
+                }
+                return closestNode;
+            }
+
+            while (true) {
+                const currentNode = findClosestNode(distances, visited);
+                if (!currentNode) break;
+                visited.add(currentNode);
+                if (currentNode === endNode) break;
+
+                network.edges.forEach(edge => {
+                    if (edge.source === currentNode) {
+                        const neighbor = edge.target;
+                        const newDistance = distances[currentNode] + edge.latency;
+                        if (newDistance < distances[neighbor]) {
+                            distances[neighbor] = newDistance;
+                            previous[neighbor] = currentNode;
+                        }
+                    } else if (edge.target === currentNode) { // Bidirectional edges
+                        const neighbor = edge.source;
+                        const newDistance = distances[currentNode] + edge.latency;
+                        if (newDistance < distances[neighbor]) {
+                            distances[neighbor] = newDistance;
+                            previous[neighbor] = currentNode;
+                        }
+                    }
+                });
+            }
+
+            const path = [];
+            let current = endNode;
+            while (current) {
+                path.unshift(current);
+                current = previous[current];
+                if (current === undefined && path.length === 1 && path[0] === endNode) return []; // No path
+            }
+            return path;
+        }
+
+
+        function randomPath(startNode, endNode) {
+            const path = [startNode];
+            const visited = new Set();
+            visited.add(startNode);
+            let currentNode = startNode;
+
+            while (currentNode !== endNode) {
+                const possibleNextNodes = [];
+                network.edges.forEach(edge => {
+                    if ((edge.source === currentNode && !visited.has(edge.target)) ) {
+                        possibleNextNodes.push(edge.target);
+                    } else if (edge.target === currentNode && !visited.has(edge.source)){ // Bidirectional edges
+                        possibleNextNodes.push(edge.source);
+                    }
+                });
+
+                if (possibleNextNodes.length === 0) { return []; } // No path
+
+                const nextNode = possibleNextNodes[Math.floor(Math.random() * possibleNextNodes.length)];
+                path.push(nextNode);
+                visited.add(nextNode);
+                currentNode = nextNode;
+            }
+            return path;
+        }
+
+        function updateNetworkStats() {
+            const congestionReport = {};
+            network.edges.forEach(edge => {
+                const congestion = edge.traffic / edge.bandwidth;
+                congestionReport[`${edge.source} <-> ${edge.target}`] = isNaN(congestion) || !isFinite(congestion) ? 0 : congestion; // Handle bandwidth=0
+            });
+            displayCongestionReport(congestionReport);
+
+            let totalLatency = 0;
+            let pathCount = 0;
+            const nodes = Object.keys(network.nodes);
+
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const path = shortestPath(nodes[i], nodes[j]);
+                    if (path.length > 1) {
+                        let pathLatency = 0;
+                        for (let k = 0; k < path.length - 1; k++) {
+                            const edge = network.edges.find(e => (e.source === path[k] && e.target === path[k + 1]) || (e.source === path[k+1] && e.target === path[k]));
+                            if (edge) { pathLatency += edge.latency; }
+                        }
+                        totalLatency += pathLatency;
+                        pathCount++;
+                    }
+                }
+            }
+            const averageLatency = (pathCount > 0) ? totalLatency / pathCount : 0;
+            displayLatencyReport(averageLatency);
+
+            const bottleneckEdges = findBottleneckEdges();
+            displayBottleneckReport(bottleneckEdges);
+        }
+
+        function findBottleneckEdges() {
+            const threshold = 0.8;
+            const bottleneckEdges = [];
+            network.edges.forEach(edge => {
+                if (edge.bandwidth === 0) return;
+                const congestion = edge.traffic / edge.bandwidth;
+                if (congestion > threshold) {
+                    bottleneckEdges.push({ edge: `${edge.source} <-> ${edge.target}`, congestion: congestion });
+                }
+            });
+            return bottleneckEdges;
+        }
+
+        function displayCongestionReport(congestionReport) {
+            const congestionReportDiv = document.getElementById('congestion-report');
+            congestionReportDiv.innerHTML = '';
+            for (const edge in congestionReport) {
+                const p = document.createElement('p');
+                p.textContent = `${edge}: ${(congestionReport[edge] * 100).toFixed(2)}%`;
+                congestionReportDiv.appendChild(p);
+            }
+        }
+
+        function displayLatencyReport(latency) {
+            const latencyReportDiv = document.getElementById('latency-report');
+            latencyReportDiv.textContent = `Average Latency: ${latency.toFixed(2)} ms`;
+        }
+
+        function displayBottleneckReport(bottleneckEdges) {
+            const bottleneckReportDiv = document.getElementById('bottleneck-report');
+            bottleneckReportDiv.innerHTML = '';
+            if (bottleneckEdges.length === 0) {
+                bottleneckReportDiv.textContent = "No bottlenecks detected.";
+            } else {
+                bottleneckEdges.forEach(item => {
+                    const p = document.createElement('p');
+                    p.textContent = `${item.edge}: Congestion ${(item.congestion * 100).toFixed(2)}%`;
+                    bottleneckReportDiv.appendChild(p);
+                });
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('add-node').addEventListener('click', addNode);
+        document.getElementById('add-edge').addEventListener('click', addEdge);
+        document.getElementById('start-simulation').addEventListener('click', startSimulation);
+        document.getElementById('stop-simulation').addEventListener('click', stopSimulation);
+
+        // Node Dragging
+        let draggingNode = null;
+        canvas = document.getElementById('network-graph');
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            for (const nodeName in network.nodes) {
+                const node = network.nodes[nodeName];
+                const distance = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
+                if (distance <= 15) {
+                    draggingNode = node;
+                    break;
+                }
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => { draggingNode = null; });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (draggingNode) {
+                const rect = canvas.getBoundingClientRect();
+                draggingNode.x = e.clientX - rect.left;
+                draggingNode.y = e.clientY - rect.top;
+                drawGraph();
+            }
+        });
+    </script>
+</body>
+</html>

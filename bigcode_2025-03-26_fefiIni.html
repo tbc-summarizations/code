@@ -1,0 +1,237 @@
+html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Platformer Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #78c2ad; /* Overall background color - a light green */
+        }
+        canvas {
+            display: block;
+            background-color: #ADD8E6; /* Sky color */
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        // I. Game Canvas and Rendering
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800;
+        canvas.height = 600;
+
+        // III. Player Implementation
+        const player = {
+            x: 50,
+            y: 400,
+            width: 30,
+            height: 50,
+            velocity_x: 0,
+            velocity_y: 0,
+            jumping: false,
+            grounded: false,
+            color: 'red',
+            draw: function() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            },
+            update: function() {
+                this.x += this.velocity_x;
+                this.y += this.velocity_y;
+
+                // Apply gravity
+                this.velocity_y += gravity;
+
+                // Ground check - refined with collision detection in update function
+                if (this.y + this.height > canvas.height) {
+                    this.y = canvas.height - this.height;
+                    this.velocity_y = 0;
+                    this.grounded = true;
+                } else {
+                    this.grounded = false;
+                }
+            }
+        };
+
+        const gravity = 0.6; // Adjusted gravity for better feel
+
+        // Keyboard Input
+        const keys = {};
+        document.addEventListener('keydown', function(event) { keys[event.key] = true; });
+        document.addEventListener('keyup', function(event) { keys[event.key] = false; });
+
+        // IV. Platform Implementation
+        class Platform {
+            constructor(x, y, width, height, color = 'green') {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        // V. Collision Detection
+        function checkCollision(rect1, rect2) {
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        }
+
+        // VI. Scrolling Background - Simple Shape Background
+        let backgroundOffset = 0;
+        const backgroundSpeed = 0.3; // Reduced background speed for parallax
+
+        function drawBackground() {
+            ctx.fillStyle = '#ADD8E6'; // Sky color
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Hills - simple triangles
+            ctx.fillStyle = '#3CB371'; // Medium sea green for hills
+            ctx.beginPath();
+            ctx.moveTo(-backgroundOffset * backgroundSpeed * 0.2, canvas.height);
+            ctx.lineTo(300 - backgroundOffset * backgroundSpeed * 0.2, canvas.height - 150);
+            ctx.lineTo(600 - backgroundOffset * backgroundSpeed * 0.2, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(200 - backgroundOffset * backgroundSpeed * 0.2, canvas.height);
+            ctx.lineTo(500 - backgroundOffset * backgroundSpeed * 0.2, canvas.height - 200);
+            ctx.lineTo(800 - backgroundOffset * backgroundSpeed * 0.2, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(500 - backgroundOffset * backgroundSpeed * 0.2, canvas.height);
+            ctx.lineTo(900 - backgroundOffset * backgroundSpeed * 0.2, canvas.height - 100);
+            ctx.lineTo(canvas.width + 200 - backgroundOffset * backgroundSpeed * 0.2, canvas.height);
+            ctx.closePath();
+            ctx.fill();
+
+            // Clouds - simple circles/ellipses
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.ellipse(100 - backgroundOffset * backgroundSpeed * 0.5, 100, 30, 20, 0, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(300 - backgroundOffset * backgroundSpeed * 0.5, 80, 40, 25, 0, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(550 - backgroundOffset * backgroundSpeed * 0.5, 120, 35, 22, 0, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(700 - backgroundOffset * backgroundSpeed * 0.5, 90, 45, 28, 0, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+
+        // VII. Level Design
+        const level1 = [
+            { x: 0, y: 500, width: 500, height: 50 }, // Extended ground platform
+            { x: 600, y: 400, width: 150, height: 50 },
+            { x: 800, y: 300, width: 200, height: 50 },
+            { x: 1100, y: 500, width: 300, height: 50 }, // Another ground extension
+            { x: 1500, y: 350, width: 150, height: 50, color: 'brown' }, // Different color platform
+            { x: 1800, y: 250, width: 200, height: 50 },
+            { x: 2100, y: 500, width: 400, height: 50 }, // Final ground platform
+        ];
+
+        let platforms = [];
+        function loadLevel(levelData) {
+            platforms = [];
+            levelData.forEach(data => {
+                platforms.push(new Platform(data.x, data.y, data.width, data.height, data.color));
+            });
+        }
+
+        // II. Game Loop and Update/Draw functions
+        function update() {
+            if (keys['ArrowLeft']) {
+                player.velocity_x = -5;
+            } else if (keys['ArrowRight']) {
+                player.velocity_x = 5;
+            } else {
+                player.velocity_x = 0;
+            }
+
+            if (keys['ArrowUp'] && player.grounded) {
+                player.velocity_y = -16; // Increased jump force
+                player.grounded = false;
+            }
+
+            // Collision Handling
+            player.grounded = false; // Reset ground status at the start of each frame
+
+            platforms.forEach(platform => {
+                if (checkCollision(player, platform)) {
+                    // Top collision
+                    if (player.y + player.height <= platform.y + 7 && player.velocity_y >= 0) { // Slightly increased tolerance
+                        player.y = platform.y - player.height;
+                        player.velocity_y = 0;
+                        player.grounded = true;
+                    }
+                    // Bottom Collision (optional - for platforms above)
+                    else if (player.y >= platform.y + platform.height -7  && player.velocity_y <= 0) { // Slightly increased tolerance
+                        player.y = platform.y + platform.height;
+                        player.velocity_y = 0; // Stop upward velocity
+                    }
+                    // Side Collision - Left
+                    else if (player.x + player.width > platform.x && player.x + player.width < platform.x + platform.width / 2 && player.velocity_x > 0) {
+                        player.velocity_x = 0;
+                        player.x = platform.x - player.width;
+                    }
+                    // Side Collision - Right
+                    else if (player.x < platform.x + platform.width && player.x > platform.x + platform.width / 2 && player.velocity_x < 0) {
+                        player.velocity_x = 0;
+                        player.x = platform.x + platform.width;
+                    }
+                }
+            });
+
+
+            backgroundOffset -= player.velocity_x * backgroundSpeed;
+            player.update();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawBackground(); // Draw background first
+
+            ctx.save(); // Save the current transformation matrix for camera
+            ctx.translate(-player.x + canvas.width / 2, 0); // Center camera around player
+
+            platforms.forEach(platform => {
+                platform.draw();
+            });
+
+            player.draw();
+
+            ctx.restore(); // Restore transformation to draw UI elements in screen space if needed later
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // VIII. Game Initialization
+        loadLevel(level1); // Load level at start
+        gameLoop(); // Start game loop
+    </script>
+</body>
+</html>

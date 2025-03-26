@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backyard Hustle</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #333;
+            color: #eee;
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+
+        #game-container {
+            width: 800px;
+            height: 600px;
+            margin: 20px auto;
+            position: relative; /* For absolute positioning of the HUD */
+            border: 1px solid #555;
+        }
+
+        #gameCanvas {
+            background-color: #4CAF50; /* Green for the backyard */
+            display: block; /* Removes default canvas spacing */
+        }
+
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 250px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Spacing between HUD elements */
+            height: 100%;
+            overflow-y: auto; /* Enable scroll if HUD content overflows */
+            box-sizing: border-box; /* Include padding in width/height */
+        }
+
+        #inventory {
+            border-bottom: 1px solid #666;
+            padding-bottom: 5px;
+        }
+
+        #stats {
+            border-bottom: 1px solid #666;
+            padding-bottom: 5px;
+        }
+
+        #dialogue {
+            font-style: italic;
+             flex-grow: 1; /* Dialogue takes remaining space */
+             overflow-wrap: break-word; /* Long words will break */
+        }
+
+        #actions {
+             margin-top: 10px; /* Space between dialogue and actions */
+        }
+
+        #actions button {
+            padding: 8px 12px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+            margin-bottom: 5px;
+            display: block; /* Buttons on separate lines */
+            width: 100%; /* Full width buttons */
+            box-sizing: border-box; /* Include padding in width */
+        }
+
+        #actions button:hover {
+            background-color: #0b7dda;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="hud">
+            <div id="inventory">Inventory: </div>
+            <div id="stats">Money: $<span id="money">0</span> | Reputation: <span id="reputation">50</span></div>
+            <div id="dialogue"></div>
+            <div id="actions"></div>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 800;
+        canvas.height = 600;
+
+        const gameState = {
+            player: {
+                x: 50,
+                y: 50,
+                width: 30,
+                height: 50,
+                speed: 5,
+                inventory: [{ name: 'Meth', quantity: 0, value: 50 }],
+                money: 100,
+                reputation: 50,
+                cookSpeed: 100,
+                cookTimer: 0,
+                cookAmount: 1
+            },
+            adammady: {
+                x: 700,
+                y: 50,
+                width: 30,
+                height: 50,
+                trust: 75,
+                willingToBuy: true
+            },
+            ingredients: {
+                pseudoephedrine: 10,
+                redPhosphorus: 5,
+                iodine: 3
+            },
+            dialogue: "",
+            gameOver: false,
+            cooking: false
+        };
+
+        const moneyDisplay = document.getElementById('money');
+        const reputationDisplay = document.getElementById('reputation');
+        const inventoryDiv = document.getElementById('inventory');
+        const dialogueDiv = document.getElementById('dialogue');
+        const actionsDiv = document.getElementById('actions');
+
+        const keys = {};
+
+        document.addEventListener('keydown', (event) => {
+            keys[event.key] = true;
+        });
+
+        document.addEventListener('keyup', (event) => {
+            keys[event.key] = false;
+        });
+
+        function gameLoop() {
+            if (!gameState.gameOver) {
+                update();
+                render();
+                requestAnimationFrame(gameLoop);
+            } else {
+                //Render a game over screen:
+                ctx.font = "30px Arial";
+                ctx.fillStyle = "red";
+                ctx.textAlign = "center";
+                ctx.fillText("Game Over!", canvas.width / 2, canvas.height / 2);
+
+            }
+        }
+
+        function update() {
+            // Movement
+            if (keys['ArrowLeft']) gameState.player.x -= gameState.player.speed;
+            if (keys['ArrowRight']) gameState.player.x += gameState.player.speed;
+            if (keys['ArrowUp']) gameState.player.y -= gameState.player.speed;
+            if (keys['ArrowDown']) gameState.player.y += gameState.player.speed;
+
+            // Bounds
+            gameState.player.x = Math.max(0, Math.min(gameState.player.x, canvas.width - gameState.player.width));
+            gameState.player.y = Math.max(0, Math.min(gameState.player.y, canvas.height - gameState.player.height));
+
+            //Adammady interaction
+            if (collision(gameState.player, gameState.adammady) && keys['e']) {
+                offerSale();
+                keys['e'] = false; // Prevent rapid triggering
+            }
+
+            //Cooking Logic
+            if (gameState.cooking) {
+                gameState.player.cookTimer++;
+                if (gameState.player.cookTimer >= gameState.player.cookSpeed) {
+                    gameState.player.cookTimer = 0;
+                    cookMethProcess();
+                }
+            }
+
+
+            //Game Over Check:
+            checkGameOver();
+        }
+
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Render the player
+            ctx.fillStyle = 'brown';
+            ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.width, gameState.player.height);
+
+            // Render Adammady
+            ctx.fillStyle = 'gray';
+            ctx.fillRect(gameState.adammady.x, gameState.adammady.y, gameState.adammady.width, gameState.adammady.height);
+
+            // Update the HUD
+            updateHUD();
+        }
+
+
+        function collision(rect1, rect2) {
+            return !(rect1.x + rect1.width < rect2.x ||
+                rect2.x + rect2.width < rect1.x ||
+                rect1.y + rect1.height < rect2.y ||
+                rect2.y + rect2.height < rect1.y);
+        }
+
+        function cookMeth() {
+            if (!gameState.cooking) { //If not cooking already
+                if (gameState.ingredients.pseudoephedrine >= 2 &&
+                    gameState.ingredients.redPhosphorus >= 1 &&
+                    gameState.ingredients.iodine >= 1) {
+
+                    gameState.dialogue = "Cooking meth...";
+                    gameState.cooking = true;
+
+
+                } else {
+                    gameState.dialogue = "Not enough ingredients!";
+                }
+            } else {
+                gameState.dialogue = "Already cooking something!"
+            }
+
+        }
+
+        function cookMethProcess() {
+            gameState.ingredients.pseudoephedrine -= 2;
+            gameState.ingredients.redPhosphorus -= 1;
+            gameState.ingredients.iodine -= 1;
+
+            gameState.player.inventory[0].quantity += gameState.player.cookAmount;
+            gameState.dialogue = "Meth cooked!";
+            gameState.cooking = false;
+        }
+
+
+        function offerSale() {
+            actionsDiv.innerHTML = ''; // Clear previous actions
+
+            if (!gameState.adammady.willingToBuy) {
+                gameState.dialogue = "Adammady isn't buying anything right now.";
+                return;
+            }
+
+            const sellButton = document.createElement('button');
+            sellButton.textContent = 'Sell Meth';
+            sellButton.addEventListener('click', sellMeth);
+            actionsDiv.appendChild(sellButton);
+
+            const cookButton = document.createElement('button');
+            cookButton.textContent = 'Cook Meth';
+            cookButton.addEventListener('click', cookMeth);
+            actionsDiv.appendChild(cookButton);
+
+            const buyIngredientsButton = document.createElement('button');
+            buyIngredientsButton.textContent = "Buy Ingredients";
+            buyIngredientsButton.addEventListener('click', buyIngredients);
+            actionsDiv.appendChild(buyIngredientsButton);
+
+            const upgradeButton = document.createElement('button');
+            upgradeButton.textContent = "Upgrade Cooking Speed";
+            upgradeButton.addEventListener('click', upgradeCookingSpeed);
+            actionsDiv.appendChild(upgradeButton);
+        }
+
+        function sellMeth() {
+            if (gameState.player.inventory[0].quantity > 0 && gameState.adammady.willingToBuy) {
+                const quantity = 1;
+                let price = gameState.player.inventory[0].value * (gameState.adammady.trust / 100);
+
+                // Randomize price slightly
+                price += (Math.random() - 0.5) * 10; // +/- $5 variation
+
+                //Maximum sale price is twice the original:
+                price = Math.min(price, gameState.player.inventory[0].value * 2)
+
+                price = Math.max(0, price); // Ensure price isn't negative
+
+                gameState.player.money += price;
+                gameState.player.inventory[0].quantity -= quantity;
+                gameState.adammady.trust -= 5;
+
+                gameState.adammady.trust = Math.max(0, gameState.adammady.trust);
+
+                //Adammady refuses to buy meth if trust is really low:
+                if (gameState.adammady.trust <= 10) {
+                    gameState.adammady.willingToBuy = false;
+                    gameState.dialogue = "Adammady doesn't trust you much anymore and might not buy next time!";
+                    //Reputation decreased:
+                    gameState.player.reputation -= 10;
+                } else {
+                    gameState.dialogue = `Sold 1 meth for $${price.toFixed(2)}`;
+                }
+
+            } else if (!gameState.adammady.willingToBuy) {
+                gameState.dialogue = "Adammady isn't buying today, maybe later!";
+            } else {
+                gameState.dialogue = "You have no meth to sell!";
+            }
+            actionsDiv.innerHTML = ''; // Clear buttons
+        }
+
+        function buyIngredients() {
+            if (gameState.player.money >= 50) {
+                gameState.player.money -= 50;
+                gameState.ingredients.pseudoephedrine += 5;
+                gameState.ingredients.redPhosphorus += 3;
+                gameState.ingredients.iodine += 2;
+                gameState.dialogue = "Bought some ingredients!";
+            } else {
+                gameState.dialogue = "Not enough money to buy ingredients!";
+            }
+            actionsDiv.innerHTML = ''; // Clear buttons
+        }
+
+        function upgradeCookingSpeed() {
+            const upgradeCost = 200; //Set cost
+
+            if (gameState.player.money >= upgradeCost) {
+                gameState.player.money -= upgradeCost;
+                gameState.player.cookSpeed = Math.max(20, gameState.player.cookSpeed - 10); // Minimum speed = 20
+                gameState.dialogue = "Cooking speed upgraded!";
+            } else {
+                gameState.dialogue = "Not enough money to upgrade cooking speed!";
+            }
+            actionsDiv.innerHTML = ''; // Clear buttons
+        }
+
+
+        function updateHUD() {
+            moneyDisplay.textContent = gameState.player.money.toFixed(2);
+            reputationDisplay.textContent = gameState.player.reputation;
+
+            inventoryDiv.innerHTML = 'Inventory: ';
+            gameState.player.inventory.forEach(item => {
+                inventoryDiv.innerHTML += `${item.name} (${item.quantity}) `;
+            });
+
+            inventoryDiv.innerHTML += '<br><br>' + 'Ingredients: ';
+            for (const [key, value] of Object.entries(gameState.ingredients)) {
+                inventoryDiv.innerHTML += `${key} (${value}) `;
+            }
+
+            dialogueDiv.textContent = gameState.dialogue;
+        }
+
+        function checkGameOver() {
+            if (gameState.player.reputation <= 0) {
+                gameState.dialogue = "Game Over: Your reputation is ruined!";
+                gameState.gameOver = true;
+            }
+
+            const arrestChance = gameState.player.money / 2000; // Adjust for difficulty
+            if (Math.random() < arrestChance) {
+                gameState.dialogue = "Game Over: You got arrested!";
+                gameState.gameOver = true;
+            }
+        }
+
+
+        gameLoop();
+    </script>
+</body>
+</html>

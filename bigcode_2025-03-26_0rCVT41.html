@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Particle Simulation</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            background-color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+        }
+
+        h1 {
+            color: #333;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+
+        #container {
+            display: flex;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        #simulation-area {
+            width: 800px;
+            height: 600px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .particle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: red;
+            border-radius: 50%;
+        }
+
+        .square-particle {
+            border-radius: 0%;
+        }
+
+        .triangle-particle {
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 10px solid blue; /* Change color as needed */
+            background-color: transparent;
+            border-radius: 0%;
+        }
+
+
+        #control-panel {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            background-color: #f0f0f0;
+            border-left: 1px solid #ccc;
+            gap: 15px;
+        }
+
+        #control-panel button,
+        #control-panel input[type="range"],
+        #control-panel input[type="number"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            background-color: white;
+        }
+
+        #control-panel button {
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        #control-panel button:hover {
+            background-color: #e0e0e0;
+        }
+
+        #control-panel label {
+            font-weight: bold;
+            color: #555;
+        }
+
+        #info-display {
+            margin-top: 10px;
+            padding: 15px;
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 0.9em;
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Simple Particle Simulation</h1>
+    <div id="container">
+        <div id="simulation-area">
+            <!-- Particles will be added here by JavaScript -->
+        </div>
+        <div id="control-panel">
+            <button id="start-button">Start</button>
+            <button id="pause-button">Pause</button>
+            <button id="reset-button">Reset</button>
+
+            <label for="speed-slider">Speed:</label>
+            <input type="range" id="speed-slider" min="1" max="200" value="50">
+
+            <label for="gravity-input">Gravity:</label>
+            <input type="number" id="gravity-input" value="0.5" step="0.1">
+
+            <label for="particle-density">Particle Density:</label>
+            <input type="range" id="particle-density" min="1" max="100" value="10">
+
+            <label for="particle-shape">Particle Shape:</label>
+            <select id="particle-shape">
+                <option value="circle">Circle</option>
+                <option value="square">Square</option>
+                <option value="triangle">Triangle</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="info-display">
+        <p id="time-elapsed">Time: 0.00</p>
+        <p id="particle-count">Particles: 0</p>
+    </div>
+
+    <script>
+        const simulationArea = document.getElementById('simulation-area');
+        const startButton = document.getElementById('start-button');
+        const pauseButton = document.getElementById('pause-button');
+        const resetButton = document.getElementById('reset-button');
+        const speedSlider = document.getElementById('speed-slider');
+        const gravityInput = document.getElementById('gravity-input');
+        const timeElapsedDisplay = document.getElementById('time-elapsed');
+        const particleCountDisplay = document.getElementById('particle-count');
+        const particleDensitySlider = document.getElementById('particle-density');
+        const particleShapeSelect = document.getElementById('particle-shape');
+
+        let gravity = parseFloat(gravityInput.value);
+        let speed = parseInt(speedSlider.value);
+        let particleDensity = parseInt(particleDensitySlider.value);
+        let particleShape = particleShapeSelect.value;
+        let particles = [];
+        let isRunning = false;
+        let timeElapsed = 0;
+        let timeScale = 1;
+
+        gravityInput.addEventListener('change', () => {
+            gravity = parseFloat(gravityInput.value);
+        });
+
+        speedSlider.addEventListener('input', () => {
+            speed = parseInt(speedSlider.value);
+        });
+
+        particleDensitySlider.addEventListener('input', () => {
+            particleDensity = parseInt(particleDensitySlider.value);
+            resetSimulation(); // Re-initialize particles when density changes
+        });
+
+        particleShapeSelect.addEventListener('change', () => {
+            particleShape = particleShapeSelect.value;
+        });
+
+
+        function updateSimulation() {
+            if (!isRunning) return;
+
+            timeElapsed += timeScale * 0.01;
+            timeElapsedDisplay.textContent = `Time: ${timeElapsed.toFixed(2)}`;
+
+            simulationArea.innerHTML = '';
+
+            for (let i = 0; i < particles.length; i++) {
+                const particle = particles[i];
+
+                particle.velocityY += gravity * timeScale * 0.01;
+                particle.y += particle.velocityY * timeScale * 0.01;
+                particle.x += particle.velocityX * timeScale * 0.01;
+
+                if (particle.y > simulationArea.clientHeight - 10 && particleShape !== 'triangle') {
+                    particle.y = simulationArea.clientHeight - 10;
+                    particle.velocityY = -particle.velocityY * 0.8;
+                    particle.velocityX *= 0.9;
+                } else if (particle.y > simulationArea.clientHeight - 10 && particleShape === 'triangle') {
+                    particle.y = simulationArea.clientHeight - 10; // Adjust for triangle height
+                    particle.velocityY = -particle.velocityY * 0.8;
+                    particle.velocityX *= 0.9;
+                }
+
+
+                if (particle.x < 0) {
+                    particle.x = 0;
+                    particle.velocityX = -particle.velocityX * 0.8;
+                } else if (particle.x > simulationArea.clientWidth - 10 && particleShape !== 'triangle') {
+                    particle.x = simulationArea.clientWidth - 10;
+                    particle.velocityX = -particle.velocityX * 0.8;
+                } else if (particle.x > simulationArea.clientWidth - 5 && particleShape === 'triangle') { //Adjust triangle width collision
+                    particle.x = simulationArea.clientWidth - 5;
+                    particle.velocityX = -particle.velocityX * 0.8;
+                }
+
+
+                const particleElement = document.createElement('div');
+                particleElement.style.left = `${particle.x}px`;
+                particleElement.style.top = `${particle.y}px`;
+                particleElement.style.backgroundColor = particle.color;
+
+                if (particleShape === 'square') {
+                    particleElement.className = 'particle square-particle';
+                } else if (particleShape === 'triangle') {
+                    particleElement.className = 'triangle-particle';
+                    particleElement.style.left = `${particle.x - 5}px`; // Adjust triangle positioning
+                }
+                else {
+                    particleElement.className = 'particle';
+                }
+
+                simulationArea.appendChild(particleElement);
+            }
+
+            requestAnimationFrame(updateSimulation);
+        }
+
+        startButton.addEventListener('click', () => {
+            isRunning = true;
+            updateSimulation();
+        });
+
+        pauseButton.addEventListener('click', () => {
+            isRunning = false;
+        });
+
+        resetButton.addEventListener('click', resetSimulation);
+
+        function resetSimulation() {
+            isRunning = false;
+            particles = [];
+            timeElapsed = 0;
+            timeElapsedDisplay.textContent = `Time: 0.00`;
+            simulationArea.innerHTML = '';
+            particleCountDisplay.textContent = `Particles: 0`;
+            initializeParticles(); // Re-initialize particles on reset
+        }
+
+
+        simulationArea.addEventListener('click', (event) => {
+            const x = event.clientX - simulationArea.offsetLeft;
+            const y = event.clientY - simulationArea.offsetTop;
+            createParticle(x, y);
+        });
+
+        function createParticle(x, y) {
+            const particle = {
+                x: x,
+                y: y,
+                velocityY: 0,
+                velocityX: (Math.random() - 0.5) * speed * 0.01,
+                color: `hsl(${Math.random() * 360}, 100%, 50%)`
+            };
+            particles.push(particle);
+            particleCountDisplay.textContent = `Particles: ${particles.length}`;
+        }
+
+
+        function initializeParticles() {
+            for (let i = 0; i < particleDensity * 5; i++) {
+                const x = Math.random() * simulationArea.clientWidth;
+                const y = Math.random() * simulationArea.clientHeight;
+                createParticle(x, y);
+            }
+        }
+
+
+        initializeParticles();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Musical Artist Battle Simulator</title>
+ <style>
+  body {
+   font-family: 'Arial', sans-serif;
+   background-color: #f7f7f7;
+   margin: 0;
+   padding: 0;
+   color: #333;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+  }
+
+  h1 {
+   text-align: center;
+   margin-top: 30px;
+   margin-bottom: 20px;
+   color: #2c3e50;
+  }
+
+  .arena {
+   display: flex;
+   justify-content: space-around;
+   width: 90%;
+   max-width: 1200px;
+   padding: 30px;
+  }
+
+  .fighter-container {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   width: 45%;
+  }
+
+  .fighter {
+   background-color: #fff;
+   border-radius: 10px;
+   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+   padding: 20px;
+   text-align: center;
+   margin-bottom: 20px;
+   width: 100%;
+   max-width: 400px;
+  }
+
+  .fighter h2 {
+   margin-top: 0;
+   color: #e74c3c;
+  }
+
+  .fighter-image {
+   width: 100px;
+   height: 100px;
+   background-color: #ddd;
+   margin: 15px auto;
+   border-radius: 50%;
+   display: flex;
+   justify-content: center;
+   align-items: center;
+   overflow: hidden;
+  }
+
+  .fighter-image.shape-square {
+   border-radius: 0;
+   background-color: #3498db;
+  }
+
+  .fighter-image.shape-triangle {
+   background-color: transparent;
+   width: 0;
+   height: 0;
+   border-left: 50px solid transparent;
+   border-right: 50px solid transparent;
+   border-bottom: 100px solid #27ae60;
+   margin-left: auto;
+   margin-right: auto;
+  }
+
+
+  .fighter p {
+   margin: 8px 0;
+   color: #777;
+  }
+
+  .controls {
+   text-align: center;
+   margin-bottom: 30px;
+  }
+
+  .controls label {
+   margin: 0 15px;
+   font-size: 18px;
+   color: #555;
+  }
+
+  .controls select {
+   padding: 12px 15px;
+   border-radius: 8px;
+   border: 1px solid #ccc;
+   font-size: 16px;
+   background-color: #fff;
+   appearance: none; /* Remove default arrow in some browsers */
+   -webkit-appearance: none;
+   -moz-appearance: none;
+   cursor: pointer;
+  }
+
+  .controls select::-ms-expand {
+   display: none; /*For IE and Edge*/
+  }
+
+  .controls button {
+   padding: 14px 30px;
+   font-size: 18px;
+   background-color: #2ecc71;
+   color: white;
+   border: none;
+   border-radius: 8px;
+   cursor: pointer;
+   transition: background-color 0.3s ease;
+   margin-top: 20px;
+  }
+
+  .controls button:hover {
+   background-color: #27ae60;
+  }
+
+  .log {
+   margin: 30px auto;
+   border: 1px solid #ddd;
+   padding: 20px;
+   height: 250px;
+   overflow-y: scroll;
+   background-color: #f9f9f9;
+   width: 90%;
+   max-width: 900px;
+   border-radius: 8px;
+   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+   font-size: 16px;
+   line-height: 1.6;
+   color: #444;
+  }
+
+  .log p {
+   margin: 10px 0;
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+   .arena {
+    flex-direction: column;
+    align-items: center;
+   }
+   .fighter-container {
+    width: 90%;
+    margin-bottom: 20px;
+   }
+   .controls label, .controls select, .controls button {
+    font-size: 16px;
+    margin: 10px 5px;
+   }
+  }
+ </style>
+</head>
+<body>
+ <h1>Musical Artist Battle Simulator</h1>
+
+ <div class="arena">
+  <div class="fighter-container">
+   <div class="fighter" id="fighter1">
+    <h2>Fighter 1</h2>
+    <div class="fighter-image shape-square" id="fighter1Image"></div>
+    <p id="fighter1Name"></p>
+    <p>HP: <span id="fighter1HP"></span></p>
+    <p>Attack: <span id="fighter1Attack"></span></p>
+    <p>Defense: <span id="fighter1Defense"></span></p>
+   </div>
+  </div>
+
+  <div class="fighter-container">
+   <div class="fighter" id="fighter2">
+    <h2>Fighter 2</h2>
+    <div class="fighter-image shape-triangle" id="fighter2Image"></div>
+    <p id="fighter2Name"></p>
+    <p>HP: <span id="fighter2HP"></span></p>
+    <p>Attack: <span id="fighter2Attack"></span></p>
+    <p>Defense: <span id="fighter2Defense"></span></p>
+   </div>
+  </div>
+ </div>
+
+ <div class="controls">
+  <label for="fighter1Select">Fighter 1:</label>
+  <select id="fighter1Select"></select>
+
+  <label for="fighter2Select">Fighter 2:</label>
+  <select id="fighter2Select"></select>
+  <br>
+  <button id="battleButton">Start Battle</button>
+ </div>
+
+ <div class="log" id="battleLog">
+  <!-- Battle log messages will appear here -->
+ </div>
+
+ <script>
+  const fighters = [
+   { name: "Kanye West", hp: 120, attack: 30, defense: 15, image: "kanye.jpg", shape: "square" },
+   { name: "The Beatles", hp: 150, attack: 25, defense: 20, image: "beatles.jpg", shape: "square" },
+   { name: "Eminem", hp: 110, attack: 35, defense: 10, image: "eminem.jpg", shape: "square" },
+   { name: "Drake", hp: 130, attack: 28, defense: 18, image: "drake.jpg", shape: "square" },
+   { name: "Tyler, The Creator", hp: 100, attack: 32, defense: 8, image: "tyler.jpg", shape: "square" },
+   { name: "Kendrick Lamar", hp: 115, attack: 33, defense: 12, image: "kendrick.jpg", shape: "square" },
+   { name: "Michael Jackson", hp: 140, attack: 27, defense: 22, image: "michael.jpg", shape: "square" },
+   { name: "Travis Scott", hp: 105, attack: 31, defense: 9, image: "travis.jpg", shape: "square" },
+   { name: "MF DOOM", hp: 95, attack: 36, defense: 7, image: "mfdoom.jpg", shape: "square" },
+   { name: "Death Grips", hp: 80, attack: 40, defense: 5, image: "deathgrips.jpg", shape: "square" },
+   { name: "Metallica", hp: 160, attack: 24, defense: 24, image: "metallica.jpg", shape: "square" },
+   { name: "OutKast", hp: 145, attack: 26, defense: 21, image: "outkast.jpg", shape: "square" },
+   { name: "N.W.A.", hp: 155, attack: 23, defense: 23, image: "nwa.jpg", shape: "square" },
+   { name: "Dr. Dre", hp: 125, attack: 29, defense: 16, image: "drdre.jpg", shape: "square" },
+   { name: "Ice Cube", hp: 118, attack: 34, defense: 11, image: "icecube.jpg", shape: "square" },
+   { name: "Eazy-E", hp: 108, attack: 37, defense: 6, image: "eazye.jpg", shape: "square" },
+   { name: "MC Ren", hp: 98, attack: 39, defense: 4, image: "mcren.jpg", shape: "square" },
+   { name: "DJ Yella", hp: 88, attack: 41, defense: 3, image: "djyella.jpg", shape: "square" },
+   { name: "Arabian Prince", hp: 78, attack: 43, defense: 2, image: "arabianprince.jpg", shape: "square" },
+   { name: "Taylor Swift", hp: 135, attack: 27, defense: 19, image: "taylorswift.jpg", shape: "square" },
+   { name: "Radiohead", hp: 152, attack: 25, defense: 22, image: "radiohead.jpg", shape: "square" },
+   { name: "Pink Floyd", hp: 162, attack: 23, defense: 25, image: "pinkfloyd.jpg", shape: "square" },
+   { name: "Elvis Presley", hp: 142, attack: 28, defense: 20, image: "elvis.jpg", shape: "square" },
+   { name: "J. Cole", hp: 112, attack: 31, defense: 13, image: "jcole.jpg", shape: "square" },
+   { name: "A Tribe Called Quest", hp: 148, attack: 26, defense: 21, image: "atcq.jpg", shape: "square" },
+   { name: "Run The Jewels", hp: 158, attack: 24, defense: 23, image: "rtj.jpg", shape: "square" },
+   { name: "The Caretaker", hp: 75, attack: 15, defense: 2, image: "caretaker.jpg", shape: "square" },
+   { name: "Aphex Twin", hp: 90, attack: 38, defense: 5, image: "aphextwin.jpg", shape: "square" },
+   { name: "Lady Gaga", hp: 122, attack: 30, defense: 15, image: "ladygaga.jpg", shape: "square" },
+   { name: "The Weeknd", hp: 132, attack: 29, defense: 17, image: "weeknd.jpg", shape: "square" },
+   { name: "Nirvana", hp: 157, attack: 23, defense: 24, image: "nirvana.jpg", shape: "square" },
+   { name: "Kevin MacLeod", hp: 65, attack: 10, defense: 1, image: "kevinmacleod.jpg", shape: "square" },
+   { name: "Charli xcx", hp: 102, attack: 35, defense: 7, image: "charlixcx.jpg", shape: "square" },
+   { name: "XXXTENTACION", hp: 117, attack: 33, defense: 10, image: "xxxtentacion.jpg", shape: "square" },
+   { name: "JAY-Z", hp: 137, attack: 27, defense: 18, image: "jayz.jpg", shape: "square" },
+   { name: "Toby Fox", hp: 85, attack: 20, defense: 3, image: "tobyfox.jpg", shape: "square" },
+   { name: "Frank Ocean", hp: 127, attack: 28, defense: 16, image: "frankocean.jpg", shape: "square" },
+   { name: "Playboi Carti", hp: 97, attack: 37, defense: 6, image: "playboicarti.jpg", shape: "square" },
+   { name: "David Bowie", hp: 147, attack: 25, defense: 22, image: "davidbowie.jpg", shape: "square" },
+   { name: "King Crimson", hp: 167, attack: 22, defense: 25, image: "kingcrimson.jpg", shape: "square" },
+   { name: "2Pac", hp: 113, attack: 34, defense: 9, image: "2pac.jpg", shape: "square" },
+   { name: "The Notorious B.I.G.", hp: 133, attack: 28, defense: 17, image: "biggie.jpg", shape: "square" },
+   { name: "Yuno Miles", hp: 50, attack: 50, defense: 0, image: "yunomiles.jpg", shape: "square" },
+   { name: "KSI", hp: 119, attack: 32, defense: 12, image: "ksi.jpg", shape: "square" },
+   { name: "Tones And I", hp: 129, attack: 29, defense: 15, image: "tonesandi.jpg", shape: "square" },
+   { name: "Rucka Rucka Ali", hp: 68, attack: 45, defense: 1, image: "rucka.jpg", shape: "square" },
+   { name: "Tom MacDonald", hp: 72, attack: 42, defense: 2, image: "tommacdonald.jpg", shape: "square" },
+   { name: "JPEGMAFIA", hp: 101, attack: 36, defense: 8, image: "jpegmafia.jpg", shape: "square" },
+   { name: "Kid Cudi", hp: 116, attack: 33, defense: 11, image: "kidcudi.jpg", shape: "square" },
+   { name: "Future", hp: 136, attack: 27, defense: 19, image: "future.jpg", shape: "square" },
+   { name: "Logic", hp: 126, attack: 30, defense: 14, image: "logic.jpg", shape: "square" },
+   { name: "JID", hp: 111, attack: 35, defense: 9, image: "jid.jpg", shape: "square" },
+   { name: "Ty Dolla $ign", hp: 131, attack: 28, defense: 16, image: "tydollasign.jpg", shape: "square" },
+   { name: "Diddy", hp: 141, attack: 26, defense: 20, image: "diddy.jpg", shape: "square" },
+   { name: "Juice WRLD", hp: 106, attack: 37, defense: 7, image: "juicewrld.jpg", shape: "square" },
+   { name: "Godspeed You! Black Emperor", hp: 170, attack: 21, defense: 26, image: "godspeed.jpg", shape: "square" },
+   { name: "Joji", hp: 121, attack: 31, defense: 13, image: "joji.jpg", shape: "square" },
+   { name: "Quadeca", hp: 91, attack: 39, defense: 4, image: "quadeca.jpg", shape: "square" },
+   { name: "Ed Sheeran", hp: 138, attack: 27, defense: 18, image: "edsheeran.jpg", shape: "square" },
+   { name: "Paul McCartney", hp: 143, attack: 26, defense: 21, image: "paulmccartney.jpg", shape: "square" },
+   { name: "John Lennon", hp: 139, attack: 28, defense: 19, image: "johnlennon.jpg", shape: "square" },
+   { name: "George Harrison", hp: 144, attack: 25, defense: 22, image: "georgeharrison.jpg", shape: "square" },
+   { name: "Ringo Starr", hp: 134, attack: 29, defense: 17, image: "ringostarr.jpg", shape: "square" },
+   { name: "BROCKHAMPTON", hp: 154, attack: 24, defense: 24, image: "brockhampton.jpg", shape: "square" },
+   { name: "Lil Wayne", hp: 114, attack: 34, defense: 10, image: "lilwayne.jpg", shape: "square" },
+   { name: "Daft Punk", hp: 164, attack: 22, defense: 25, image: "daftpunk.jpg", shape: "square" },
+   { name: "Panda Eyes", hp: 77, attack: 44, defense: 3, image: "pandaeyes.jpg", shape: "square" },
+   { name: "Teminite", hp: 82, attack: 41, defense: 4, image: "teminite.jpg", shape: "square" },
+   { name: "Miles Davis", hp: 159, attack: 23, defense: 24, image: "milesdavis.jpg", shape: "square" },
+   { name: "Marek Grechuta", hp: 163, attack: 21, defense: 26, image: "grechuta.jpg", shape: "square" },
+   { name: "Kult", hp: 153, attack: 25, defense: 23, image: "kult.jpg", shape: "square" },
+   { name: "Yes", hp: 168, attack: 20, defense: 27, image: "yes.jpg", shape: "square" },
+   { name: "The Cure", hp: 149, attack: 24, defense: 22, image: "thecure.jpg", shape: "square" },
+   { name: "Queen", hp: 169, attack: 19, defense: 28, image: "queen.jpg", shape: "square" },
+   { name: "Lil Uzi Vert", hp: 104, attack: 38, defense: 6, image: "liluzivert.jpg", shape: "square" },
+   { name: "mgk", hp: 94, attack: 40, defense: 5, image: "mgk.jpg", shape: "square" },
+   { name: "Trippie Redd", hp: 109, attack: 36, defense: 7, image: "trippieredd.jpg", shape: "square" },
+   { name: "DJ Khaled", hp: 60, attack: 10, defense: 0, image: "djkhaled.jpg", shape: "square" },
+   { name: "Weezer", hp: 156, attack: 22, defense: 24, image: "weezer.jpg", shape: "square" },
+   { name: "Post Malone", hp: 130, attack: 29, defense: 15, image: "postmalone.jpg", shape: "square" },
+   { name: "Black Sabbath", hp: 165, attack: 20, defense: 26, image: "blacksabbath.jpg", shape: "square" },
+   { name: "Charlie Puth", hp: 128, attack: 30, defense: 14, image: "charlieputh.jpg", shape: "square" },
+   { name: "Billie Eilish", hp: 117, attack: 33, defense: 9, image: "billieeilish.jpg", shape: "square" },
+   { name: "Elton John", hp: 146, attack: 25, defense: 21, image: "eltonjohn.jpg", shape: "square" },
+   { name: "Rihanna", hp: 135, attack: 27, defense: 17, image: "rihanna.jpg", shape: "square" },
+   { name: "Nas", hp: 123, attack: 31, defense: 12, image: "nas.jpg", shape: "square" },
+   { name: "Yeat", hp: 99, attack: 39, defense: 3, image: "yeat.jpg", shape: "square" },
+   { name: "Macklemore", hp: 124, attack: 30, defense: 13, image: "macklemore.jpg", shape: "square" },
+   { name: "DEMONDICE", hp: 84, attack: 42, defense: 2, image: "demondice.jpg", shape: "square" },
+   { name: "Bad Bunny", hp: 103, attack: 37, defense: 6, image: "badbunny.jpg", shape: "square" },
+   { name: "6ix9ine", hp: 66, attack: 48, defense: 1, image: "6ix9ine.jpg", shape: "square" },
+   { name: "Lil Pump", hp: 70, attack: 45, defense: 0, image: "lilpump.jpg", shape: "square" },
+   { name: "Metro Boomin", hp: 151, attack: 23, defense: 23, image: "metroboomin.jpg", shape: "square" },
+   { name: "Skrillex", hp: 89, attack: 41, defense: 3, image: "skrillex.jpg", shape: "square" },
+   { name: "Mustard", hp: 140, attack: 26, defense: 20, image: "mustard.jpg", shape: "square" },
+   { name: "The Beach Boys", hp: 166, attack: 19, defense: 27, image: "beachboys.jpg", shape: "square" },
+   { name: "Wu-Tang Clan", hp: 175, attack: 18, defense: 29, image: "wutang.jpg", shape: "square" },
+   { name: "Denzel Curry", hp: 107, attack: 35, defense: 8, image: "denzelcurry.jpg", shape: "square" },
+   { name: "Danny Brown", hp: 93, attack: 42, defense: 4, image: "dannybrown.jpg", shape: "square" },
+   { name: "The Rolling Stones", hp: 172, attack: 17, defense: 30, image: "rollingstones.jpg", shape: "square" }
+  ];
+
+  const fighter1Select = document.getElementById("fighter1Select");
+  const fighter2Select = document.getElementById("fighter2Select");
+
+  fighters.forEach((fighter, index) => {
+   const option1 = document.createElement("option");
+   option1.value = index;
+   option1.textContent = fighter.name;
+   fighter1Select.appendChild(option1);
+
+   const option2 = document.createElement("option");
+   option2.value = index;
+   option2.textContent = fighter.name;
+   fighter2Select.appendChild(option2);
+  });
+
+  function displayFighterStats(fighterIndex, fighterElementId, nameElementId, hpElementId, attackElementId, defenseElementId, imageElementId) {
+   const fighter = fighters[fighterIndex];
+   document.getElementById(nameElementId).textContent = fighter.name;
+   document.getElementById(hpElementId).textContent = fighter.hp;
+   document.getElementById(attackElementId).textContent = fighter.attack;
+   document.getElementById(defenseElementId).textContent = fighter.defense;
+
+   const imageDiv = document.getElementById(imageElementId);
+   imageDiv.className = 'fighter-image'; // Reset classes
+   if (fighter.shape === 'square') {
+    imageDiv.classList.add('shape-square');
+   } else if (fighter.shape === 'triangle') {
+    imageDiv.classList.add('shape-triangle');
+   } else {
+    imageDiv.classList.add('shape-square'); // Default to square if no shape defined
+   }
+  }
+
+
+  displayFighterStats(0, "fighter1", "fighter1Name", "fighter1HP", "fighter1Attack", "fighter1Defense", "fighter1Image");
+  displayFighterStats(1, "fighter2", "fighter2Name", "fighter2HP", "fighter2Attack", "fighter2Defense", "fighter2Image");
+
+  fighter1Select.addEventListener("change", () => {
+   displayFighterStats(parseInt(fighter1Select.value), "fighter1", "fighter1Name", "fighter1HP", "fighter1Attack", "fighter1Defense", "fighter1Image");
+  });
+
+  fighter2Select.addEventListener("change", () => {
+   displayFighterStats(parseInt(fighter2Select.value), "fighter2", "fighter2Name", "fighter2HP", "fighter2Attack", "fighter2Defense", "fighter2Image");
+  });
+
+  const battleButton = document.getElementById("battleButton");
+  const battleLog = document.getElementById("battleLog");
+
+  function logMessage(message) {
+   const p = document.createElement("p");
+   p.textContent = message;
+   battleLog.appendChild(p);
+   battleLog.scrollTop = battleLog.scrollHeight;
+  }
+
+  function battle() {
+   battleLog.innerHTML = "";
+
+   let fighter1Index = parseInt(fighter1Select.value);
+   let fighter2Index = parseInt(fighter2Select.value);
+
+   if (fighter1Index === fighter2Index) {
+    logMessage("Fighters cannot be the same!");
+    return;
+   }
+
+   let fighter1OriginalHp = fighters[fighter1Index].hp;
+   let fighter2OriginalHp = fighters[fighter2Index].hp;
+
+   let fighter1 = { ...fighters[fighter1Index] };
+   let fighter2 = { ...fighters[fighter2Index] };
+
+   logMessage(`Battle Start: ${fighter1.name} vs. ${fighter2.name}`);
+
+   let round = 1;
+   while (fighter1.hp > 0 && fighter2.hp > 0) {
+    logMessage(`--- Round ${round} ---`);
+
+    let damage1 = Math.max(0, fighter1.attack - fighter2.defense);
+    fighter2.hp -= damage1;
+    logMessage(`${fighter1.name} attacks ${fighter2.name} for ${damage1} damage!`);
+    logMessage(`${fighter2.name} HP: ${Math.max(0, fighter2.hp)}`);
+
+    if (fighter2.hp <= 0) {
+     logMessage(`${fighter2.name} has been defeated! ${fighter1.name} wins!`);
+     break;
+    }
+
+    let damage2 = Math.max(0, fighter2.attack - fighter1.defense);
+    fighter1.hp -= damage2;
+    logMessage(`${fighter2.name} attacks ${fighter1.name} for ${damage2} damage!`);
+    logMessage(`${fighter1.name} HP: ${Math.max(0, fighter1.hp)}`);
+
+    if (fighter1.hp <= 0) {
+     logMessage(`${fighter1.name} has been defeated! ${fighter2.name} wins!`);
+     break;
+    }
+
+    round++;
+   }
+
+   document.getElementById("fighter1HP").textContent = Math.max(0, fighter1.hp);
+   document.getElementById("fighter2HP").textContent = Math.max(0, fighter2.hp);
+  }
+
+  battleButton.addEventListener("click", battle);
+ </script>
+</body>
+</html>

@@ -1,0 +1,251 @@
+html
+ <!DOCTYPE html>
+ <html>
+ <head>
+  <title>Circle Escape Simulation</title>
+  <style>
+  body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #f0f0f0;
+  font-family: Arial, sans-serif;
+  }
+
+  #canvas {
+  background-color: #ffffff;
+  display: block;
+  }
+
+  #controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  }
+
+  #resetButton {
+  padding: 10px 20px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 16px;
+  }
+
+  #gameTitle {
+  color: #333;
+  font-size: 24px;
+  margin: 0;
+  }
+  </style>
+ </head>
+ <body>
+  <div id="controls">
+  <h1 id="gameTitle">Circle Escape</h1>
+  <button id="resetButton">Reset</button>
+  </div>
+  <canvas id="canvas"></canvas>
+
+  <script>
+  // Canvas Setup
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  // Game Parameters
+  const numBigCircles = 100;
+  const bigCircleInitialRadius = Math.min(canvas.width, canvas.height) / 3;
+  const smallCircleRadius = 3; // Really small!
+  const gravity = 0.1;
+  const bounceDamping = 0.7; // Slightly less bouncy for a more realistic feel
+  const holeSize = Math.PI / 6; // Adjust hole size as needed
+
+  // Game State
+  let bigCircles = [];
+  let smallCircle;
+  let gameRunning = false; // Game starts in paused state, reset to begin
+
+  // Initialize Game Objects
+  function initialize() {
+  bigCircles = [];
+  for (let i = 0; i < numBigCircles; i++) {
+  const radius = bigCircleInitialRadius * (1 - i / numBigCircles);
+  const holeStart = Math.random() * Math.PI * 2;
+  const holeEnd = holeStart + holeSize;
+
+  bigCircles.push({
+  x: canvas.width / 2,
+  y: canvas.height / 2,
+  radius: radius,
+  holeAngleStart: holeStart,
+  holeAngleEnd: holeEnd,
+  intact: true,
+  color: `hsl(${i * 3.6}, 100%, 50%)` // Different color for each circle
+  });
+  }
+
+  smallCircle = {
+  x: canvas.width / 2,
+  y: canvas.height / 4,
+  radius: smallCircleRadius,
+  velocityX: (Math.random() - 0.5) * 2,
+  velocityY: 0,
+  color: 'red'
+  };
+
+  gameRunning = true;
+  }
+
+  // Draw Functions
+  function drawCircle(circle) {
+  ctx.beginPath();
+  ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
+  ctx.fillStyle = circle.color;
+  ctx.fill();
+  ctx.closePath();
+  }
+
+  function drawBigCircle(circle) {
+  ctx.beginPath();
+  ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
+  ctx.fillStyle = circle.color;
+  ctx.fill();
+
+  // Draw Hole - clear a sector
+  ctx.beginPath();
+  ctx.arc(circle.x, circle.y, circle.radius, circle.holeAngleStart, circle.holeAngleEnd);
+  ctx.lineTo(circle.x, circle.y); // Line back to center to close the sector
+  ctx.fillStyle = 'white';
+  ctx.fill();
+  ctx.closePath();
+  }
+
+  // Physics Functions
+  function applyGravity() {
+  smallCircle.velocityY += gravity;
+  smallCircle.y += smallCircle.velocityY;
+  smallCircle.x += smallCircle.velocityX;
+  }
+
+  function handleWallCollisions() {
+  if (smallCircle.x + smallCircle.radius > canvas.width || smallCircle.x - smallCircle.radius < 0) {
+  smallCircle.velocityX = -smallCircle.velocityX * bounceDamping;
+  smallCircle.x += smallCircle.velocityX;
+  }
+  if (smallCircle.y + smallCircle.radius > canvas.height || smallCircle.y - smallCircle.radius < 0) {
+  smallCircle.velocityY = -smallCircle.velocityY * bounceDamping;
+  smallCircle.y += smallCircle.velocityY;
+  }
+  }
+
+  // Hole Detection
+  function isInHole(bigCircle) {
+  const angle = Math.atan2(smallCircle.y - bigCircle.y, smallCircle.x - bigCircle.x);
+  let normalizedAngle = angle;
+  if (normalizedAngle < 0) {
+  normalizedAngle += 2 * Math.PI;
+  }
+
+  let holeStartNorm = bigCircle.holeAngleStart % (2 * Math.PI);
+  if (holeStartNorm < 0) holeStartNorm += 2 * Math.PI;
+
+  let holeEndNorm = bigCircle.holeAngleEnd % (2 * Math.PI);
+  if (holeEndNorm < 0) holeEndNorm += 2 * Math.PI;
+
+  if (holeEndNorm < holeStartNorm) {
+  return (normalizedAngle >= holeStartNorm || normalizedAngle <= holeEndNorm);
+  } else {
+  return (normalizedAngle >= holeStartNorm && normalizedAngle <= holeEndNorm);
+  }
+  }
+
+  // Circle Break Check
+  function checkCircleBreak() {
+  for (let i = bigCircles.length - 1; i >= 0; i--) {
+  const circle = bigCircles[i];
+  const dx = smallCircle.x - circle.x;
+  const dy = smallCircle.y - circle.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (distance < circle.radius && circle.intact) {
+  if (isInHole(circle)) {
+  circle.intact = false;
+  bigCircles.splice(i, 1);
+  console.log("Circle Broken!");
+  }
+  }
+  }
+  }
+
+  // Update Game State
+  function update() {
+  if (!gameRunning) return;
+  applyGravity();
+  handleWallCollisions();
+  checkCircleBreak();
+  if (bigCircles.length === 0) {
+  gameRunning = false;
+  console.log("You Escaped!");
+  }
+  }
+
+  // Render Game Frame
+  function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw Big Circles
+  for (const circle of bigCircles) {
+  if (circle.intact) {
+  drawBigCircle(circle);
+  }
+  }
+
+  // Draw Small Circle
+  drawCircle(smallCircle);
+
+  // Game Over Screen
+  if (!gameRunning && bigCircles.length === 0) {
+  ctx.font = "30px Arial";
+  ctx.fillStyle = "green";
+  ctx.textAlign = "center";
+  ctx.fillText("You Escaped!", canvas.width / 2, canvas.height / 2);
+  ctx.font = "20px Arial";
+  ctx.fillText("Click Reset to play again.", canvas.width / 2, canvas.height / 2 + 40);
+  } else if (!gameRunning) {
+  ctx.font = "30px Arial";
+  ctx.fillStyle = "black";
+  ctx.textAlign = "center";
+  ctx.fillText("Game Over!", canvas.width / 2, canvas.height / 2);
+  ctx.font = "20px Arial";
+  ctx.fillText("Click Reset to play again.", canvas.width / 2, canvas.height / 2 + 40);
+  }
+  }
+
+  // Game Loop
+  function gameLoop() {
+  update();
+  render();
+  requestAnimationFrame(gameLoop);
+  }
+
+  // Reset Functionality
+  const resetButton = document.getElementById('resetButton');
+  resetButton.addEventListener('click', resetGame);
+
+  function resetGame() {
+  initialize();
+  gameRunning = true;
+  gameLoop(); // Restart game loop after reset
+  }
+
+  // Start the game when page loads (or wait for reset button click to start first game)
+  initialize();
+  render(); // Render initial frame before game starts actively updating. Game will start on reset.
+  gameRunning = false; // Game starts paused. User must click reset to start.
+  </script>
+ </body>
+ </html>

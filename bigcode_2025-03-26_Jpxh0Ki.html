@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Cup Qualifiers</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+      background-color: #f4f4f4;
+      color: #333;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #0056b3;
+    }
+    section {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    #progress p {
+      text-align: center;
+      font-size: 1.1em;
+      font-weight: bold;
+    }
+    #teams-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 15px;
+    }
+    .country-card {
+      border: 1px solid #ddd;
+      padding: 10px;
+      border-radius: 5px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      background-color: #fff;
+    }
+    .country-card h3 {
+      margin: 5px 0;
+      font-size: 1.2em;
+    }
+    .flag-placeholder {
+      width: 50px;
+      height: 30px;
+      background-color: #ccc;
+      margin-bottom: 5px;
+      border: 1px solid #bbb;
+    }
+    .host-triangle {
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-bottom: 17px solid green;
+      margin-top: 5px;
+    }
+    .host-text {
+      font-style: italic;
+      color: green;
+      margin-top: 5px;
+    }
+    #search-input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    #search button, #sort button {
+      padding: 8px 15px;
+      border: none;
+      background-color: #0056b3;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #search button:hover, #sort button:hover {
+      background-color: #003d82;
+    }
+    #search-results {
+      margin-top: 10px;
+      font-weight: bold;
+      color: #dc3545;
+    }
+  </style>
+</head>
+<body>
+  <h1>World Cup 2026 Qualified Teams</h1>
+
+  <section id="progress">
+    <h2>Qualification Progress</h2>
+    <p id="qualification-status">7/48 Teams Qualified</p>
+  </section>
+
+  <section id="qualified-teams">
+    <h2>Qualified Teams</h2>
+    <div id="teams-container">
+      <!-- Teams will be dynamically added here -->
+    </div>
+  </section>
+
+  <section id="search">
+    <h2>Search Teams</h2>
+    <input type="text" id="search-input" placeholder="Search by country name">
+    <button onclick="searchTeams()">Search</button>
+    <div id="search-results">
+      <!-- Search results will be displayed here -->
+    </div>
+  </section>
+
+  <section id="sort">
+    <h2>Sort Teams</h2>
+    <button onclick="sortAlphabetically()">Sort Alphabetically</button>
+    <button onclick="sortByHostStatus()">Sort by Host Status</button>
+  </section>
+
+  <script>
+    // 1. Data Representation
+    const qualifiedTeamsData = [
+      { name: "Canada", host: true },
+      { name: "Mexico", host: true },
+      { name: "United States", host: true },
+      { name: "Japan", host: false },
+      { name: "New Zealand", host: false },
+      { name: "Iran", host: false },
+      { name: "Argentina", host: false }
+    ];
+
+    // 2. Initial Rendering of Teams
+    function renderTeams(teams) {
+      const teamsContainer = document.getElementById("teams-container");
+      teamsContainer.innerHTML = ""; // Clear existing content
+      const searchResultsContainer = document.getElementById("search-results");
+      searchResultsContainer.innerHTML = ""; // Clear search results when re-rendering all teams
+
+      teams.forEach(team => {
+        const teamCard = document.createElement("div");
+        teamCard.classList.add("country-card");
+
+        const flagPlaceholder = document.createElement("div");
+        flagPlaceholder.classList.add("flag-placeholder");
+        teamCard.appendChild(flagPlaceholder);
+
+        const teamName = document.createElement("h3");
+        teamName.textContent = team.name;
+        teamCard.appendChild(teamName);
+
+        if (team.host) {
+          const hostTriangle = document.createElement("div");
+          hostTriangle.classList.add("host-triangle");
+          teamCard.appendChild(hostTriangle);
+          const hostLabel = document.createElement("span");
+          hostLabel.textContent = "Host";
+          hostLabel.classList.add("host-text");
+          teamCard.appendChild(hostLabel);
+        }
+
+        teamsContainer.appendChild(teamCard);
+      });
+    }
+
+    // Initial rendering
+    renderTeams(qualifiedTeamsData);
+
+    // 3. Search Functionality
+    function searchTeams() {
+      const searchTerm = document.getElementById("search-input").value.toLowerCase();
+      const searchResultsContainer = document.getElementById("search-results");
+      const teamsContainer = document.getElementById("teams-container");
+      teamsContainer.innerHTML = ""; // Clear the main teams container for search results
+
+      const filteredTeams = qualifiedTeamsData.filter(team =>
+        team.name.toLowerCase().includes(searchTerm)
+      );
+
+      if (filteredTeams.length > 0) {
+        renderTeams(filteredTeams); // Reuse renderTeams to display search results in teamsContainer
+        searchResultsContainer.innerHTML = ""; // Clear "No results" message if any
+      } else {
+        teamsContainer.innerHTML = ""; // Ensure teams container is empty
+        searchResultsContainer.textContent = "No matching teams found.";
+      }
+    }
+
+    // 4. Sorting Functionality
+    function sortAlphabetically() {
+      const sortedTeams = [...qualifiedTeamsData].sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+      renderTeams(sortedTeams);
+    }
+
+    function sortByHostStatus() {
+      const sortedTeams = [...qualifiedTeamsData].sort((a, b) => {
+        if (a.host && !b.host) return -1; // Hosts first
+        if (!a.host && b.host) return 1; // Non-hosts last
+        return 0; // Maintain original order for teams with the same host status
+      });
+      renderTeams(sortedTeams);
+    }
+  </script>
+</body>
+</html>

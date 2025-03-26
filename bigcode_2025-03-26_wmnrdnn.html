@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backyard Hustle</title>
+  <style>
+  body {
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+  margin: 20px;
+  background-color: #f4f4f4;
+  color: #333;
+  }
+  h1, h2, h3 {
+  color: #222;
+  }
+  .section {
+  margin-bottom: 20px;
+  padding: 15px;
+  border: 1px solid #ddd;
+  background-color: #fff;
+  border-radius: 5px;
+  }
+  .code-example {
+  background-color: #e8e8e8;
+  padding: 10px;
+  border: 1px solid #ccc;
+  overflow-x: auto;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+  }
+  pre {
+  margin: 0;
+  }
+  #game-output {
+  white-space: pre-line;
+  font-family: monospace;
+  background-color: #f0f0f0;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  margin-top: 10px;
+  }
+  button {
+  padding: 8px 15px;
+  margin: 5px;
+  border: none;
+  border-radius: 4px;
+  background-color: #5cb85c;
+  color: white;
+  cursor: pointer;
+  }
+  button:hover {
+  background-color: #4cae4c;
+  }
+  </style>
+</head>
+<body>
+  <h1>Meethexep's Backyard Hustle</h1>
+  <div id="game-container">
+  <div class="section">
+  <h2>Game Status</h2>
+  <div id="game-output">Welcome to Backyard Hustle!</div>
+  </div>
+  <div class="section">
+  <h2>Resources</h2>
+  <div id="resources-display"></div>
+  </div>
+  <div class="section">
+  <h2>Actions</h2>
+  <div id="actions-panel">
+  <button onclick="startGameProcess('reaction')">Start Reaction</button>
+  <button onclick="startGameProcess('purification')">Start Purification</button>
+  <button onclick="buyIngredient()">Buy Ingredient A</button>
+  <button onclick="gameWait()">Wait</button>
+  <button onclick="sellProduct()">Sell Product</button>
+  </div>
+  </div>
+  </div>
+
+  <script>
+  class Resource {
+  constructor(name, initialQuantity = 0) {
+  this.name = name;
+  this.quantity = initialQuantity;
+  }
+
+  add(amount) {
+  this.quantity += amount;
+  return true;
+  }
+
+  subtract(amount) {
+  if (this.quantity >= amount) {
+  this.quantity -= amount;
+  return true;
+  } else {
+  return false;
+  }
+  }
+
+  getQuantity() {
+  return this.quantity;
+  }
+
+  toString() {
+  return `${this.name}: ${this.quantity}`;
+  }
+  }
+
+  class Currency extends Resource {
+  constructor(name = "Currency", initialQuantity = 100) {
+  super(name, initialQuantity);
+  }
+  }
+
+  class Process {
+  constructor(name, duration) {
+  this.name = name;
+  this.duration = duration;
+  this.isRunning = false;
+  this.progress = 0;
+  }
+
+  start(resources) {
+  this.isRunning = true;
+  this.progress = 0;
+  return true;
+  }
+
+  update(resources) {
+  if (this.isRunning) {
+  this.progress += (100 / this.duration);
+  this.progress = Math.min(100, this.progress);
+  if (this.progress >= 100) {
+  this.finish(resources);
+  }
+  }
+  }
+
+  finish(resources) {
+  this.isRunning = false;
+  }
+  }
+
+  class ReactionProcess extends Process {
+  constructor() {
+  super("Reaction", 10);
+  this.inputA = "Ingredient A";
+  this.inputB = "Ingredient B";
+  this.outputProduct = "Product X";
+  this.inputAQty = 10;
+  this.inputBQty = 5;
+  this.outputQty = 12;
+  this.successChance = 0.7;
+  }
+
+  start(resources) {
+  if (!resources[this.inputA].subtract(this.inputAQty)) {
+  updateGameOutput(`Not enough ${this.inputA} to start reaction.`);
+  return false;
+  }
+  if (!resources[this.inputB].subtract(this.inputBQty)) {
+  resources[this.inputA].add(this.inputAQty); // Return Ingredient A if Ingredient B failed
+  updateGameOutput(`Not enough ${this.inputB} to start reaction.`);
+  return false;
+  }
+  super.start(resources);
+  updateGameOutput(`Reaction started, using ${this.inputAQty} ${this.inputA} and ${this.inputBQty} ${this.inputB}.`);
+  return true;
+  }
+
+  finish(resources) {
+  super.finish(resources);
+  if (Math.random() < this.successChance) {
+  resources[this.outputProduct].add(this.outputQty);
+  updateGameOutput(`Reaction successful! Produced ${this.outputQty} ${this.outputProduct}.`);
+  } else {
+  updateGameOutput("Reaction failed! No product produced.");
+  }
+  }
+  }
+
+  class PurificationProcess extends Process {
+  constructor() {
+  super("Purification", 5);
+  this.inputProduct = "Product X";
+  this.outputProduct = "Refined Product X";
+  this.inputQty = 10;
+  this.outputQty = 9;
+  this.successChance = 0.8;
+  this.solvent = "Solvent";
+  this.solventQty = 2;
+  }
+
+  start(resources) {
+  if (!resources[this.inputProduct].subtract(this.inputQty)) {
+  updateGameOutput(`Not enough ${this.inputProduct} to start purification.`);
+  return false;
+  }
+  if (!resources[this.solvent].subtract(this.solventQty)) {
+  resources[this.inputProduct].add(this.inputQty); // Return Product X if Solvent failed
+  updateGameOutput(`Not enough ${this.solvent} to start purification.`);
+  return false;
+  }
+  super.start(resources);
+  updateGameOutput(`Purification started, using ${this.inputQty} ${this.inputProduct} and ${this.solventQty} ${this.solvent}.`);
+  return true;
+  }
+
+  finish(resources) {
+  super.finish(resources);
+  if (Math.random() < this.successChance) {
+  resources[this.outputProduct].add(this.outputQty);
+  updateGameOutput(`Purification successful! Produced ${this.outputQty} ${this.outputProduct}.`);
+  } else {
+  updateGameOutput("Purification failed! Product lost.");
+  }
+  }
+  }
+
+
+  const resources = {
+  "Ingredient A": new Resource("Ingredient A", 100),
+  "Ingredient B": new Resource("Ingredient B", 50),
+  "Product X": new Resource("Product X", 0),
+  "Refined Product X": new Resource("Refined Product X", 0),
+  "Solvent": new Resource("Solvent", 30),
+  "Currency": new Currency("Cash", 100),
+  };
+
+  let gameProcesses = [];
+  let gameTime = 0;
+  let reactionProcess = new ReactionProcess();
+  let purificationProcess = new PurificationProcess();
+
+  function updateResourceDisplay() {
+  let resourceText = "";
+  for (const name in resources) {
+  resourceText += `<p>${resources[name].toString()}</p>`;
+  }
+  document.getElementById("resources-display").innerHTML = resourceText;
+  }
+
+  function updateGameOutput(message) {
+  const outputDiv = document.getElementById("game-output");
+  outputDiv.textContent += "\n" + message;
+  outputDiv.scrollTop = outputDiv.scrollHeight; // Scroll to bottom
+  }
+
+  function startGameProcess(processType) {
+  let processToStart;
+  if (processType === 'reaction') {
+  processToStart = reactionProcess;
+  } else if (processType === 'purification') {
+  processToStart = purificationProcess;
+  }
+
+  if (processToStart && !processToStart.isRunning) {
+  if (processToStart.start(resources)) {
+  gameProcesses.push(processToStart);
+  }
+  } else if (processToStart && processToStart.isRunning) {
+  updateGameOutput(`${processToStart.name} is already running.`);
+  } else {
+  updateGameOutput("Invalid process type.");
+  }
+  updateResourceDisplay();
+  }
+
+  function gameWait() {
+  gameTime++;
+  updateGameOutput(`--- Time: ${gameTime} ---`);
+  let processesToRemove = [];
+  gameProcesses.forEach((process, index) => {
+  process.update(resources);
+  if (!process.isRunning) {
+  processesToRemove.push(index);
+  }
+  });
+  processesToRemove.reverse().forEach(index => { //remove in reverse to avoid index issues
+  gameProcesses.splice(index, 1);
+  });
+
+  if (checkGameOver()) return;
+  generateRandomEvent();
+  updateResourceDisplay();
+  }
+
+
+  function buyIngredient() {
+  const ingredientName = "Ingredient A";
+  const quantity = 10;
+  const pricePerUnit = 5;
+  const totalCost = quantity * pricePerUnit;
+
+  if (resources["Currency"].getQuantity() >= totalCost) {
+  if (resources["Currency"].subtract(totalCost)) {
+  resources[ingredientName].add(quantity);
+  updateGameOutput(`Bought ${quantity} of ${ingredientName} for ${totalCost} cash.`);
+  } else {
+  updateGameOutput("Could not subtract currency."); // Should not happen, but for safety
+  }
+  } else {
+  updateGameOutput("Not enough cash to buy Ingredient A.");
+  }
+  updateResourceDisplay();
+  }
+
+  function sellProduct() {
+  const productName = "Refined Product X";
+  const quantityToSell = resources[productName].getQuantity();
+  const pricePerUnit = 30;
+  const totalCash = quantityToSell * pricePerUnit;
+
+  if (quantityToSell > 0) {
+  resources[productName].subtract(quantityToSell);
+  resources["Currency"].add(totalCash);
+  updateGameOutput(`Sold ${quantityToSell} ${productName} for ${totalCash} cash.`);
+  } else {
+  updateGameOutput(`No ${productName} to sell.`);
+  }
+  updateResourceDisplay();
+  }
+
+
+  function generateRandomEvent() {
+  const eventChance = Math.random();
+
+  if (eventChance < 0.1) { // 10% chance
+  updateGameOutput("Minor Setback! Lost some Ingredient A (5).");
+  resources["Ingredient A"].subtract(5);
+  } else if (eventChance < 0.2) { // 10% chance
+  updateGameOutput("Unexpected Delivery! Received Solvent (10).");
+  resources["Solvent"].add(10);
+  } else {
+  // No event
+  }
+  }
+
+  function checkGameOver() {
+  if (resources["Currency"].getQuantity() <= 0) {
+  updateGameOutput("Game Over! Meethexep ran out of cash.");
+  disableActions();
+  return true;
+  }
+  return false;
+  }
+
+  function disableActions() {
+  const buttons = document.querySelectorAll("#actions-panel button");
+  buttons.forEach(button => {
+  button.disabled = true;
+  });
+  }
+
+
+  updateResourceDisplay(); // Initial display of resources
+  updateGameOutput("Meethexep is in his backyard, ready to cook up some... product. Adammady is waiting to buy. Let's get hustling!");
+
+  </script>
+</body>
+</html>

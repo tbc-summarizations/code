@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+ <html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Circle Simulation</title>
+  <style>
+  body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #f0f0f0;
+  }
+  canvas {
+  display: block;
+  }
+  #resetButton {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  padding: 10px 15px;
+  background-color: #ddd;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  }
+  </style>
+ </head>
+ <body>
+  <canvas id="gameCanvas"></canvas>
+  <button id="resetButton">Reset</button>
+
+  <script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const numBigCircles = 30;
+  let bigCircles = [];
+  const smallCircleRadius = 5;
+  let smallCircleX = canvas.width / 2;
+  let smallCircleY = canvas.height / 2;
+  let smallCircleSpeedX = 0.2; // Slowed down speed
+  let smallCircleSpeedY = 0.2; // Slowed down speed
+  const gravity = 0.02; // Reduced gravity for slower fall
+  const bounceDamping = 0.7;
+
+  const bigCircleStartRadius = Math.min(canvas.width, canvas.height) / 3;
+  const bigCircleSpacing = bigCircleStartRadius / numBigCircles;
+  let allCirclesBroken = false;
+
+  function initializeBigCircles() {
+  bigCircles = [];
+  for (let i = 0; i < numBigCircles; i++) {
+  const radius = bigCircleStartRadius - i * bigCircleSpacing;
+  bigCircles.push({
+  x: canvas.width / 2,
+  y: canvas.height / 2,
+  radius: radius,
+  rotationSpeed: 0.002 + i * 0.0002, // Slower rotation
+  rotationAngle: Math.random() * Math.PI * 2,
+  holeAngle: Math.random() * Math.PI * 2,
+  holeSize: Math.PI / 8, // Slightly smaller hole
+  isBroken: false
+  });
+  }
+  allCirclesBroken = false;
+  smallCircleX = canvas.width / 2;
+  smallCircleY = canvas.height / 2;
+  smallCircleSpeedX = 0.2; // Reset slow speed
+  smallCircleSpeedY = 0.2; // Reset slow speed
+  }
+
+  function drawBigCircle(circle) {
+  if (circle.isBroken) return; // Don't draw broken circles
+  ctx.save();
+  ctx.translate(circle.x, circle.y);
+  ctx.rotate(circle.rotationAngle);
+
+  ctx.beginPath();
+  // Main circle outline
+  ctx.arc(0, 0, circle.radius, circle.holeAngle, circle.holeAngle + (2 * Math.PI - circle.holeSize));
+  // Hole - create a white gap by drawing a white filled arc
+  ctx.arc(0, 0, circle.radius, circle.holeAngle - circle.holeSize, circle.holeAngle, true);
+  ctx.closePath();
+
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Fill the hole with white to make it visually clear
+  ctx.beginPath();
+  ctx.arc(0, 0, circle.radius, circle.holeAngle - circle.holeSize, circle.holeAngle, true);
+  ctx.fillStyle = '#f0f0f0'; // Background color for the hole
+  ctx.fill();
+
+  ctx.restore();
+  }
+
+  function drawSmallCircle() {
+  ctx.beginPath();
+  ctx.arc(smallCircleX, smallCircleY, smallCircleRadius, 0, Math.PI * 2);
+  ctx.fillStyle = 'red';
+  ctx.fill();
+  ctx.closePath();
+  }
+
+  function updateSmallCircle() {
+  smallCircleSpeedY += gravity;
+  smallCircleX += smallCircleSpeedX;
+  smallCircleY += smallCircleSpeedY;
+
+  if (smallCircleX + smallCircleRadius > canvas.width || smallCircleX - smallCircleRadius < 0) {
+  smallCircleSpeedX = -smallCircleSpeedX * bounceDamping;
+  smallCircleX += smallCircleSpeedX;
+  }
+  if (smallCircleY + smallCircleRadius > canvas.height || smallCircleY - smallCircleRadius < 0) {
+  smallCircleSpeedY = -smallCircleSpeedY * bounceDamping;
+  smallCircleY += smallCircleSpeedY;
+  }
+  }
+
+  function checkCollisions() {
+  if (allCirclesBroken) return;
+
+  for (let i = 0; i < bigCircles.length; i++) {
+  const circle = bigCircles[i];
+
+  if (!circle.isBroken) {
+  const dx = smallCircleX - circle.x;
+  const dy = smallCircleY - circle.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (distance < circle.radius + smallCircleRadius) {
+  const angle = Math.atan2(dy, dx);
+  const relativeAngle = angle - circle.rotationAngle;
+  let normalizedRelativeAngle = relativeAngle;
+  if (normalizedRelativeAngle < 0) {
+  normalizedRelativeAngle += 2 * Math.PI; // Normalize to 0 to 2PI
+  }
+
+  let holeStartAngle = circle.holeAngle;
+  let holeEndAngle = circle.holeAngle - circle.holeSize;
+
+  if (holeEndAngle < 0) {
+  holeEndAngle += 2 * Math.PI; // Normalize hole end angle
+  }
+  if (holeStartAngle < 0) {
+  holeStartAngle += 2 * Math.PI; // Normalize hole start angle
+  }
+
+  // Check if the angle is within the hole range
+  if (holeEndAngle < holeStartAngle) { // Hole crosses 0/2PI boundary
+  if (normalizedRelativeAngle > holeEndAngle && normalizedRelativeAngle < holeStartAngle ) {
+  } else {
+  circle.isBroken = true;
+  console.log("Circle broken!");
+  break;
+  }
+
+  } else { // Normal hole range
+  if (normalizedRelativeAngle > holeEndAngle && normalizedRelativeAngle < holeStartAngle) {
+  circle.isBroken = true;
+  console.log("Circle broken!");
+  break;
+  } else {
+  smallCircleSpeedX = -smallCircleSpeedX;
+  smallCircleSpeedY = -smallCircleSpeedY;
+  }
+  }
+  }
+  }
+  }
+
+  if (bigCircles.every(circle => circle.isBroken)) {
+  allCirclesBroken = true;
+  console.log("All circles broken! Small circle escapes!");
+  }
+  }
+
+  function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!allCirclesBroken) {
+  for (let i = 0; i < bigCircles.length; i++) {
+  const circle = bigCircles[i];
+  drawBigCircle(circle);
+  circle.rotationAngle += circle.rotationSpeed;
+  }
+  }
+
+  updateSmallCircle();
+  drawSmallCircle();
+  checkCollisions();
+
+  requestAnimationFrame(gameLoop);
+  }
+
+  const resetButton = document.getElementById('resetButton');
+  resetButton.addEventListener('click', initializeBigCircles);
+
+  initializeBigCircles();
+  gameLoop();
+  </script>
+ </body>
+ </html>

@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>India Simulator - Release Version</title>
+    <style>
+        body { font-family: 'Arial', sans-serif; background-color: #f4f4f4; color: #333; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        #game-container { background-color: #fff; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); padding: 20px; width: 90%; max-width: 900px; margin: 20px; }
+        h1, h2 { color: #2c3e50; text-align: center; }
+        #game-state, #actions, #event-log { border: 1px solid #ddd; border-radius: 4px; padding: 15px; margin-bottom: 15px; background-color: #f9f9f9; }
+        #game-state h2, #actions h2, #event-log h2 { margin-top: 0; font-size: 1.4em; }
+        #population-display, #economy-display, #environment-display, #social-display, #political-display { margin-bottom: 10px; }
+        #population-display p, #economy-display p, #environment-display p, #social-display p, #political-display p { margin: 5px 0; }
+        .stat-label { font-weight: bold; display: inline-block; width: 150px; }
+        #actions button { background-color: #3498db; color: #fff; border: none; padding: 10px 15px; margin: 5px; border-radius: 4px; cursor: pointer; transition: background-color 0.3s ease; }
+        #actions button:hover { background-color: #2980b9; }
+        #event-log ul { list-style-type: none; padding: 0; }
+        #event-log li { padding: 8px 0; border-bottom: 1px dotted #eee; }
+        #event-log li:last-child { border-bottom: none; }
+        /* Optional Canvas for Visuals (Simplified - Squares and Triangles) */
+        #visual-display { width: 100%; height: 150px; border: 1px solid #ddd; margin-bottom: 15px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>India Simulator</h1>
+
+        <div id="game-state">
+            <h2>Game State</h2>
+            <div id="population-display">
+                <h3>Population</h3>
+                <p><span class="stat-label">Total Population:</span> <span id="total-population"></span></p>
+                <p><span class="stat-label">Rural:</span> <span id="rural-population"></span>, <span class="stat-label">Urban:</span> <span id="urban-population"></span></p>
+                <p><span class="stat-label">Male:</span> <span id="male-population"></span>, <span class="stat-label">Female:</span> <span id="female-population"></span></p>
+            </div>
+            <div id="economy-display">
+                <h3>Economy</h3>
+                <p><span class="stat-label">GDP:</span> <span id="gdp"></span> USD</p>
+                <p><span class="stat-label">GDP Growth:</span> <span id="gdp-growth"></span>%</p>
+                <p><span class="stat-label">Unemployment:</span> <span id="unemployment"></span>%</p>
+                <p><span class="stat-label">Inflation:</span> <span id="inflation"></span>%</p>
+                <p><span class="stat-label">Agri. Output:</span> <span id="agricultural-output"></span></p>
+                <p><span class="stat-label">Indus. Output:</span> <span id="industrial-output"></span></p>
+                <p><span class="stat-label">Service Output:</span> <span id="service-output"></span></p>
+            </div>
+            <div id="environment-display">
+                <h3>Environment</h3>
+                <p><span class="stat-label">Pollution:</span> <span id="pollution"></span></p>
+                <p><span class="stat-label">Forest Cover:</span> <span id="forest-cover"></span>%</p>
+                <p><span class="stat-label">Water Availability:</span> <span id="water-availability"></span></p>
+                <p><span class="stat-label">Avg. Temp:</span> <span id="average-temperature"></span>°C</p>
+            </div>
+            <div id="social-display">
+                <h3>Social Indicators</h3>
+                <p><span class="stat-label">Literacy:</span> <span id="literacy"></span>%</p>
+                <p><span class="stat-label">Healthcare Quality:</span> <span id="healthcare"></span></p>
+                <p><span class="stat-label">Poverty:</span> <span id="poverty"></span>%</p>
+                <p><span class="stat-label">Corruption:</span> <span id="corruption"></span></p>
+            </div>
+            <div id="political-display">
+                <h3>Political Stability</h3>
+                <p><span class="stat-label">Public Trust:</span> <span id="public-trust"></span></p>
+                <p><span class="stat-label">Political Unrest:</span> <span id="political-unrest"></span></p>
+                <p><span class="stat-label">International Relations:</span> <span id="international-relations"></span></p>
+            </div>
+        </div>
+
+        <div id="actions">
+            <h2>Actions</h2>
+            <button onclick="investInEducation()">Invest in Education</button>
+            <button onclick="increaseHealthcareSpending()">Increase Healthcare Spending</button>
+            <button onclick="implementEnvironmentalRegulations()">Environmental Regulations</button>
+            <button onclick="reduceCorruption()">Reduce Corruption</button>
+            <button onclick="improveInfrastructure()">Improve Infrastructure</button>
+            <button onclick="agriculturalReform()">Agricultural Reform</button>
+            <button onclick="taxReform()">Tax Reform</button>
+            <button onclick="foreignPolicyDecision()">Foreign Policy Decision</button>
+            <button onclick="socialPrograms()">Social Programs</button>
+        </div>
+
+        <div id="event-log">
+            <h2>Event Log</h2>
+            <ul></ul>
+        </div>
+
+        <div id="visual-display">
+            <!-- Optional Canvas for Visuals -->
+        </div>
+    </div>
+
+    <script>
+        // Game State Variables
+        let populationCount = 1400000000;
+        let ruralPopulation = 900000000;
+        let urbanPopulation = 500000000;
+        let malePopulation = 710000000;
+        let femalePopulation = 690000000;
+
+        let gdp = 3000000000000;
+        let gdpGrowthRate = 0.07;
+        let unemploymentRate = 0.08;
+        let inflationRate = 0.05;
+        let agriculturalOutput = 1000000000000;
+        let industrialOutput = 1000000000000;
+        let serviceSectorOutput = 1000000000000;
+
+        let pollutionLevel = 60;
+        let forestCover = 22;
+        let waterAvailability = 50;
+        let averageTemperature = 25;
+
+        let literacyRate = 0.74;
+        let healthcareQuality = 60;
+        let povertyRate = 0.22;
+        let corruptionLevel = 70;
+
+        let publicTrust = 50;
+        let politicalUnrest = 30;
+        let internationalRelations = 0; // Scale -100 to 100
+
+        // Initialization
+        function initializeGame() {
+            updateDisplay();
+            logEvent("Game started. Welcome to India Simulator.");
+        }
+
+        // Update Display Function
+        function updateDisplay() {
+            document.getElementById("total-population").innerText = formatNumber(populationCount);
+            document.getElementById("rural-population").innerText = formatNumber(ruralPopulation);
+            document.getElementById("urban-population").innerText = formatNumber(urbanPopulation);
+            document.getElementById("male-population").innerText = formatNumber(malePopulation);
+            document.getElementById("female-population").innerText = formatNumber(femalePopulation);
+
+            document.getElementById("gdp").innerText = formatNumber(gdp);
+            document.getElementById("gdp-growth").innerText = (gdpGrowthRate * 100).toFixed(2);
+            document.getElementById("unemployment").innerText = (unemploymentRate * 100).toFixed(2);
+            document.getElementById("inflation").innerText = (inflationRate * 100).toFixed(2);
+            document.getElementById("agricultural-output").innerText = formatNumber(agriculturalOutput);
+            document.getElementById("industrial-output").innerText = formatNumber(industrialOutput);
+            document.getElementById("service-output").innerText = formatNumber(serviceSectorOutput);
+
+            document.getElementById("pollution").innerText = pollutionLevel.toFixed(2);
+            document.getElementById("forest-cover").innerText = forestCover.toFixed(2);
+            document.getElementById("water-availability").innerText = waterAvailability.toFixed(2);
+            document.getElementById("average-temperature").innerText = averageTemperature.toFixed(2);
+
+            document.getElementById("literacy").innerText = (literacyRate * 100).toFixed(2);
+            document.getElementById("healthcare").innerText = healthcareQuality.toFixed(2);
+            document.getElementById("poverty").innerText = (povertyRate * 100).toFixed(2);
+            document.getElementById("corruption").innerText = corruptionLevel.toFixed(2);
+
+            document.getElementById("public-trust").innerText = publicTrust.toFixed(2);
+            document.getElementById("political-unrest").innerText = politicalUnrest.toFixed(2);
+            document.getElementById("international-relations").innerText = internationalRelations.toFixed(2);
+
+             //updateVisualDisplay(); // Function to update canvas visuals (if implemented)
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000000) {
+                return (num / 1000000000).toFixed(1) + 'B';
+            } else if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            } else {
+                return num;
+            }
+        }
+
+
+        // Action Functions
+        function investInEducation() {
+            literacyRate = Math.min(1, literacyRate + 0.015);
+            gdp -= 6000000000;
+            publicTrust += 3;
+            unemploymentRate = Math.max(0, unemploymentRate - 0.002);
+            inflationRate = Math.max(0, inflationRate - 0.001);
+
+            logEvent("Invested in Education. Literacy improved, public trust increased.");
+            updateDisplay();
+        }
+
+        function increaseHealthcareSpending() {
+            healthcareQuality = Math.min(100, healthcareQuality + 4);
+            gdp -= 5000000000;
+            publicTrust += 4;
+            inflationRate += 0.002;
+            populationCount += 100000; // Sligth population increase due to better healthcare
+
+            logEvent("Increased Healthcare Spending. Healthcare quality improved, population slightly increased.");
+            updateDisplay();
+        }
+
+        function implementEnvironmentalRegulations() {
+            pollutionLevel = Math.max(0, pollutionLevel - 5);
+            gdpGrowthRate -= 0.005;
+            industrialOutput -= 4000000000;
+            forestCover = Math.min(100, forestCover + 0.2);
+            publicTrust += 2;
+
+            logEvent("Implemented Environmental Regulations. Pollution decreased, forest cover increased, GDP growth slightly slowed.");
+            updateDisplay();
+        }
+
+        function reduceCorruption() {
+            corruptionLevel = Math.max(0, corruptionLevel - 6);
+            publicTrust += 6;
+            gdpGrowthRate += 0.003;
+            gdp += 3000000000;
+
+            logEvent("Launched Anti-Corruption Drive. Public trust and GDP growth increased.");
+            updateDisplay();
+        }
+
+        function improveInfrastructure() {
+            gdp -= 7000000000;
+            gdpGrowthRate += 0.006;
+            urbanPopulation = Math.min(populationCount, urbanPopulation + 2500000);
+            ruralPopulation = Math.max(0, ruralPopulation - 2500000);
+            unemploymentRate = Math.max(0, unemploymentRate - 0.004);
+            pollutionLevel = Math.min(100, pollutionLevel + 1); // Infrastructure growth can slightly increase pollution
+
+            logEvent("Improved Infrastructure. GDP growth increased, urbanization increased.");
+            updateDisplay();
+        }
+
+        function agriculturalReform() {
+            agriculturalOutput += 5000000000;
+            ruralPopulation = Math.min(populationCount, ruralPopulation + 1200000);
+            urbanPopulation = Math.max(0, urbanPopulation - 1200000);
+            gdpGrowthRate += 0.002;
+            inflationRate += 0.004;
+            povertyRate = Math.max(0, povertyRate - 0.005); // Agri reform helps reduce poverty
+
+            logEvent("Implemented Agricultural Reform. Agricultural output increased, poverty slightly reduced.");
+            updateDisplay();
+        }
+
+        function taxReform() {
+            gdpGrowthRate += 0.007;
+            publicTrust -= 3; // Tax reforms can be unpopular initially
+            gdp += 3500000000;
+            unemploymentRate = Math.max(0, unemploymentRate - 0.003);
+            inflationRate = Math.min(1, inflationRate + 0.001); // Tax reform can slightly increase inflation
+
+
+            logEvent("Implemented Tax Reform. GDP growth increased, public trust slightly decreased.");
+            updateDisplay();
+        }
+
+        function foreignPolicyDecision() {
+            const policyRoll = Math.random();
+            if (policyRoll < 0.5) { // Improve relations
+                internationalRelations = Math.min(100, internationalRelations + 5);
+                gdpGrowthRate += 0.001;
+                publicTrust += 1;
+                logEvent("Improved International Relations. Slight GDP growth and public trust increase.");
+            } else { // Worsen relations
+                internationalRelations = Math.max(-100, internationalRelations - 5);
+                gdpGrowthRate -= 0.002;
+                publicTrust -= 2;
+                logEvent("Worsened International Relations. GDP growth slowed, public trust decreased.");
+            }
+            updateDisplay();
+        }
+
+        function socialPrograms() {
+            povertyRate = Math.max(0, povertyRate - 0.01);
+            publicTrust += 3;
+            gdp -= 4500000000;
+            inflationRate += 0.003;
+            healthcareQuality = Math.min(100, healthcareQuality + 1); // Social programs might indirectly improve healthcare
+
+            logEvent("Implemented Social Programs. Poverty reduced, public trust increased.");
+            updateDisplay();
+        }
+
+
+        // Event Generation
+        function generateRandomEvent() {
+            const eventRoll = Math.random();
+
+            if (eventRoll < 0.08) {
+                goodMonsoon();
+            } else if (eventRoll < 0.15) {
+                terroristAttack();
+            } else if (eventRoll < 0.22) {
+                diseaseOutbreak();
+            } else if (eventRoll < 0.29) {
+                mineralDiscovery();
+            } else if (eventRoll < 0.36) {
+                tradeWar();
+            } else if (eventRoll < 0.43) {
+                politicalScandal();
+            } else if (eventRoll < 0.50) {
+                techInnovation();
+            } else if (eventRoll < 0.57) {
+                heatWave();
+            } else if (eventRoll < 0.64) {
+                globalRecession();
+            } else if (eventRoll < 0.71) {
+                cyberAttack();
+            } else if (eventRoll < 0.78) {
+                earthquake();
+            } else if (eventRoll < 0.85) {
+                diplomaticSuccess();
+            } else if (eventRoll < 0.92) {
+                brainDrain();
+            } else {
+                youthProtests();
+            }
+        }
+
+        function goodMonsoon() {
+            agriculturalOutput += 0.08 * agriculturalOutput;
+            gdpGrowthRate += 0.015;
+            inflationRate -= 0.008;
+            waterAvailability = Math.min(100, waterAvailability + 5);
+
+            logEvent("Good Monsoon! Agricultural output surged, inflation decreased, water availability improved.");
+        }
+
+        function terroristAttack() {
+            publicTrust -= 10;
+            gdpGrowthRate -= 0.02;
+            politicalUnrest += 7;
+            internationalRelations -= 5;
+            gdp -= 5000000000;
+            serviceSectorOutput -= 0.03 * serviceSectorOutput; // Tourism affected
+
+            logEvent("Terrorist Attack! Public trust plummeted, political unrest increased, tourism affected.");
+        }
+
+        function diseaseOutbreak() {
+            populationCount -= 600000;
+            healthcareQuality -= 7;
+            gdpGrowthRate -= 0.01;
+            povertyRate = Math.min(1, povertyRate + 0.005); // Disease can increase poverty
+            unemploymentRate += 0.005; // Workforce affected
+
+            logEvent("Disease Outbreak! Population decreased, healthcare system strained, poverty and unemployment increased.");
+        }
+
+        function mineralDiscovery() {
+            gdp += 9000000000;
+            industrialOutput += 0.06 * industrialOutput;
+            gdpGrowthRate += 0.025;
+            pollutionLevel = Math.min(100, pollutionLevel + 2); // Mineral extraction can increase pollution
+
+            logEvent("Discovered New Mineral Resources! GDP and industrial output increased, pollution slightly increased.");
+        }
+
+        function tradeWar() {
+            gdpGrowthRate -= 0.03;
+            internationalRelations -= 8;
+            unemploymentRate += 0.015;
+            industrialOutput -= 0.05 * industrialOutput;
+            inflationRate += 0.01;
+
+            logEvent("International Trade War! GDP growth slowed, unemployment and inflation increased, industrial output decreased.");
+        }
+
+        function politicalScandal() {
+            publicTrust -= 15;
+            politicalUnrest += 10;
+            corruptionLevel += 4;
+            gdpGrowthRate -= 0.005;
+
+            logEvent("Political Scandal! Public trust severely damaged, political unrest and corruption increased, GDP growth slightly slowed.");
+        }
+
+        function techInnovation() {
+            industrialOutput += 0.10 * industrialOutput;
+            serviceSectorOutput += 0.08 * serviceSectorOutput;
+            gdpGrowthRate += 0.04;
+            unemploymentRate = Math.max(0, unemploymentRate - 0.008); // Tech can reduce unemployment
+            literacyRate = Math.min(1, literacyRate + 0.005); // Increased need for skilled workers
+
+            logEvent("Technological Innovation! Industrial and service output boomed, unemployment decreased, literacy slightly increased.");
+        }
+
+        function heatWave() {
+            agriculturalOutput -= 0.05 * agriculturalOutput;
+            waterAvailability -= 5;
+            averageTemperature += 3;
+            pollutionLevel = Math.min(100, pollutionLevel + 1); // Increased energy consumption for cooling
+
+            logEvent("Severe Heat Wave! Agricultural output decreased, water availability strained, pollution slightly increased.");
+        }
+
+        function globalRecession() {
+            gdpGrowthRate -= 0.04;
+            unemploymentRate += 0.025;
+            internationalRelations -= 6;
+            gdp -= 8000000000;
+            industrialOutput -= 0.08 * industrialOutput;
+            serviceSectorOutput -= 0.07 * serviceSectorOutput;
+
+            logEvent("Global Recession! GDP growth plummeted, unemployment increased, international relations worsened, industrial and service output decreased.");
+        }
+
+        function cyberAttack() {
+            gdp -= 7000000000;
+            publicTrust -= 8;
+            corruptionLevel += 3;
+            serviceSectorOutput -= 0.04 * serviceSectorOutput; // Services reliant on digital infra affected
+
+            logEvent("Major Cyber Attack! GDP decreased, public trust damaged, corruption increased, service sector affected.");
+        }
+
+        function earthquake() {
+            populationCount -= 400000;
+            gdp -= 6000000000;
+            infrastructureDamage = 0.05; // Hypothetical infrastructure damage factor
+            urbanPopulation *= (1 - infrastructureDamage); // Urban areas more densely affected
+            ruralPopulation *= (1 - infrastructureDamage * 0.5); // Rural areas less affected
+            politicalUnrest += 5;
+
+            logEvent("Major Earthquake! Population decreased, GDP decreased, infrastructure damaged, political unrest increased.");
+        }
+
+        function diplomaticSuccess() {
+            internationalRelations = Math.min(100, internationalRelations + 8);
+            gdpGrowthRate += 0.008;
+            publicTrust += 4;
+            gdp += 4000000000;
+
+            logEvent("Diplomatic Success! International relations improved, GDP growth and public trust increased.");
+        }
+
+        function brainDrain() {
+            literacyRate = Math.max(0, literacyRate - 0.003); // Educated people leaving reduces effective literacy
+            healthcareQuality = Math.max(0, healthcareQuality - 1); // Doctors and nurses emigrating affects healthcare
+            gdpGrowthRate -= 0.004;
+
+            logEvent("Brain Drain! Literacy and healthcare quality slightly decreased, GDP growth slowed.");
+        }
+
+        function youthProtests() {
+            politicalUnrest += 8;
+            publicTrust -= 5;
+            gdpGrowthRate -= 0.002;
+            unemploymentRate += 0.002; // Protests can disrupt economic activity
+
+            logEvent("Youth Protests! Political unrest increased, public trust decreased, GDP growth slightly slowed, unemployment slightly increased.");
+        }
+
+
+        // Game Loop
+        function gameLoop() {
+            generateRandomEvent();
+
+            // Passive effects
+            gdp *= (1 + gdpGrowthRate);
+            populationCount += Math.round(populationCount * 0.009); // Approx 0.9% population growth per turn (adjust as needed)
+            ruralPopulation = Math.round(ruralPopulation + (populationCount * 0.009 * (ruralPopulation / populationCount)));
+            urbanPopulation = Math.round(urbanPopulation + (populationCount * 0.009 * (urbanPopulation / populationCount)));
+
+
+            // Environmental degradation (if unchecked)
+            if (pollutionLevel < 95) {
+                pollutionLevel += 0.3;
+                forestCover = Math.max(0, forestCover - 0.05); // Forest cover slowly decreases if pollution is unchecked
+            }
+
+
+            updateDisplay();
+
+            // Game Over condition
+            if (pollutionLevel >= 98 || publicTrust <= 5 || gdp <= 0 || povertyRate >= 0.95 || politicalUnrest >= 90) {
+                logEvent("Game Over! Catastrophic conditions reached. Simulation ended.");
+                clearInterval(gameInterval);
+                if (pollutionLevel >= 98) logEvent("Cause: Runaway Pollution");
+                if (publicTrust <= 5) logEvent("Cause: Complete Loss of Public Trust");
+                if (gdp <= 0) logEvent("Cause: Economic Collapse");
+                if (povertyRate >= 0.95) logEvent("Cause: Widespread Poverty");
+                if (politicalUnrest >= 90) logEvent("Cause: Extreme Political Instability");
+            }
+        }
+
+        // Event Logging
+        function logEvent(message) {
+            const eventLog = document.getElementById("event-log").querySelector("ul");
+            const newEvent = document.createElement("li");
+            newEvent.innerText = `Turn ${gameTurn}: ${message}`;
+            eventLog.appendChild(newEvent);
+
+            if (eventLog.children.length > 15) {
+                eventLog.removeChild(eventLog.firstChild);
+            }
+             eventLog.scrollTop = eventLog.scrollHeight; // Auto-scroll to bottom
+        }
+
+
+        // Start the game
+        window.onload = initializeGame;
+        let gameTurn = 0;
+        const gameInterval = setInterval(() => {
+            gameTurn++;
+            gameLoop();
+        }, 5000); // Every 5 seconds (1 turn)
+
+    </script>
+</body>
+</html>

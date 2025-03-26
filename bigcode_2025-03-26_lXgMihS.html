@@ -1,0 +1,407 @@
+html
+ <!DOCTYPE html>
+ <html>
+ <head>
+  <title>Anti-Adolf Hitler Simulator</title>
+  <style>
+  body {
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f4f4f4;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  }
+ 
+
+  h1 {
+  text-align: center;
+  margin-top: 20px;
+  color: #222;
+  }
+ 
+
+  #simulator-container {
+  width: 80%;
+  max-width: 960px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+ 
+
+  #world-state, #action-panel, #event-log {
+  border: 1px solid #ddd;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+  }
+ 
+
+  #world-state h2, #action-panel h2, #event-log h2 {
+  margin-top: 0;
+  color: #555;
+  }
+ 
+
+  #world-state p {
+  margin: 8px 0;
+  }
+ 
+
+  #action-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch; /* Make buttons full width */
+  }
+ 
+
+  #action-panel button {
+  margin: 5px 0;
+  padding: 10px 15px;
+  cursor: pointer;
+  border: none;
+  border-radius: 5px;
+  background-color: #007bff;
+  color: white;
+  font-size: 1rem;
+  transition: background-color 0.3s ease;
+  }
+ 
+
+  #action-panel button:hover {
+  background-color: #0056b3;
+  }
+ 
+
+  #event-log {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  }
+ 
+
+  #event-list {
+  list-style-type: none;
+  padding: 0;
+  }
+ 
+
+  #event-list li {
+  padding: 8px 10px;
+  border-bottom: 1px solid #eee;
+  font-size: 0.9rem;
+  }
+ 
+
+  #event-list li:last-child {
+  border-bottom: none;
+  }
+  </style>
+ </head>
+ <body>
+  <div id="simulator-container">
+  <h1>Anti-Adolf Hitler Simulator</h1>
+ 
+
+  <div id="world-state">
+  <h2>World State (1932-1945)</h2>
+  <p>Year: <span id="year">1932</span></p>
+  <p>Germany: <span id="germany-stability">Stable</span></p>
+  <p>Allies: <span id="allies-strength">Weak</span></p>
+  <p>Public Opinion: <span id="public-opinion">Neutral</span></p>
+  <p>Technology Level: <span id="technology-level">Basic</span></p>
+  </div>
+ 
+
+  <div id="action-panel">
+  <h2>Your Actions</h2>
+  <button onclick="fundOpposition()">Fund Opposition in Germany</button>
+  <button onclick="smearCampaign()">Launch Smear Campaign</button>
+  <button onclick="armAllies()">Secretly Arm Allies</button>
+  <button onclick="infiltrateGovernment()">Infiltrate German Government</button>
+  <button onclick="supportJewishRefugees()">Support Jewish Refugees</button>
+  <button onclick="warnWorldLeaders()">Warn World Leaders</button>
+  <button onclick="influencePublicOpinion()">Influence Public Opinion</button>
+  <button onclick="sabotageGermanIndustry()">Sabotage German Industry</button>
+  <button onclick="assassinationAttempt()">Attempt Assassination (RISKY)</button>
+  <button onclick="investInTechnology()">Invest in Allied Technology</button>
+  </div>
+ 
+
+  <div id="event-log">
+  <h2>Event Log</h2>
+  <ul id="event-list"></ul>
+  </div>
+  </div>
+ 
+
+  <script>
+  // --- State Variables ---
+  let year = 1932;
+  let germanyStability = 0.5; // 0 (Collapse) to 1 (Total Control)
+  let alliesStrength = 0.2; // 0 (Defeated) to 1 (Dominant)
+  let publicOpinion = 0.5; // 0 (Pro-Hitler) to 1 (Anti-Hitler)
+  let technologyLevel = 0.1; // 0 (Primitive) to 1 (Advanced)
+  let gameRunning = true;
+ 
+
+  // --- DOM Elements ---
+  const yearDisplay = document.getElementById("year");
+  const germanyStabilityDisplay = document.getElementById("germany-stability");
+  const alliesStrengthDisplay = document.getElementById("allies-strength");
+  const publicOpinionDisplay = document.getElementById("public-opinion");
+  const technologyLevelDisplay = document.getElementById("technology-level");
+  const eventList = document.getElementById("event-list");
+ 
+
+  // --- Helper Functions ---
+  function logEvent(message) {
+  const li = document.createElement("li");
+  li.textContent = message;
+  eventList.prepend(li); // Add to the beginning of the list
+  }
+ 
+
+  function updateDisplay() {
+  yearDisplay.textContent = year;
+  germanyStabilityDisplay.textContent = getStabilityDescription(germanyStability);
+  alliesStrengthDisplay.textContent = getAlliesStrengthDescription(alliesStrength);
+  publicOpinionDisplay.textContent = getPublicOpinionDescription(publicOpinion);
+  technologyLevelDisplay.textContent = getTechnologyDescription(technologyLevel);
+  }
+ 
+
+  function getStabilityDescription(stability) {
+  if (stability < 0.2) return "Near Collapse";
+  if (stability < 0.4) return "Unstable";
+  if (stability < 0.6) return "Somewhat Stable";
+  if (stability < 0.8) return "Stable";
+  return "Total Control";
+  }
+ 
+
+  function getAlliesStrengthDescription(strength) {
+  if (strength < 0.2) return "Very Weak";
+  if (strength < 0.4) return "Weak";
+  if (strength < 0.6) return "Moderate";
+  if (strength < 0.8) return "Strong";
+  return "Dominant";
+  }
+ 
+
+  function getPublicOpinionDescription(opinion) {
+  if (opinion < 0.2) return "Strongly Pro-Hitler";
+  if (opinion < 0.4) return "Leaning Pro-Hitler";
+  if (opinion < 0.6) return "Neutral";
+  if (opinion < 0.8) return "Leaning Anti-Hitler";
+  return "Strongly Anti-Hitler";
+  }
+ 
+
+  function getTechnologyDescription(level) {
+  if (level < 0.2) return "Primitive";
+  if (level < 0.4) return "Basic";
+  if (level < 0.6) return "Moderate";
+  if (level < 0.8) return "Advanced";
+  return "Cutting Edge";
+  }
+ 
+
+  // --- Action Functions ---
+ 
+
+  function fundOpposition() {
+  if (!gameRunning) return;
+  let effect = Math.random() * 0.05; // Small effect
+  effect *= (1 + technologyLevel * 0.5); //Tech level improves effects
+  germanyStability += effect;
+  publicOpinion += effect * 0.2; // Slight positive impact on public opinion
+  germanyStability = Math.min(germanyStability, 1); // Cap at 1
+  publicOpinion = Math.min(publicOpinion, 1);
+  logEvent("Funded opposition groups in Germany.  Stability increased slightly.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function smearCampaign() {
+  if (!gameRunning) return;
+  let effect = Math.random() * 0.1;
+  effect *= (1 + technologyLevel * 0.5); //Tech level improves effects
+  germanyStability -= effect;
+  publicOpinion += effect * 0.5; // Greater impact on public opinion
+  germanyStability = Math.max(germanyStability, 0); // Floor at 0
+  publicOpinion = Math.min(publicOpinion, 1);
+  logEvent("Launched a smear campaign against Hitler.  Stability decreased, public opinion improved.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function armAllies() {
+  if (!gameRunning) return;
+  let effect = Math.random() * 0.07;
+  effect *= (1 + technologyLevel); //Tech level improves effects
+  alliesStrength += effect;
+  alliesStrength = Math.min(alliesStrength, 1);
+  logEvent("Secretly armed Allied forces.  Allies strength increased.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function infiltrateGovernment() {
+  if (!gameRunning) return;
+  let effect = Math.random() * 0.04;
+  effect *= (1 + technologyLevel * 0.5); //Tech level improves effects
+  germanyStability -= effect;
+  publicOpinion += effect * 0.3;
+  germanyStability = Math.max(germanyStability, 0);
+  publicOpinion = Math.min(publicOpinion, 1);
+  logEvent("Infiltrated the German government.  Stability decreased slightly, public opinion improved.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function supportJewishRefugees() {
+  if (!gameRunning) return;
+  let effect = 0.05 * (1 + technologyLevel * 0.25);
+  publicOpinion += effect;
+  alliesStrength += 0.02; //Small bonus for moral high ground
+  publicOpinion = Math.min(publicOpinion, 1);
+  alliesStrength = Math.min(alliesStrength, 1);
+  logEvent("Supported Jewish refugees.  Public opinion improved.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function warnWorldLeaders() {
+  if (!gameRunning) return;
+  let effect = 0.03 * (1 + technologyLevel * 0.25);
+  alliesStrength += effect;
+  publicOpinion += effect;
+  alliesStrength = Math.min(alliesStrength, 1);
+  publicOpinion = Math.min(publicOpinion, 1);
+  logEvent("Warned world leaders about Hitler's intentions.  Allies strength and public opinion improved slightly.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function influencePublicOpinion() {
+  if (!gameRunning) return;
+  let effect = Math.random() * 0.08;
+  effect *= (1 + technologyLevel); //Tech level improves effects
+  publicOpinion += effect;
+  publicOpinion = Math.min(publicOpinion, 1);
+  logEvent("Launched a propaganda campaign to influence public opinion. Public opinion improved.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function sabotageGermanIndustry() {
+  if (!gameRunning) return;
+  let effect = Math.random() * 0.12;
+  effect *= (1 + technologyLevel); //Tech level improves effects
+  germanyStability -= effect;
+  alliesStrength += effect * 0.05; // Benefit to allies from weakened Germany
+  germanyStability = Math.max(germanyStability, 0);
+  alliesStrength = Math.min(alliesStrength, 1);
+  logEvent("Sabotaged German industry.  Stability decreased significantly, allies strength increased slightly.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function assassinationAttempt() {
+  if (!gameRunning) return;
+  let chanceOfSuccess = 0.3 + (alliesStrength * 0.2) + ((1 - germanyStability) * 0.3) + (technologyLevel * 0.2); //Higher chance with stronger allies and unstable Germany
+  chanceOfSuccess = Math.min(chanceOfSuccess, 0.9); //Cap the chance of success
+ 
+
+  if (Math.random() < chanceOfSuccess) {
+  logEvent("ASSASSINATION SUCCESSFUL! Hitler is dead. The Nazi regime collapses.");
+  germanyStability = 0;
+  gameRunning = false;
+  } else {
+  logEvent("Assassination attempt failed!  Security is tightened. Allies strength decreased.");
+  alliesStrength -= 0.1;
+  alliesStrength = Math.max(alliesStrength, 0);
+  }
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  function investInTechnology() {
+  if (!gameRunning) return;
+  let cost = 0.2 / (1 + technologyLevel);  //Cost increases with current level
+  if (publicOpinion < 0.3) {
+  logEvent("Investment in technology failed. Public opinion is too low to allow such investments.");
+  return;
+  }
+  publicOpinion -= 0.3; //Requires public support
+  technologyLevel += 0.1;
+  technologyLevel = Math.min(technologyLevel, 1);
+  logEvent("Invested in Allied Technology.  Technology level improved.");
+  updateDisplay();
+  advanceYear();
+  }
+ 
+
+  // --- Game Over Condition ---
+  function checkGameOver() {
+  if (year >= 1945) {
+  logEvent("The war ends.  Final assessment:");
+  gameRunning = false;
+  //Add evaluation logic here
+  if (alliesStrength > 0.7) {
+  logEvent("The Allies Won!");
+  } else {
+  logEvent("It Was a Pyrrhic Victory");
+  }
+  }
+  if (germanyStability >= 0.95 && year > 1938) { //If Hitler consolidates power before the war starts
+  logEvent("Hitler has consolidated power. You failed to stop him!");
+  gameRunning = false;
+  }
+  if (alliesStrength <= 0.05 && year > 1940) {
+  logEvent("The Allies have fallen. Hitler has Won.");
+  gameRunning = false;
+  }
+  }
+ 
+
+  // --- Game Loop ---
+  function advanceYear() {
+  if (!gameRunning) return;
+  year++;
+ 
+
+  //Simulate yearly changes (passive)
+  germanyStability += (0.02 * (1 - publicOpinion)) - (0.01 * (1 + technologyLevel * 0.5)); //Hitler gains power based on public opinion, but always a small resistance, affected by allied tech
+  alliesStrength += 0.005 + (0.002 * technologyLevel); //Allies passively gain strength depending on tech
+  germanyStability = Math.max(0, Math.min(1, germanyStability));
+  alliesStrength = Math.max(0, Math.min(1, alliesStrength));
+ 
+
+  updateDisplay();
+  checkGameOver();
+  }
+ 
+
+  // --- Initialization ---
+  updateDisplay();
+  </script>
+ </body>
+ </html>

@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyper Realistic Mario Bros</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #5c94fc; /* Sky blue */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px; /* Adjust as needed */
+            height: 480px; /* Adjust as needed */
+            background-color: #5c94fc;
+            overflow: hidden;
+            border: 5px solid #000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .game-object {
+            position: absolute;
+            box-sizing: border-box;
+        }
+
+        #player {
+            width: 30px;
+            height: 40px;
+            background-color: #ff4122; /* Mario red */
+            border: 2px solid #800000;
+            bottom: 50px; /* Start on the ground */
+            left: 50px;
+            z-index: 10;
+            /* Simple representation */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #player::before { /* Hat */
+            content: '';
+            width: 100%;
+            height: 10px;
+            background-color: #ff4122;
+             border-bottom: 2px solid #800000;
+        }
+         #player::after { /* Overalls */
+            content: '';
+            width: 80%;
+            height: 15px;
+            background-color: #0051ff; /* Blue */
+            border-top: 2px solid #000080;
+            margin-top: 2px;
+        }
+
+
+        .ground {
+            width: 100%;
+            height: 50px;
+            background-color: #e07400; /* Brownish ground */
+            border-top: 5px solid #8b4513; /* Darker brown top */
+            bottom: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .platform {
+             background-color: #e07400; /* Brownish ground */
+             border: 3px solid #8b4513;
+             z-index: 1;
+        }
+
+        .brick {
+            width: 40px;
+            height: 40px;
+            background-color: #d95000; /* Brick color */
+            border: 2px solid #802000;
+            z-index: 2;
+             /* Basic brick pattern */
+            background-image:
+                linear-gradient(to right, rgba(128, 32, 0, 0.5) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(128, 32, 0, 0.5) 1px, transparent 1px);
+            background-size: 10px 20px;
+        }
+
+        .question-block {
+            width: 40px;
+            height: 40px;
+            background-color: #ffcc00; /* Yellow */
+            border: 3px solid #e69900;
+            z-index: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 25px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+        }
+         .question-block.hit {
+             background-color: #a0522d; /* Used block color */
+             color: #a0522d;
+             border-color: #5c2d0a;
+             text-shadow: none;
+         }
+
+        .pipe {
+            width: 60px;
+            height: 80px;
+            background-color: #00a800; /* Green */
+            border: 4px solid #006400; /* Dark green */
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            z-index: 3;
+        }
+         .pipe::before { /* Pipe top lip */
+             content: '';
+             position: absolute;
+             top: -10px;
+             left: -10px;
+             width: 80px;
+             height: 20px;
+             background-color: #00a800;
+             border: 4px solid #006400;
+             border-radius: 5px;
+         }
+
+        .goomba {
+            width: 35px;
+            height: 35px;
+            background-color: #8B4513; /* Brown */
+            border: 2px solid #50280a;
+            border-radius: 40% 40% 20% 20%;
+            bottom: 50px; /* Start on ground */
+            z-index: 5;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+        }
+         .goomba::before { /* Eyes */
+            content: '▼ ▼';
+            color: #fff;
+            font-size: 10px;
+            line-height: 10px;
+            transform: scaleY(1.5);
+            margin-bottom: 5px;
+         }
+          .goomba.squished {
+             height: 10px;
+             border-radius: 0;
+             background-color: #6b350a;
+             animation: fadeOut 0.5s forwards;
+          }
+
+        .coin {
+            width: 25px;
+            height: 25px;
+            background-color: #ffd700; /* Gold */
+            border-radius: 50%;
+            border: 2px solid #b8860b; /* Darker gold */
+            z-index: 4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 15px;
+            font-weight: bold;
+            color: #b8860b;
+            animation: spin 1s linear infinite, bounce-up 0.3s ease-out forwards;
+        }
+
+        @keyframes spin {
+            from { transform: rotateY(0deg); }
+            to { transform: rotateY(360deg); }
+        }
+         @keyframes bounce-up {
+             0% { transform: translateY(0); opacity: 0;}
+             50% { transform: translateY(-50px); opacity: 1;}
+             100% { transform: translateY(-60px); opacity: 0;}
+         }
+         @keyframes fadeOut {
+            to { opacity: 0; }
+         }
+
+        #flagpole {
+            width: 10px;
+            height: 300px;
+            background-color: #c0c0c0; /* Silver */
+            border: 2px solid #808080; /* Gray */
+            bottom: 50px;
+            z-index: 1;
+        }
+         #flag {
+             width: 30px;
+             height: 20px;
+             background-color: #fff;
+             border: 2px solid #000;
+             position: absolute;
+             top: 10px; /* Start near top */
+             left: -12px; /* Center on pole */
+             z-index: 2;
+             /* Basic representation of Mario flag */
+             display: flex;
+             justify-content: center;
+             align-items: center;
+             font-size: 12px;
+             color: red;
+         }
+         #flag::before { content: '🍄'} /* Mushroom emoji */
+
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: white;
+            text-shadow: 2px 2px 4px #000;
+            z-index: 100;
+        }
+
+        #message-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            color: white;
+            text-shadow: 3px 3px 6px #000;
+            z-index: 101;
+            display: none; /* Hidden initially */
+            text-align: center;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="score-display">Score: 0</div>
+        <div id="message-display"></div>
+
+        <div id="player" class="game-object"></div>
+
+        <!-- Level Elements -->
+        <div class="ground game-object"></div>
+
+        <!-- Platforms -->
+        <div class="platform game-object" style="bottom: 50px; left: 0; width: 680px; height: 50px;"></div>
+        <div class="platform game-object" style="bottom: 50px; left: 740px; width: 60px; height: 50px;"></div>
+        <!-- Gap -->
+        <div class="platform game-object" style="bottom: 50px; left: 860px; width: 300px; height: 50px;"></div>
+
+        <!-- Blocks -->
+        <div class="brick game-object" style="bottom: 150px; left: 200px;"></div>
+        <div id="q1" class="question-block game-object" style="bottom: 150px; left: 240px;">?</div>
+        <div class="brick game-object" style="bottom: 150px; left: 280px;"></div>
+        <div id="q2" class="question-block game-object" style="bottom: 150px; left: 320px;">?</div>
+        <div class="brick game-object" style="bottom: 150px; left: 360px;"></div>
+        <div id="q3" class="question-block game-object" style="bottom: 150px; left: 400px;">?</div>
+
+        <div class="brick game-object" style="bottom: 250px; left: 320px;"></div>
+
+        <div class="brick game-object" style="bottom: 150px; left: 900px;"></div>
+        <div class="brick game-object" style="bottom: 150px; left: 940px;"></div>
+        <div id="q4" class="question-block game-object" style="bottom: 150px; left: 980px;">?</div>
+
+
+        <!-- Pipes -->
+        <div class="pipe game-object" style="bottom: 50px; left: 500px;"></div>
+        <div class="pipe game-object" style="bottom: 50px; left: 620px; height: 100px;"></div>
+
+        <!-- Enemies -->
+        <div id="goomba1" class="goomba game-object" style="left: 400px;"></div>
+        <div id="goomba2" class="goomba game-object" style="left: 920px;"></div>
+
+        <!-- Goal -->
+        <div id="flagpole" class="game-object" style="left: 1100px;">
+             <div id="flag" class="game-object"></div>
+        </div>
+         <div class="brick game-object" style="bottom: 50px; left: 1105px; width: 40px; height: 40px; background-color: #a0522d; border-color: #5c2d0a;"></div>
+
+
+        <!-- Add more game elements here -->
+
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const scoreDisplay = document.getElementById('score-display');
+        const messageDisplay = document.getElementById('message-display');
+        const gameWidth = gameContainer.offsetWidth;
+        const gameHeight = gameContainer.offsetHeight;
+
+        let playerX = 50;
+        let playerY = 50; // Bottom position
+        let playerVelX = 0;
+        let playerVelY = 0;
+        let isJumping = false;
+        let onGround = true;
+        let score = 0;
+        let gameOver = false;
+        let gameWon = false;
+
+        const gravity = 0.6;
+        const moveSpeed = 5;
+        const jumpPower = 12;
+        const terminalVelocity = 15;
+
+        const keys = {
+            left: false,
+            right: false,
+            up: false
+        };
+
+        // --- Level Data ---
+        // Convert static HTML elements to a more dynamic structure
+        const staticObjects = [];
+        document.querySelectorAll('.game-object:not(#player):not(#score-display):not(#message-display):not(#flag)').forEach(el => {
+            if (!el.classList.contains('goomba')) { // Exclude enemies initially
+                staticObjects.push({
+                    element: el,
+                    x: parseInt(el.style.left || 0),
+                    y: parseInt(el.style.bottom || 0), // Using bottom for consistency
+                    width: el.offsetWidth,
+                    height: el.offsetHeight,
+                    type: el.classList.contains('ground') ? 'ground' :
+                          el.classList.contains('platform') ? 'platform' :
+                          el.classList.contains('brick') ? 'brick' :
+                          el.classList.contains('question-block') ? 'question' :
+                          el.classList.contains('pipe') ? 'pipe' :
+                          el.id === 'flagpole' ? 'flagpole' : 'unknown',
+                    isHit: false, // For question blocks
+                });
+            }
+        });
+
+         // --- Enemy Data ---
+         const enemies = [];
+         document.querySelectorAll('.goomba').forEach(el => {
+            enemies.push({
+                element: el,
+                x: parseInt(el.style.left || 0),
+                y: parseInt(el.style.bottom || 0),
+                width: el.offsetWidth,
+                height: el.offsetHeight,
+                velX: -1, // Start moving left
+                velY: 0,
+                onGround: true,
+                isSquished: false,
+                squishTimer: 0,
+            });
+        });
+
+        // --- Flag ---
+        const flag = document.getElementById('flag');
+        const flagpole = staticObjects.find(obj => obj.type === 'flagpole');
+        let flagY = flagpole ? flagpole.height - flag.offsetHeight - 10 : 270; // Initial flag top position relative to pole bottom
+
+
+        // --- Helper Functions ---
+        function updatePlayerPosition() {
+            player.style.left = `${playerX}px`;
+            player.style.bottom = `${playerY}px`;
+        }
+
+        function updateEnemyPosition(enemy) {
+            enemy.element.style.left = `${enemy.x}px`;
+            enemy.element.style.bottom = `${enemy.y}px`;
+        }
+
+        function updateScore() {
+            scoreDisplay.textContent = `Score: ${score}`;
+        }
+
+         function showMessage(msg) {
+             messageDisplay.textContent = msg;
+             messageDisplay.style.display = 'block';
+         }
+
+         function hideMessage() {
+             messageDisplay.style.display = 'none';
+         }
+
+        function isColliding(rect1, rect2) {
+             // Simple AABB collision detection
+             // rect = { x, y, width, height } (y is bottom position)
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        }
+
+        function spawnCoin(x, y) {
+            const coin = document.createElement('div');
+            coin.className = 'coin game-object';
+            coin.textContent = '$';
+            coin.style.left = `${x}px`;
+            coin.style.bottom = `${y + 40}px`; // Spawn above block
+            gameContainer.appendChild(coin);
+            score += 100;
+            updateScore();
+
+            // Remove coin after animation
+            setTimeout(() => {
+                if (gameContainer.contains(coin)) {
+                     gameContainer.removeChild(coin);
+                }
+            }, 300); // Match bounce-up animation duration
+        }
+
+        function hitBlock(block) {
+            if (block.type === 'question' && !block.isHit) {
+                block.isHit = true;
+                block.element.classList.add('hit');
+                block.element.textContent = ''; // Remove '?'
+                spawnCoin(block.x, block.y);
+            } else if (block.type === 'brick') {
+                // Simple break effect - could be improved
+                 if(gameContainer.contains(block.element)) {
+                     gameContainer.removeChild(block.element);
+                     // Remove from staticObjects array too to prevent further collision checks
+                     const index = staticObjects.indexOf(block);
+                     if (index > -1) {
+                         staticObjects.splice(index, 1);
+                     }
+                     score += 50;
+                     updateScore();
+                 }
+
+            }
+        }
+
+        function playerDie() {
+            if (!gameOver) {
+                 console.log("Player died!");
+                 gameOver = true;
+                 player.style.backgroundColor = '#888'; // Indicate death
+                 player.style.animation = 'fadeOut 1s forwards';
+                 showMessage("GAME OVER");
+                 // Could add restart logic here
+            }
+        }
+
+         function enemyDie(enemy) {
+             if (!enemy.isSquished) {
+                 enemy.isSquished = true;
+                 enemy.velX = 0;
+                 enemy.element.classList.add('squished');
+                 enemy.element.style.height = '10px'; // Override class change for immediate effect
+                 enemy.element.textContent = ''; // Remove eyes
+                 score += 200;
+                 updateScore();
+                 enemy.squishTimer = Date.now();
+                 // Make player bounce slightly
+                 playerVelY = 6;
+             }
+         }
+
+        function winGame() {
+            if (!gameWon && !gameOver) {
+                gameWon = true;
+                showMessage("YOU WIN!");
+                // Add slide down flag animation
+                let flagInterval = setInterval(() => {
+                    flagY -= 5;
+                    if (flagY <= 10) { // Stop near bottom
+                        flagY = 10;
+                        clearInterval(flagInterval);
+                    }
+                    flag.style.top = `${flagpole.height - flagY - flag.offsetHeight}px`; // Adjust based on pole height
+                }, 50);
+            }
+        }
+
+
+        // --- Game Loop ---
+        function gameLoop(timestamp) {
+            if (gameOver || gameWon) {
+                // Stop game logic, but keep rendering if needed for animations
+                 requestAnimationFrame(gameLoop);
+                 return;
+            }
+
+            // --- Handle Input ---
+            playerVelX = 0;
+            if (keys.left) {
+                playerVelX = -moveSpeed;
+            }
+            if (keys.right) {
+                playerVelX = moveSpeed;
+            }
+            if (keys.up && !isJumping && onGround) {
+                playerVelY = jumpPower;
+                isJumping = true;
+                onGround = false;
+            }
+
+            // --- Update Player ---
+            // Apply gravity
+            playerVelY -= gravity;
+            if (playerVelY < -terminalVelocity) {
+                 playerVelY = -terminalVelocity;
+            }
+
+            // Calculate potential new position
+            let nextPlayerX = playerX + playerVelX;
+            let nextPlayerY = playerY + playerVelY;
+
+            // Basic world bounds
+            if (nextPlayerX < 0) nextPlayerX = 0;
+             // Allow moving off left slightly for scrolling later (not implemented here)
+            // if (nextPlayerX + player.offsetWidth > gameWidth) nextPlayerX = gameWidth - player.offsetWidth;
+
+
+            // --- Collision Detection ---
+            onGround = false;
+            const playerRect = { x: nextPlayerX, y: playerY, width: player.offsetWidth, height: player.offsetHeight };
+            const playerNextYRect = { x: playerX, y: nextPlayerY, width: player.offsetWidth, height: player.offsetHeight };
+
+
+            // Vertical Collision
+            staticObjects.forEach(obj => {
+                const objRect = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+
+                 if (isColliding(playerNextYRect, objRect)) {
+                     // Check if moving down (hitting top of object)
+                     if (playerVelY < 0 && playerY >= obj.y + obj.height) {
+                         nextPlayerY = obj.y + obj.height; // Place player on top
+                         playerVelY = 0;
+                         onGround = true;
+                         isJumping = false;
+                     }
+                     // Check if moving up (hitting bottom of object)
+                     else if (playerVelY > 0 && playerY + player.offsetHeight <= obj.y) {
+                          nextPlayerY = obj.y - player.offsetHeight; // Place player below
+                          playerVelY = 0;
+                          hitBlock(obj); // Trigger block hit
+                     }
+                 }
+            });
+
+             // Check ground separately if needed (included in platforms now)
+             if (nextPlayerY <= 50) { // Assuming ground height is 50
+                 nextPlayerY = 50;
+                 playerVelY = 0;
+                 onGround = true;
+                 isJumping = false;
+             }
+
+
+            // Horizontal Collision
+            playerRect.y = nextPlayerY; // Use the resolved Y position for horizontal check
+            staticObjects.forEach(obj => {
+                 const objRect = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+
+                 if (isColliding(playerRect, objRect)) {
+                     // Check if moving right (hitting left side of object)
+                      if (playerVelX > 0 && playerX + player.offsetWidth <= obj.x) {
+                         nextPlayerX = obj.x - player.offsetWidth;
+                         playerVelX = 0;
+                     }
+                     // Check if moving left (hitting right side of object)
+                      else if (playerVelX < 0 && playerX >= obj.x + obj.width) {
+                         nextPlayerX = obj.x + obj.width;
+                         playerVelX = 0;
+                     }
+                 }
+            });
+
+
+             // --- Update Enemy Logic ---
+             enemies.forEach(enemy => {
+                if (enemy.isSquished) {
+                    // Remove after a delay
+                    if (Date.now() - enemy.squishTimer > 500) { // 0.5 second fade
+                        if (gameContainer.contains(enemy.element)) {
+                            gameContainer.removeChild(enemy.element);
+                        }
+                        // Remove from enemies array? Or mark as inactive
+                    }
+                    return; // Skip movement if squished
+                }
+
+                 // Basic gravity for enemies (if needed, currently they stick to ground)
+                if (!enemy.onGround) {
+                    enemy.velY -= gravity;
+                    enemy.y += enemy.velY;
+                     // Check ground collision for enemy
+                    if (enemy.y <= 50) {
+                        enemy.y = 50;
+                        enemy.velY = 0;
+                        enemy.onGround = true;
+                    }
+                }
+
+                 // Movement & Collision with static objects
+                 let nextEnemyX = enemy.x + enemy.velX;
+                 enemy.onGround = false; // Assume not on ground until checked
+
+                 const enemyRect = { x: nextEnemyX, y: enemy.y, width: enemy.width, height: enemy.height };
+
+                 let wallCollision = false;
+                 staticObjects.forEach(obj => {
+                     const objRect = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+
+                     // Check horizontal collision (walls, pipes)
+                      if (isColliding(enemyRect, objRect)) {
+                          if (obj.type === 'pipe' || obj.type === 'brick' || obj.type === 'question') {
+                             wallCollision = true;
+                             nextEnemyX = enemy.x; // Stop movement
+                          }
+                      }
+
+                      // Check vertical collision (ground/platform below)
+                      const enemyGroundCheckRect = { x: enemy.x, y: enemy.y - 1, width: enemy.width, height: 1 };
+                      if(isColliding(enemyGroundCheckRect, objRect)) {
+                          if(obj.type === 'ground' || obj.type === 'platform' || obj.type === 'pipe' || obj.type === 'brick' || obj.type === 'question') {
+                            enemy.onGround = true;
+                          }
+                      }
+                 });
+
+                  // Simple edge detection (turn around before falling off) - needs refinement
+                 let leadingEdgeX = enemy.velX > 0 ? nextEnemyX + enemy.width : nextEnemyX;
+                 let groundBelowLeadingEdge = false;
+                 staticObjects.forEach(obj => {
+                      const objRect = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+                      const checkRect = {x: leadingEdgeX, y: enemy.y - 5, width: 1, height: 5}; // Check slightly below and ahead
+                      if (isColliding(checkRect, objRect) && (obj.type === 'ground' || obj.type === 'platform' || obj.type === 'pipe' || obj.type === 'brick' || obj.type === 'question')) {
+                          groundBelowLeadingEdge = true;
+                      }
+                  });
+
+                  if (!groundBelowLeadingEdge && enemy.onGround) {
+                      // If on ground but no ground ahead, turn around
+                       wallCollision = true; // Treat edge like a wall
+                  }
+
+
+                 if (wallCollision) {
+                     enemy.velX *= -1; // Reverse direction
+                     nextEnemyX = enemy.x + enemy.velX; // Move slightly in new direction
+                 }
+
+                 enemy.x = nextEnemyX;
+
+
+                 // Player-Enemy Collision
+                 const playerCurrentRect = { x: playerX, y: playerY, width: player.offsetWidth, height: player.offsetHeight }; // Use current player pos for this check
+                 const enemyCurrentRect = { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height };
+
+                 if (isColliding(playerCurrentRect, enemyCurrentRect)) {
+                    // Check if player is landing on top of enemy
+                    // Player's bottom edge is slightly above enemy's top edge, and player is moving down
+                    if (playerVelY < 0 && (playerY > enemy.y + enemy.height * 0.5) ) {
+                         enemyDie(enemy);
+                    } else {
+                         playerDie(); // Player hit side or bottom
+                    }
+                 }
+
+                 updateEnemyPosition(enemy);
+             });
+
+            // Finalize player position
+            playerX = nextPlayerX;
+            playerY = nextPlayerY;
+
+            // --- Check Win Condition ---
+            const playerFinalRect = { x: playerX, y: playerY, width: player.offsetWidth, height: player.offsetHeight };
+            if (flagpole && isColliding(playerFinalRect, { x: flagpole.x, y: flagpole.y, width: flagpole.width, height: flagpole.height })) {
+                 winGame();
+                 // Optional: Make player grab pole - stop horizontal movement
+                 playerVelX = 0;
+                 playerX = flagpole.x - player.offsetWidth / 2 + flagpole.width / 2; // Center on pole roughly
+            }
+
+
+             // --- Update Camera/Scroll (Basic - just keep player roughly centered if they move right) ---
+            const scrollThreshold = 300;
+            const scrollAmount = playerX - scrollThreshold;
+            if (scrollAmount > 0) {
+                gameContainer.scrollLeft = scrollAmount;
+                // Keep score display fixed relative to viewport
+                 scoreDisplay.style.transform = `translateX(${scrollAmount}px)`;
+                 messageDisplay.style.transform = `translate(-50%, -50%) translateX(${scrollAmount}px)`;
+            } else {
+                 gameContainer.scrollLeft = 0;
+                 scoreDisplay.style.transform = `translateX(0px)`;
+                 messageDisplay.style.transform = `translate(-50%, -50%) translateX(0px)`;
+            }
+
+
+            // Update display
+            updatePlayerPosition();
+
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+            if (gameOver || gameWon) return;
+            switch (e.key) {
+                case 'ArrowLeft':
+                case 'a':
+                    keys.left = true;
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    keys.right = true;
+                    break;
+                case 'ArrowUp':
+                case 'w':
+                case ' ': // Space bar
+                    keys.up = true;
+                    break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+             if (gameOver || gameWon) return;
+            switch (e.key) {
+                case 'ArrowLeft':
+                case 'a':
+                    keys.left = false;
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    keys.right = false;
+                    break;
+                case 'ArrowUp':
+                case 'w':
+                case ' ': // Space bar
+                    keys.up = false;
+                    break;
+            }
+        });
+
+        // --- Start Game ---
+        updateScore();
+        updatePlayerPosition();
+        enemies.forEach(updateEnemyPosition);
+        requestAnimationFrame(gameLoop);
+
+    </script>
+
+</body>
+</html>

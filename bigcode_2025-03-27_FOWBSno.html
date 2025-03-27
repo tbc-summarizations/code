@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>___HENRY X PILLOW: The Game.___</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: #333;
+            border: 2px solid #fff;
+            overflow: hidden;
+        }
+        #player {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: #00f; /* Blue square for Henry */
+            bottom: 10px;
+            left: 385px;
+        }
+        .enemy-clyde {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-bottom: 30px solid #f00; /* Red triangle for Clyde */
+        }
+        .boss {
+            position: absolute;
+            font-size: 40px; /* Use emojis or larger shapes */
+            text-align: center;
+        }
+        .projectile {
+            position: absolute;
+            width: 50px;
+            height: 20px;
+            background-color: #ff0;
+            color: #000;
+            font-size: 10px;
+            text-align: center;
+            line-height: 20px;
+            border: 1px solid black;
+        }
+        #dialogue-box {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            height: 100px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 1px solid #fff;
+            padding: 10px;
+            font-size: 16px;
+            display: none; /* Hidden by default */
+            z-index: 10;
+        }
+        #health-bar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 200px;
+            height: 20px;
+            background-color: #555;
+            border: 1px solid #fff;
+        }
+        #health-fill {
+            width: 100%;
+            height: 100%;
+            background-color: #0f0;
+        }
+        #boss-health-bar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 300px;
+            height: 20px;
+            background-color: #555;
+            border: 1px solid #fff;
+            display: none; /* Hidden by default */
+        }
+        #boss-health-fill {
+            width: 100%;
+            height: 100%;
+            background-color: #f00;
+        }
+        #message-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border: 2px solid #fff;
+            font-size: 24px;
+            text-align: center;
+            display: none; /* Hidden by default */
+            z-index: 20;
+        }
+        .football-cannon {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: gray;
+            border: 2px solid black;
+        }
+        .football {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: brown;
+            border-radius: 50%;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="player"></div>
+        <div id="health-bar">
+            <div id="health-fill"></div>
+        </div>
+        <div id="boss-health-bar">
+            <div id="boss-health-fill"></div>
+        </div>
+        <div id="dialogue-box"></div>
+        <div id="message-display"></div>
+        <!-- Enemies, Bosses, Projectiles, Cannons will be added dynamically -->
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const dialogueBox = document.getElementById('dialogue-box');
+        const healthFill = document.getElementById('health-fill');
+        const bossHealthBar = document.getElementById('boss-health-bar');
+        const bossHealthFill = document.getElementById('boss-health-fill');
+        const messageDisplay = document.getElementById('message-display');
+
+        const gameWidth = 800;
+        const gameHeight = 600;
+        const playerSpeed = 5;
+        const projectileSpeed = 8;
+        const enemySpeed = 1.5;
+        const footballSpeed = 6;
+
+        let playerHealth = 100;
+        let playerMaxHealth = 100;
+        let benchodGunEnabled = false;
+        let clydeResistance = 0; // 0 = no resistance, 1 = some resistance
+        let footballCannonsActive = false;
+
+        let gameState = 'start'; // start, dialogue, explore, boss_fight
+        let currentBoss = null;
+        let bossMaxHealth = 0;
+        let bossHealth = 0;
+        let bossElement = null;
+        let bossIndex = -1; // Index for tracking which boss we are fighting
+
+        let keys = {};
+        let projectiles = [];
+        let enemies = [];
+        let footballCannons = [];
+        let footballs = [];
+
+        let dialogueQueue = [];
+        let dialogueIndex = 0;
+
+        const bosses = [
+            { name: 'Clyde', emoji: '😠', health: 100, introDialogue: ["Henry: I want to cuddle pillow.", "Clyde: What?! No, Henry, that's... unwise!", "Henry: I don't care, Clyde. I must.", "Clyde: I can't let you do that! Prepare yourself!"], defeatDialogue: ["Clyde: Agh... you... haven't heard the last of me... *dissipates*"], speed: 2 },
+            { name: 'Meeth', emoji: '🤔', health: 150, introDialogue: ["Meeth: Henry? What are you doing?", "Henry: Going to cuddle Pillow.", "Meeth: But... why? Clyde tried to warn you.", "Henry: He failed. Stand aside, Meeth.", "Meeth: I can't! For your own good!"], defeatDialogue: ["Meeth: Urgh... Henry... be careful..."], speed: 2.5 },
+            { name: 'SC0J', emoji: '❓', health: 80, introDialogue: ["SC0J: Hold it right there!", "Henry: Who are you?", "SC0J: Name's SC0J. Heard you're causing trouble. Pillow isn't bad, you know. Maybe reconsider?", "Henry: ...Maybe. But I'm still going.", "SC0J: Then I guess I have to... uh... gently stop you?"], defeatDialogue: ["SC0J: Ow! Okay, okay! Just... think about what I said!"], speed: 1.5 },
+            { name: 'Frank', emoji: '🦴', health: 200, introDialogue: ["Frank: Grrr... Henry!", "Henry: Frank? You too?", "Frank: Can't let you go near Pillow! It's just... wrong!", "Henry: We'll see about that!"], defeatDialogue: ["Frank: Woof... defeated..."], speed: 3 }, // Placeholder Frank
+            { name: 'Admiral', emoji: '⚽', health: 250, introDialogue: ["Admiral: HALT! You will not pass!", "Henry: Admiral! Out of my way!", "Admiral: Never! Defend the Pillow! Like defending the goal!", "Henry: This isn't football!", "Admiral: Everything is football! En garde!"], defeatDialogue: ["Admiral: GOOOOAAAL... against me... *Fades* Cannons activated!"], speed: 3 },
+            { name: 'BDYT', emoji: '🚨', health: 220, introDialogue: ["BDYT: WEE WOO WEE WOO! Intruder alert!", "Henry: BDYT, turn off the sirens.", "BDYT: Negative! Threat detected: You!", "Henry: This is getting ridiculous."], defeatDialogue: ["BDYT: System... Malfunction... *Powers down*"], speed: 2.8 },
+            { name: 'Memo', emoji: '💾', health: 180, introDialogue: ["Memo: Bzzzt... Analyzing Henry...", "Henry: Memo? What's your function here?", "Memo: Directive: Protect Pillow. You are... interference.", "Henry: Just data to you?"], defeatDialogue: ["Memo: Data... corrupted..."], speed: 2.5 }, // Placeholder Memo
+            { name: 'Adam', emoji: '💻', health: 300, introDialogue: ["Adam: // TODO: Stop Henry", "Henry: Adam! Are you coding a wall?", "Adam: Precisely. If (Henry.approachesPillow) { block(); } else { proceed(); } You are approaching.", "Henry: Your logic is flawed!", "Adam: Exception! Initiating combat subroutine!"], defeatDialogue: ["Adam: NullPointerException... Henry... wins..."], speed: 3.5 },
+            { name: 'HappyMan', emoji: '🐔', health: 350, introDialogue: ["HappyMan: Bawk Bawk! Strongest Chicken blocks your path!", "Henry: A chicken?", "HappyMan: Not just *A* chicken! The STRONGEST! Pillow is safe with me!", "Henry: We'll see about that, feather duster!"], defeatDialogue: ["HappyMan: Cluck... defeated... Strongest... but not enough..."], speed: 4 },
+            { name: 'Alan', emoji: '🔬', health: 280, introDialogue: ["Alan: Fascinating. Your determination is illogical.", "Henry: Alan. Step aside.", "Alan: Hypothesis: Direct confrontation will alter your trajectory. Experiment commencing!", "Henry: I'm not your test subject!"], defeatDialogue: ["Alan: Results... inconclusive... Retreating..."], speed: 3.2 }, // Placeholder Alan
+            { name: 'Dekoder', emoji: 'λ', health: 320, introDialogue: ["Dekoder: Freeman... I mean, Henry! Stop right there!", "Henry: Dekoder? What's with the crowbar?", "Dekoder: It's a standard issue Pillow Protection Device! Don't make me use it!", "Henry: This isn't Half-Life!", "Dekoder: Isn't it? Prepare for unforeseen consequences!"], defeatDialogue: ["Dekoder: Resonance... cascade... failure... *Fades*"], speed: 3.8 },
+            { name: 'Nagg', emoji: '🗣️', health: 150, introDialogue: ["Nagg: Henry! Henry! HEEEENRY! Listen! You CAN'T do this! It's bad! Really bad! Did you hear me? Henry?", "Henry: NAGG! Enough!", "Nagg: But Pillow! And Clyde! And everyone! Just STOP! Please? Pretty please? Henry?", "Henry: *Sigh* Let's get this over with."], defeatDialogue: ["Nagg: Owwie! Fine! Go! But I TOLD YOU SO! Remember that! I told you!"], speed: 2 },
+            { name: 'Uami Bosim', emoji: '👑', health: 400, introDialogue: ["Uami Bosim: So, my creation... you've come far.", "Henry: Uami? You're behind this?", "Uami Bosim: I created this world, Henry. Pillow included. And I cannot allow this union.", "Henry: You created me to stop me?", "Uami Bosim: It seems my parameters were... flawed. Let us correct that."], defeatDialogue: ["Uami Bosim: How...? My own... creation... *Static*"], speed: 4 },
+            { name: 'Kamran', emoji: '💖', health: 500, introDialogue: ["Kamran: HENRY! STOP!", "Henry: Kamran!? You're the final boss?", "Kamran: No, Henry! I'm here to SAVE you! This path... it leads to ruin!", "Henry: But... Pillow...", "Kamran: There's more going on than you understand! You have to trust me! If you won't listen... I'll HAVE to stop you!"], defeatDialogue: ["Kamran: Henry... please... reconsider... *Fades momentarily before final sequence (not implemented)*"], speed: 4.5 } // Final Boss
+        ];
+
+        // --- Utility Functions ---
+        function updateHealthBar() {
+            const percentage = Math.max(0, (playerHealth / playerMaxHealth) * 100);
+            healthFill.style.width = percentage + '%';
+            healthFill.style.backgroundColor = percentage > 50 ? '#0f0' : percentage > 20 ? '#ff0' : '#f00';
+        }
+
+        function updateBossHealthBar() {
+            if (currentBoss && bossElement) {
+                const percentage = Math.max(0, (bossHealth / bossMaxHealth) * 100);
+                bossHealthFill.style.width = percentage + '%';
+            }
+        }
+
+        function showDialogue(lines) {
+            dialogueQueue = lines;
+            dialogueIndex = 0;
+            dialogueBox.textContent = dialogueQueue[dialogueIndex];
+            dialogueBox.style.display = 'block';
+            gameState = 'dialogue';
+        }
+
+        function nextDialogue() {
+            dialogueIndex++;
+            if (dialogueIndex < dialogueQueue.length) {
+                dialogueBox.textContent = dialogueQueue[dialogueIndex];
+            } else {
+                dialogueBox.style.display = 'none';
+                dialogueQueue = [];
+                // Transition state after dialogue finishes
+                if (bossIndex === -1 && gameState === 'dialogue') { // Initial Clyde dialogue
+                    startBossFight(0); // Start Clyde fight
+                } else if (gameState === 'dialogue' && currentBoss) {
+                     // Check if it was defeat dialogue
+                    if (dialogueBox.textContent.includes(currentBoss.defeatDialogue[currentBoss.defeatDialogue.length-1])) {
+                        handleBossDefeatCleanup();
+                    } else { // Must be intro dialogue finished
+                        gameState = 'boss_fight'; // Start fight after intro
+                    }
+                } else {
+                    gameState = 'explore'; // Default back to exploration
+                }
+            }
+        }
+
+        function displayMessage(text, duration = 2000) {
+            messageDisplay.textContent = text;
+            messageDisplay.style.display = 'block';
+            setTimeout(() => {
+                messageDisplay.style.display = 'none';
+            }, duration);
+        }
+
+        function gameOver() {
+            gameState = 'game_over';
+            displayMessage("GAME OVER", 5000);
+            // Consider adding a restart mechanism here
+             setTimeout(() => location.reload(), 5000); // Simple reload to restart
+        }
+
+         function gameWin() {
+            gameState = 'win';
+            // Final boss dialogue handled separately if needed
+            displayMessage("YOU REACHED PILLOW...?", 10000);
+            // Potentially transition to a final screen or sequence
+        }
+
+        function isColliding(el1, el2) {
+            const rect1 = el1.getBoundingClientRect();
+            const rect2 = el2.getBoundingClientRect();
+            const gameRect = gameContainer.getBoundingClientRect();
+
+            // Adjust positions relative to the game container
+            const obj1 = {
+                left: rect1.left - gameRect.left,
+                right: rect1.right - gameRect.left,
+                top: rect1.top - gameRect.top,
+                bottom: rect1.bottom - gameRect.top
+            };
+            const obj2 = {
+                left: rect2.left - gameRect.left,
+                right: rect2.right - gameRect.top,
+                top: rect2.top - gameRect.top,
+                bottom: rect2.bottom - gameRect.top
+            };
+
+            return obj1.left < obj2.right &&
+                   obj1.right > obj2.left &&
+                   obj1.top < obj2.bottom &&
+                   obj1.bottom > obj2.top;
+        }
+
+
+        // --- Game Object Creation ---
+        function createProjectile(x, y) {
+            const p = document.createElement('div');
+            p.className = 'projectile';
+            p.textContent = 'Benchod';
+            p.style.left = x + 'px';
+            p.style.top = y + 'px';
+            gameContainer.appendChild(p);
+            projectiles.push({ element: p, x: x, y: y });
+        }
+
+        function createClydeEnemy() {
+            if (enemies.length >= 10) return; // Limit enemies on screen
+
+            const enemy = document.createElement('div');
+            enemy.className = 'enemy-clyde';
+            const side = Math.random() < 0.5 ? -30 : gameWidth; // Spawn off-screen left or right
+            const top = Math.random() * (gameHeight - 50);
+            enemy.style.left = side + 'px';
+            enemy.style.top = top + 'px';
+            gameContainer.appendChild(enemy);
+            enemies.push({
+                element: enemy,
+                x: side,
+                y: top,
+                health: 30 * (1 + clydeResistance), // Increase health based on resistance
+                speed: enemySpeed + Math.random() * 0.5
+            });
+        }
+
+        function createBoss(bossData) {
+            const boss = document.createElement('div');
+            boss.className = 'boss';
+            boss.textContent = bossData.emoji;
+            boss.style.left = (gameWidth / 2 - 25) + 'px';
+            boss.style.top = '50px';
+            boss.style.width = '50px';
+            boss.style.height = '50px';
+            gameContainer.appendChild(boss);
+            return boss;
+        }
+
+        function createFootballCannon(x, y, direction = 'down') {
+             const cannon = document.createElement('div');
+             cannon.className = 'football-cannon';
+             cannon.style.left = x + 'px';
+             cannon.style.top = y + 'px';
+             gameContainer.appendChild(cannon);
+             footballCannons.push({ element: cannon, x: x, y: y, direction: direction, timer: Math.random() * 3000 + 1000, cooldown: 3000 + Math.random()*1000 }); // Shoot every 3-4s approx
+        }
+
+         function createFootball(x, y, dirX, dirY) {
+            const ball = document.createElement('div');
+            ball.className = 'football';
+            ball.style.left = x + 'px';
+            ball.style.top = y + 'px';
+            gameContainer.appendChild(ball);
+            footballs.push({ element: ball, x: x, y: y, dirX: dirX, dirY: dirY });
+        }
+
+        // --- Game State Management ---
+        function startGame() {
+            playerHealth = playerMaxHealth;
+            updateHealthBar();
+            bossIndex = -1; // Ensure we start before the first boss
+            gameState = 'dialogue';
+            showDialogue(bosses[0].introDialogue); // Start with Clyde's intro
+        }
+
+        function startBossFight(index) {
+            if (index >= bosses.length) {
+                gameWin(); // All bosses defeated
+                return;
+            }
+            bossIndex = index;
+            currentBoss = bosses[bossIndex];
+            bossMaxHealth = currentBoss.health;
+            bossHealth = bossMaxHealth;
+
+            // Clear existing enemies maybe? Or leave them? Let's clear for focus.
+            enemies.forEach(e => e.element.remove());
+            enemies = [];
+
+            bossElement = createBoss(currentBoss);
+            bossHealthBar.style.display = 'block';
+            updateBossHealthBar();
+
+            // Show intro dialogue, which will transition state to 'boss_fight'
+             showDialogue(currentBoss.introDialogue);
+        }
+
+        function handleBossDefeatCleanup() {
+            // Called after defeat dialogue ends
+            const defeatedBoss = bosses[bossIndex]; // Get the boss that was just defeated
+            console.log(defeatedBoss.name + " defeated.");
+
+            if (bossElement) {
+                bossElement.remove();
+                bossElement = null;
+            }
+            bossHealthBar.style.display = 'none';
+            currentBoss = null;
+
+            // Specific actions after certain bosses
+            if (defeatedBoss.name === 'Clyde') {
+                benchodGunEnabled = true;
+                displayMessage("Benchod Gun acquired! Press SPACE to fire.", 3000);
+                // Start spawning Clyde parts
+                setInterval(createClydeEnemy, 2000);
+            } else if (defeatedBoss.name === 'SC0J') {
+                clydeResistance = 0.5; // Clyde enemies get tougher
+                displayMessage("Clyde remnants seem more resistant...", 3000);
+            } else if (defeatedBoss.name === 'Admiral') {
+                footballCannonsActive = true;
+                displayMessage("Football Cannons Deployed!", 3000);
+                // Add cannons to the map
+                createFootballCannon(50, 100, 'right');
+                createFootballCannon(gameWidth - 90, 100, 'left');
+                createFootballCannon(gameWidth / 2 - 20, 0, 'down');
+                createFootballCannon(50, gameHeight - 140, 'right');
+                createFootballCannon(gameWidth - 90, gameHeight - 140, 'left');
+            } else if (defeatedBoss.name === 'Kamran') {
+                 gameWin(); // Game ends after Kamran fight
+                 return; // Stop further progression
+            }
+
+
+            // Delay before next boss? Or trigger immediately? Let's add exploration time.
+            gameState = 'explore';
+             // Automatically trigger next boss after a short delay for demo purposes
+             // In a full game, this would happen upon reaching a location
+             setTimeout(() => {
+                 if (gameState !== 'boss_fight' && gameState !== 'dialogue' && bossIndex < bosses.length -1) {
+                      startBossFight(bossIndex + 1);
+                 }
+             }, 5000); // 5 seconds pause before next boss intro
+        }
+
+
+        // --- Game Loop ---
+        function gameLoop() {
+            if (gameState === 'game_over' || gameState === 'win') return;
+
+            // --- Player Movement ---
+            let dx = 0;
+            let dy = 0;
+            if (keys['w'] || keys['ArrowUp']) dy -= playerSpeed;
+            if (keys['s'] || keys['ArrowDown']) dy += playerSpeed;
+            if (keys['a'] || keys['ArrowLeft']) dx -= playerSpeed;
+            if (keys['d'] || keys['ArrowRight']) dx += playerSpeed;
+
+            if (gameState !== 'dialogue') { // Allow movement unless in dialogue
+                let currentX = parseInt(player.style.left || '0');
+                let currentY = parseInt(player.style.top || '0'); // Use top for consistency
+                if (isNaN(currentX)) currentX = gameWidth / 2 - 15; // Initialize if needed
+                if (isNaN(currentY)) currentY = gameHeight - 40;
+
+                let nextX = currentX + dx;
+                let nextY = currentY + dy;
+
+                // Boundary checks
+                nextX = Math.max(0, Math.min(gameWidth - player.offsetWidth, nextX));
+                nextY = Math.max(0, Math.min(gameHeight - player.offsetHeight, nextY));
+
+                player.style.left = nextX + 'px';
+                player.style.top = nextY + 'px';
+            }
+
+            // --- Projectile Movement & Collision ---
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.y -= projectileSpeed; // Move projectiles upwards
+                p.element.style.top = p.y + 'px';
+
+                if (p.y < 0) { // Remove projectiles going off-screen
+                    p.element.remove();
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+
+                // Projectile vs Enemy Collision
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    if (isColliding(p.element, enemy.element)) {
+                        enemy.health -= 50; // Damage amount for Benchod Gun
+                        p.element.remove(); // Remove projectile on hit
+                        projectiles.splice(i, 1);
+
+                        if (enemy.health <= 0) {
+                            enemy.element.remove();
+                            enemies.splice(j, 1);
+                        }
+                        break; // Projectile hit one enemy, stop checking for this projectile
+                    }
+                }
+
+                 // Projectile vs Boss Collision
+                 if (currentBoss && bossElement && isColliding(p.element, bossElement)) {
+                     bossHealth -= 25; // Lower damage for bosses maybe?
+                     updateBossHealthBar();
+                     p.element.remove();
+                     projectiles.splice(i, 1);
+
+                     if (bossHealth <= 0) {
+                         // Start defeat sequence
+                         gameState = 'dialogue';
+                         showDialogue(currentBoss.defeatDialogue);
+                         // Cleanup happens after dialogue ends in nextDialogue() -> handleBossDefeatCleanup()
+                     }
+                     // Break if projectile hit boss
+                     break;
+                 }
+            }
+
+             // --- Enemy Movement & Collision ---
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                // Simple AI: move towards player
+                const playerRect = player.getBoundingClientRect();
+                const enemyRect = enemy.element.getBoundingClientRect();
+                const gameRect = gameContainer.getBoundingClientRect();
+
+                const playerCenterX = (playerRect.left - gameRect.left) + playerRect.width / 2;
+                const playerCenterY = (playerRect.top - gameRect.top) + playerRect.height / 2;
+                const enemyCenterX = (enemyRect.left - gameRect.left) + enemyRect.width / 2;
+                const enemyCenterY = (enemyRect.top - gameRect.top) + enemyRect.height / 2;
+
+                const angle = Math.atan2(playerCenterY - enemyCenterY, playerCenterX - enemyCenterX);
+                enemy.x += Math.cos(angle) * enemy.speed;
+                enemy.y += Math.sin(angle) * enemy.speed;
+
+                // Basic boundary check for enemies (prevent them going too far off) - optional
+                 enemy.x = Math.max(-50, Math.min(gameWidth + 20, enemy.x));
+                 enemy.y = Math.max(-50, Math.min(gameHeight + 20, enemy.y));
+
+
+                enemy.element.style.left = enemy.x + 'px';
+                enemy.element.style.top = enemy.y + 'px';
+
+                // Enemy vs Player Collision
+                if (isColliding(player, enemy.element)) {
+                    playerHealth -= 10; // Damage amount from Clyde enemy
+                    updateHealthBar();
+                    // Knockback effect or temporary invincibility could be added here
+                    enemy.element.remove(); // Remove enemy on collision
+                    enemies.splice(i, 1);
+
+                    if (playerHealth <= 0) {
+                        gameOver();
+                        return; // Stop loop on game over
+                    }
+                }
+            }
+
+             // --- Boss Movement & Collision ---
+            if (gameState === 'boss_fight' && currentBoss && bossElement) {
+                 // Simple AI: move towards player, faster than regular enemies
+                const playerRect = player.getBoundingClientRect();
+                const bossRect = bossElement.getBoundingClientRect();
+                const gameRect = gameContainer.getBoundingClientRect();
+
+                const playerCenterX = (playerRect.left - gameRect.left) + playerRect.width / 2;
+                const playerCenterY = (playerRect.top - gameRect.top) + playerRect.height / 2;
+                const bossCenterX = (bossRect.left - gameRect.left) + bossRect.width / 2;
+                const bossCenterY = (bossRect.top - gameRect.top) + bossRect.height / 2;
+
+
+                const angle = Math.atan2(playerCenterY - bossCenterY, playerCenterX - bossCenterX);
+                let bossCurrentX = parseFloat(bossElement.style.left);
+                let bossCurrentY = parseFloat(bossElement.style.top);
+
+                bossCurrentX += Math.cos(angle) * currentBoss.speed;
+                bossCurrentY += Math.sin(angle) * currentBoss.speed;
+
+                // Keep boss within bounds (optional)
+                bossCurrentX = Math.max(0, Math.min(gameWidth - bossElement.offsetWidth, bossCurrentX));
+                bossCurrentY = Math.max(0, Math.min(gameHeight - bossElement.offsetHeight - 150, bossCurrentY)); // Keep boss in upper area
+
+                bossElement.style.left = bossCurrentX + 'px';
+                bossElement.style.top = bossCurrentY + 'px';
+
+
+                // Boss vs Player Collision
+                 if (isColliding(player, bossElement)) {
+                    playerHealth -= 20; // Higher damage from boss
+                    updateHealthBar();
+                    // Add knockback maybe
+                     // Simple knockback: Move player away slightly
+                    let playerX = parseFloat(player.style.left);
+                    let playerY = parseFloat(player.style.top);
+                    player.style.left = playerX - Math.cos(angle) * 30 + 'px';
+                    player.style.top = playerY - Math.sin(angle) * 30 + 'px';
+
+
+                    if (playerHealth <= 0) {
+                        gameOver();
+                        return; // Stop loop
+                    }
+                 }
+            }
+
+             // --- Football Cannon Logic ---
+             if (footballCannonsActive) {
+                 const now = Date.now();
+                 for (const cannon of footballCannons) {
+                     cannon.timer -= 16; // Roughly decrement by ms per frame
+                     if (cannon.timer <= 0) {
+                         cannon.timer = cannon.cooldown; // Reset timer
+                         let dirX = 0, dirY = 0;
+                         let startX = cannon.x + cannon.element.offsetWidth / 2 - 10; // Center of cannon - half ball width
+                         let startY = cannon.y + cannon.element.offsetHeight / 2 - 10; // Center of cannon - half ball height
+
+                         switch (cannon.direction) {
+                             case 'down': dirY = 1; startY += 20; break;
+                             case 'up': dirY = -1; startY -= 20; break;
+                             case 'left': dirX = -1; startX -= 20; break;
+                             case 'right': dirX = 1; startX += 20; break;
+                         }
+                         createFootball(startX, startY, dirX, dirY);
+                     }
+                 }
+
+                 // Move footballs and check collision
+                 for (let i = footballs.length - 1; i >= 0; i--) {
+                    const ball = footballs[i];
+                    ball.x += ball.dirX * footballSpeed;
+                    ball.y += ball.dirY * footballSpeed;
+                    ball.element.style.left = ball.x + 'px';
+                    ball.element.style.top = ball.y + 'px';
+
+                    // Remove if off-screen
+                     if (ball.x < -20 || ball.x > gameWidth || ball.y < -20 || ball.y > gameHeight) {
+                         ball.element.remove();
+                         footballs.splice(i, 1);
+                         continue;
+                     }
+
+                     // Football vs Player Collision
+                    if (isColliding(player, ball.element)) {
+                        playerHealth -= 15; // Football damage
+                        updateHealthBar();
+                        ball.element.remove(); // Remove ball on hit
+                        footballs.splice(i, 1);
+
+                        if (playerHealth <= 0) {
+                            gameOver();
+                            return; // Stop loop
+                        }
+                         // Add slight knockback from football?
+                        let playerX = parseFloat(player.style.left);
+                        let playerY = parseFloat(player.style.top);
+                        player.style.left = playerX + ball.dirX * 15 + 'px'; // Knock back in ball's direction
+                        player.style.top = playerY + ball.dirY * 15 + 'px';
+
+                    }
+                 }
+             }
+
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+
+            // Handle dialogue progression or shooting
+            if (gameState === 'dialogue' && e.key === 'Enter') {
+                 nextDialogue();
+            } else if (benchodGunEnabled && e.key === ' ' && gameState !== 'dialogue') { // Spacebar to shoot
+                 e.preventDefault(); // Prevent spacebar from scrolling page
+                 // Get player's current center position to spawn projectile
+                 const playerRect = player.getBoundingClientRect();
+                 const gameRect = gameContainer.getBoundingClientRect();
+                 const spawnX = (playerRect.left - gameRect.left) + (playerRect.width / 2) - 25; // Center horizontally, adjust for projectile width
+                 const spawnY = (playerRect.top - gameRect.top) - 20; // Spawn slightly above player
+                 createProjectile(spawnX, spawnY);
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        // --- Initialize ---
+        // Set initial player position via style before game starts if needed
+        player.style.top = (gameHeight - player.offsetHeight - 10) + 'px';
+        player.style.left = (gameWidth / 2 - player.offsetWidth / 2) + 'px';
+
+        startGame();
+        gameLoop();
+
+    </script>
+</body>
+</html>

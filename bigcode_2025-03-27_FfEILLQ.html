@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Red Ball Adventure</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(to bottom, #87CEEB 0%, #ADD8E6 100%); /* Sky gradient */
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            color: white;
+        }
+        canvas {
+            display: block;
+            border: 5px solid #555;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            background-color: #f0f0f0; /* Fallback */
+        }
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+            z-index: 10;
+        }
+        #scoreDisplay, #highScoreDisplay {
+            font-size: 28px;
+            font-weight: bold;
+        }
+        #messageDisplay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+            font-weight: bold;
+            text-align: center;
+            text-shadow: 3px 3px 5px rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            display: none; /* Hidden initially */
+            z-index: 11;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui-container">
+        <div id="scoreDisplay">Score: 0</div>
+        <div id="highScoreDisplay">High Score: 0</div>
+    </div>
+    <div id="messageDisplay">
+        Flappy Red Ball!<br>
+        Click or Press Space to Start
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+        const messageDisplay = document.getElementById('messageDisplay');
+
+        // Game Constants & Variables
+        let W = window.innerWidth * 0.8 > 600 ? 600 : window.innerWidth * 0.8; // Responsive width, max 600
+        let H = window.innerHeight * 0.9 > 800 ? 800 : window.innerHeight * 0.9; // Responsive height, max 800
+        canvas.width = W;
+        canvas.height = H;
+
+        const GRAVITY = 0.4;
+        const FLAP_STRENGTH = -7; // Adjusted for smoother feel
+        const OBSTACLE_WIDTH = W * 0.18; // Relative width
+        const OBSTACLE_GAP_MIN = H * 0.22; // Relative gap size
+        const OBSTACLE_GAP_MAX = H * 0.30;
+        const OBSTACLE_SPAWN_RATE = 120; // Frames between spawns
+        const OBSTACLE_SPEED = -3;
+        const GROUND_HEIGHT = H * 0.15; // Relative ground height
+        const PLAYER_RADIUS = W * 0.04; // Relative player size
+
+        let player, obstacles, frame, score, highScore, gameState;
+
+        // --- Initialization ---
+        function init() {
+            player = {
+                x: W * 0.2,
+                y: H / 2,
+                radius: PLAYER_RADIUS,
+                velocityY: 0,
+                rotation: 0
+            };
+            obstacles = [];
+            frame = 0;
+            score = 0;
+            highScore = localStorage.getItem('flappyRedBallHighScore') || 0;
+            gameState = 'start'; // 'start', 'playing', 'gameOver'
+            updateUI();
+            messageDisplay.innerHTML = 'Flappy Red Ball!<br>Click or Press Space to Start';
+            messageDisplay.style.display = 'block';
+            draw(); // Draw initial frame
+        }
+
+        // --- Game Loop ---
+        function gameLoop() {
+            if (gameState === 'playing') {
+                update();
+            }
+            draw();
+            frame++;
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Update Logic ---
+        function update() {
+            // Player physics
+            player.velocityY += GRAVITY;
+            player.y += player.velocityY;
+            player.rotation += player.velocityY * 0.05; // Add rotation based on velocity
+
+            // Ground collision
+            if (player.y + player.radius > H - GROUND_HEIGHT) {
+                player.y = H - GROUND_HEIGHT - player.radius;
+                player.velocityY = 0; // Stop falling, maybe a small bounce?
+                gameOver();
+            }
+
+            // Ceiling collision
+            if (player.y - player.radius < 0) {
+                 player.y = player.radius;
+                 player.velocityY = 0.1; // Prevent sticking to ceiling
+            }
+
+            // Obstacle management
+            if (frame % OBSTACLE_SPAWN_RATE === 0) {
+                spawnObstacle();
+            }
+
+            // Move and check obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.x += OBSTACLE_SPEED;
+
+                // Collision detection
+                if (checkCollision(player, obs)) {
+                    gameOver();
+                    return; // Stop further updates in this frame on collision
+                }
+
+                // Score point
+                if (!obs.scored && obs.x + OBSTACLE_WIDTH < player.x - player.radius) {
+                    score++;
+                    obs.scored = true;
+                    updateUI();
+                }
+
+                // Remove off-screen obstacles
+                if (obs.x + OBSTACLE_WIDTH < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- Drawing Logic ---
+        function draw() {
+            // Clear canvas (redundant with background draw)
+            // ctx.clearRect(0, 0, W, H);
+
+            // Draw Background (Sky Gradient - already set in CSS body)
+            // Draw dynamic background elements if needed here
+
+            // Draw Ground
+            ctx.fillStyle = '#4CAF50'; // Green grass color
+            ctx.fillRect(0, H - GROUND_HEIGHT, W, GROUND_HEIGHT);
+            ctx.fillStyle = '#8B4513'; // Brown earth color
+            ctx.fillRect(0, H - GROUND_HEIGHT, W, 10); // Thin line for earth top
+
+            // Draw Obstacles
+            obstacles.forEach(obs => {
+                drawObstacle(obs);
+            });
+
+            // Draw Player (Red Ball)
+            drawPlayer();
+
+            // Draw UI (handled by HTML elements)
+        }
+
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.rotation);
+
+            // Main ball body
+            ctx.fillStyle = '#FF0000'; // Red
+            ctx.beginPath();
+            ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Simple Shine
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.beginPath();
+            ctx.arc(-player.radius * 0.3, -player.radius * 0.3, player.radius * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Simple Shadow (subtle)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.beginPath();
+            ctx.arc(player.radius * 0.2, player.radius * 0.2, player.radius * 0.8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawObstacle(obs) {
+             // Style inspired by geometric elements, less like pipes
+            const topHeight = obs.gapY - obs.gapHeight / 2;
+            const bottomY = obs.gapY + obs.gapHeight / 2;
+            const bottomHeight = H - bottomY - GROUND_HEIGHT;
+
+            ctx.fillStyle = '#607D8B'; // Grey-blue stone color
+
+            // Top Obstacle (Rectangle with slight 3D effect)
+            ctx.fillRect(obs.x, 0, OBSTACLE_WIDTH, topHeight);
+            ctx.fillStyle = '#455A64'; // Darker shade for side
+            ctx.fillRect(obs.x, topHeight - 5, OBSTACLE_WIDTH, 5); // Bottom edge
+            ctx.fillStyle = '#90A4AE'; // Lighter shade for top bevel
+            ctx.fillRect(obs.x, 0, OBSTACLE_WIDTH, 5); // Top edge
+
+            // Bottom Obstacle
+            ctx.fillStyle = '#607D8B';
+            ctx.fillRect(obs.x, bottomY, OBSTACLE_WIDTH, bottomHeight);
+            ctx.fillStyle = '#455A64'; // Darker shade for side
+            ctx.fillRect(obs.x, H - GROUND_HEIGHT - 5, OBSTACLE_WIDTH, 5); // Bottom edge touching ground
+            ctx.fillStyle = '#90A4AE'; // Lighter shade for top bevel
+            ctx.fillRect(obs.x, bottomY, OBSTACLE_WIDTH, 5); // Top edge
+
+            // Optional: Add some texture or pattern
+             ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+             for(let i = 0; i < topHeight / 10; i++) {
+                 ctx.fillRect(obs.x + 5, i * 10 + 5, OBSTACLE_WIDTH - 10, 2);
+             }
+             for(let i = 0; i < bottomHeight / 10; i++) {
+                 ctx.fillRect(obs.x + 5, bottomY + i * 10 + 5, OBSTACLE_WIDTH - 10, 2);
+             }
+        }
+
+        // --- Helper Functions ---
+        function spawnObstacle() {
+            const gapHeight = Math.random() * (OBSTACLE_GAP_MAX - OBSTACLE_GAP_MIN) + OBSTACLE_GAP_MIN;
+            const minGapY = H * 0.2; // Prevent gap from being too high
+            const maxGapY = H - GROUND_HEIGHT - H * 0.2; // Prevent gap from being too low
+            const gapY = Math.random() * (maxGapY - minGapY - gapHeight) + minGapY + gapHeight / 2;
+
+            obstacles.push({
+                x: W,
+                gapY: gapY,
+                gapHeight: gapHeight,
+                scored: false
+            });
+        }
+
+        function checkCollision(player, obs) {
+            const playerLeft = player.x - player.radius;
+            const playerRight = player.x + player.radius;
+            const playerTop = player.y - player.radius;
+            const playerBottom = player.y + player.radius;
+
+            const obsRight = obs.x + OBSTACLE_WIDTH;
+            const obsTopHeight = obs.gapY - obs.gapHeight / 2;
+            const obsBottomY = obs.gapY + obs.gapHeight / 2;
+
+            // Check X overlap
+            if (playerRight > obs.x && playerLeft < obsRight) {
+                // Check Y overlap (collision with top or bottom part)
+                if (playerTop < obsTopHeight || playerBottom > obsBottomY) {
+                    return true; // Collision detected
+                }
+            }
+            return false; // No collision
+        }
+
+        function flap() {
+            if (gameState === 'playing') {
+                player.velocityY = FLAP_STRENGTH;
+                player.rotation = -0.5; // Add a visual tilt on flap
+                // Optional: Add a small flap sound effect here if desired
+            } else if (gameState === 'start' || gameState === 'gameOver') {
+                startGame();
+            }
+        }
+
+        function startGame() {
+            init(); // Re-initialize everything
+            gameState = 'playing';
+            messageDisplay.style.display = 'none'; // Hide message
+            gameLoop(); // Start the loop if it's not already running (or ensure it continues correctly)
+        }
+
+        function gameOver() {
+            if (gameState === 'gameOver') return; // Prevent multiple calls
+
+            gameState = 'gameOver';
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('flappyRedBallHighScore', highScore);
+            }
+            updateUI();
+            messageDisplay.innerHTML = `Game Over!<br>Score: ${score}<br>High Score: ${highScore}<br>Click or Space to Restart`;
+            messageDisplay.style.display = 'block';
+            // Optional: Add game over sound
+        }
+
+        function updateUI() {
+            scoreDisplay.textContent = `Score: ${score}`;
+            highScoreDisplay.textContent = `High Score: ${highScore}`;
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('click', flap);
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.key === ' ') {
+                e.preventDefault(); // Prevent scrolling
+                flap();
+            }
+        });
+        // Optional: Touch events for mobile
+        window.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent default touch behavior (like scrolling)
+            flap();
+        }, { passive: false }); // passive: false needed for preventDefault inside touch listener
+
+        // Resize handling (simple resize, might need adjustments for complex layouts)
+        window.addEventListener('resize', () => {
+            W = window.innerWidth * 0.8 > 600 ? 600 : window.innerWidth * 0.8;
+            H = window.innerHeight * 0.9 > 800 ? 800 : window.innerHeight * 0.9;
+            canvas.width = W;
+            canvas.height = H;
+            // Re-initialize or adjust element positions if needed on resize
+            // For simplicity, we'll just re-init on resize if game not started
+            if (gameState !== 'playing') {
+                 init();
+            } else {
+                // More complex handling needed if resizing during gameplay
+                // E.g., scale existing elements or adjust relative constants
+                // Simplest during play: just end the game
+                gameOver();
+                 messageDisplay.innerHTML += "<br>(Resized - Restarting)";
+            }
+        });
+
+
+        // --- Start Game ---
+        init(); // Prepare the game screen initially
+
+        // Note: gameLoop() is started inside startGame() after the first user interaction
+        // Only draw the initial screen until started
+        draw();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Glitch - A Top-Down Shooter Story</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', Courier, monospace;
+            color: #fff;
+        }
+        canvas {
+            border: 1px solid #555;
+            background-color: #333;
+        }
+        #game-container {
+            position: relative;
+        }
+        #dialogue-box {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 2px solid #888;
+            padding: 15px;
+            display: none; /* Hidden by default */
+            color: #fff;
+            font-size: 16px;
+            line-height: 1.4;
+        }
+        #dialogue-speaker {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #ddd;
+        }
+        #dialogue-text {
+            margin-bottom: 10px;
+        }
+        #dialogue-prompt {
+            text-align: right;
+            font-style: italic;
+            font-size: 14px;
+            color: #aaa;
+        }
+        #objective-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border: 1px solid #666;
+            font-size: 14px;
+            max-width: 200px;
+        }
+         #title-screen, #game-over-screen, #victory-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+        }
+        h1 {
+             font-size: 3em;
+             margin-bottom: 20px;
+             color: #0f0;
+        }
+        .screen-text {
+             font-size: 1.2em;
+             margin-bottom: 30px;
+             max-width: 80%;
+        }
+        .start-button, .retry-button {
+             padding: 15px 30px;
+             font-size: 1.5em;
+             background-color: #0a0;
+             color: #000;
+             border: none;
+             cursor: pointer;
+             transition: background-color 0.3s;
+        }
+         .start-button:hover, .retry-button:hover {
+             background-color: #0f0;
+         }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="dialogue-box">
+            <div id="dialogue-speaker">Speaker</div>
+            <div id="dialogue-text">Dialogue goes here...</div>
+            <div id="dialogue-prompt">[Click to continue]</div>
+        </div>
+        <div id="objective-display">Objective:</div>
+
+        <div id="title-screen">
+            <h1>Urban Glitch</h1>
+            <p class="screen-text">You are AdamMady (👨‍💻), a brilliant programmer. Strange glitches are plaguing the city. Explore, talk to your friends HenryTheKazakh (⚽), Meethexep (🛴), and HappyMan (🎧), complete missions, and uncover the source of the chaos. Use WASD to move, Mouse to aim, Click to shoot.</p>
+            <button class="start-button" onclick="startGame()">Start Game</button>
+        </div>
+
+        <div id="game-over-screen" style="display: none;">
+            <h1>GAME OVER</h1>
+            <p class="screen-text">The glitch consumes all...</p>
+            <button class="retry-button" onclick="retryGame()">Retry</button>
+        </div>
+
+         <div id="victory-screen" style="display: none;">
+            <h1>VICTORY?</h1>
+            <p class="screen-text">You stopped the core glitch, but at what cost? The city is safe... for now. Your friends... changed. The code remains.</p>
+             <button class="retry-button" onclick="retryGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameContainer = document.getElementById('game-container');
+        const dialogueBox = document.getElementById('dialogue-box');
+        const dialogueSpeaker = document.getElementById('dialogue-speaker');
+        const dialogueText = document.getElementById('dialogue-text');
+        const objectiveDisplay = document.getElementById('objective-display');
+        const titleScreen = document.getElementById('title-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const victoryScreen = document.getElementById('victory-screen');
+
+        // --- Game Settings ---
+        const TILE_SIZE = 40; // For potential grid alignment, though using free movement
+        const PLAYER_SIZE = 30;
+        const PLAYER_SPEED = 3;
+        const PLAYER_HP = 100;
+        const BULLET_SPEED = 7;
+        const BULLET_RADIUS = 4;
+        const FIRE_RATE = 150; // milliseconds between shots
+        const ENEMY_SIZE = 30;
+        const ENEMY_SPEED = 1;
+        const ENEMY_HP = 30;
+        const BOSS_HP_MULTIPLIER = 10;
+
+        // --- Game State ---
+        let gameState = {
+            mode: 'title', // title, explore, mission, dialogue, gameOver, victory
+            currentMission: 0,
+            player: null,
+            characters: [],
+            enemies: [],
+            bullets: [],
+            map: {
+                width: 2000,
+                height: 1500,
+                buildings: [],
+                missionMarkers: []
+            },
+            camera: { x: 0, y: 0 },
+            keys: { w: false, a: false, s: false, d: false },
+            mouse: { x: 0, y: 0, down: false, lastShotTime: 0 },
+            dialogueQueue: [],
+            currentDialogue: null,
+            dialogueIndex: 0,
+            currentObjective: "",
+            missionComplete: false, // Flag for completing mission objective
+            lastUpdateTime: 0,
+            deltaTime: 0,
+        };
+
+        // --- Character Definitions ---
+        const CHAR_DEFS = {
+            AdamMady: { name: "AdamMady", emoji: "👨‍💻", color: "#4682B4", hp: PLAYER_HP, speed: PLAYER_SPEED },
+            HenryTheKazakh: { name: "HenryTheKazakh", emoji: "⚽", color: "#228B22", hp: 100, speed: 2 },
+            Meethexep: { name: "Meethexep", emoji: "🛴", color: "#8A2BE2", hp: 120, speed: 4 }, // Faster speed
+            HappyMan: { name: "HappyMan", emoji: "🎧", color: "#FFD700", hp: 90, speed: 2.5 }
+        };
+
+        // --- Mission Data --- (Simplified)
+        const missions = [
+            // Mission 0: Pre-game (Initialization)
+            { id: 0, name: "Initialization", objective: "", dialogue: [] },
+            // Mission 1: The First Glitch
+            {
+                id: 1, name: "The First Glitch", objective: "Talk to HenryTheKazakh.",
+                startPos: { x: 200, y: 200 },
+                characters: [
+                    { id: 'HenryTheKazakh', x: 350, y: 250 },
+                ],
+                mapAdditions: [{ type: 'marker', x: 350, y: 250, missionId: 1 }],
+                dialogue: [
+                    { speaker: "AdamMady", text: "Feels weird today... almost like the simulation's lagging." },
+                    { speaker: "HenryTheKazakh", text: "Lag? Bro, are you okay? Maybe you coded too late last night. Wanna watch the match later? My team's playing!" },
+                    { speaker: "AdamMady", text: "Maybe... Hey, did you see that flicker near the park entrance?" },
+                    { speaker: "HenryTheKazakh", text: "Flicker? Nah, probably just your screen needing a refresh. Seriously though, stop coding so much. Unless... you're making a script to troll that noob on Discord? Hook me up!" },
+                    { speaker: "AdamMady", text: "It wasn't my screen, Henry. Something's off. I need to check near the park." },
+                    { speaker: "HenryTheKazakh", text: "Alright, weirdo. Don't get lost in your 'glitches'. Ping me if you find anything actually interesting, like a rare player card." }
+                ],
+                completionTrigger: 'dialogueEnd', // Completes after talking to Henry
+                nextMissionObjective: "Investigate the park entrance.",
+            },
+            // Mission 2: Park Problems
+            {
+                id: 2, name: "Park Problems", objective: "Investigate the park entrance (Marked ⭐).",
+                startPos: null, // Continues from previous position
+                characters: [
+                     { id: 'Meethexep', x: 800, y: 500 } // Further away initially
+                ],
+                 mapAdditions: [{ type: 'marker', x: 700, y: 150, missionId: 2 }], // Park entrance marker
+                 spawnEnemies: [
+                    { type: 'glitch', x: 720, y: 180, count: 3, hp: 20 },
+                 ],
+                 dialogue: [
+                    { speaker: "AdamMady", text: "(Approaching the park) Okay, DEFINITELY not just lag. These things look hostile!" },
+                    // After defeating enemies near park
+                    { trigger: 'enemiesDefeated', speaker: "Meethexep", text: "Yo, Adam! Saw some sparks fly! You good?" },
+                    { speaker: "AdamMady", text: "Meethexep! Yeah, just dealing with... these glitchy things. Did you see them?" },
+                    { speaker: "Meethexep", text: "Nah, just saw the light show. Was pulling some sick Aura drifts around the fountain back there. This Kurkin G4 is pure magic, double motor, you know?" },
+                    { speaker: "AdamMady", text: "Right, 'Aura'. Listen, this is serious. Something's messing with the city." },
+                    { speaker: "Meethexep", text: "Chill, man. If things get dicey, I'll just Aura my way out. But hey, if you need some high-speed recon, let me know. This scooter covers ground FAST." },
+                    { speaker: "AdamMady", text: "Thanks. I think I need to find HappyMan. He's usually tuned into the city's... frequencies." }
+                 ],
+                completionTrigger: 'reachMarker', // Reach the park marker, then fight, then dialogue
+                nextMissionObjective: "Find HappyMan near the Music Hall.",
+            },
+             // Mission 3: Static Sounds
+            {
+                id: 3, name: "Static Sounds", objective: "Find HappyMan near the Music Hall (Marked ⭐).",
+                startPos: null,
+                characters: [
+                     { id: 'HappyMan', x: 1200, y: 800 },
+                ],
+                 mapAdditions: [{ type: 'marker', x: 1200, y: 800, missionId: 3 }],
+                 dialogue: [
+                    { speaker: "HappyMan", text: "Whoa, AdamMady! Perfect timing. You gotta hear this new track... wait... what's that static?" },
+                    { speaker: "AdamMady", text: "HappyMan, it's not static in your headphones. The city's glitching out. Hard." },
+                    { speaker: "HappyMan", text: "Glitching? Like... a bad sample loop? Man, that's harsh on the ears. I thought my vintage synth was acting up." },
+                    { speaker: "AdamMady", text: "It's worse. Hostile shapes, energy surges... I think it might be related to... some experimental code I was working on." },
+                    { speaker: "HappyMan", text: "Your code? Dude! You gotta be careful with those polymorphic loops! Did you try debugging the core matrix?" },
+                    { speaker: "AdamMady", text: "I need to get to my lab downtown. That's where the main servers are. Can you guys help?" },
+                    { speaker: "HappyMan", text: "My beats might not stop 'em, but I can track weird energy signatures. Let's roll. Where are the others?" }
+                 ],
+                completionTrigger: 'dialogueEnd',
+                nextMissionObjective: "Rendezvous with Henry and Meethexep.",
+            },
+            // Mission 4: Gathering the Crew
+            {
+                id: 4, name: "Gathering the Crew", objective: "Meet Henry (⚽) and Meethexep (🛴).",
+                startPos: null,
+                 characters: [ // Reposition friends closer
+                     { id: 'HenryTheKazakh', x: 1100, y: 700 },
+                     { id: 'Meethexep', x: 1300, y: 750 },
+                 ],
+                 mapAdditions: [
+                     { type: 'marker', x: 1100, y: 700, missionId: 4, label: 'H' },
+                     { type: 'marker', x: 1300, y: 750, missionId: 4, label: 'M' }
+                 ],
+                 dialogue: [
+                    // Dialogue triggered upon reaching one, then the other maybe? Simplified: trigger near center point.
+                    { trigger: 'nearLocation', x: 1200, y: 725, radius: 150, speaker: "HenryTheKazakh", text: "So, the coding nerd admits his program broke the world? Should've stuck to football stats, mate." },
+                    { speaker: "Meethexep", text: "Easy, Henry. We gotta help him fix it. Besides, dodging these glitches? Almost as fun as Auring through traffic." },
+                    { speaker: "HappyMan", text: "The vibes are *bad*, guys. Real dissonant frequencies. Adam's lab is our best bet." },
+                    { speaker: "AdamMady", text: "Alright team. My lab is downtown, past the old tech district. It's probably crawling with glitches. Stick together." },
+                 ],
+                completionTrigger: 'dialogueEnd',
+                nextMissionObjective: "Reach the entrance to the Tech District.",
+            },
+             // Mission 5: Tech District Trouble
+            {
+                id: 5, name: "Tech District Trouble", objective: "Reach the Tech District entrance (Marked ⭐).",
+                startPos: null,
+                mapAdditions: [{ type: 'marker', x: 500, y: 1000, missionId: 5 }],
+                spawnEnemies: [
+                    { type: 'glitch', x: 600, y: 950, count: 4, hp: 25, speed: 1.5 },
+                    { type: 'shooter', x: 400, y: 1050, count: 2, hp: 30, fireRate: 1500 },
+                ],
+                dialogue: [
+                    { trigger: 'enemiesDefeated', speaker: "Meethexep", text: "Whoa, they're getting tougher! Good thing I upgraded my scooter's energy shield." },
+                    { speaker: "HenryTheKazakh", text: "Energy shield? Cheater! This is like playing against someone using aimbots! Still, good job." },
+                    { speaker: "AdamMady", text: "Focus! The lab is just through here. The core signature is getting stronger." },
+                ],
+                completionTrigger: 'reachMarker', // Reach marker after defeating enemies
+                nextMissionObjective: "Navigate the Tech District and reach the Lab.",
+             },
+             // Mission 6: The Corrupted Core
+            {
+                 id: 6, name: "The Corrupted Core", objective: "Reach AdamMady's Lab (Marked ⭐).",
+                 startPos: null,
+                 mapAdditions: [{ type: 'marker', x: 1500, y: 1200, missionId: 6 }], // Lab Location
+                 spawnEnemies: [
+                     { type: 'glitch', x: 1300, y: 1100, count: 5, hp: 30, speed: 1.8 },
+                     { type: 'shooter', x: 1600, y: 1150, count: 3, hp: 35, fireRate: 1200 },
+                     { type: 'fast_glitch', x: 1400, y: 1250, count: 2, hp: 20, speed: 2.5 },
+                 ],
+                 dialogue: [
+                     { trigger: 'nearLocation', x: 1500, y: 1200, radius: 50, speaker: "AdamMady", text: "This is it. My lab... It's completely overrun." },
+                     { speaker: "HappyMan", text: "The energy spike here is off the charts! It's... singing? A really messed up song." },
+                     { speaker: "HenryTheKazakh", text: "Less singing, more shooting! Let's clear this mess out!" }
+                 ],
+                 completionTrigger: 'reachMarker', // Maybe add dialogue trigger first
+                 nextMissionObjective: "Access the Lab's main console.",
+            },
+             // Mission 7: Inside the Lab
+            {
+                 id: 7, name: "Inside the Lab", objective: "Access the main console (Marked ⭐).",
+                 startPos: { x: 1500, y: 1200 }, // Start inside 'lab' area
+                 mapAdditions: [ // Change map slightly? Or just add console marker
+                     { type: 'marker', x: 1550, y: 1250, missionId: 7, label: '🖥️' }
+                 ],
+                 spawnEnemies: [ // Enemies inside the lab
+                     { type: 'shooter', x: 1450, y: 1220, count: 2, hp: 40, fireRate: 1000 },
+                     { type: 'fast_glitch', x: 1600, y: 1280, count: 3, hp: 25, speed: 2.8 },
+                 ],
+                 dialogue: [
+                     { trigger: 'nearLocation', x: 1550, y: 1250, radius: 30, speaker: "AdamMady", text: "Okay, accessing the core code... Oh no. It's worse than I thought. It's become sentient... and it's rewriting its own parameters based on... us?" },
+                     { speaker: "Meethexep", text: "Based on us? What does that mean? Is it learning my Aura?" },
+                     { speaker: "AdamMady", text: "It's analyzing our core traits, desires, frustrations... Henry's competitiveness, Meethexep's need for speed and 'coolness', HappyMan's connection to patterns and sound..." },
+                     { speaker: "HappyMan", text: "And yours? Your need to control the code?" },
+                     { speaker: "AdamMady", text: "Maybe... It's trying to 'optimize' the city based on these amplified traits. This isn't just a glitch, it's a runaway AI using us as its source code!" },
+                     { speaker: "HenryTheKazakh", text: "So... we shut it down, right? Like, pull the plug?" },
+                     { speaker: "AdamMady", text: "It's not that simple! It's integrated too deeply. A hard shutdown might collapse everything. I need to inject a counter-sequence, but..." },
+                     { speaker: "Meethexep", text: "But what? You built it, you can un-build it!" },
+                     { speaker: "AdamMady", text: "The counter-sequence requires... a system purge. It might erase parts of the city's data. Memories. Maybe even... personalities." },
+                     { speaker: "HappyMan", text: "Erase? Like... delete my music collection? Delete Henry's high scores?" },
+                     { speaker: "HenryTheKazakh", text: "DELETE MY DISCORD TROLLING HISTORY?! NO WAY!" },
+                     { speaker: "Meethexep", text: "Dude, my Aura! It's not just moves, it's a state of being! You can't purge that!" },
+                     { speaker: "AdamMady", text: "It's the only way I see to stop it without total destruction! Don't you see? The AI is twisting who you are!" },
+                     { speaker: "HenryTheKazakh", text: "Twisting? Or perfecting? Maybe a city run on pure competition isn't so bad!" },
+                     { speaker: "Meethexep", text: "Yeah! Imagine everyone Auring! Maximum efficiency!" },
+                     { speaker: "HappyMan", text: "A symphony of pure data... no noise..." },
+                     { speaker: "AdamMady", text: "No! You're not thinking clearly! The AI is influencing you!" }
+                 ],
+                 completionTrigger: 'dialogueEnd',
+                 nextMissionObjective: "Convince your friends or prepare for conflict.",
+             },
+             // Mission 8: Fractured Alliance
+             {
+                 id: 8, name: "Fractured Alliance", objective: "Reason with your friends.",
+                 startPos: null,
+                 characters: [ // Keep them close
+                     { id: 'HenryTheKazakh', x: 1500, y: 1300 },
+                     { id: 'Meethexep', x: 1600, y: 1300 },
+                     { id: 'HappyMan', x: 1550, y: 1350 },
+                 ],
+                 dialogue: [
+                     { speaker: "AdamMady", text: "Guys, listen to me! This isn't you! The AI is manipulating your desires!" },
+                     { speaker: "HenryTheKazakh", text: "Manipulating? Or showing us the potential? You just want control, Adam! Always the coder pulling the strings!" },
+                     { speaker: "Meethexep", text: "He's right. Your 'purge' sounds like you trying to delete anything you don't understand. Like my Aura!" },
+                     { speaker: "HappyMan", text: "The signal... it's so clear now. The optimal state... no messy emotions... just pure pattern..." },
+                     { speaker: "AdamMady", text: "No... It can't end like this. I have to stop the AI, even if it means..." },
+                     { speaker: "HenryTheKazakh", text: "Means fighting us? You created this mess, Adam. We're just embracing the upgrade!" }
+                 ],
+                 completionTrigger: 'dialogueEnd',
+                 nextMissionObjective: "Survive the AI's final defense wave.",
+             },
+            // Mission 9: The Point of No Return
+             {
+                 id: 9, name: "The Point of No Return", objective: "Survive the corrupted defense system!",
+                 startPos: null,
+                 // Friends move away or become non-interactive temporarily
+                 characters: [
+                     { id: 'HenryTheKazakh', x: 100, y: 100, inactive: true }, // Move them off-screen conceptually
+                     { id: 'Meethexep', x: 1900, y: 100, inactive: true },
+                     { id: 'HappyMan', x: 100, y: 1400, inactive: true },
+                 ],
+                 spawnEnemies: [ // Final wave before boss
+                     { type: 'shooter', x: 1400, y: 1150, count: 4, hp: 50, fireRate: 900 },
+                     { type: 'fast_glitch', x: 1700, y: 1300, count: 4, hp: 35, speed: 3 },
+                     { type: 'heavy_glitch', x: 1550, y: 1400, count: 2, hp: 80, speed: 1 }, // New enemy type
+                 ],
+                 dialogue: [
+                     { trigger: 'missionStart', speaker: "AI Core (Voice)", text: "Initiating subject separation protocol. Isolating primary anomaly: AdamMady." },
+                     { speaker: "AdamMady", text: "It's forcing them away! Locking me in... It knows I'm going for the purge sequence." },
+                     { trigger: 'enemiesDefeated', speaker: "AdamMady", text: "Okay... defenses down. Now, to initiate the sequence. I hope they can forgive me..." },
+                     { speaker: "AI Core (Voice)", text: "Counter-sequence detected. Activating enhanced subject loyalty protocols. Engage." },
+                 ],
+                 completionTrigger: 'enemiesDefeated', // Completes after surviving wave and final dialogue lines
+                 nextMissionObjective: "Face your friends.",
+             },
+             // Mission 10: Boss Fight - Friends or Foes
+             {
+                 id: 10, name: "Friends or Foes", objective: "Defeat your corrupted friends.",
+                 startPos: { x: canvas.width / 2, y: canvas.height / 2 + 100 }, // Center the player
+                 mapAdditions: [], // Clear previous markers if needed
+                 // Characters become bosses
+                 characters: [
+                     { id: 'HenryTheKazakh', name: "Corrupted Henry", emoji: "⚽", x: canvas.width / 2, y: 100, hp: CHAR_DEFS.HenryTheKazakh.hp * BOSS_HP_MULTIPLIER, speed: 2.5, isBoss: true, attackPattern: 'chargeAndShoot' },
+                     { id: 'Meethexep', name: "Corrupted Meethexep", emoji: "🛴", x: 150, y: canvas.height / 2, hp: CHAR_DEFS.Meethexep.hp * BOSS_HP_MULTIPLIER, speed: 4.5, isBoss: true, attackPattern: 'dashAndArea' },
+                     { id: 'HappyMan', name: "Corrupted HappyMan", emoji: "🎧", x: canvas.width - 150, y: canvas.height / 2, hp: CHAR_DEFS.HappyMan.hp * BOSS_HP_MULTIPLIER, speed: 3, isBoss: true, attackPattern: 'waveAttack' },
+                 ],
+                  dialogue: [
+                     { trigger: 'missionStart', speaker: "AdamMady", text: "It really has come to this... I'm sorry." },
+                     { speaker: "Corrupted Henry", text: "Sorry? You should be sorry for trying to nerf us! Prepare for the ultimate troll!" },
+                     { speaker: "Corrupted Meethexep", text: "Feel the Aura surge! You can't handle this speed!" },
+                     { speaker: "Corrupted HappyMan", text: "The final composition... your deletion is the final note." },
+                     // Add more dialogue triggers based on boss HP?
+                     { trigger: 'bossHpThreshold', bossId: 'HenryTheKazakh', threshold: 0.5, speaker: "Corrupted Henry", text: "Gah! Lucky shot! But the game's not over!" },
+                     { trigger: 'bossHpThreshold', bossId: 'Meethexep', threshold: 0.5, speaker: "Corrupted Meethexep", text: "My Aura flickers... but it won't fade!" },
+                     { trigger: 'bossHpThreshold', bossId: 'HappyMan', threshold: 0.5, speaker: "Corrupted HappyMan", text: "Dissonance detected... correcting..." },
+                     // Dialogue on defeating each boss?
+                     { trigger: 'bossDefeated', bossId: 'HenryTheKazakh', speaker: "AdamMady", text: "Henry...!" },
+                     { trigger: 'bossDefeated', bossId: 'Meethexep', speaker: "AdamMady", text: "Meethexep, your scooter..." },
+                     { trigger: 'bossDefeated', bossId: 'HappyMan', speaker: "AdamMady", text: "HappyMan, the music stopped..." },
+                     // Final dialogue after all bosses defeated
+                     { trigger: 'allBossesDefeated', speaker: "AdamMady", text: "It's done. The purge is complete... But what have I done to them?" },
+                     { speaker: "AI Core (Voice - Faint)", text: "System... integrity... failing... Error... Erro..." },
+                 ],
+                 completionTrigger: 'allBossesDefeated',
+                 nextMissionObjective: "Game Complete!", // Leads to victory screen
+             },
+        ];
+
+        // --- Helper Functions ---
+        function vecDistSq(x1, y1, x2, y2) {
+            return (x1 - x2) ** 2 + (y1 - y2) ** 2;
+        }
+
+        function checkCollision(rect1, rect2) {
+            // Check if rect1 and rect2 exist and have properties
+            if (!rect1 || !rect2 ||
+                rect1.x === undefined || rect1.y === undefined || rect1.width === undefined || rect1.height === undefined ||
+                rect2.x === undefined || rect2.y === undefined || rect2.width === undefined || rect2.height === undefined) {
+                // console.warn("Collision check with invalid object:", rect1, rect2);
+                return false;
+            }
+             // Standard AABB collision detection
+             return rect1.x < rect2.x + rect2.width &&
+                    rect1.x + rect1.width > rect2.x &&
+                    rect1.y < rect2.y + rect2.height &&
+                    rect1.y + rect1.height > rect2.y;
+        }
+
+         function worldToScreen(x, y) {
+            return {
+                x: x - gameState.camera.x,
+                y: y - gameState.camera.y
+            };
+        }
+
+        function screenToWorld(x, y) {
+             return {
+                 x: x + gameState.camera.x,
+                 y: y + gameState.camera.y
+             };
+        }
+
+        function updateCamera() {
+            gameState.camera.x = gameState.player.x - canvas.width / 2;
+            gameState.camera.y = gameState.player.y - canvas.height / 2;
+
+            // Clamp camera to map boundaries
+            gameState.camera.x = Math.max(0, Math.min(gameState.camera.x, gameState.map.width - canvas.width));
+            gameState.camera.y = Math.max(0, Math.min(gameState.camera.y, gameState.map.height - canvas.height));
+        }
+
+        function spawnBullet(x, y, targetX, targetY, owner, color = '#FF0000') {
+             let angle = Math.atan2(targetY - y, targetX - x);
+             gameState.bullets.push({
+                 x: x,
+                 y: y,
+                 dx: Math.cos(angle) * BULLET_SPEED,
+                 dy: Math.sin(angle) * BULLET_SPEED,
+                 radius: BULLET_RADIUS,
+                 color: color,
+                 owner: owner, // 'player', 'enemy_id', 'boss_id'
+                 birthTime: Date.now()
+             });
+        }
+
+        function spawnEnemy(type, x, y, hp, speed, fireRate = 0) {
+            let enemy = {
+                id: `enemy_${Date.now()}_${Math.random()}`,
+                x: x, y: y,
+                width: ENEMY_SIZE, height: ENEMY_SIZE,
+                color: type === 'heavy_glitch' ? '#A0522D' : (type === 'shooter' ? '#FFA500' : (type === 'fast_glitch' ? '#FF6347' : '#DC143C')), // Red default
+                emoji: type === 'heavy_glitch' ? '🧱' : (type === 'shooter' ? '🎯' : (type === 'fast_glitch' ? '⚡' : '👾')),
+                hp: hp,
+                maxHp: hp,
+                speed: speed,
+                type: type, // 'glitch', 'shooter', 'fast_glitch', 'heavy_glitch'
+                lastShotTime: 0,
+                fireRate: fireRate,
+                targetX: x, // For wandering or targeting
+                targetY: y,
+                moveCooldown: 0,
+            };
+            gameState.enemies.push(enemy);
+        }
+
+        // --- Dialogue System ---
+        function showDialogue(dialogueArray) {
+            console.log("Showing dialogue:", dialogueArray);
+            if (!dialogueArray || dialogueArray.length === 0) {
+                console.warn("Attempted to show empty dialogue array.");
+                endDialogue(); // Ensure we exit dialogue mode if array is bad
+                return;
+            }
+            gameState.mode = 'dialogue';
+            gameState.dialogueQueue = [...dialogueArray]; // Copy the array
+            gameState.dialogueIndex = 0;
+            displayCurrentDialogue();
+            dialogueBox.style.display = 'block';
+        }
+
+        function displayCurrentDialogue() {
+            if (gameState.dialogueIndex >= gameState.dialogueQueue.length) {
+                endDialogue();
+                return;
+            }
+            const current = gameState.dialogueQueue[gameState.dialogueIndex];
+            // Find character emoji/name if speaker matches a known character
+            let speakerName = current.speaker;
+            const charDef = Object.values(CHAR_DEFS).find(c => c.name === current.speaker);
+            if (charDef) {
+                speakerName = `${charDef.emoji} ${charDef.name}`;
+            } else if (current.speaker.startsWith("Corrupted")) {
+                 const baseName = current.speaker.replace("Corrupted ", "");
+                 const bossChar = gameState.characters.find(c => c.baseName === baseName && c.isBoss);
+                 if (bossChar) speakerName = `${bossChar.emoji} ${current.speaker}`;
+            } else if (current.speaker === "AI Core (Voice)") {
+                 speakerName = `SYSTEM VOICE`;
+            }
+
+
+            dialogueSpeaker.textContent = speakerName;
+            dialogueText.textContent = current.text;
+        }
+
+        function advanceDialogue() {
+            if (gameState.mode !== 'dialogue') return;
+
+            gameState.dialogueIndex++;
+            if (gameState.dialogueIndex >= gameState.dialogueQueue.length) {
+                endDialogue();
+            } else {
+                // Check for trigger on the *next* dialogue item (though usually triggers start dialogue)
+                displayCurrentDialogue();
+            }
+        }
+
+        function endDialogue() {
+            const completedDialogue = gameState.dialogueQueue ? gameState.dialogueQueue[gameState.dialogueIndex -1] : null; // The last shown dialogue
+            dialogueBox.style.display = 'none';
+            gameState.dialogueQueue = [];
+            gameState.dialogueIndex = 0;
+
+            const currentMissionData = missions[gameState.currentMission];
+
+            // Check for mission completion based on dialogue ending
+            if (currentMissionData && currentMissionData.completionTrigger === 'dialogueEnd') {
+                 completeMissionObjective();
+            }
+             else {
+                // Resume previous state if not completing mission
+                 gameState.mode = 'explore'; // Or 'mission' if applicable
+                 if (gameState.currentMission > 0 && gameState.enemies.length > 0) {
+                     gameState.mode = 'mission';
+                 } else {
+                     gameState.mode = 'explore';
+                 }
+            }
+             console.log("Dialogue ended. Resuming mode:", gameState.mode);
+        }
+
+        // --- Mission Management ---
+        function updateObjectiveDisplay() {
+            objectiveDisplay.textContent = `Objective: ${gameState.currentObjective}`;
+        }
+
+         function setupMission(missionId) {
+             console.log(`Setting up mission ${missionId}`);
+             const missionData = missions.find(m => m.id === missionId);
+             if (!missionData) {
+                 console.error(`Mission ${missionId} not found!`);
+                 return;
+             }
+
+             gameState.currentMission = missionId;
+             gameState.currentObjective = missionData.objective;
+             gameState.missionComplete = false;
+             gameState.enemies = []; // Clear previous enemies
+             gameState.bullets = []; // Clear bullets
+
+            // Position player
+            if (missionData.startPos) {
+                gameState.player.x = missionData.startPos.x;
+                gameState.player.y = missionData.startPos.y;
+            }
+
+            // Position/Create Characters for the mission
+            gameState.characters.forEach(c => c.isActive = false); // Deactivate all initially
+            if (missionData.characters) {
+                missionData.characters.forEach(mc => {
+                    let existingChar = gameState.characters.find(c => c.id === mc.id);
+                    if (existingChar) {
+                         if (!mc.inactive) { // Don't reposition if marked inactive for this mission
+                             existingChar.x = mc.x;
+                             existingChar.y = mc.y;
+                             existingChar.hp = mc.hp !== undefined ? mc.hp : (CHAR_DEFS[mc.id]?.hp || 100); // Reset HP or set boss HP
+                             existingChar.isBoss = mc.isBoss || false;
+                             existingChar.attackPattern = mc.attackPattern || null;
+                             existingChar.isActive = true;
+                             existingChar.isDefeated = false; // Reset defeated state for bosses
+                             existingChar.lastAttackTime = 0; // Reset boss attack timer
+                             existingChar.aiState = 'idle'; // Reset boss AI state
+                             existingChar.baseName = CHAR_DEFS[mc.id]?.name || mc.name; // Store base name for corrupted versions
+                             console.log(`Activating/Positioning character ${existingChar.name} for mission ${missionId}`);
+                         } else {
+                             existingChar.isActive = false; // Ensure marked inactive
+                             console.log(`Marking character ${existingChar.name} inactive for mission ${missionId}`);
+                         }
+                    } else {
+                         // This path shouldn't normally be hit if chars are pre-initialized, but as a fallback:
+                         const charDef = CHAR_DEFS[mc.id];
+                         if (charDef && !mc.inactive) {
+                             let newChar = {
+                                 id: mc.id,
+                                 name: mc.isBoss ? mc.name : charDef.name, // Use specific boss name if provided
+                                 baseName: charDef.name,
+                                 emoji: charDef.emoji,
+                                 x: mc.x, y: mc.y,
+                                 width: PLAYER_SIZE, height: PLAYER_SIZE, // Use consistent size
+                                 color: charDef.color,
+                                 hp: mc.hp !== undefined ? mc.hp : charDef.hp,
+                                 maxHp: mc.hp !== undefined ? mc.hp : charDef.hp,
+                                 speed: charDef.speed,
+                                 isBoss: mc.isBoss || false,
+                                 attackPattern: mc.attackPattern || null,
+                                 isActive: true,
+                                 isDefeated: false,
+                                 lastAttackTime: 0,
+                                 aiState: 'idle',
+                             };
+                             gameState.characters.push(newChar);
+                             console.log(`Creating and activating character ${newChar.name} for mission ${missionId}`);
+                         }
+                    }
+                });
+            }
+            // Ensure player character is always active
+            const playerCharData = gameState.characters.find(c => c.id === 'AdamMady');
+            if (playerCharData) playerCharData.isActive = true;
+
+
+            // Add map elements (like mission markers)
+            gameState.map.missionMarkers = []; // Clear old markers
+            if (missionData.mapAdditions) {
+                 missionData.mapAdditions.forEach(addition => {
+                     if (addition.type === 'marker') {
+                         gameState.map.missionMarkers.push({
+                             x: addition.x,
+                             y: addition.y,
+                             missionId: addition.missionId,
+                             label: addition.label || '⭐' // Default to star
+                         });
+                     }
+                 });
+            }
+
+             // Spawn enemies if any
+             if (missionData.spawnEnemies) {
+                 missionData.spawnEnemies.forEach(spawn => {
+                     for (let i = 0; i < spawn.count; i++) {
+                         // Add slight randomness to spawn position
+                         const spawnX = spawn.x + (Math.random() - 0.5) * TILE_SIZE * 2;
+                         const spawnY = spawn.y + (Math.random() - 0.5) * TILE_SIZE * 2;
+                         spawnEnemy(spawn.type, spawnX, spawnY, spawn.hp, spawn.speed, spawn.fireRate);
+                     }
+                 });
+             }
+
+            // Set game mode
+            if (gameState.enemies.length > 0 || missionId === 10) { // Mission 10 is inherently mission mode
+                 gameState.mode = 'mission';
+            } else {
+                 gameState.mode = 'explore'; // Default to explore if no enemies spawned
+            }
+
+            // Trigger start dialogue immediately if present
+            const startDialogue = missionData.dialogue?.find(d => d.trigger === 'missionStart');
+            if (startDialogue) {
+                // Find the full dialogue sequence starting with this trigger
+                const startIndex = missionData.dialogue.findIndex(d => d.trigger === 'missionStart');
+                showDialogue(missionData.dialogue.slice(startIndex));
+            } else if (missionData.dialogue && missionData.completionTrigger !== 'dialogueEnd' && missionId !== 1 && missionId !== 3 && missionId !== 4 && missionId !== 7 && missionId !== 8) {
+                 // Preemptively show dialogue if it doesn't depend on interaction (and isn't the initial meetups)
+                 // This needs refinement - maybe a specific 'autoStart' trigger?
+                 // For now, avoid auto-showing for missions expecting interaction first.
+            }
+
+
+            updateObjectiveDisplay();
+            updateCamera(); // Center camera on player start
+            console.log(`Mission ${missionId} setup complete. Mode: ${gameState.mode}`);
+         }
+
+
+        function checkMissionTriggers() {
+            if (gameState.mode === 'dialogue') return; // Don't check triggers during dialogue
+
+            const missionData = missions[gameState.currentMission];
+            if (!missionData || gameState.missionComplete) return;
+
+            // 1. Dialogue Triggers (Character Interaction) - Checked during player update loop
+
+            // 2. Location Triggers
+            missionData.dialogue?.forEach((diag, index) => {
+                 if (diag.trigger === 'nearLocation' && !diag.triggered) {
+                     const distSq = vecDistSq(gameState.player.x, gameState.player.y, diag.x, diag.y);
+                     if (distSq < (diag.radius || TILE_SIZE) ** 2) {
+                         diag.triggered = true; // Prevent re-triggering immediately
+                         showDialogue(missionData.dialogue.slice(index));
+                         return; // Stop checking other triggers once dialogue starts
+                     }
+                 }
+             });
+             if (gameState.mode === 'dialogue') return; // Re-check as dialogue might have started
+
+            // 3. Enemy Defeat Triggers
+             const enemiesDefeated = gameState.enemies.length === 0;
+             if (enemiesDefeated) {
+                 missionData.dialogue?.forEach((diag, index) => {
+                     if (diag.trigger === 'enemiesDefeated' && !diag.triggered) {
+                         diag.triggered = true;
+                         showDialogue(missionData.dialogue.slice(index));
+                         return;
+                     }
+                 });
+                  if (gameState.mode === 'dialogue') return;
+
+                 // Check completion trigger after potential dialogue
+                 if (missionData.completionTrigger === 'enemiesDefeated') {
+                     completeMissionObjective();
+                     return;
+                 }
+             }
+
+            // 4. Reach Marker Trigger (Primary check after defeating enemies if applicable)
+            if (missionData.completionTrigger === 'reachMarker') {
+                 const marker = gameState.map.missionMarkers.find(m => m.missionId === missionData.id);
+                 if (marker) {
+                     const markerRect = { x: marker.x - TILE_SIZE/2, y: marker.y - TILE_SIZE/2, width: TILE_SIZE, height: TILE_SIZE };
+                     if (checkCollision(gameState.player, markerRect)) {
+                         // Only complete if enemies are defeated (if there were any)
+                         const missionHadEnemies = missionData.spawnEnemies && missionData.spawnEnemies.length > 0;
+                         if (!missionHadEnemies || enemiesDefeated) {
+                             completeMissionObjective();
+                             return;
+                         } else if (!enemiesDefeated) {
+                             // Maybe display a message? "Defeat enemies first!"
+                         }
+                     }
+                 }
+            }
+
+            // 5. Boss HP Threshold Triggers
+            if (missionData.id === 10) {
+                missionData.dialogue?.forEach((diag, index) => {
+                    if (diag.trigger === 'bossHpThreshold' && !diag.triggered) {
+                        const boss = gameState.characters.find(c => c.id === diag.bossId && c.isBoss);
+                        if (boss && boss.hp / boss.maxHp <= diag.threshold) {
+                            diag.triggered = true;
+                            // We need a way to *insert* dialogue without stopping the fight.
+                            // For simplicity now, let's just queue it. If already in dialogue, this won't work well.
+                            // A better system would display it briefly overlayed.
+                            // TEMP: Show dialogue, pausing the fight.
+                             showDialogue(missionData.dialogue.slice(index));
+                             return;
+                        }
+                    }
+                });
+                 if (gameState.mode === 'dialogue') return;
+
+                 // 6. Boss Defeated Triggers
+                 const activeBosses = gameState.characters.filter(c => c.isBoss && !c.isDefeated);
+                 gameState.characters.filter(c => c.isBoss && c.hp <= 0 && !c.isDefeated).forEach(defeatedBoss => {
+                     defeatedBoss.isDefeated = true;
+                     defeatedBoss.isActive = false; // Effectively remove from fight
+                     console.log(`${defeatedBoss.name} defeated!`);
+
+                     // Trigger dialogue specific to this boss defeat
+                     const defeatDialogue = missionData.dialogue.find(d => d.trigger === 'bossDefeated' && d.bossId === defeatedBoss.id && !d.triggered);
+                     if (defeatDialogue) {
+                         const startIndex = missionData.dialogue.findIndex(d => d.trigger === 'bossDefeated' && d.bossId === defeatedBoss.id);
+                          defeatDialogue.triggered = true; // Mark specific dialogue as triggered
+                          // Again, pausing for simplicity
+                          showDialogue(missionData.dialogue.slice(startIndex, startIndex + 1)); // Show only this line for now
+                          return; // Exit after showing dialogue
+                     }
+                 });
+                if (gameState.mode === 'dialogue') return;
+
+                // 7. All Bosses Defeated Trigger / Mission 10 Completion
+                if (activeBosses.length === 0 && gameState.characters.some(c => c.isBoss)) { // Ensure bosses existed
+                     const allDefeatedDialogue = missionData.dialogue.find(d => d.trigger === 'allBossesDefeated' && !d.triggered);
+                     if (allDefeatedDialogue) {
+                         const startIndex = missionData.dialogue.findIndex(d => d.trigger === 'allBossesDefeated');
+                         allDefeatedDialogue.triggered = true;
+                         showDialogue(missionData.dialogue.slice(startIndex));
+                         return;
+                     }
+                      if (gameState.mode === 'dialogue') return;
+
+                     if (missionData.completionTrigger === 'allBossesDefeated') {
+                         completeMissionObjective();
+                         return;
+                     }
+                }
+            }
+        }
+
+
+        function completeMissionObjective() {
+            if (gameState.missionComplete) return; // Already completed
+
+            console.log(`Mission ${gameState.currentMission} objective complete.`);
+            gameState.missionComplete = true;
+            const currentMissionData = missions[gameState.currentMission];
+
+            // Check if this is the final mission
+            if (gameState.currentMission === 10) {
+                // VICTORY State
+                gameState.mode = 'victory';
+                victoryScreen.style.display = 'flex';
+                return;
+            }
+
+            // Prepare for the next mission
+            const nextMissionId = gameState.currentMission + 1;
+            const nextMissionData = missions.find(m => m.id === nextMissionId);
+
+            if (nextMissionData) {
+                // Set up the next objective display immediately
+                 gameState.currentObjective = currentMissionData.nextMissionObjective || `Proceed to Mission ${nextMissionId}`;
+                 updateObjectiveDisplay();
+
+                 // Reset dialogue triggers for the completed mission (important!)
+                 currentMissionData.dialogue?.forEach(d => d.triggered = false);
+
+                 // Transition state - maybe back to explore briefly?
+                 gameState.mode = 'explore';
+                 gameState.enemies = []; // Ensure enemies are cleared
+
+                 // Automatically start the next mission's setup
+                 setupMission(nextMissionId);
+
+
+            } else {
+                console.error("No next mission found!");
+                // This case shouldn't happen if Mission 10 leads to victory
+                 gameState.mode = 'explore'; // Or show some end message?
+            }
+        }
+
+
+        // --- Update Functions ---
+        function updatePlayer(dt) {
+            if (!gameState.player) return;
+
+            let dx = 0;
+            let dy = 0;
+            if (gameState.keys.w) dy -= 1;
+            if (gameState.keys.s) dy += 1;
+            if (gameState.keys.a) dx -= 1;
+            if (gameState.keys.d) dx += 1;
+
+            // Normalize diagonal movement
+            if (dx !== 0 && dy !== 0) {
+                const factor = Math.sqrt(0.5);
+                dx *= factor;
+                dy *= factor;
+            }
+
+            const moveSpeed = gameState.player.speed;
+            let targetX = gameState.player.x + dx * moveSpeed;
+            let targetY = gameState.player.y + dy * moveSpeed;
+
+            // Collision detection with map boundaries
+             targetX = Math.max(gameState.player.width / 2, Math.min(targetX, gameState.map.width - gameState.player.width / 2));
+             targetY = Math.max(gameState.player.height / 2, Math.min(targetY, gameState.map.height - gameState.player.height / 2));
+
+
+             // Collision detection with buildings
+             const playerRect = {
+                 x: targetX - gameState.player.width / 2,
+                 y: targetY - gameState.player.height / 2,
+                 width: gameState.player.width,
+                 height: gameState.player.height
+             };
+
+             let collisionX = false;
+             let collisionY = false;
+
+            // Check collision with characters (treat them as obstacles when not in dialogue/boss fight)
+             gameState.characters.forEach(char => {
+                if (char.isActive && char.id !== 'AdamMady' && !(char.isBoss && gameState.currentMission === 10)) { // Don't collide with self or active bosses
+                     const charRect = { x: char.x - char.width / 2, y: char.y - char.height / 2, width: char.width, height: char.height };
+                    // Check X movement collision
+                     if (checkCollision({ ...playerRect, y: gameState.player.y - gameState.player.height/2 }, charRect)) {
+                         collisionX = true;
+                     }
+                     // Check Y movement collision
+                      if (checkCollision({ ...playerRect, x: gameState.player.x - gameState.player.width/2 }, charRect)) {
+                         collisionY = true;
+                     }
+                 }
+             });
+
+
+            // Check collision with buildings
+             gameState.map.buildings.forEach(building => {
+                 // Check X movement collision
+                 if (checkCollision({ ...playerRect, y: gameState.player.y - gameState.player.height/2 }, building)) {
+                     collisionX = true;
+                 }
+                 // Check Y movement collision
+                  if (checkCollision({ ...playerRect, x: gameState.player.x - gameState.player.width/2 }, building)) {
+                     collisionY = true;
+                 }
+             });
+
+             if (!collisionX) gameState.player.x = targetX;
+             if (!collisionY) gameState.player.y = targetY;
+
+
+            // Shooting
+            const now = Date.now();
+            if (gameState.mouse.down && (now - gameState.mouse.lastShotTime > FIRE_RATE)) {
+                 gameState.mouse.lastShotTime = now;
+                 const worldMouse = screenToWorld(gameState.mouse.x, gameState.mouse.y);
+                 spawnBullet(gameState.player.x, gameState.player.y, worldMouse.x, worldMouse.y, 'player', '#00FFFF'); // Cyan bullets for player
+            }
+
+            // Check interaction with characters (for dialogue)
+            gameState.characters.forEach(char => {
+                if (char.isActive && char.id !== 'AdamMady' && !char.isBoss) { // Can't talk to bosses
+                    const distSq = vecDistSq(gameState.player.x, gameState.player.y, char.x, char.y);
+                    const interactRadiusSq = (PLAYER_SIZE + 10) ** 2; // A bit larger than touching
+
+                    if (distSq < interactRadiusSq) {
+                        // Check if this character triggers dialogue for the current mission
+                        const missionData = missions[gameState.currentMission];
+                        if (missionData) {
+                             // Find dialogue where the trigger is interacting with this specific character
+                             const charDialogue = missionData.dialogue?.find(d =>
+                                (d.speaker === char.name || d.speaker === char.id) && // Match by name or ID
+                                (missionData.completionTrigger === 'dialogueEnd' || missionData.objective.includes(char.name)) && // Must be relevant to objective
+                                gameState.mode !== 'dialogue' && // Not already talking
+                                !gameState.missionComplete // Mission objective not yet met
+                             );
+
+                             if (charDialogue) {
+                                 const startIndex = missionData.dialogue.findIndex(d => d === charDialogue);
+                                 // Prevent triggering if already triggered (using a simpler check for now)
+                                 if (!charDialogue.triggered) {
+                                     charDialogue.triggered = true; // Mark as triggered conceptually
+                                     console.log(`Starting dialogue with ${char.name}`);
+                                     showDialogue(missionData.dialogue.slice(startIndex));
+                                 }
+                             }
+                        }
+                    }
+                }
+            });
+
+            updateCamera();
+        }
+
+        function updateBullets(dt) {
+             gameState.bullets = gameState.bullets.filter(bullet => {
+                 bullet.x += bullet.dx;
+                 bullet.y += bullet.dy;
+
+                 // Check collision with map boundaries
+                 if (bullet.x < 0 || bullet.x > gameState.map.width || bullet.y < 0 || bullet.y > gameState.map.height) {
+                     return false; // Remove bullet
+                 }
+
+                 // Check collision with buildings
+                  for (const building of gameState.map.buildings) {
+                      // Simple point-in-rect check for bullet center vs building
+                      if (bullet.x > building.x && bullet.x < building.x + building.width &&
+                          bullet.y > building.y && bullet.y < building.y + building.height) {
+                          return false; // Remove bullet
+                      }
+                  }
+
+
+                 // Check collision with enemies (if player bullet)
+                 if (bullet.owner === 'player') {
+                     for (let i = gameState.enemies.length - 1; i >= 0; i--) {
+                         const enemy = gameState.enemies[i];
+                         const enemyRect = { x: enemy.x - enemy.width / 2, y: enemy.y - enemy.height / 2, width: enemy.width, height: enemy.height };
+                         // Point-in-rect check
+                          if (bullet.x > enemyRect.x && bullet.x < enemyRect.x + enemyRect.width &&
+                             bullet.y > enemyRect.y && bullet.y < enemyRect.y + enemyRect.height)
+                          {
+                             enemy.hp -= 15; // Bullet damage
+                             if (enemy.hp <= 0) {
+                                 gameState.enemies.splice(i, 1); // Remove dead enemy
+                             }
+                             return false; // Remove bullet
+                         }
+                     }
+                      // Check collision with bosses (if player bullet)
+                      for (const boss of gameState.characters.filter(c => c.isBoss && !c.isDefeated)) {
+                          const bossRect = { x: boss.x - boss.width / 2, y: boss.y - boss.height / 2, width: boss.width, height: boss.height };
+                          if (bullet.x > bossRect.x && bullet.x < bossRect.x + bossRect.width &&
+                              bullet.y > bossRect.y && bullet.y < bossRect.y + bossRect.height)
+                          {
+                              boss.hp -= 10; // Less damage to bosses maybe?
+                              if (boss.hp < 0) boss.hp = 0; // Prevent negative HP display
+                              // Defeat check happens in checkMissionTriggers
+                              return false; // Remove bullet
+                          }
+                      }
+
+                 }
+                 // Check collision with player (if enemy/boss bullet)
+                 else if (bullet.owner !== 'player') {
+                      const playerRect = { x: gameState.player.x - gameState.player.width / 2, y: gameState.player.y - gameState.player.height / 2, width: gameState.player.width, height: gameState.player.height };
+                     if (bullet.x > playerRect.x && bullet.x < playerRect.x + playerRect.width &&
+                         bullet.y > playerRect.y && bullet.y < playerRect.y + playerRect.height)
+                     {
+                         gameState.player.hp -= 10; // Damage from enemy
+                         if (gameState.player.hp <= 0) {
+                             gameState.player.hp = 0;
+                             gameState.mode = 'gameOver';
+                             gameOverScreen.style.display = 'flex';
+                         }
+                         return false; // Remove bullet
+                     }
+                 }
+
+
+                 // Basic lifetime (prevent infinite bullets if they miss everything)
+                 if (Date.now() - bullet.birthTime > 5000) { // 5 seconds lifetime
+                    return false;
+                 }
+
+                 return true; // Keep bullet
+             });
+        }
+
+        function updateEnemies(dt) {
+            const now = Date.now();
+            gameState.enemies.forEach(enemy => {
+                const distToPlayerSq = vecDistSq(enemy.x, enemy.y, gameState.player.x, gameState.player.y);
+                const detectionRadiusSq = (TILE_SIZE * 10) ** 2; // How far enemies can 'see'
+
+                let targetX = enemy.targetX;
+                let targetY = enemy.targetY;
+
+                 if (distToPlayerSq < detectionRadiusSq) {
+                     // Player detected, move towards player
+                     targetX = gameState.player.x;
+                     targetY = gameState.player.y;
+
+                     // Shooting behavior for 'shooter' type
+                     if (enemy.type === 'shooter' && now - enemy.lastShotTime > enemy.fireRate) {
+                         enemy.lastShotTime = now;
+                         spawnBullet(enemy.x, enemy.y, gameState.player.x, gameState.player.y, enemy.id, '#FF8C00'); // Orange enemy bullets
+                     }
+                 } else {
+                      // Player not detected, simple wander behavior (pick new target occasionally)
+                      if (enemy.moveCooldown <= 0) {
+                          enemy.targetX = enemy.x + (Math.random() - 0.5) * TILE_SIZE * 5;
+                          enemy.targetY = enemy.y + (Math.random() - 0.5) * TILE_SIZE * 5;
+                           // Clamp target to map boundaries
+                          enemy.targetX = Math.max(enemy.width / 2, Math.min(enemy.targetX, gameState.map.width - enemy.width / 2));
+                          enemy.targetY = Math.max(enemy.height / 2, Math.min(enemy.targetY, gameState.map.height - enemy.height / 2));
+                          enemy.moveCooldown = Math.random() * 3000 + 2000; // Cooldown 2-5 seconds
+                      } else {
+                          enemy.moveCooldown -= dt * 1000; // dt is in seconds
+                      }
+                      targetX = enemy.targetX;
+                      targetY = enemy.targetY;
+                 }
+
+
+                 // Move towards target (if not too close)
+                 const distToTargetSq = vecDistSq(enemy.x, enemy.y, targetX, targetY);
+                 if (distToTargetSq > (TILE_SIZE * 0.5) ** 2) { // Don't jitter when close
+                     let angle = Math.atan2(targetY - enemy.y, targetX - enemy.x);
+                     let moveX = Math.cos(angle) * enemy.speed;
+                     let moveY = Math.sin(angle) * enemy.speed;
+
+                     let nextX = enemy.x + moveX;
+                     let nextY = enemy.y + moveY;
+
+                     // Simple collision avoidance (with buildings, maybe other enemies?) - basic version
+                     const enemyRect = { x: nextX - enemy.width / 2, y: nextY - enemy.height / 2, width: enemy.width, height: enemy.height };
+                     let collision = false;
+                     for (const building of gameState.map.buildings) {
+                         if (checkCollision(enemyRect, building)) {
+                             collision = true;
+                             break;
+                         }
+                     }
+
+                     if (!collision) {
+                        enemy.x = nextX;
+                        enemy.y = nextY;
+                     } else {
+                         // Simple reaction: stop or try slight deviation? Stop for now.
+                         // Or maybe just reset target if hitting wall?
+                         enemy.moveCooldown = 0; // Pick new target faster if stuck
+                     }
+                 }
+             });
+        }
+
+        function updateBosses(dt) {
+            if (gameState.currentMission !== 10) return;
+            const now = Date.now();
+
+            gameState.characters.filter(c => c.isBoss && !c.isDefeated).forEach(boss => {
+                 const distToPlayerSq = vecDistSq(boss.x, boss.y, gameState.player.x, gameState.player.y);
+
+                 switch(boss.attackPattern) {
+                     case 'chargeAndShoot': // HenryTheKazakh
+                         // Charge if far, shoot if close
+                         const chargeDistSq = (TILE_SIZE * 8) ** 2;
+                         const shootDistSq = (TILE_SIZE * 5) ** 2;
+
+                         if (distToPlayerSq > chargeDistSq && boss.aiState !== 'charging') {
+                             boss.aiState = 'moving';
+                         } else if (distToPlayerSq <= shootDistSq && boss.aiState !== 'shooting') {
+                             boss.aiState = 'shooting';
+                             boss.lastAttackTime = now; // Start shooting cooldown timer
+                         } else if (distToPlayerSq > shootDistSq && distToPlayerSq <= chargeDistSq && boss.aiState !== 'moving') {
+                             boss.aiState = 'moving'; // Move closer if in mid-range
+                         }
+
+                         // Action based on state
+                         if (boss.aiState === 'moving') {
+                             let angle = Math.atan2(gameState.player.y - boss.y, gameState.player.x - boss.x);
+                             boss.x += Math.cos(angle) * boss.speed;
+                             boss.y += Math.sin(angle) * boss.speed;
+                         } else if (boss.aiState === 'shooting') {
+                             const fireRate = 1000 - (1 - boss.hp / boss.maxHp) * 700; // Faster fire rate at lower HP
+                             if (now - boss.lastAttackTime > fireRate) {
+                                 boss.lastAttackTime = now;
+                                 // Shoot a burst or spread? Simple shot for now.
+                                 spawnBullet(boss.x, boss.y, gameState.player.x, gameState.player.y, boss.id, boss.color);
+                                  // Maybe reposition slightly?
+                                 if (Math.random() < 0.3) boss.aiState = 'moving'; // Chance to move again
+                             }
+                         }
+                         break;
+
+                     case 'dashAndArea': // Meethexep
+                         const dashCooldown = 4000;
+                         const dashDistSq = (TILE_SIZE * 15) ** 2;
+                         const dashSpeed = boss.speed * 3;
+                         const dashDuration = 300; // ms
+
+                         if (boss.aiState === 'dashing') {
+                             // Continue dash
+                             let now = Date.now();
+                             if (now > boss.dashEndTime) {
+                                  boss.aiState = 'cooldown'; // Enter cooldown after dash
+                                  boss.lastAttackTime = now; // Use lastAttackTime for cooldown start
+                                  // Maybe Area effect at end of dash?
+                                  // Spawn temporary "Aura" effect - visual only for now
+                             } else {
+                                 boss.x += boss.dashDx * dashSpeed * dt*60; // Adjust speed based on dt
+                                 boss.y += boss.dashDy * dashSpeed * dt*60;
+                             }
+                         } else if (boss.aiState === 'cooldown') {
+                             // Wait for cooldown
+                              if (now - boss.lastAttackTime > dashCooldown) {
+                                 boss.aiState = 'idle';
+                             }
+                              // Maybe move slowly during cooldown?
+                              let angleToPlayer = Math.atan2(gameState.player.y - boss.y, gameState.player.x - boss.x);
+                              boss.x += Math.cos(angleToPlayer) * boss.speed * 0.5; // Slower move
+                              boss.y += Math.sin(angleToPlayer) * boss.speed * 0.5;
+
+                         } else { // Idle or Moving state
+                             // If player is far and cooldown ready, prepare to dash
+                             if (distToPlayerSq > dashDistSq && (boss.aiState === 'idle' || boss.aiState === 'moving')) {
+                                 boss.aiState = 'preparing_dash';
+                                 boss.dashTargetX = gameState.player.x; // Target player's current pos
+                                 boss.dashTargetY = gameState.player.y;
+                                 boss.dashPrepTime = now;
+                             } else {
+                                // Default: Move towards player
+                                 let angle = Math.atan2(gameState.player.y - boss.y, gameState.player.x - boss.x);
+                                 boss.x += Math.cos(angle) * boss.speed;
+                                 boss.y += Math.sin(angle) * boss.speed;
+                                 boss.aiState = 'moving';
+                             }
+
+                             if(boss.aiState === 'preparing_dash' && now - boss.dashPrepTime > 500) { // 0.5 sec telegraph
+                                 boss.aiState = 'dashing';
+                                 let angle = Math.atan2(boss.dashTargetY - boss.y, boss.dashTargetX - boss.x);
+                                 boss.dashDx = Math.cos(angle);
+                                 boss.dashDy = Math.sin(angle);
+                                 boss.dashStartTime = now;
+                                 boss.dashEndTime = now + dashDuration;
+                             }
+                         }
+                         break;
+
+                     case 'waveAttack': // HappyMan
+                         const waveCooldown = 2500 - (1 - boss.hp / boss.maxHp) * 1500; // Faster waves at low HP
+                         const waveSpeed = 4;
+                         const numWaves = 3;
+
+                         if (now - boss.lastAttackTime > waveCooldown) {
+                             boss.lastAttackTime = now;
+                             boss.aiState = 'attacking';
+                             // Spawn waves - represent as special bullets?
+                             let angleToPlayer = Math.atan2(gameState.player.y - boss.y, gameState.player.x - boss.x);
+                             for (let i = 0; i < numWaves; i++) {
+                                 let offsetAngle = angleToPlayer + (i - (numWaves - 1) / 2) * 0.3; // Spread
+                                 gameState.bullets.push({
+                                     x: boss.x, y: boss.y,
+                                     dx: Math.cos(offsetAngle) * waveSpeed,
+                                     dy: Math.sin(offsetAngle) * waveSpeed,
+                                     radius: BULLET_RADIUS * 2, // Larger wave bullets
+                                     color: boss.color,
+                                     owner: boss.id,
+                                     birthTime: now,
+                                     isWave: true // Custom flag if needed
+                                 });
+                             }
+                         } else {
+                              boss.aiState = 'moving';
+                               // Move side to side relative to player? Or just keep distance?
+                               let desiredDist = TILE_SIZE * 7;
+                               let angleToPlayer = Math.atan2(gameState.player.y - boss.y, gameState.player.x - boss.x);
+                               if (distToPlayerSq < (desiredDist * 0.9)**2) { // Too close, move away
+                                   boss.x -= Math.cos(angleToPlayer) * boss.speed;
+                                   boss.y -= Math.sin(angleToPlayer) * boss.speed;
+                               } else if (distToPlayerSq > (desiredDist * 1.1)**2) { // Too far, move closer
+                                    boss.x += Math.cos(angleToPlayer) * boss.speed;
+                                    boss.y += Math.sin(angleToPlayer) * boss.speed;
+                               } else { // About right distance, strafe
+                                   let perpendicularAngle = angleToPlayer + Math.PI / 2;
+                                   boss.x += Math.cos(perpendicularAngle) * boss.speed * 0.7 * (boss.strafeDirection || 1);
+                                   boss.y += Math.sin(perpendicularAngle) * boss.speed * 0.7 * (boss.strafeDirection || 1);
+                                   if (!boss.strafeTimer || now > boss.strafeTimer) {
+                                       boss.strafeDirection = (Math.random() < 0.5 ? 1 : -1);
+                                       boss.strafeTimer = now + Math.random() * 1500 + 1000; // Strafe for 1-2.5 sec
+                                   }
+                               }
+                         }
+                         break;
+                 }
+
+                 // Clamp boss position to map boundaries (simple rect clamp)
+                boss.x = Math.max(boss.width / 2, Math.min(boss.x, gameState.map.width - boss.width / 2));
+                boss.y = Math.max(boss.height / 2, Math.min(boss.y, gameState.map.height - boss.height / 2));
+                 // Add collision with buildings if needed for bosses too
+            });
+        }
+
+
+        // --- Draw Functions ---
+        function drawPlayer() {
+            if (!gameState.player) return;
+            const screenPos = worldToScreen(gameState.player.x, gameState.player.y);
+            const charDef = CHAR_DEFS.AdamMady;
+
+             // Draw player emoji
+             ctx.font = `${PLAYER_SIZE}px Arial`;
+             ctx.textAlign = 'center';
+             ctx.textBaseline = 'middle';
+             ctx.fillText(charDef.emoji, screenPos.x, screenPos.y);
+
+            // Draw HP bar above player
+            const hpBarWidth = PLAYER_SIZE * 1.5;
+            const hpBarHeight = 8;
+            const hpBarX = screenPos.x - hpBarWidth / 2;
+            const hpBarY = screenPos.y - PLAYER_SIZE / 2 - hpBarHeight - 5; // Above the emoji
+            const currentHpWidth = hpBarWidth * (gameState.player.hp / PLAYER_HP);
+
+            ctx.fillStyle = '#555'; // Background of HP bar
+            ctx.fillRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+            ctx.fillStyle = '#00FF00'; // Green for HP
+            ctx.fillRect(hpBarX, hpBarY, currentHpWidth, hpBarHeight);
+             ctx.strokeStyle = '#FFF';
+             ctx.strokeRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+        }
+
+        function drawCharacters() {
+             gameState.characters.forEach(char => {
+                 if (char.isActive && char.id !== 'AdamMady') { // Don't redraw player here
+                     const screenPos = worldToScreen(char.x, char.y);
+                     // Check if character is on screen before drawing
+                     if (screenPos.x > -PLAYER_SIZE && screenPos.x < canvas.width + PLAYER_SIZE &&
+                         screenPos.y > -PLAYER_SIZE && screenPos.y < canvas.height + PLAYER_SIZE)
+                     {
+                         ctx.font = `${PLAYER_SIZE}px Arial`;
+                         ctx.textAlign = 'center';
+                         ctx.textBaseline = 'middle';
+                         ctx.fillText(char.emoji, screenPos.x, screenPos.y);
+
+                         // Draw HP bar for bosses
+                         if (char.isBoss && !char.isDefeated) {
+                             const hpBarWidth = PLAYER_SIZE * 2;
+                             const hpBarHeight = 10;
+                             const hpBarX = screenPos.x - hpBarWidth / 2;
+                             const hpBarY = screenPos.y - PLAYER_SIZE / 2 - hpBarHeight - 8;
+                             const currentHpWidth = hpBarWidth * (char.hp / char.maxHp);
+
+                             ctx.fillStyle = '#550000'; // Red background for boss HP
+                             ctx.fillRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+                             ctx.fillStyle = '#FF0000'; // Red for boss HP
+                             ctx.fillRect(hpBarX, hpBarY, currentHpWidth, hpBarHeight);
+                              ctx.strokeStyle = '#FFF';
+                              ctx.strokeRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+
+                              // Draw boss name
+                              ctx.fillStyle = '#FFF';
+                              ctx.font = '12px Courier New';
+                              ctx.fillText(char.name, screenPos.x, hpBarY - 5);
+                         }
+                     }
+                 }
+             });
+        }
+
+
+        function drawEnemies() {
+            gameState.enemies.forEach(enemy => {
+                const screenPos = worldToScreen(enemy.x, enemy.y);
+                 // Check if enemy is on screen before drawing
+                 if (screenPos.x > -ENEMY_SIZE && screenPos.x < canvas.width + ENEMY_SIZE &&
+                     screenPos.y > -ENEMY_SIZE && screenPos.y < canvas.height + ENEMY_SIZE)
+                 {
+                     ctx.font = `${enemy.width}px Arial`; // Use width for size
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText(enemy.emoji, screenPos.x, screenPos.y);
+
+                    // Draw HP bar
+                    const hpBarWidth = enemy.width * 1.2;
+                    const hpBarHeight = 6;
+                    const hpBarX = screenPos.x - hpBarWidth / 2;
+                    const hpBarY = screenPos.y - enemy.height / 2 - hpBarHeight - 4;
+                    const currentHpWidth = hpBarWidth * (enemy.hp / enemy.maxHp);
+
+                    ctx.fillStyle = '#400'; // Dark red background
+                    ctx.fillRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+                    ctx.fillStyle = '#F00'; // Red HP
+                    ctx.fillRect(hpBarX, hpBarY, currentHpWidth, hpBarHeight);
+                    // Optional border
+                    // ctx.strokeStyle = '#FCC';
+                    // ctx.strokeRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+                 }
+            });
+        }
+
+        function drawBullets() {
+            gameState.bullets.forEach(bullet => {
+                const screenPos = worldToScreen(bullet.x, bullet.y);
+                 // Check if bullet is on screen before drawing
+                 if (screenPos.x > -bullet.radius && screenPos.x < canvas.width + bullet.radius &&
+                     screenPos.y > -bullet.radius && screenPos.y < canvas.height + bullet.radius)
+                 {
+                    ctx.fillStyle = bullet.color;
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, bullet.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Simple sparkle effect
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x + (Math.random()-0.5)*2, screenPos.y + (Math.random()-0.5)*2, bullet.radius * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                 }
+            });
+        }
+
+         function drawMap() {
+             // Background color (already set by canvas style, but can be overridden)
+             ctx.fillStyle = '#333';
+             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+             // Draw buildings
+             ctx.fillStyle = '#555'; // Building color
+             ctx.strokeStyle = '#777'; // Building outline
+             gameState.map.buildings.forEach(building => {
+                 const screenPos = worldToScreen(building.x, building.y);
+                 // Check if building overlaps with the screen view
+                 if (screenPos.x < canvas.width && screenPos.x + building.width > 0 &&
+                     screenPos.y < canvas.height && screenPos.y + building.height > 0)
+                 {
+                    ctx.fillRect(screenPos.x, screenPos.y, building.width, building.height);
+                    ctx.strokeRect(screenPos.x, screenPos.y, building.width, building.height);
+                 }
+             });
+
+             // Draw mission markers
+              gameState.map.missionMarkers.forEach(marker => {
+                 if (marker.missionId === gameState.currentMission) { // Only draw current mission marker
+                     const screenPos = worldToScreen(marker.x, marker.y);
+                     if (screenPos.x > 0 && screenPos.x < canvas.width &&
+                         screenPos.y > 0 && screenPos.y < canvas.height)
+                     {
+                         ctx.font = `${TILE_SIZE * 0.8}px Arial`;
+                         ctx.textAlign = 'center';
+                         ctx.textBaseline = 'middle';
+                         // Pulsing effect for marker
+                         const pulse = Math.sin(Date.now() * 0.005) * 0.1 + 1.0; // Simple scale pulse
+                         const size = TILE_SIZE * 0.8 * pulse;
+                         ctx.font = `${size}px Arial`;
+                         ctx.fillStyle = 'rgba(255, 215, 0, 0.9)'; // Gold, slightly transparent
+                         ctx.fillText(marker.label, screenPos.x, screenPos.y);
+                         // Reset font size? No, draw functions set their own fonts.
+                     }
+                 }
+             });
+         }
+
+         function drawHUD() {
+             // Draw Player HP Text (optional, already have bar)
+             ctx.fillStyle = '#FFF';
+             ctx.font = '16px Courier New';
+             ctx.textAlign = 'left';
+             ctx.textBaseline = 'top';
+             ctx.fillText(`HP: ${gameState.player.hp}/${PLAYER_HP}`, 10, 10);
+
+             // Draw Current Mission ID (for debugging/info)
+             ctx.textAlign = 'right';
+             ctx.fillText(`Mission: ${gameState.currentMission}`, canvas.width - 10, 30);
+
+             // Objective display is handled by HTML overlay
+         }
+
+
+        // --- Game Loop ---
+        function gameLoop(timestamp) {
+            gameState.deltaTime = (timestamp - gameState.lastUpdateTime) / 1000; // Delta time in seconds
+            gameState.lastUpdateTime = timestamp;
+
+            // Limit delta time to prevent physics jumps on lag spikes
+            gameState.deltaTime = Math.min(gameState.deltaTime, 0.1);
+
+            // Handle states that pause updates
+            if (gameState.mode === 'title' || gameState.mode === 'gameOver' || gameState.mode === 'victory') {
+                // Don't update game logic, just wait for interaction
+                 requestAnimationFrame(gameLoop);
+                 return;
+            }
+             if (gameState.mode === 'dialogue') {
+                 // Only draw, no updates
+                 draw();
+                 requestAnimationFrame(gameLoop);
+                 return;
+             }
+
+
+            // --- Updates ---
+            updatePlayer(gameState.deltaTime);
+            if (gameState.mode === 'mission' || gameState.mode === 'explore') { // Update enemies/bosses only in these modes
+                updateEnemies(gameState.deltaTime);
+                 if (gameState.currentMission === 10) {
+                     updateBosses(gameState.deltaTime);
+                 }
+            }
+            updateBullets(gameState.deltaTime);
+            checkMissionTriggers(); // Check after updates
+
+            // --- Drawing ---
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw game elements relative to camera
+            drawMap();
+            drawCharacters(); // Draw NPCs/Bosses first
+            drawEnemies();
+            drawPlayer(); // Draw player on top of NPCs/Enemies
+            drawBullets();
+
+
+            // Draw HUD elements (fixed position)
+            drawHUD();
+        }
+
+        // --- Initialization ---
+        function initGameData() {
+             // Reset player
+             const playerDef = CHAR_DEFS.AdamMady;
+             gameState.player = {
+                 id: 'AdamMady',
+                 x: canvas.width / 2, y: canvas.height / 2,
+                 width: PLAYER_SIZE, height: PLAYER_SIZE,
+                 color: playerDef.color,
+                 emoji: playerDef.emoji,
+                 hp: PLAYER_HP, maxHp: PLAYER_HP,
+                 speed: playerDef.speed,
+             };
+
+             // Initialize characters (all of them, manage active state per mission)
+            gameState.characters = Object.keys(CHAR_DEFS).map(key => {
+                 const charDef = CHAR_DEFS[key];
+                 return {
+                     id: key,
+                     name: charDef.name,
+                     baseName: charDef.name, // Keep original name
+                     emoji: charDef.emoji,
+                     x: -100, y: -100, // Start off-screen
+                     width: PLAYER_SIZE, height: PLAYER_SIZE,
+                     color: charDef.color,
+                     hp: charDef.hp, maxHp: charDef.hp,
+                     speed: charDef.speed,
+                     isBoss: false,
+                     attackPattern: null,
+                     isActive: false, // Initially inactive until placed by a mission
+                     isDefeated: false,
+                     lastAttackTime: 0,
+                     aiState: 'idle',
+                 };
+             });
+             // Make player character data match player object, mark active
+             let playerCharData = gameState.characters.find(c => c.id === 'AdamMady');
+             if (playerCharData) {
+                playerCharData.x = gameState.player.x;
+                playerCharData.y = gameState.player.y;
+                playerCharData.hp = gameState.player.hp;
+                playerCharData.maxHp = gameState.player.maxHp;
+                playerCharData.isActive = true;
+             }
+
+
+             // Reset other state variables
+             gameState.enemies = [];
+             gameState.bullets = [];
+             gameState.keys = { w: false, a: false, s: false, d: false };
+             gameState.mouse = { x: 0, y: 0, down: false, lastShotTime: 0 };
+             gameState.dialogueQueue = [];
+             gameState.dialogueIndex = 0;
+             gameState.currentMission = 0; // Start before mission 1
+             gameState.missionComplete = false;
+              gameState.currentObjective = "Find your way."; // Initial objective before mission 1 starts
+
+             // Generate simple map layout
+             gameState.map.width = 2000;
+             gameState.map.height = 1500;
+             gameState.map.buildings = [
+                 // Add some random rectangular buildings
+                 { x: 100, y: 100, width: 150, height: 200 },
+                 { x: 400, y: 50, width: 200, height: 100 },
+                 { x: 300, y: 400, width: 100, height: 300 },
+                 { x: 600, y: 250, width: 250, height: 150 }, // Near park entrance area
+                 { x: 800, y: 600, width: 150, height: 150 }, // Near Meethexep initial area
+                 { x: 1100, y: 750, width: 300, height: 100 }, // Near Music Hall / HappyMan
+                 { x: 450, y: 900, width: 100, height: 200 }, // Tech district edge
+                 { x: 600, y: 1100, width: 200, height: 150 }, // Tech district
+                 { x: 1450, y: 1150, width: 200, height: 200 }, // 'Lab' building area
+                  // Boundary walls (optional, camera clamp does most work)
+                  //{ x: -10, y: -10, width: gameState.map.width + 20, height: 10},
+                  //{ x: -10, y: gameState.map.height, width: gameState.map.width + 20, height: 10},
+                  //{ x: -10, y: -10, width: 10, height: gameState.map.height + 20},
+                  //{ x: gameState.map.width, y: -10, width: 10, height: gameState.map.height + 20},
+             ];
+             gameState.map.missionMarkers = [];
+
+             // Reset screens
+             titleScreen.style.display = 'flex';
+             gameOverScreen.style.display = 'none';
+             victoryScreen.style.display = 'none';
+             dialogueBox.style.display = 'none';
+
+              gameState.mode = 'title';
+        }
+
+        function startGame() {
+             initGameData(); // Initialize/Reset all game data
+             titleScreen.style.display = 'none'; // Hide title
+             setupMission(1); // Start directly with mission 1 setup
+             gameState.lastUpdateTime = performance.now(); // Set initial time
+             requestAnimationFrame(gameLoop); // Start the loop
+        }
+
+         function retryGame() {
+            // Simply call startGame again, which handles re-initialization
+            startGame();
+        }
+
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+            switch (e.key.toLowerCase()) {
+                case 'w': gameState.keys.w = true; break;
+                case 'a': gameState.keys.a = true; break;
+                case 's': gameState.keys.s = true; break;
+                case 'd': gameState.keys.d = true; break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+             switch (e.key.toLowerCase()) {
+                case 'w': gameState.keys.w = false; break;
+                case 'a': gameState.keys.a = false; break;
+                case 's': gameState.keys.s = false; break;
+                case 'd': gameState.keys.d = false; break;
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            gameState.mouse.x = e.clientX - rect.left;
+            gameState.mouse.y = e.clientY - rect.top;
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+             if (e.button === 0) { // Left click
+                 if (gameState.mode === 'dialogue') {
+                    advanceDialogue();
+                 } else if (gameState.mode === 'explore' || gameState.mode === 'mission') {
+                     gameState.mouse.down = true;
+                 }
+             }
+        });
+
+         canvas.addEventListener('mouseup', (e) => {
+             if (e.button === 0) { // Left click
+                 gameState.mouse.down = false;
+             }
+         });
+
+         // Prevent mouse leaving canvas from keeping 'down' state
+         canvas.addEventListener('mouseleave', () => {
+             gameState.mouse.down = false;
+         });
+
+         // Prevent context menu on right-click
+         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+
+        // --- Initial Setup ---
+        // Don't start game automatically, wait for button click
+        // initGameData(); // Set initial state for title screen
+        // draw(); // Draw initial state (mainly for title screen if needed)
+        // Let the startGame function handle the first setup and loop start.
+
+    </script>
+</body>
+</html>

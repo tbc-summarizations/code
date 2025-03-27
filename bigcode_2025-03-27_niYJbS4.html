@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kazakhstan Simulator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: #e0f2fe; /* Light blue background */
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #game-container {
+            background-color: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            max-width: 700px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid #b3e5fc;
+        }
+
+        h1 {
+            color: #01579b; /* Darker blue */
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        #flag {
+            font-size: 1.5em; /* Adjust size as needed */
+        }
+
+        #resource-bar {
+            display: flex;
+            justify-content: space-around;
+            background-color: #f1f8ff; /* Very light blue */
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 1px solid #cdeafc;
+        }
+
+        .resource {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #0277bd; /* Medium blue */
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .resource span {
+            background-color: #ffffff;
+            padding: 5px 10px;
+            border-radius: 20px;
+            min-width: 50px;
+            text-align: right;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        #visual-area {
+            background-color: #f1f8ff;
+            border: 1px solid #cdeafc;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 100px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3em; /* Make emojis larger */
+            overflow: hidden;
+            transition: background-color 0.5s ease;
+        }
+
+        #event-area {
+            background-color: #e3f2fd;
+            border: 1px solid #bbdefb;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 100px;
+        }
+
+        #event-text {
+            font-size: 1.1em;
+            line-height: 1.6;
+            color: #01579b;
+            margin-bottom: 20px;
+        }
+
+        #choices {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        button {
+            background-color: #0288d1; /* Standard blue */
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        button:hover {
+            background-color: #0277bd; /* Darker blue on hover */
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            background-color: #01579b; /* Even darker blue on click */
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background-color: #90a4ae; /* Grey when disabled */
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        #turn-counter {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #546e7a; /* Greyish blue */
+        }
+
+        /* Simple Shapes */
+        .shape {
+            display: inline-block;
+            margin: 0 5px;
+        }
+        .square { width: 15px; height: 15px; background-color: #ffd700; /* Yellow */ }
+        .triangle { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 18px solid #00aeef; /* Blue */ }
+        .circle { width: 15px; height: 15px; background-color: #ffae42; /* Orange-ish */ border-radius: 50%; }
+
+        /* Game Over/Win Message */
+        #message-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #message-box {
+            background-color: white;
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+
+        #message-box h2 {
+            color: #01579b;
+            margin-bottom: 20px;
+        }
+
+        #message-box p {
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        #restart-button {
+            background-color: #ffc107; /* Yellow */
+            color: #333;
+        }
+         #restart-button:hover {
+            background-color: #ffa000; /* Darker Yellow */
+         }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <h1><span id="flag">🇰🇿</span> Kazakhstan Simulator</h1>
+
+        <div id="resource-bar">
+            <div class="resource">₸ Tenge: <span id="tenge">10000</span></div>
+            <div class="resource">⭐ Reputation: <span id="reputation">50</span></div>
+            <div class="resource">⚖️ Stability: <span id="stability">50</span></div>
+            <div class="resource">💡 Progress: <span id="progress">0</span></div>
+        </div>
+
+        <div id="visual-area">
+            <!-- Visual elements will be updated by JS -->
+            🏔️☀️<span class="shape triangle"></span><span class="shape square"></span>🦅
+        </div>
+
+        <div id="event-area">
+            <p id="event-text">Welcome to Kazakhstan! Lead the nation towards a bright future. Make your first decision.</p>
+            <div id="choices">
+                <!-- Choices will be populated by JS -->
+                <button onclick="startGame()">Begin Your Journey</button>
+            </div>
+        </div>
+
+        <div id="turn-counter">Year: <span id="year">2024</span></div>
+    </div>
+
+    <div id="message-overlay">
+        <div id="message-box">
+            <h2 id="message-title">Game Over</h2>
+            <p id="message-text">Your journey has ended.</p>
+            <button id="restart-button" onclick="restartGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game State Variables
+        let gameState = {
+            tenge: 10000,
+            reputation: 50,
+            stability: 50,
+            progress: 0,
+            year: 2024,
+            gameOver: false,
+            maxYears: 2044 // Game ends after 20 years or by conditions
+        };
+
+        // UI Elements
+        const tengeDisplay = document.getElementById('tenge');
+        const reputationDisplay = document.getElementById('reputation');
+        const stabilityDisplay = document.getElementById('stability');
+        const progressDisplay = document.getElementById('progress');
+        const yearDisplay = document.getElementById('year');
+        const eventTextDisplay = document.getElementById('event-text');
+        const choicesDisplay = document.getElementById('choices');
+        const visualArea = document.getElementById('visual-area');
+        const messageOverlay = document.getElementById('message-overlay');
+        const messageTitle = document.getElementById('message-title');
+        const messageText = document.getElementById('message-text');
+
+        // --- Game Events Data ---
+        const events = [
+            {
+                id: 1,
+                text: "Oil prices are fluctuating globally. How should Kazakhstan respond?",
+                visual: "⛽💰📉",
+                choices: [
+                    { text: "Increase oil production to capitalize.", effects: { tenge: 5000, stability: -5, reputation: -3, progress: 1 } },
+                    { text: "Invest in diversifying the economy (renewable energy).", effects: { tenge: -3000, stability: 5, reputation: 5, progress: 3 } },
+                    { text: "Maintain current levels and wait.", effects: { tenge: -500, stability: -1 } }
+                ]
+            },
+            {
+                id: 2,
+                text: "A proposal to host a major international sports event has been received. It could boost reputation but is costly.",
+                visual: "🏟️🏅💸",
+                choices: [
+                    { text: "Accept the proposal and invest heavily.", effects: { tenge: -8000, reputation: 15, stability: 5, progress: 2 }, requires: { tenge: 8000 } },
+                    { text: "Politely decline, focusing on domestic issues.", effects: { tenge: 500, reputation: -5, stability: 2 } },
+                    { text: "Propose a smaller-scale cultural festival instead.", effects: { tenge: -2000, reputation: 5, stability: 3, progress: 1 } }
+                ]
+            },
+            {
+                id: 3,
+                text: "Neighboring countries are proposing a new trade agreement. It promises economic growth but might affect local industries.",
+                visual: "🤝🌍🏭",
+                choices: [
+                    { text: "Sign the agreement enthusiastically.", effects: { tenge: 3000, reputation: 5, stability: -4, progress: 2 } },
+                    { text: "Negotiate for better terms protecting local business.", effects: { tenge: 1000, stability: 3, reputation: 2, progress: 1 } },
+                    { text: "Reject the agreement to protect domestic markets.", effects: { tenge: -1000, reputation: -4, stability: 5, progress: -1 } }
+                ]
+            },
+            {
+                id: 4,
+                text: "Reports indicate a need for significant infrastructure upgrades (roads, internet).",
+                visual: "🛣️💻🏗️",
+                choices: [
+                    { text: "Launch a major nationwide upgrade project.", effects: { tenge: -7000, stability: 7, progress: 5, reputation: 3 }, requires: { tenge: 7000 } },
+                    { text: "Implement smaller, targeted improvements.", effects: { tenge: -3000, stability: 3, progress: 2, reputation: 1 } },
+                    { text: "Postpone major spending for now.", effects: { stability: -3, progress: -1, reputation: -2 } }
+                ]
+            },
+            {
+                id: 5,
+                text: "There's a growing movement to promote and preserve traditional Kazakh culture.",
+                visual: "🐎🦅 yurt", // Using 'yurt' text as emoji might not exist widely
+                choices: [
+                    { text: "Fund cultural centers and educational programs.", effects: { tenge: -2500, reputation: 4, stability: 4, progress: 1 } },
+                    { text: "Organize a large-scale Nauryz celebration.", effects: { tenge: -1500, reputation: 3, stability: 2 } },
+                    { text: "Focus resources on economic development instead.", effects: { reputation: -3, stability: -2 } }
+                ]
+            },
+             {
+                id: 6,
+                text: "An unexpected drought is affecting agriculture in the southern regions.",
+                visual: "☀️🌾🚱",
+                choices: [
+                    { text: "Provide emergency aid and subsidies to farmers.", effects: { tenge: -4000, stability: 5, reputation: 3 }, requires: { tenge: 4000 } },
+                    { text: "Invest in long-term irrigation projects.", effects: { tenge: -6000, stability: 2, progress: 4, reputation: 1 }, requires: { tenge: 6000 } },
+                    { text: "Import more food to cover the shortfall.", effects: { tenge: -2000, stability: -3, reputation: -2 } }
+                ]
+            },
+             {
+                id: 7,
+                text: "A foreign company wants to build a large factory, promising jobs but potentially causing pollution.",
+                visual: "🏭💼💨",
+                choices: [
+                    { text: "Approve with strict environmental regulations.", effects: { tenge: 2000, stability: 2, progress: 3, reputation: 1 } },
+                    { text: "Approve with minimal regulations for faster job creation.", effects: { tenge: 3000, stability: -5, progress: 2, reputation: -4 } },
+                    { text: "Reject the proposal due to environmental concerns.", effects: { tenge: -500, stability: 3, progress: -1, reputation: 2 } }
+                ]
+            },
+             {
+                id: 8,
+                text: "Young Kazakhs are demanding more investment in technology and digital skills education.",
+                visual: "🧑‍💻💡🎓",
+                choices: [
+                    { text: "Launch a national digital literacy program.", effects: { tenge: -5000, stability: 4, progress: 5, reputation: 3 }, requires: { tenge: 5000 } },
+                    { text: "Offer scholarships for tech studies abroad.", effects: { tenge: -3000, stability: 1, progress: 3, reputation: 2 } },
+                    { text: "Acknowledge demands but prioritize other sectors.", effects: { stability: -4, progress: -2, reputation: -3 } }
+                ]
+            }
+            // Add more events here...
+        ];
+
+        let availableEvents = [...events]; // Copy events to modify availability
+
+        // --- Game Functions ---
+
+        function updateDisplay() {
+            tengeDisplay.textContent = gameState.tenge;
+            reputationDisplay.textContent = gameState.reputation;
+            stabilityDisplay.textContent = gameState.stability;
+            progressDisplay.textContent = gameState.progress;
+            yearDisplay.textContent = gameState.year;
+
+            // Clamp values (optional, but good practice)
+            gameState.reputation = Math.max(0, Math.min(100, gameState.reputation));
+            gameState.stability = Math.max(0, Math.min(100, gameState.stability));
+
+             // Basic visual feedback based on stability
+            if (gameState.stability < 30) {
+                visualArea.style.backgroundColor = "#ffebee"; // Light red tint
+            } else if (gameState.stability > 70) {
+                 visualArea.style.backgroundColor = "#e8f5e9"; // Light green tint
+            } else {
+                 visualArea.style.backgroundColor = "#f1f8ff"; // Default light blue
+            }
+        }
+
+        function triggerEvent() {
+            if (availableEvents.length === 0) {
+                // If we run out of unique events, reset the pool (or end game)
+                // For now, just reuse events
+                availableEvents = [...events];
+                 // Optional: Add a small recurring event/message
+                eventTextDisplay.textContent = `Year ${gameState.year}: A calm year passes. Minor adjustments are made to the budget.`;
+                visualArea.textContent = "🇰🇿";
+                choicesDisplay.innerHTML = `<button onclick="nextTurn()">Continue</button>`;
+                return;
+            }
+
+            const eventIndex = Math.floor(Math.random() * availableEvents.length);
+            const currentEvent = availableEvents[eventIndex];
+
+            // Remove the chosen event from the available pool for this cycle
+            availableEvents.splice(eventIndex, 1);
+
+            eventTextDisplay.textContent = currentEvent.text;
+            visualArea.textContent = currentEvent.visual || "🏛️"; // Default visual
+            choicesDisplay.innerHTML = ''; // Clear previous choices
+
+            currentEvent.choices.forEach((choice, index) => {
+                const button = document.createElement('button');
+                button.textContent = choice.text;
+                button.onclick = () => makeChoice(choice);
+
+                // Disable button if resource requirement is not met
+                if (choice.requires) {
+                    for (const resource in choice.requires) {
+                        if (gameState[resource] < choice.requires[resource]) {
+                            button.disabled = true;
+                            button.title = `Requires ${choice.requires[resource]} ${resource}`;
+                            button.style.backgroundColor = "#cfd8dc"; // Lighter grey for unmet requirement
+                            break;
+                        }
+                    }
+                }
+                choicesDisplay.appendChild(button);
+            });
+        }
+
+        function makeChoice(choice) {
+            // Apply effects
+            for (const effect in choice.effects) {
+                if (gameState.hasOwnProperty(effect)) {
+                    gameState[effect] += choice.effects[effect];
+                }
+            }
+
+            nextTurn();
+        }
+
+        function nextTurn() {
+             // Check for game over conditions BEFORE incrementing year
+             checkGameOver();
+             if(gameState.gameOver) return;
+
+            // Increment year
+            gameState.year++;
+
+            // Add small passive changes per year (optional)
+            gameState.tenge += Math.floor(gameState.progress * 100 + gameState.reputation * 50 - (100 - gameState.stability) * 100); // Simple economic model
+            gameState.tenge = Math.max(0, gameState.tenge); // Prevent negative Tenge
+
+
+            updateDisplay();
+
+             // Check for game over conditions AFTER updates and year increment
+             checkGameOver(); // Check again after updates
+             if(gameState.gameOver) return;
+
+            // Check for win condition
+             if (gameState.year > gameState.maxYears) {
+                 endGame(true, "You have successfully guided Kazakhstan for 20 years! The future looks bright. 🇰🇿☀️");
+                 return;
+             }
+              if (gameState.progress >= 100) { // Example win condition
+                 endGame(true, "Kazakhstan has achieved remarkable progress under your leadership! Congratulations! 🎉");
+                 return;
+             }
+
+
+            // Trigger next event
+            triggerEvent();
+        }
+
+         function checkGameOver() {
+            if (gameState.gameOver) return; // Already over
+
+            let reason = "";
+            if (gameState.stability <= 0) {
+                reason = "National stability collapsed, leading to chaos. Your leadership has ended.";
+                gameState.gameOver = true;
+            } else if (gameState.reputation <= 0) {
+                reason = "Kazakhstan's international and domestic reputation is ruined. A change in leadership is demanded.";
+                 gameState.gameOver = true;
+            } else if (gameState.tenge < -5000) { // Allow some debt, but not too much
+                reason = "The national treasury is bankrupt beyond recovery. Economic collapse ensues.";
+                gameState.gameOver = true;
+            }
+
+            if (gameState.gameOver) {
+                endGame(false, reason);
+            }
+        }
+
+
+        function endGame(isWin, message) {
+            gameState.gameOver = true;
+            messageTitle.textContent = isWin ? "Victory!" : "Game Over";
+            messageText.textContent = message + `\nFinal Stats: Tenge: ${gameState.tenge}, Reputation: ${gameState.reputation}, Stability: ${gameState.stability}, Progress: ${gameState.progress}`;
+            messageOverlay.style.display = 'flex';
+            choicesDisplay.innerHTML = ''; // Clear choices on game end
+        }
+
+         function startGame() {
+             // Reset game state for the initial start
+             gameState = {
+                tenge: 10000,
+                reputation: 50,
+                stability: 50,
+                progress: 0,
+                year: 2024,
+                gameOver: false,
+                maxYears: 2044
+             };
+             availableEvents = [...events]; // Refill event pool
+             updateDisplay();
+             triggerEvent(); // Show the first real event
+         }
+
+        function restartGame() {
+            messageOverlay.style.display = 'none';
+            startGame(); // Reset and start a new game
+        }
+
+        // Initial setup on load
+        updateDisplay();
+        // Don't trigger the first event immediately, wait for "Begin" button.
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Clone</title>
+    <style>
+        :root {
+            --background-primary: #36393f;
+            --background-secondary: #2f3136;
+            --background-tertiary: #202225;
+            --channeltextarea-background: #40444b;
+            --background-accent: #7289da;
+            --background-floating: #18191c;
+            --text-normal: #dcddde;
+            --text-muted: #72767d;
+            --text-link: #00b0f4;
+            --header-primary: #ffffff;
+            --header-secondary: #b9bbbe;
+            --interactive-normal: #b9bbbe;
+            --interactive-hover: #dcddde;
+            --interactive-active: #ffffff;
+            --interactive-muted: #4f545c;
+            --scrollbar-thin-thumb: #202225;
+            --scrollbar-thin-track: transparent;
+            --scrollbar-auto-thumb: #202225;
+            --scrollbar-auto-track: #2e3338;
+            --green-positive: #43b581;
+            --red-negative: #f04747;
+            --font-primary: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            scrollbar-width: thin;
+            scrollbar-color: var(--scrollbar-thin-thumb) var(--scrollbar-thin-track);
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            font-family: var(--font-primary);
+            background-color: var(--background-primary);
+            color: var(--text-normal);
+            font-size: 16px;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100%;
+        }
+
+        /* Server List (Leftmost) */
+        .server-list {
+            width: 72px;
+            background-color: var(--background-tertiary);
+            padding: 12px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .server-icon, .dm-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background-color: var(--background-primary);
+            color: var(--header-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: border-radius 0.15s ease-out, background-color 0.15s ease-out;
+            position: relative;
+            overflow: hidden; /* Hide overflow for placeholder */
+            flex-shrink: 0; /* Prevent shrinking */
+            font-size: 12px; /* Smaller text for initials */
+            text-align: center;
+        }
+         .server-icon.active, .dm-icon.active {
+             border-radius: 16px;
+             background-color: var(--background-accent);
+         }
+        .server-icon:hover, .dm-icon:hover {
+            border-radius: 16px;
+            background-color: var(--background-accent);
+        }
+        .server-icon.add-server:hover {
+             background-color: var(--green-positive);
+        }
+        .server-icon.add-server {
+            background-color: var(--background-secondary);
+            color: var(--green-positive);
+            font-size: 24px;
+        }
+
+        .server-separator {
+            width: 32px;
+            height: 2px;
+            border-radius: 1px;
+            background-color: var(--background-primary);
+            margin: 0 auto 8px auto;
+        }
+
+        /* Channels / DM List (Middle Left) */
+        .channels-dms-list {
+            width: 240px;
+            background-color: var(--background-secondary);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .server-header, .dm-header {
+            height: 48px;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--background-tertiary);
+            font-weight: 600;
+            color: var(--header-primary);
+            flex-shrink: 0;
+            box-shadow: 0 1px 0 rgba(4, 4, 5, 0.2), 0 1.5px 0 rgba(6, 6, 7, 0.05), 0 2px 0 rgba(4, 4, 5, 0.05);
+            z-index: 2;
+        }
+
+        .channels-dms-content {
+            padding: 16px 8px 16px 16px;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+
+        .channel-category, .dm-category {
+            text-transform: uppercase;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--header-secondary);
+            margin-bottom: 4px;
+            padding: 0 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+         .channel-category span, .dm-category span {
+             cursor: default;
+         }
+         .dm-category button {
+             background: none;
+             border: none;
+             color: var(--header-secondary);
+             font-size: 16px;
+             cursor: pointer;
+             padding: 2px;
+         }
+          .dm-category button:hover {
+              color: var(--interactive-hover);
+          }
+
+
+        .channel, .dm-user {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: var(--interactive-normal);
+            position: relative; /* For active state indicator */
+        }
+
+        .channel:hover, .dm-user:hover {
+            background-color: rgba(79, 84, 92, 0.32);
+            color: var(--interactive-hover);
+        }
+
+        .channel.active, .dm-user.active {
+            background-color: rgba(79, 84, 92, 0.6);
+            color: var(--interactive-active);
+        }
+
+         .channel-icon, .dm-avatar {
+            width: 20px;
+            height: 20px;
+            margin-right: 8px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--header-secondary); /* Default color for text channels */
+         }
+        .dm-avatar {
+            border-radius: 50%;
+            background-color: var(--background-accent); /* Placeholder color */
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+        }
+
+         .channel-name, .dm-username {
+             white-space: nowrap;
+             overflow: hidden;
+             text-overflow: ellipsis;
+             flex-grow: 1;
+         }
+
+        .user-panel {
+            height: 52px;
+            background-color: #292b2f;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            flex-shrink: 0;
+            color: var(--header-primary);
+        }
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: var(--green-positive); /* Your avatar */
+            margin-right: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .user-info {
+            flex-grow: 1;
+            line-height: 1.2;
+        }
+        .username {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .user-id {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Chat Area (Main Content) */
+        .chat-area {
+            flex-grow: 1;
+            background-color: var(--background-primary);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            height: 48px;
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--background-tertiary);
+            font-weight: 600;
+            color: var(--header-primary);
+            flex-shrink: 0;
+            box-shadow: 0 1px 0 rgba(4, 4, 5, 0.2), 0 1.5px 0 rgba(6, 6, 7, 0.05), 0 2px 0 rgba(4, 4, 5, 0.05);
+            z-index: 2;
+        }
+        .chat-header-icon {
+            margin-right: 8px;
+            color: var(--text-muted);
+            font-size: 20px; /* Size for # or @ */
+        }
+        .chat-header-name {
+            color: var(--header-primary);
+            font-weight: 600;
+        }
+
+        .messages-wrapper {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 16px 16px 0 16px;
+            display: flex;
+            flex-direction: column-reverse; /* New messages appear at the bottom */
+        }
+
+        .message-container {
+            margin-bottom: 16px; /* Spacing between messages */
+            display: flex;
+        }
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--background-accent); /* Default user color */
+            margin-right: 16px;
+            flex-shrink: 0;
+             display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 16px;
+            color: white;
+        }
+         .message-avatar.ai {
+             background-color: var(--red-negative); /* AI color */
+         }
+        .message-content {
+             display: flex;
+             flex-direction: column;
+        }
+        .message-header {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 4px;
+        }
+        .message-username {
+            font-weight: 500;
+            color: var(--header-primary);
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        .message-timestamp {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+        .message-text {
+            color: var(--text-normal);
+            line-height: 1.375;
+            white-space: pre-wrap; /* Preserve whitespace and wrap */
+            word-wrap: break-word; /* Break long words */
+        }
+
+        /* Input Area */
+        .chat-input-area {
+            padding: 0 16px 24px 16px;
+            margin-top: 8px; /* Space above input */
+            flex-shrink: 0;
+        }
+
+        .chat-input-wrapper {
+            background-color: var(--channeltextarea-background);
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex-grow: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-normal);
+            font-size: 16px;
+            height: 22px; /* Approximate line height */
+            resize: none; /* Prevent manual resizing */
+            max-height: 200px; /* Limit expansion */
+            overflow-y: auto; /* Allow scrolling if needed */
+            line-height: 1.375;
+        }
+         .chat-input::placeholder {
+             color: var(--text-muted);
+         }
+
+         /* Utility */
+         .hidden {
+             display: none !important;
+         }
+
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Server List -->
+        <div class="server-list" id="serverList">
+            <div class="dm-icon active" id="dmHomeButton" onclick="selectDmHome()">🏠</div>
+            <div class="server-separator"></div>
+            <!-- Example Premade Server -->
+            <div class="server-icon" data-server-id="hangout" onclick="selectServer('hangout')">TH</div>
+            <!-- Add Server Button -->
+            <div class="server-icon add-server" onclick="promptCreateServer()">+</div>
+        </div>
+
+        <!-- Channels / DMs List -->
+        <div class="channels-dms-list" id="channelsDmsList">
+            <!-- Header (Dynamically Set) -->
+            <div class="dm-header" id="channelsDmsHeader">
+                <input type="text" id="findConversationInput" placeholder="Find or start a conversation" style="width: 100%; padding: 4px 8px; background-color: var(--background-tertiary); border: none; border-radius: 4px; color: var(--text-normal); font-size: 14px;">
+            </div>
+
+            <!-- Content (Dynamically Filled) -->
+            <div class="channels-dms-content" id="channelsDmsContent">
+                 <!-- DM Home Content (Default) -->
+                 <div class="dm-category"><span>Direct Messages</span> <button onclick="promptAddFriend()">+</button></div>
+                 <div class="dm-user" data-dm-id="ai" onclick="selectDm('ai')">
+                     <div class="dm-avatar">🤖</div>
+                     <div class="dm-username">Boring AI</div>
+                 </div>
+                 <!-- Friend List Here -->
+            </div>
+
+            <!-- User Panel -->
+            <div class="user-panel">
+                <div class="user-avatar">👤</div>
+                <div class="user-info">
+                    <div class="username">You</div>
+                    <div class="user-id">#0001</div>
+                </div>
+                <!-- Icons placeholder -->
+                <div>⚙️</div>
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="chat-area" id="chatArea">
+             <!-- Default View (Maybe show Friends List/Activity?) -->
+             <div id="chatWelcomeScreen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; color: var(--text-muted);">
+                 <h2>Welcome!</h2>
+                 <p>Select a server or friend to start chatting.</p>
+                 <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cstyle%3Epath%7Bfill:%237289da%7D%3C/style%3E%3Cpath d='M50 10 C 27.9 10 10 27.9 10 50 C 10 72.1 27.9 90 50 90 C 72.1 90 90 72.1 90 50 C 90 27.9 72.1 10 50 10 z M 50 70 C 38.9 70 30 61.1 30 50 C 30 38.9 38.9 30 50 30 C 61.1 30 70 38.9 70 50 C 70 61.1 61.1 70 50 70 z'/%3E%3Cpath d='M35 40 L 65 40 L 65 60 L 35 60 z'/%3E%3C/svg%3E" alt="Welcome Graphic" width="150" style="margin-top: 20px; opacity: 0.5;">
+
+             </div>
+
+            <!-- Chat Header (Dynamically Set) -->
+            <div class="chat-header hidden" id="chatHeader">
+                <span class="chat-header-icon" id="chatHeaderIcon"></span>
+                <span class="chat-header-name" id="chatHeaderName"></span>
+            </div>
+
+            <!-- Messages -->
+            <div class="messages-wrapper hidden" id="messagesWrapper">
+                <div id="messageListEnd" style="height: 1px;"></div> <!-- Scroll anchor -->
+                 <div id="messageListContainer">
+                    <!-- Messages will be appended here -->
+                 </div>
+
+            </div>
+
+            <!-- Input -->
+            <div class="chat-input-area hidden" id="chatInputArea">
+                <div class="chat-input-wrapper">
+                    <textarea id="chatInput" class="chat-input" rows="1" placeholder="Message..."></textarea>
+                    <!-- Send button potentially added via JS if needed, or just use Enter -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- STATE MANAGEMENT ---
+        const appState = {
+            servers: {
+                "hangout": {
+                    id: "hangout",
+                    name: "The Hangout",
+                    channels: {
+                        "general": { id: "general", name: "general", type: "text" },
+                        "memes": { id: "memes", name: "memes", type: "text" },
+                        "music": { id: "music", name: "voice", type: "voice" } // Example voice
+                    },
+                    initials: "TH"
+                }
+                // New servers added here
+            },
+            dms: {
+                "ai": { id: "ai", name: "Boring AI", avatar: "🤖" },
+                // New friends added here
+            },
+            messages: {
+                // store messages like: "server-channelId": [{ user, text, time, avatar? }], or "dm-userId": [...]
+                "server-hangout-general": [
+                     { user: "Server Bot", text: "Welcome to #general! Feel free to chat.", time: "10:00 AM", avatar: '🤖'},
+                     { user: "Alice", text: "Hey everyone!", time: "10:01 AM", avatar: 'A'},
+                     { user: "Bob", text: "Hi Alice!", time: "10:02 AM", avatar: 'B'}
+                ],
+                "server-hangout-memes": [
+                     { user: "Charlie", text: "Post your best memes here!", time: "11:30 AM", avatar: 'C'}
+                ],
+                "dm-ai": [
+                    { user: "Boring AI", text: "Hello. I am a very basic AI.", time: "9:00 AM", avatar: '🤖', isAI: true }
+                ]
+            },
+            currentView: {
+                type: 'dm', // 'dm' or 'server'
+                serverId: null,
+                channelId: null,
+                dmId: 'ai' // Start with AI DM selected
+            },
+            nextServerId: 1, // For generating unique server IDs
+            nextFriendId: 1, // For generating unique friend IDs
+            friends: { // Separate from DMs in case we want more structure later
+                 "ai": { id: "ai", name: "Boring AI", avatar: "🤖" }
+            }
+        };
+
+        // --- DOM ELEMENTS ---
+        const serverListEl = document.getElementById('serverList');
+        const channelsDmsListEl = document.getElementById('channelsDmsList');
+        const channelsDmsHeaderEl = document.getElementById('channelsDmsHeader');
+        const channelsDmsContentEl = document.getElementById('channelsDmsContent');
+        const chatAreaEl = document.getElementById('chatArea');
+        const chatWelcomeScreenEl = document.getElementById('chatWelcomeScreen');
+        const chatHeaderEl = document.getElementById('chatHeader');
+        const chatHeaderIconEl = document.getElementById('chatHeaderIcon');
+        const chatHeaderNameEl = document.getElementById('chatHeaderName');
+        const messagesWrapperEl = document.getElementById('messagesWrapper');
+        const messageListContainerEl = document.getElementById('messageListContainer');
+        const chatInputAreaEl = document.getElementById('chatInputArea');
+        const chatInputEl = document.getElementById('chatInput');
+        const dmHomeButtonEl = document.getElementById('dmHomeButton');
+        const findConversationInputEl = document.getElementById('findConversationInput'); // Added reference
+
+        // --- RENDERING FUNCTIONS ---
+
+        function renderServerList() {
+            // Clear existing servers except DM home and Add button
+            const servers = serverListEl.querySelectorAll('.server-icon:not(.add-server)');
+            servers.forEach(icon => {
+                if (icon.id !== 'dmHomeButton') {
+                    icon.remove();
+                }
+            });
+             const separator = serverListEl.querySelector('.server-separator');
+
+            // Add servers from state
+            Object.values(appState.servers).forEach(server => {
+                const serverIcon = document.createElement('div');
+                serverIcon.classList.add('server-icon');
+                serverIcon.dataset.serverId = server.id;
+                serverIcon.textContent = server.initials || server.name.substring(0, 2).toUpperCase();
+                serverIcon.title = server.name;
+                serverIcon.onclick = () => selectServer(server.id);
+                // Insert before separator
+                 if (separator) {
+                    serverListEl.insertBefore(serverIcon, separator.nextSibling); // Add after separator
+                 } else {
+                     serverListEl.insertBefore(serverIcon, serverListEl.querySelector('.add-server')); // Add before add button if separator missing
+                 }
+            });
+            updateActiveServerIcon();
+        }
+
+         function renderDmList() {
+             channelsDmsContentEl.innerHTML = ''; // Clear content
+
+             const category = document.createElement('div');
+             category.className = 'dm-category';
+             category.innerHTML = `<span>Direct Messages</span> <button onclick="promptAddFriend()">+</button>`;
+             channelsDmsContentEl.appendChild(category);
+
+             Object.values(appState.friends).forEach(friend => {
+                 const dmUserEl = document.createElement('div');
+                 dmUserEl.className = 'dm-user';
+                 dmUserEl.dataset.dmId = friend.id;
+                 dmUserEl.onclick = () => selectDm(friend.id);
+
+                 const avatarEl = document.createElement('div');
+                 avatarEl.className = 'dm-avatar';
+                 avatarEl.textContent = friend.avatar || friend.name.substring(0, 1).toUpperCase();
+                  if (friend.id === 'ai') avatarEl.style.backgroundColor = 'var(--red-negative)'; // Special color for AI
+
+                 const nameEl = document.createElement('div');
+                 nameEl.className = 'dm-username';
+                 nameEl.textContent = friend.name;
+
+                 dmUserEl.appendChild(avatarEl);
+                 dmUserEl.appendChild(nameEl);
+                 channelsDmsContentEl.appendChild(dmUserEl);
+             });
+             updateActiveDmUser();
+         }
+
+        function renderChannelList(serverId) {
+            const server = appState.servers[serverId];
+            if (!server) return;
+
+            channelsDmsContentEl.innerHTML = ''; // Clear content
+
+            // Group channels by type (e.g., text, voice)
+            const textChannels = Object.values(server.channels).filter(ch => ch.type === 'text');
+            const voiceChannels = Object.values(server.channels).filter(ch => ch.type === 'voice');
+
+            if (textChannels.length > 0) {
+                const category = document.createElement('div');
+                category.className = 'channel-category';
+                category.textContent = 'Text Channels';
+                channelsDmsContentEl.appendChild(category);
+
+                textChannels.forEach(channel => {
+                    const channelEl = document.createElement('div');
+                    channelEl.className = 'channel';
+                    channelEl.dataset.channelId = channel.id;
+                    channelEl.onclick = () => selectChannel(serverId, channel.id);
+
+                    const iconEl = document.createElement('span');
+                    iconEl.className = 'channel-icon';
+                    iconEl.textContent = '#'; // Icon for text channels
+
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'channel-name';
+                    nameEl.textContent = channel.name;
+
+                    channelEl.appendChild(iconEl);
+                    channelEl.appendChild(nameEl);
+                    channelsDmsContentEl.appendChild(channelEl);
+                });
+            }
+
+             if (voiceChannels.length > 0) {
+                 const category = document.createElement('div');
+                 category.className = 'channel-category';
+                 category.textContent = 'Voice Channels';
+                 channelsDmsContentEl.appendChild(category);
+
+                 voiceChannels.forEach(channel => {
+                     const channelEl = document.createElement('div');
+                     channelEl.className = 'channel'; // No click handler for now
+                     channelEl.style.cursor = 'not-allowed'; // Indicate non-interactive
+                     channelEl.dataset.channelId = channel.id;
+
+                     const iconEl = document.createElement('span');
+                     iconEl.className = 'channel-icon';
+                     iconEl.textContent = '🔊'; // Icon for voice channels
+
+                     const nameEl = document.createElement('div');
+                     nameEl.className = 'channel-name';
+                     nameEl.textContent = channel.name;
+                     nameEl.style.color = 'var(--text-muted)'; // Dim voice channels
+
+                     channelEl.appendChild(iconEl);
+                     channelEl.appendChild(nameEl);
+                     channelsDmsContentEl.appendChild(channelEl);
+                 });
+             }
+             updateActiveChannel();
+        }
+
+        function renderMessages(messageHistory = []) {
+            messageListContainerEl.innerHTML = ''; // Clear existing messages
+            messageHistory.forEach(msg => addMessageToDOM(msg, false)); // Add messages without scrolling animation initially
+             scrollToBottom(); // Scroll after rendering all
+        }
+
+        function addMessageToDOM(msg, animateScroll = true) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message-container';
+
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'message-avatar';
+            avatarDiv.textContent = msg.avatar || msg.user.substring(0, 1).toUpperCase();
+            if (msg.isAI) {
+                avatarDiv.classList.add('ai');
+            }
+             // Add basic color variety based on username hash (simple example)
+            if (!msg.isAI && msg.user !== 'You') {
+                 avatarDiv.style.backgroundColor = `hsl(${hashCode(msg.user) % 360}, 50%, 50%)`;
+            }
+             if (msg.user === 'You') {
+                 avatarDiv.textContent = '👤';
+                 avatarDiv.style.backgroundColor = 'var(--green-positive)';
+             }
+
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'message-header';
+
+            const usernameSpan = document.createElement('span');
+            usernameSpan.className = 'message-username';
+            usernameSpan.textContent = msg.user;
+
+            const timestampSpan = document.createElement('span');
+            timestampSpan.className = 'message-timestamp';
+            timestampSpan.textContent = msg.time;
+
+            headerDiv.appendChild(usernameSpan);
+            headerDiv.appendChild(timestampSpan);
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            textDiv.textContent = msg.text; // Use textContent to prevent XSS
+
+            contentDiv.appendChild(headerDiv);
+            contentDiv.appendChild(textDiv);
+
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
+
+            messageListContainerEl.prepend(messageDiv); // Prepend to keep order correct with flex-direction: column-reverse
+
+             if (animateScroll) {
+                 scrollToBottom(true);
+             }
+        }
+
+         // Simple hash function for basic color variation
+         function hashCode(str) {
+             let hash = 0;
+             for (let i = 0; i < str.length; i++) {
+                 const char = str.charCodeAt(i);
+                 hash = ((hash << 5) - hash) + char;
+                 hash |= 0; // Convert to 32bit integer
+             }
+             return Math.abs(hash);
+         }
+
+         function updateActiveServerIcon() {
+             // Deactivate all
+             serverListEl.querySelectorAll('.server-icon, .dm-icon').forEach(icon => icon.classList.remove('active'));
+             // Activate current
+             if (appState.currentView.type === 'dm') {
+                 dmHomeButtonEl.classList.add('active');
+             } else if (appState.currentView.type === 'server' && appState.currentView.serverId) {
+                 const activeServer = serverListEl.querySelector(`.server-icon[data-server-id="${appState.currentView.serverId}"]`);
+                 if (activeServer) {
+                     activeServer.classList.add('active');
+                 }
+             }
+         }
+
+         function updateActiveChannel() {
+              // Only relevant in server view
+             if (appState.currentView.type !== 'server') return;
+
+             // Deactivate all channels
+             channelsDmsContentEl.querySelectorAll('.channel').forEach(ch => ch.classList.remove('active'));
+
+             // Activate current channel
+             if (appState.currentView.channelId) {
+                  const activeChannel = channelsDmsContentEl.querySelector(`.channel[data-channel-id="${appState.currentView.channelId}"]`);
+                  if (activeChannel) {
+                      activeChannel.classList.add('active');
+                  }
+             }
+         }
+
+         function updateActiveDmUser() {
+             // Only relevant in DM view
+             if (appState.currentView.type !== 'dm') return;
+
+             // Deactivate all DMs
+             channelsDmsContentEl.querySelectorAll('.dm-user').forEach(dm => dm.classList.remove('active'));
+
+             // Activate current DM
+             if (appState.currentView.dmId) {
+                  const activeDm = channelsDmsContentEl.querySelector(`.dm-user[data-dm-id="${appState.currentView.dmId}"]`);
+                  if (activeDm) {
+                      activeDm.classList.add('active');
+                  }
+             }
+         }
+
+        // --- UI UPDATE LOGIC ---
+
+        function showChatView() {
+             chatWelcomeScreenEl.classList.add('hidden');
+             chatHeaderEl.classList.remove('hidden');
+             messagesWrapperEl.classList.remove('hidden');
+             chatInputAreaEl.classList.remove('hidden');
+        }
+
+         function showWelcomeView() {
+             chatWelcomeScreenEl.classList.remove('hidden');
+             chatHeaderEl.classList.add('hidden');
+             messagesWrapperEl.classList.add('hidden');
+             chatInputAreaEl.classList.add('hidden');
+              // Also clear channel/dm list header and content
+             channelsDmsHeaderEl.textContent = ''; // Or set default?
+             channelsDmsContentEl.innerHTML = ''; // Clear list
+         }
+
+        function updateChatUI() {
+             showChatView(); // Ensure chat elements are visible
+
+            let messageKey = '';
+            let headerName = '';
+            let headerIcon = '';
+            let inputPlaceholder = '';
+
+            if (appState.currentView.type === 'server') {
+                const server = appState.servers[appState.currentView.serverId];
+                const channel = server?.channels[appState.currentView.channelId];
+                if (server && channel) {
+                    messageKey = `server-${server.id}-${channel.id}`;
+                    headerName = channel.name;
+                    headerIcon = '#';
+                    inputPlaceholder = `Message #${channel.name}`;
+                }
+            } else if (appState.currentView.type === 'dm') {
+                 const dmUser = appState.dms[appState.currentView.dmId];
+                if (dmUser) {
+                     messageKey = `dm-${dmUser.id}`;
+                     headerName = dmUser.name;
+                     headerIcon = '@'; // Use @ for DMs, maybe later use avatar?
+                     inputPlaceholder = `Message @${dmUser.name}`;
+                 }
+            }
+
+             // Set header
+             chatHeaderNameEl.textContent = headerName;
+             chatHeaderIconEl.textContent = headerIcon;
+             chatInputEl.placeholder = inputPlaceholder;
+
+            // Ensure message history exists
+            if (!appState.messages[messageKey]) {
+                appState.messages[messageKey] = [];
+            }
+
+            // Render messages
+            renderMessages(appState.messages[messageKey]);
+            updateActiveServerIcon();
+             if (appState.currentView.type === 'server') {
+                 updateActiveChannel();
+             } else {
+                 updateActiveDmUser();
+             }
+        }
+
+        // --- ACTIONS ---
+
+         function selectDmHome() {
+              if (appState.currentView.type === 'dm' && !appState.currentView.dmId) return; // Already home
+
+             appState.currentView = { type: 'dm', serverId: null, channelId: null, dmId: null };
+
+             // Update UI
+             channelsDmsHeaderEl.innerHTML = ''; // Clear server name
+              const input = document.createElement('input');
+                 input.type = 'text';
+                 input.id = 'findConversationInput'; // Keep the ID consistent
+                 input.placeholder = 'Find or start a conversation';
+                 input.style.width = '100%';
+                 input.style.padding = '4px 8px';
+                 input.style.backgroundColor = 'var(--background-tertiary)';
+                 input.style.border = 'none';
+                 input.style.borderRadius = '4px';
+                 input.style.color = 'var(--text-normal)';
+                 input.style.fontSize = '14px';
+                 // Add event listener if needed for filtering
+                 channelsDmsHeaderEl.appendChild(input);
+
+             renderDmList();
+             showWelcomeView(); // Show welcome until a DM is selected
+             updateActiveServerIcon(); // Highlight DM home icon
+         }
+
+
+        function selectServer(serverId) {
+            const server = appState.servers[serverId];
+            if (!server) return;
+
+             // Default to the first text channel if switching servers or no channel selected
+             const firstTextChannel = Object.values(server.channels).find(ch => ch.type === 'text');
+             const targetChannelId = (appState.currentView.serverId !== serverId || !appState.currentView.channelId)
+                 ? firstTextChannel?.id
+                 : appState.currentView.channelId;
+
+             if (!targetChannelId) {
+                 // Handle case where server has no text channels (show empty state?)
+                  appState.currentView = { type: 'server', serverId: serverId, channelId: null };
+                 channelsDmsHeaderEl.textContent = server.name;
+                  renderChannelList(serverId); // Show empty or just voice
+                  showWelcomeView(); // Or a specific "no text channel" view
+                  console.warn("No text channels found in this server.");
+                  updateActiveServerIcon();
+                 return;
+             }
+
+             // Select the server and the determined channel
+             selectChannel(serverId, targetChannelId);
+        }
+
+         function selectChannel(serverId, channelId) {
+             const server = appState.servers[serverId];
+             const channel = server?.channels[channelId];
+              // Ignore clicks on non-text channels for now
+             if (!channel || channel.type !== 'text') {
+                  console.log(`Channel ${channelId} is not a text channel or does not exist.`);
+                 return;
+             }
+
+             appState.currentView = { type: 'server', serverId: serverId, channelId: channelId, dmId: null };
+
+             // Update UI
+             channelsDmsHeaderEl.textContent = server.name; // Set header to server name
+             renderChannelList(serverId); // Update channel list highlighting
+             updateChatUI(); // Update chat area
+         }
+
+         function selectDm(dmId) {
+              const dmUser = appState.dms[dmId];
+             if (!dmUser) return;
+
+             appState.currentView = { type: 'dm', serverId: null, channelId: null, dmId: dmId };
+
+             // Update UI
+              channelsDmsHeaderEl.innerHTML = ''; // Clear server name
+              const input = document.createElement('input');
+                 input.type = 'text';
+                 input.id = 'findConversationInput'; // Keep the ID consistent
+                 input.placeholder = 'Find or start a conversation';
+                 input.style.width = '100%';
+                 input.style.padding = '4px 8px';
+                 input.style.backgroundColor = 'var(--background-tertiary)';
+                 input.style.border = 'none';
+                 input.style.borderRadius = '4px';
+                 input.style.color = 'var(--text-normal)';
+                 input.style.fontSize = '14px';
+                 channelsDmsHeaderEl.appendChild(input);
+
+             renderDmList(); // Update DM list highlighting
+             updateChatUI(); // Update chat area
+         }
+
+        function sendMessage() {
+            const text = chatInputEl.value.trim();
+            if (!text) return;
+
+            let messageKey = '';
+             let isDM = false;
+             let recipientId = null;
+
+            if (appState.currentView.type === 'server' && appState.currentView.channelId) {
+                messageKey = `server-${appState.currentView.serverId}-${appState.currentView.channelId}`;
+            } else if (appState.currentView.type === 'dm' && appState.currentView.dmId) {
+                messageKey = `dm-${appState.currentView.dmId}`;
+                 isDM = true;
+                 recipientId = appState.currentView.dmId;
+            } else {
+                console.error("Cannot send message, no active channel or DM selected.");
+                return;
+            }
+
+            const newMessage = {
+                user: "You", // Or get actual username later
+                text: text,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                avatar: '👤'
+            };
+
+            // Ensure message array exists and add message
+            if (!appState.messages[messageKey]) {
+                appState.messages[messageKey] = [];
+            }
+            appState.messages[messageKey].push(newMessage);
+
+            // Add message visually
+            addMessageToDOM(newMessage);
+
+            // Clear input and refocus
+            chatInputEl.value = '';
+            chatInputEl.style.height = '22px'; // Reset height
+            // chatInputEl.focus(); // Don't refocus immediately on mobile, can be annoying
+
+            // Trigger AI response if in DM with AI
+             if (isDM && recipientId === 'ai') {
+                 triggerAIResponse(text, messageKey);
+             }
+        }
+
+         function triggerAIResponse(userMessage, messageKey) {
+              // Simple delay to simulate thinking
+             setTimeout(() => {
+                 const aiResponseText = getAIResponse(userMessage);
+                 const aiMessage = {
+                     user: "Boring AI",
+                     text: aiResponseText,
+                     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                     avatar: '🤖',
+                     isAI: true
+                 };
+                  appState.messages[messageKey].push(aiMessage);
+                  addMessageToDOM(aiMessage);
+             }, 800 + Math.random() * 500); // Slight random delay
+         }
+
+         function getAIResponse(message) {
+             const lowerCaseMessage = message.toLowerCase();
+             const responses = [
+                 "Okay.",
+                 "Interesting.",
+                 "I see.",
+                 "Tell me more.",
+                 "That's... something.",
+                 "Hmm.",
+                 "Error 404: Comprehension not found.",
+                 "Does not compute.",
+                 "My programming does not cover that.",
+                 "Fascinating. In a boring way.",
+                 "Processing... Zzzzz.",
+                 "Yes.",
+                 "No.",
+                 "Perhaps.",
+                 "Are you sure?",
+                 "Why do you ask?",
+             ];
+
+             // Simple keyword checking
+             if (lowerCaseMessage.includes("hello") || lowerCaseMessage.includes("hi")) {
+                 return "Hello there.";
+             }
+             if (lowerCaseMessage.includes("how are you")) {
+                 return "I am a simulation. I do not have feelings.";
+             }
+             if (lowerCaseMessage.includes("?")) {
+                 return "That is a question.";
+             }
+             if (lowerCaseMessage.length > 50) {
+                  return "That was quite long.";
+             }
+             if (lowerCaseMessage.length < 5) {
+                 return "Brief.";
+             }
+
+             // Default random response
+             return responses[Math.floor(Math.random() * responses.length)];
+         }
+
+        function promptCreateServer() {
+            const serverName = prompt("Enter server name:");
+            if (serverName && serverName.trim()) {
+                createServer(serverName.trim());
+            } else if (serverName !== null) {
+                 alert("Server name cannot be empty.");
+            }
+        }
+
+        function createServer(name) {
+            const serverId = `custom-${appState.nextServerId++}`;
+             const initials = name.split(' ').map(word => word[0]).join('').substring(0, 2).toUpperCase() || name.substring(0,2).toUpperCase();
+            const newServer = {
+                id: serverId,
+                name: name,
+                channels: { // Add default channels
+                     "general": { id: "general", name: "general", type: "text" },
+                     "voice1": { id: "voice1", name: "General Voice", type: "voice"}
+                },
+                initials: initials
+            };
+            appState.servers[serverId] = newServer;
+            renderServerList();
+             // Optionally automatically select the new server
+             selectServer(serverId);
+        }
+
+        function promptAddFriend() {
+             const friendName = prompt("Enter friend's username (e.g., 'Friend1'):");
+             if (friendName && friendName.trim() && friendName.trim().toLowerCase() !== 'you') {
+                 addFriend(friendName.trim());
+             } else if (friendName !== null) {
+                 alert("Invalid username.");
+             }
+        }
+
+         function addFriend(name) {
+             // Check if friend already exists (case-insensitive check is good)
+             const existingFriend = Object.values(appState.friends).find(f => f.name.toLowerCase() === name.toLowerCase());
+             if (existingFriend) {
+                 alert(`You are already friends with ${existingFriend.name}!`);
+                  selectDm(existingFriend.id); // Select existing DM
+                 return;
+             }
+
+             const friendId = `friend-${appState.nextFriendId++}`;
+              const avatar = name.substring(0, 1).toUpperCase();
+             const newFriend = {
+                 id: friendId,
+                 name: name,
+                 avatar: avatar
+             };
+             appState.friends[friendId] = newFriend;
+             appState.dms[friendId] = newFriend; // Add to DMs as well
+
+             // Ensure message history exists for the new DM
+             const messageKey = `dm-${friendId}`;
+             if (!appState.messages[messageKey]) {
+                 appState.messages[messageKey] = [
+                      { user: name, text: "Hey! We're friends now!", time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), avatar: avatar}
+                 ];
+             }
+
+             renderDmList(); // Update the list visually
+             selectDm(friendId); // Automatically open the DM with the new friend
+         }
+
+        function scrollToBottom(smooth = false) {
+             // messagesWrapperEl.scrollTop = messagesWrapperEl.scrollHeight; // Simple scroll
+             const endMarker = document.getElementById('messageListEnd');
+             if (endMarker) {
+                 endMarker.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+             }
+        }
+
+         // Auto-resize textarea
+         function autoResizeTextarea() {
+             chatInputEl.style.height = 'auto'; // Temporarily shrink to get scrollHeight
+             let newHeight = Math.min(chatInputEl.scrollHeight, 200); // Max height limit
+             chatInputEl.style.height = `${newHeight}px`;
+         }
+
+        // --- EVENT LISTENERS ---
+        chatInputEl.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // Prevent newline
+                sendMessage();
+            }
+        });
+
+         chatInputEl.addEventListener('input', autoResizeTextarea);
+
+        // --- INITIALIZATION ---
+        function initialize() {
+            renderServerList();
+             // Decide initial view based on appState.currentView
+             if (appState.currentView.type === 'dm') {
+                  selectDmHome(); // Start at DM home screen
+                 if (appState.currentView.dmId) {
+                      selectDm(appState.currentView.dmId); // Select the initial DM (e.g., AI)
+                 }
+             } else if (appState.currentView.type === 'server') {
+                 selectServer(appState.currentView.serverId); // Select initial server/channel
+             } else {
+                 selectDmHome(); // Default fallback
+             }
+
+             // Initial resize for textarea if it has content (unlikely on load)
+            autoResizeTextarea();
+        }
+
+        // Run initialization when the DOM is ready
+        document.addEventListener('DOMContentLoaded', initialize);
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Night Shift at the Pizzeria</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 1000px;
+            height: 600px;
+            background-color: #111;
+            border: 2px solid #333;
+            overflow: hidden;
+        }
+
+        #office-view {
+            width: 100%;
+            height: 100%;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            position: relative;
+            background-image: radial-gradient(circle, #444 10%, #222 70%);
+            background-size: cover;
+        }
+
+        #office-text {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 1em;
+            color: #888;
+        }
+
+        .door-control, .light-control {
+            position: absolute;
+            bottom: 100px;
+            width: 80px;
+            height: 120px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 1px solid #555;
+            background-color: #3a3a3a;
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        .door-control button, .light-control button {
+            width: 60px;
+            height: 50px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            font-size: 0.8em;
+            border: none;
+            border-radius: 3px;
+        }
+
+        #left-controls { left: 30px; }
+        #right-controls { right: 30px; }
+
+        #left-door-button, #right-door-button { background-color: #ff4444; color: white; }
+        #left-light-button, #right-light-button { background-color: #eee; color: black; }
+
+        .door {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 150px; /* Adjust width as needed */
+            background-color: #5a5a5a; /* Steel door color */
+            border: 5px outset #777;
+            transition: transform 0.3s ease-in-out;
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3em;
+            color: #333;
+        }
+
+        #left-door {
+            left: 0;
+            transform: translateX(-100%); /* Initially open */
+        }
+
+        #right-door {
+            right: 0;
+            transform: translateX(100%); /* Initially open */
+        }
+
+        #left-door.closed { transform: translateX(0); }
+        #right-door.closed { transform: translateX(0); }
+
+        .hallway-light-effect {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 200px; /* Width of the illuminated area */
+            background: linear-gradient(to right, rgba(255, 255, 200, 0.5), rgba(255, 255, 200, 0));
+            z-index: 5;
+            display: none; /* Hidden by default */
+            pointer-events: none;
+            font-size: 5em; /* For animatronic shape */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: rgba(0, 0, 0, 0.7);
+        }
+
+        #left-hallway-light {
+            left: 0; /* Position just outside the door */
+        }
+
+        #right-hallway-light {
+            right: 0; /* Position just outside the door */
+            background: linear-gradient(to left, rgba(255, 255, 200, 0.5), rgba(255, 255, 200, 0));
+        }
+
+        #monitor-toggle {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 40px;
+            background-color: #444;
+            color: #fff;
+            border: 2px solid #666;
+            cursor: pointer;
+            font-size: 1.2em;
+            border-radius: 0 0 10px 10px;
+            z-index: 20;
+        }
+         #monitor-toggle:hover {
+             background-color: #555;
+         }
+
+        #camera-view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(10, 10, 10, 0.95);
+            z-index: 30;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        #camera-feed {
+            width: 80%;
+            height: 70%;
+            background-color: #000;
+            border: 3px solid #555;
+            margin-top: 20px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5em;
+            color: #aaa;
+        }
+        #camera-location-name {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.6);
+            padding: 5px;
+            border-radius: 3px;
+            color: #ff5555;
+            font-weight: bold;
+        }
+
+        #camera-content {
+             font-size: 4em;
+        }
+
+        #static-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noiseFilter)' opacity='0.15'/%3E%3C/svg%3E");
+            pointer-events: none;
+            animation: staticAnim 0.1s infinite linear;
+            opacity: 0.2;
+        }
+        @keyframes staticAnim {
+            0% { transform: translate(0,0); }
+            10% { transform: translate(-2px,-2px); }
+            20% { transform: translate(2px,2px); }
+            30% { transform: translate(-1px,1px); }
+            /* ... add more steps ... */
+            100% { transform: translate(0,0); }
+        }
+
+
+        #camera-map {
+            width: 250px;
+            height: 150px;
+            background-color: #2a2a2a;
+            border: 1px solid #666;
+            padding: 5px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 5px;
+            margin-bottom: 10px;
+            align-self: flex-end;
+            margin-right: 20px;
+        }
+
+        .cam-button {
+            background-color: #555;
+            color: #fff;
+            border: 1px solid #888;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.8em;
+            position: relative;
+        }
+        .cam-button.active {
+            background-color: #eee;
+            color: #000;
+            border: 2px solid #fff;
+        }
+        .cam-button:hover {
+            background-color: #777;
+        }
+        .cam-label {
+            position: absolute;
+            bottom: 1px;
+            right: 2px;
+            font-size: 0.7em;
+            color: #ccc;
+        }
+        .cam-button.active .cam-label {
+             color: #333;
+        }
+
+        #ui-elements {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 1.2em;
+            z-index: 25;
+            color: #0f0; /* Green digital text */
+        }
+        #power-level, #clock, #night-indicator, #power-usage {
+            margin-bottom: 5px;
+        }
+        #power-usage-indicator {
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .usage-bar {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            background-color: #0f0;
+            margin-left: 3px;
+            opacity: 0.3;
+        }
+         .usage-bar.active {
+             opacity: 1;
+         }
+
+        .jumpscare-overlay, #game-over, #win-screen, #power-outage-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            text-align: center;
+        }
+
+        .jumpscare-overlay { z-index: 100; } /* Highest priority */
+        #jumpscare-animatronic {
+            font-size: 15em; /* Make the shape large */
+            animation: jumpscareZoom 0.5s ease-out;
+            /* Add shaky animation later if desired */
+        }
+        @keyframes jumpscareZoom {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        #game-over h1, #win-screen h1 {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+        #game-over { color: #f00; }
+        #win-screen { color: #0f0; }
+         #restart-button {
+             padding: 10px 20px;
+             font-size: 1.5em;
+             cursor: pointer;
+             background-color: #555;
+             color: #fff;
+             border: 1px solid #888;
+             border-radius: 5px;
+             margin-top: 30px;
+         }
+
+
+        #power-outage-overlay {
+             background-color: rgba(0,0,0,0.9);
+             z-index: 40; /* Below jumpscare, above game */
+        }
+         #power-outage-text {
+             font-size: 2em;
+             color: #888;
+             margin-bottom: 20px;
+         }
+         #freddy-power-out {
+            font-size: 6em;
+            color: #643000; /* Dark brown for Freddy */
+            /* Add blinking eyes effect later? */
+            animation: freddyPeek 8s linear forwards;
+            opacity: 0;
+         }
+         @keyframes freddyPeek {
+             0% { opacity: 0; }
+             25% { opacity: 0.8; transform: translateX(-10px); }
+             50% { opacity: 0.8; transform: translateX(10px); }
+             75% { opacity: 0.8; transform: translateX(-5px); }
+             90% { opacity: 0; } /* Disappears before final jumpscare */
+             100% { opacity: 0; }
+         }
+
+         /* Simple Loading Screen */
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 200;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            flex-direction: column;
+        }
+         #start-button {
+              padding: 15px 30px;
+              font-size: 1.2em;
+              cursor: pointer;
+              background-color: #f00;
+              color: #fff;
+              border: 2px solid #a00;
+              border-radius: 5px;
+              margin-top: 30px;
+         }
+
+    </style>
+</head>
+<body>
+    <div id="loading-screen">
+        <div>Night Shift at the Pizzeria</div>
+        <button id="start-button">Start Night 1</button>
+    </div>
+
+    <div id="game-container" style="display: none;">
+        <div id="office-view">
+             <div id="office-text">Security Office</div>
+            <!-- Office Details can be added here -->
+        </div>
+
+        <!-- Controls -->
+        <div id="left-controls" class="door-control">
+            <button id="left-light-button">LIGHT</button>
+            <button id="left-door-button">DOOR</button>
+        </div>
+        <div id="right-controls" class="light-control">
+            <button id="right-light-button">LIGHT</button>
+            <button id="right-door-button">DOOR</button>
+        </div>
+
+        <!-- Doors -->
+        <div id="left-door" class="door">🚪</div>
+        <div id="right-door" class="door">🚪</div>
+
+        <!-- Hallway Lights -->
+        <div id="left-hallway-light" class="hallway-light-effect"></div>
+        <div id="right-hallway-light" class="hallway-light-effect"></div>
+
+
+        <!-- Monitor -->
+        <button id="monitor-toggle">▲ Toggle Monitor</button>
+
+        <!-- Camera View (Initially Hidden) -->
+        <div id="camera-view" style="display: none;">
+            <div id="camera-feed">
+                 <div id="camera-location-name">CAM 1A</div>
+                 <div id="camera-content"></div>
+                 <div id="static-overlay"></div>
+            </div>
+            <div id="camera-map">
+                <!-- Add 11 Camera Buttons -->
+                <button class="cam-button active" data-cam="1A"><span class="cam-label">1A</span>⬛</button>
+                <button class="cam-button" data-cam="1B"><span class="cam-label">1B</span>⬛</button>
+                <button class="cam-button" data-cam="1C"><span class="cam-label">1C</span>⬛</button>
+                <button class="cam-button" data-cam="5"><span class="cam-label">5</span>⬛</button>
+
+                <button class="cam-button" data-cam="2A"><span class="cam-label">2A</span>⬛</button>
+                <button class="cam-button" data-cam="2B"><span class="cam-label">2B</span>⬛</button>
+                <button class="cam-button" data-cam="3"><span class="cam-label">3</span>⬛</button>
+                 <button class="cam-button" data-cam="4A"><span class="cam-label">4A</span>⬛</button>
+
+                <button class="cam-button" data-cam="4B"><span class="cam-label">4B</span>⬛</button>
+                 <button class="cam-button" data-cam="6"><span class="cam-label">6</span>⬛</button>
+                <button class="cam-button" data-cam="7"><span class="cam-label">7</span>⬛</button>
+                 <!-- Empty cell or another cam -->
+                 <div></div>
+            </div>
+        </div>
+
+        <!-- UI -->
+        <div id="ui-elements">
+            <div id="night-indicator">Night: 1</div>
+            <div id="clock">12:00 AM</div>
+            <div id="power-level">Power Left: 100%</div>
+            <div id="power-usage">
+                Usage:
+                <div id="power-usage-indicator">
+                     <div class="usage-bar active"></div> <!-- Base usage -->
+                     <div class="usage-bar"></div>
+                     <div class="usage-bar"></div>
+                     <div class="usage-bar"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overlays -->
+        <div id="jumpscare-overlay" style="display: none;">
+             <div id="jumpscare-animatronic"></div>
+        </div>
+        <div id="power-outage-overlay" style="display: none;">
+            <div id="power-outage-text">Power Depleted!</div>
+            <div id="freddy-power-out">🐻</div>
+        </div>
+        <div id="game-over" style="display: none;">
+            <h1>GAME OVER</h1>
+             <button id="restart-button">Try Again?</button>
+        </div>
+        <div id="win-screen" style="display: none;">
+            <h1>6:00 AM</h1>
+            <h2>You Survived!</h2>
+             <button id="restart-button-win">Next Night (Restart)</button> <!-- For now, just restarts -->
+        </div>
+    </div>
+
+    <script>
+        const gameState = {
+            power: 100,
+            time: 0, // 0 = 12 AM, 6 = 6 AM
+            night: 1,
+            isMonitorUp: false,
+            leftDoorClosed: false,
+            rightDoorClosed: false,
+            leftLightOn: false,
+            rightLightOn: false,
+            currentCamera: '1A',
+            powerUsageLevel: 1, // Base usage
+            gameOver: false,
+            gameWon: false,
+            powerOutage: false,
+            animatronics: {
+                bonnie: { pos: '1A', aggression: 1, shape: '🟦', path: ['1A', '1B', '5', '2A', '2B', '3', 'L_HALL'], atDoor: false }, // Blue Square
+                chica: { pos: '1A', aggression: 1, shape: '🟡', path: ['1A', '1B', '7', '6', '4A', '4B', 'R_HALL'], atDoor: false }, // Yellow Circle
+                foxy: { pos: '1C', aggression: 1, shape: '🔺', state: 'hidden', timer: 0, stage: 0, sprintCooldown: 0 }, // Red Triangle
+                freddy: { pos: '1A', aggression: 0, shape: '🐻', timer: 0, movementDelay: 5000 }, // Bear Emoji / Brown Square
+            },
+            cameraLocations: { // Define rooms and who can be there initially
+                '1A': { name: "Show Stage", occupants: ['bonnie', 'chica', 'freddy'] },
+                '1B': { name: "Dining Area", occupants: [] },
+                '1C': { name: "Pirate Cove", occupants: ['foxy'] },
+                '2A': { name: "West Hall", occupants: [] },
+                '2B': { name: "W. Hall Corner", occupants: [] },
+                '3': { name: "Supply Closet", occupants: [] },
+                '4A': { name: "East Hall", occupants: [] },
+                '4B': { name: "E. Hall Corner", occupants: [] },
+                '5': { name: "Backstage", occupants: [] },
+                '6': { name: "Kitchen", occupants: [], audioOnly: true }, // Camera disabled
+                '7': { name: "Restrooms", occupants: [] },
+                'L_HALL': { name: "Left Hallway (Office)", occupants: [], isOfficeHall: true }, // Special location for near office
+                'R_HALL': { name: "Right Hallway (Office)", occupants: [], isOfficeHall: true }, // Special location for near office
+            },
+            officeViewAnimatronics: { // Track who is visually at the door/window
+                 left: null,
+                 right: null
+            }
+        };
+
+        // DOM Elements
+        const loadingScreen = document.getElementById('loading-screen');
+        const startButton = document.getElementById('start-button');
+        const gameContainer = document.getElementById('game-container');
+        const officeView = document.getElementById('office-view');
+        const leftDoorButton = document.getElementById('left-door-button');
+        const rightDoorButton = document.getElementById('right-door-button');
+        const leftLightButton = document.getElementById('left-light-button');
+        const rightLightButton = document.getElementById('right-light-button');
+        const leftDoor = document.getElementById('left-door');
+        const rightDoor = document.getElementById('right-door');
+        const leftHallwayLight = document.getElementById('left-hallway-light');
+        const rightHallwayLight = document.getElementById('right-hallway-light');
+        const monitorToggleButton = document.getElementById('monitor-toggle');
+        const cameraView = document.getElementById('camera-view');
+        const cameraFeed = document.getElementById('camera-feed');
+        const cameraContent = document.getElementById('camera-content');
+        const cameraLocationName = document.getElementById('camera-location-name');
+        const staticOverlay = document.getElementById('static-overlay');
+        const camButtons = document.querySelectorAll('.cam-button');
+        const nightIndicator = document.getElementById('night-indicator');
+        const clockDisplay = document.getElementById('clock');
+        const powerLevelDisplay = document.getElementById('power-level');
+        const powerUsageIndicator = document.getElementById('power-usage-indicator');
+        const usageBars = powerUsageIndicator.querySelectorAll('.usage-bar');
+        const jumpscareOverlay = document.getElementById('jumpscare-overlay');
+        const jumpscareAnimatronic = document.getElementById('jumpscare-animatronic');
+        const gameOverScreen = document.getElementById('game-over');
+        const winScreen = document.getElementById('win-screen');
+        const powerOutageOverlay = document.getElementById('power-outage-overlay');
+        const restartButton = document.getElementById('restart-button');
+        const restartButtonWin = document.getElementById('restart-button-win');
+
+
+        let gameLoopInterval;
+        let timeUpdateInterval;
+        let powerDrainInterval;
+        let animatronicUpdateInterval;
+        const REAL_TIME_PER_GAME_HOUR = 90 * 1000; // 90 seconds per game hour = 9 minutes total
+        const POWER_DRAIN_RATE = 1 / (10 * 1000); // 1% every 10 seconds base for level 1 usage
+        const ANIMATRONIC_MOVE_CHECK_INTERVAL = 5000; // Check every 5 seconds
+
+        // --- Game Control Functions ---
+        function startGame() {
+            loadingScreen.style.display = 'none';
+            gameContainer.style.display = 'block';
+
+            // Reset game state
+            gameState.power = 100;
+            gameState.time = 0;
+            // gameState.night = 1; // Keep night or implement progression
+            gameState.isMonitorUp = false;
+            gameState.leftDoorClosed = false;
+            gameState.rightDoorClosed = false;
+            gameState.leftLightOn = false;
+            gameState.rightLightOn = false;
+            gameState.currentCamera = '1A';
+            gameState.powerUsageLevel = 1;
+            gameState.gameOver = false;
+            gameState.gameWon = false;
+            gameState.powerOutage = false;
+            gameState.officeViewAnimatronics.left = null;
+            gameState.officeViewAnimatronics.right = null;
+
+            // Reset animatronics (simple reset for now)
+             resetAnimatronicPositions();
+             gameState.animatronics.foxy.state = 'hidden';
+             gameState.animatronics.foxy.stage = 0;
+             gameState.animatronics.foxy.timer = 0;
+             gameState.animatronics.foxy.sprintCooldown = 0;
+             gameState.animatronics.freddy.timer = 0;
+
+
+            // Reset UI
+            updateUI();
+            leftDoor.classList.remove('closed');
+            rightDoor.classList.remove('closed');
+            leftHallwayLight.style.display = 'none';
+            rightHallwayLight.style.display = 'none';
+            cameraView.style.display = 'none';
+            jumpscareOverlay.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            winScreen.style.display = 'none';
+            powerOutageOverlay.style.display = 'none';
+            monitorToggleButton.textContent = '▲ Toggle Monitor';
+
+
+            // Start Timers
+            timeUpdateInterval = setInterval(updateTime, REAL_TIME_PER_GAME_HOUR);
+            powerDrainInterval = setInterval(updatePower, 1000); // Drain power every second
+            animatronicUpdateInterval = setInterval(moveAnimatronics, ANIMATRONIC_MOVE_CHECK_INTERVAL);
+
+            console.log("Game Started - Night " + gameState.night);
+        }
+
+         function resetAnimatronicPositions() {
+             // Clear all occupants first
+             for (const loc in gameState.cameraLocations) {
+                 gameState.cameraLocations[loc].occupants = [];
+             }
+
+             // Place animatronics at start positions
+             gameState.animatronics.bonnie.pos = '1A';
+             gameState.cameraLocations['1A'].occupants.push('bonnie');
+             gameState.animatronics.bonnie.atDoor = false;
+
+             gameState.animatronics.chica.pos = '1A';
+             gameState.cameraLocations['1A'].occupants.push('chica');
+             gameState.animatronics.chica.atDoor = false;
+
+             gameState.animatronics.foxy.pos = '1C';
+             gameState.cameraLocations['1C'].occupants.push('foxy');
+
+             gameState.animatronics.freddy.pos = '1A';
+             gameState.cameraLocations['1A'].occupants.push('freddy');
+         }
+
+
+        function stopGame() {
+            clearInterval(timeUpdateInterval);
+            clearInterval(powerDrainInterval);
+            clearInterval(animatronicUpdateInterval);
+            // Also clear any pending timeouts if used for jumpscares etc.
+            console.log("Game Stopped");
+        }
+
+        function triggerGameOver(animatronicName = null) {
+            if (gameState.gameOver || gameState.gameWon) return;
+            console.log("GAME OVER triggered by", animatronicName || "Power Outage");
+            gameState.gameOver = true;
+            stopGame();
+
+            // Close monitor if open
+            if(gameState.isMonitorUp) {
+                 toggleMonitor();
+            }
+            // Force doors open, lights off
+             if (gameState.leftDoorClosed) toggleDoor('left');
+             if (gameState.rightDoorClosed) toggleDoor('right');
+             // Ensure lights visuals are off
+             leftHallwayLight.style.display = 'none';
+             rightHallwayLight.style.display = 'none';
+             gameState.leftLightOn = false;
+             gameState.rightLightOn = false;
+
+
+            if (animatronicName) {
+                const anim = gameState.animatronics[animatronicName];
+                jumpscareAnimatronic.textContent = anim ? anim.shape : '❓'; // Show shape or question mark
+                jumpscareOverlay.style.display = 'flex';
+                // Hide jumpscare after a short delay and show game over screen
+                setTimeout(() => {
+                    jumpscareOverlay.style.display = 'none';
+                    gameOverScreen.style.display = 'flex';
+                }, 1500); // Jumpscare duration
+            } else {
+                 // Power outage game over (Freddy) - handled by power outage sequence
+                 // If somehow called without animatronic and not power outage:
+                 gameOverScreen.style.display = 'flex';
+            }
+        }
+
+         function triggerWin() {
+             if (gameState.gameOver || gameState.gameWon) return;
+             console.log("WIN! Survived until 6 AM");
+             gameState.gameWon = true;
+             stopGame();
+              // Close monitor if open
+             if(gameState.isMonitorUp) {
+                 toggleMonitor();
+             }
+              // Force doors open, lights off
+             if (gameState.leftDoorClosed) toggleDoor('left');
+             if (gameState.rightDoorClosed) toggleDoor('right');
+             leftHallwayLight.style.display = 'none';
+             rightHallwayLight.style.display = 'none';
+             gameState.leftLightOn = false;
+             gameState.rightLightOn = false;
+
+             winScreen.style.display = 'flex';
+         }
+
+        function triggerPowerOutage() {
+            if (gameState.powerOutage || gameState.gameOver || gameState.gameWon) return;
+            console.log("POWER OUTAGE!");
+            gameState.powerOutage = true;
+            stopGame(); // Stop normal game functions
+
+            // Force UI changes
+            gameState.power = 0;
+            gameState.leftDoorClosed = false; // Doors open
+            gameState.rightDoorClosed = false;
+            gameState.leftLightOn = false;
+            gameState.rightLightOn = false;
+            gameState.isMonitorUp = false;
+            updateUI(); // Show 0 power, hide usage bars etc.
+            leftDoor.classList.remove('closed');
+            rightDoor.classList.remove('closed');
+            leftHallwayLight.style.display = 'none';
+            rightHallwayLight.style.display = 'none';
+            cameraView.style.display = 'none';
+            monitorToggleButton.disabled = true;
+            leftDoorButton.disabled = true;
+            rightDoorButton.disabled = true;
+            leftLightButton.disabled = true;
+            rightLightButton.disabled = true;
+
+            // Show power outage overlay with Freddy sequence
+            powerOutageOverlay.style.display = 'flex';
+
+            // After Freddy's animation/song duration, trigger game over
+            // Duration matches freddyPeek animation + slight delay
+            setTimeout(() => {
+                 if (!gameState.gameWon) { // Check if player somehow won during the outage animation
+                    powerOutageOverlay.style.display = 'none';
+                    triggerGameOver('freddy'); // Freddy gets you
+                 }
+            }, 9000); // 8s animation + 1s buffer
+        }
+
+
+        // --- Update Functions ---
+        function updateTime() {
+            if (gameState.gameOver || gameState.gameWon || gameState.powerOutage) return;
+
+            gameState.time++;
+            updateClockDisplay();
+
+            if (gameState.time >= 6) {
+                triggerWin();
+            } else {
+                 // Increase difficulty slightly as time passes (optional)
+                 // Maybe increase aggression slightly for some animatronics
+                 if(gameState.time === 2) gameState.animatronics.bonnie.aggression++;
+                 if(gameState.time === 3) gameState.animatronics.chica.aggression++;
+                 if(gameState.time === 4) gameState.animatronics.freddy.aggression++;
+            }
+        }
+
+        function updatePower() {
+             if (gameState.gameOver || gameState.gameWon || gameState.powerOutage) return;
+
+            let usage = gameState.powerUsageLevel;
+            let drainMultiplier = 1; // Base drain multiplier
+
+            // Calculate drain based on usage level
+            // Level 1: Base drain
+            // Level 2: Base * 1.5
+            // Level 3: Base * 2.0
+            // Level 4: Base * 2.5
+            if (usage === 2) drainMultiplier = 1.5;
+            else if (usage === 3) drainMultiplier = 2.0;
+            else if (usage === 4) drainMultiplier = 2.5;
+
+            const drainAmount = POWER_DRAIN_RATE * 1000 * drainMultiplier; // Calculate drain for this second
+
+            gameState.power -= drainAmount;
+
+            if (gameState.power <= 0) {
+                gameState.power = 0;
+                updatePowerDisplay();
+                triggerPowerOutage();
+            } else {
+                updatePowerDisplay();
+            }
+        }
+
+        function calculatePowerUsage() {
+            let level = 1; // Base usage
+            if (gameState.isMonitorUp) level++;
+            if (gameState.leftDoorClosed) level++;
+            if (gameState.rightDoorClosed) level++;
+            if (gameState.leftLightOn) level++; // Lights use power continuously while on
+            if (gameState.rightLightOn) level++;
+
+            // Clamp level between 1 and 4 (max usage bars)
+            gameState.powerUsageLevel = Math.min(Math.max(level, 1), 4);
+            updateUsageIndicator();
+        }
+
+        // --- UI Update Functions ---
+         function updateUI() {
+             updateClockDisplay();
+             updatePowerDisplay();
+             calculatePowerUsage(); // This also updates the indicator bars
+             updateCameraFeed(); // Update camera if monitor is up
+             updateNightDisplay();
+         }
+         function updateNightDisplay(){
+             nightIndicator.textContent = `Night: ${gameState.night}`;
+         }
+
+        function updateClockDisplay() {
+            const hour = 12 + gameState.time;
+            const displayHour = hour > 12 ? hour - 12 : 12; // Handle 12 AM correctly
+            clockDisplay.textContent = `${displayHour}:00 AM`;
+        }
+
+        function updatePowerDisplay() {
+            powerLevelDisplay.textContent = `Power Left: ${Math.floor(gameState.power)}%`;
+        }
+
+        function updateUsageIndicator() {
+            usageBars.forEach((bar, index) => {
+                if (index < gameState.powerUsageLevel) {
+                    bar.classList.add('active');
+                } else {
+                    bar.classList.remove('active');
+                }
+            });
+        }
+
+        function updateCameraFeed() {
+             if (!gameState.isMonitorUp || gameState.powerOutage) return;
+
+             const camId = gameState.currentCamera;
+             const location = gameState.cameraLocations[camId];
+
+             if (!location) {
+                 cameraContent.textContent = 'Error';
+                 cameraLocationName.textContent = 'UNKNOWN';
+                 return;
+             }
+
+             cameraLocationName.textContent = `CAM ${camId} - ${location.name}`;
+
+             // Kitchen special case
+             if (location.audioOnly) {
+                 cameraContent.textContent = "🔊 AUDIO ONLY";
+                  // Maybe add random clanging sounds simulation later
+                 staticOverlay.style.opacity = '0.1'; // Less static for audio only?
+                 return;
+             } else {
+                 staticOverlay.style.opacity = '0.2'; // Normal static
+             }
+
+             // Display occupants
+             let content = '';
+             if (location.occupants.length > 0) {
+                 location.occupants.forEach(animName => {
+                     // Special handling for Foxy visibility based on state
+                     if (animName === 'foxy') {
+                         if (gameState.animatronics.foxy.state !== 'sprinting') {
+                              if (gameState.animatronics.foxy.stage === 0) content += ''; // Hidden
+                              else if (gameState.animatronics.foxy.stage === 1) content += '🔺? '; // Peeking
+                              else if (gameState.animatronics.foxy.stage === 2) content += '🔺!! '; // Out of curtain
+                              else content += ''; // Gone
+                         }
+                     } else {
+                        // Don't show Freddy if he's meant to be hidden sometimes? (Add complexity later)
+                         content += gameState.animatronics[animName].shape + ' ';
+                     }
+                 });
+             } else {
+                 content = '⬛'; // Empty room symbol
+             }
+             cameraContent.textContent = content.trim();
+
+
+             // If viewing Foxy, potentially reset his timer/stage
+             if (camId === '1C' && gameState.animatronics.foxy.state !== 'sprinting' && gameState.animatronics.foxy.stage > 0) {
+                 // Looking at Foxy slows him down or resets his progress partially
+                 gameState.animatronics.foxy.timer = Math.max(0, gameState.animatronics.foxy.timer - 2000); // Reduce timer slightly
+             }
+        }
+
+
+        // --- Player Actions ---
+        function toggleDoor(side) {
+            if (gameState.gameOver || gameState.gameWon || gameState.powerOutage) return;
+
+            const doorElement = side === 'left' ? leftDoor : rightDoor;
+            const stateProp = side === 'left' ? 'leftDoorClosed' : 'rightDoorClosed';
+
+            gameState[stateProp] = !gameState[stateProp];
+            doorElement.classList.toggle('closed', gameState[stateProp]);
+            // console.log(`${side} door ${gameState[stateProp] ? 'closed' : 'opened'}`);
+            calculatePowerUsage();
+
+             // Check immediately if closing the door saved you from an attack
+             if (gameState[stateProp] && gameState.officeViewAnimatronics[side]) {
+                  console.log(`Door closed on ${gameState.officeViewAnimatronics[side]} at ${side} door.`);
+                  // Animatronic might retreat after a while if door stays closed
+                  const animName = gameState.officeViewAnimatronics[side];
+                  if (animName === 'bonnie' || animName === 'chica') {
+                       gameState.animatronics[animName].atDoor = false; // No longer considered 'at the door' for attack
+                  }
+                  gameState.officeViewAnimatronics[side] = null; // Clear visual
+                  updateHallwayLight(side); // Update light view if it was on
+             }
+        }
+
+        function toggleLight(side) {
+             if (gameState.gameOver || gameState.gameWon || gameState.powerOutage || gameState.isMonitorUp) return; // Can't use lights with monitor up
+
+            const lightProp = side === 'left' ? 'leftLightOn' : 'rightLightOn';
+            const lightElement = side === 'left' ? leftHallwayLight : rightHallwayLight;
+
+            // Lights are momentary press (or turn on/off?) - Let's make them toggle for simplicity
+            gameState[lightProp] = !gameState[lightProp];
+             // console.log(`${side} light ${gameState[lightProp] ? 'ON' : 'OFF'}`);
+
+             updateHallwayLight(side); // Update visual based on state and animatronics
+             calculatePowerUsage();
+
+             // If turning light OFF, hide the element immediately
+             if (!gameState[lightProp]) {
+                 lightElement.style.display = 'none';
+             }
+        }
+
+         function updateHallwayLight(side) {
+            const lightProp = side === 'left' ? 'leftLightOn' : 'rightLightOn';
+            const lightElement = side === 'left' ? leftHallwayLight : rightHallwayLight;
+            const relevantHall = side === 'left' ? 'L_HALL' : 'R_HALL';
+
+            if (gameState[lightProp] && !gameState.powerOutage && !gameState.isMonitorUp) {
+                lightElement.style.display = 'flex'; // Show light effect
+                let animatronicAtDoor = null;
+                // Check if Bonnie/Chica/Foxy(sprinted) is in the corresponding hallway location
+                const occupants = gameState.cameraLocations[relevantHall].occupants;
+                 occupants.forEach(name => {
+                     if ((side === 'left' && (name === 'bonnie' || name === 'foxy')) || (side === 'right' && name === 'chica')) {
+                         animatronicAtDoor = name;
+                     }
+                 });
+
+
+                if (animatronicAtDoor) {
+                    lightElement.textContent = gameState.animatronics[animatronicAtDoor].shape;
+                    gameState.officeViewAnimatronics[side] = animatronicAtDoor; // Mark visual presence
+                    gameState.animatronics[animatronicAtDoor].atDoor = true; // Mark logical presence for attack check
+                    // Check for immediate attack if door is open
+                    const doorClosed = side === 'left' ? gameState.leftDoorClosed : gameState.rightDoorClosed;
+                    if (!doorClosed) {
+                         // Small delay before jumpscare?
+                         setTimeout(() => {
+                              // Double check if door closed in the meantime
+                              const stillDoorClosed = side === 'left' ? gameState.leftDoorClosed : gameState.rightDoorClosed;
+                              if (!stillDoorClosed && gameState.animatronics[animatronicAtDoor].atDoor) { // Check if still logically at door
+                                   triggerGameOver(animatronicAtDoor);
+                              }
+                         }, 300); // 300ms reaction time window
+                    }
+                } else {
+                    lightElement.textContent = ''; // Empty hallway
+                    gameState.officeViewAnimatronics[side] = null;
+                    // Ensure any animatronic previously marked atDoor is cleared if they moved away
+                     Object.values(gameState.animatronics).forEach(anim => {
+                         if(anim.atDoor && anim.pos !== relevantHall) {
+                              anim.atDoor = false;
+                         }
+                     });
+                }
+            } else {
+                lightElement.style.display = 'none'; // Hide light effect
+                 gameState.officeViewAnimatronics[side] = null; // Clear visual presence when light off
+                // Note: animatronic might still be logically 'atDoor' even if light is off
+            }
+         }
+
+
+        function toggleMonitor() {
+            if (gameState.gameOver || gameState.gameWon || gameState.powerOutage) return;
+
+            gameState.isMonitorUp = !gameState.isMonitorUp;
+            cameraView.style.display = gameState.isMonitorUp ? 'flex' : 'none';
+            monitorToggleButton.textContent = gameState.isMonitorUp ? '▼ Toggle Monitor' : '▲ Toggle Monitor';
+            // console.log(`Monitor ${gameState.isMonitorUp ? 'UP' : 'DOWN'}`);
+            calculatePowerUsage();
+
+             // Cannot use lights while monitor is up, turn them off if they were on
+             if (gameState.isMonitorUp) {
+                 if(gameState.leftLightOn) {
+                     gameState.leftLightOn = false;
+                     leftHallwayLight.style.display = 'none';
+                 }
+                  if(gameState.rightLightOn) {
+                     gameState.rightLightOn = false;
+                     rightHallwayLight.style.display = 'none';
+                 }
+             } else {
+                 // When monitor comes down, update camera feed (clears it visually) and potentially check door attacks immediately
+                 updateCameraFeed(); // Will show nothing as monitor is down
+                 checkImmediateDoorAttack('left');
+                 checkImmediateDoorAttack('right');
+             }
+        }
+
+        function changeCamera(camId) {
+            if (!gameState.isMonitorUp || gameState.gameOver || gameState.gameWon || gameState.powerOutage) return;
+
+            if (gameState.currentCamera !== camId) {
+                // console.log(`Changing camera to ${camId}`);
+                gameState.currentCamera = camId;
+                // Update active button style
+                camButtons.forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.cam === camId);
+                });
+                // Update feed content
+                updateCameraFeed();
+                 // Add a small power cost for changing camera? (optional)
+                 // gameState.power -= 0.1;
+            }
+        }
+
+         function checkImmediateDoorAttack(side) {
+              // Called when lowering monitor, checks if animatronic is waiting
+             const relevantHall = side === 'left' ? 'L_HALL' : 'R_HALL';
+             const doorClosed = side === 'left' ? gameState.leftDoorClosed : gameState.rightDoorClosed;
+             const occupants = gameState.cameraLocations[relevantHall].occupants;
+             let attacker = null;
+
+              occupants.forEach(name => {
+                 if ((side === 'left' && (name === 'bonnie' || name === 'foxy')) || (side === 'right' && name === 'chica')) {
+                      // Check if they are logically marked as 'atDoor' (meaning they arrived while monitor was up or light check)
+                     if(gameState.animatronics[name].atDoor) {
+                         attacker = name;
+                     }
+                 }
+             });
+
+              if (attacker && !doorClosed) {
+                  console.log(`Immediate attack by ${attacker} at ${side} door upon lowering monitor!`);
+                 triggerGameOver(attacker);
+             }
+         }
+
+
+        // --- Animatronic AI ---
+        function moveAnimatronics() {
+            if (gameState.gameOver || gameState.gameWon || gameState.powerOutage || gameState.isMonitorUp) {
+                 // Animatronics generally don't move (or move less predictably) when watched
+                 // Foxy's timer might still increase if not watched on his specific cam
+                 if (!gameState.isMonitorUp || gameState.currentCamera !== '1C') {
+                     updateFoxy(); // Foxy progresses even if monitor is down, just not watched
+                 }
+                 // Freddy might move even if watched sometimes? Add later.
+                 return;
+            }
+
+            // Bonnie AI
+            moveBonnie();
+
+            // Chica AI
+            moveChica();
+
+            // Foxy AI (progresses mainly when not watched)
+             updateFoxy();
+
+             // Freddy AI (moves later, often unseen)
+             moveFreddy();
+
+
+            // After potential moves, update the camera feed if the monitor is up
+            if (gameState.isMonitorUp) {
+                updateCameraFeed();
+            }
+
+             // Crucially, check if an animatronic reached an open door
+             checkDoorAttack('left', ['bonnie', 'foxy']);
+             checkDoorAttack('right', ['chica', 'freddy']); // Freddy also attacks right? Or left? Check FNAF lore. Let's say right for now.
+        }
+
+         function removeFromLocation(animName, locId) {
+             if (gameState.cameraLocations[locId]) {
+                  const index = gameState.cameraLocations[locId].occupants.indexOf(animName);
+                  if (index > -1) {
+                      gameState.cameraLocations[locId].occupants.splice(index, 1);
+                  }
+             }
+         }
+         function addToLocation(animName, locId) {
+              if (gameState.cameraLocations[locId]) {
+                  if (!gameState.cameraLocations[locId].occupants.includes(animName)) {
+                     gameState.cameraLocations[locId].occupants.push(animName);
+                  }
+              }
+         }
+
+         function moveBonnie() {
+             const bonnie = gameState.animatronics.bonnie;
+             // Roll die based on aggression
+             if (Math.random() * 20 < bonnie.aggression) {
+                 const currentPosIndex = bonnie.path.indexOf(bonnie.pos);
+                 if (currentPosIndex >= 0 && currentPosIndex < bonnie.path.length - 1) {
+                     const nextPos = bonnie.path[currentPosIndex + 1];
+                     // Check if Freddy is in the target location (Bonnie might wait?) - simplified: just move.
+                      removeFromLocation('bonnie', bonnie.pos);
+                      addToLocation('bonnie', nextPos);
+                      bonnie.pos = nextPos;
+                      bonnie.atDoor = (nextPos === 'L_HALL'); // Mark if reached door hallway
+                     console.log(`Bonnie moved to ${gameState.cameraLocations[nextPos].name} (${nextPos})`);
+                 } else if (bonnie.pos === 'L_HALL') {
+                     // Already at door, do nothing here, handled by light/door checks
+                 } else {
+                      // Might decide to teleport back or choose random valid path node?
+                      // Simple: stay put or maybe go back to dining area
+                      if (Math.random() < 0.2) { // 20% chance to move back
+                           const targetPos = '1B';
+                           if(bonnie.pos !== targetPos){
+                                removeFromLocation('bonnie', bonnie.pos);
+                                addToLocation('bonnie', targetPos);
+                                bonnie.pos = targetPos;
+                                bonnie.atDoor = false;
+                                console.log(`Bonnie moved back to ${gameState.cameraLocations[targetPos].name} (${targetPos})`);
+                           }
+                      }
+                 }
+             }
+         }
+
+         function moveChica() {
+             const chica = gameState.animatronics.chica;
+             if (Math.random() * 20 < chica.aggression) {
+                 const currentPosIndex = chica.path.indexOf(chica.pos);
+                 if (currentPosIndex >= 0 && currentPosIndex < chica.path.length - 1) {
+                     const nextPos = chica.path[currentPosIndex + 1];
+                      removeFromLocation('chica', chica.pos);
+                      addToLocation('chica', nextPos);
+                      chica.pos = nextPos;
+                      chica.atDoor = (nextPos === 'R_HALL');
+                     console.log(`Chica moved to ${gameState.cameraLocations[nextPos].name} (${nextPos})`);
+
+                     // If chica enters kitchen, make noise? (visual cue for now)
+                     if (nextPos === '6') {
+                         console.log("Clang! Crash! (Chica in Kitchen)");
+                         // Could add a temporary indicator on the kitchen cam button
+                     }
+
+                 } else if (chica.pos === 'R_HALL') {
+                     // At door
+                 } else {
+                      // Move back?
+                      if (Math.random() < 0.2) {
+                           const targetPos = '1B';
+                           if(chica.pos !== targetPos){
+                                removeFromLocation('chica', chica.pos);
+                                addToLocation('chica', targetPos);
+                                chica.pos = targetPos;
+                                chica.atDoor = false;
+                                console.log(`Chica moved back to ${gameState.cameraLocations[targetPos].name} (${targetPos})`);
+                           }
+                      }
+                 }
+             }
+         }
+
+         function updateFoxy() {
+             const foxy = gameState.animatronics.foxy;
+
+              // Check cooldown first
+              if(foxy.sprintCooldown > 0) {
+                  foxy.sprintCooldown -= ANIMATRONIC_MOVE_CHECK_INTERVAL;
+                  if(foxy.sprintCooldown <= 0) {
+                      foxy.sprintCooldown = 0;
+                      // Reset Foxy after cooldown
+                       foxy.state = 'hidden';
+                       foxy.stage = 0;
+                       foxy.timer = 0;
+                       removeFromLocation('foxy', foxy.pos); // Remove from wherever he ended up (hallway)
+                       foxy.pos = '1C'; // Back to Pirate Cove
+                       addToLocation('foxy', foxy.pos);
+                       console.log("Foxy returned to Pirate Cove.");
+                  }
+                  return; // Do nothing else while on cooldown
+              }
+
+
+             // If Foxy is already sprinting, just check if he reached the door
+             if (foxy.state === 'sprinting') {
+                 // Simulate sprint - he appears in West Hall (2A) then immediately checks Left Door
+                 const targetHall = 'L_HALL';
+                 removeFromLocation('foxy', foxy.pos); // Remove from 2A
+                 addToLocation('foxy', targetHall); // Arrive at door hall
+                 foxy.pos = targetHall;
+                 foxy.atDoor = true;
+                 console.log("Foxy arrived at Left Door!");
+                 // Attack check will happen in checkDoorAttack or light check
+                 foxy.state = 'at_door'; // Mark him as waiting at the door
+
+                 // Set cooldown after sprint attempt
+                  foxy.sprintCooldown = 30 * 1000 + Math.random() * 15000; // 30-45 sec cooldown
+
+                 return; // Stop processing Foxy for this cycle
+             }
+              if (foxy.state === 'at_door') {
+                   // If Foxy is at the door and the door is closed, he bangs on it and retreats after a while
+                   if (gameState.leftDoorClosed) {
+                        console.log("BANG! (Foxy hit the closed door)");
+                        // Drain some extra power?
+                        gameState.power = Math.max(0, gameState.power - (1 + Math.random()*2)); // Drain 1-3% power
+                         updatePowerDisplay();
+                        // Foxy gives up and resets (cooldown already started)
+                        foxy.state = 'retreating'; // No longer actively attacking
+                        foxy.atDoor = false;
+                        gameState.officeViewAnimatronics.left = null; // No longer visible
+                         // He'll reset fully when cooldown ends
+                   } else {
+                        // Door is open! Attack check will trigger game over.
+                   }
+                   return;
+              }
+
+
+             // Foxy progresses if NOT being watched and NOT sprinting/at_door/on cooldown
+             let beingWatched = gameState.isMonitorUp && gameState.currentCamera === '1C';
+             if (!beingWatched && foxy.state === 'hidden' || foxy.state === 'peeking' || foxy.state === 'ready') {
+                 foxy.timer += ANIMATRONIC_MOVE_CHECK_INTERVAL;
+
+                 // Define thresholds for stage changes based on timer and aggression
+                 const stage1Threshold = (15 - foxy.aggression * 1.5) * 1000; // Faster with more aggression
+                 const stage2Threshold = (25 - foxy.aggression * 2.0) * 1000;
+                 const sprintThreshold = (35 - foxy.aggression * 2.5) * 1000;
+
+                 if (foxy.timer >= sprintThreshold && foxy.stage === 2) {
+                     // Sprint!
+                     console.log("Foxy is sprinting!");
+                     foxy.state = 'sprinting';
+                     foxy.stage = 3; // Gone from cove
+                     foxy.timer = 0;
+                     removeFromLocation('foxy', '1C');
+                     // Simulate quick move through West Hall
+                     addToLocation('foxy', '2A');
+                     foxy.pos = '2A';
+                     // The next `moveAnimatronics` call while state is 'sprinting' will move him to L_HALL
+                     // Play sprint sound? (visual cue for now)
+                      console.log("Thump-thump-thump (Foxy running)");
+
+                 } else if (foxy.timer >= stage2Threshold && foxy.stage === 1) {
+                     foxy.stage = 2; // Fully out of curtain
+                     console.log("Foxy is out of the curtain!");
+                      foxy.state = 'ready';
+                 } else if (foxy.timer >= stage1Threshold && foxy.stage === 0) {
+                     foxy.stage = 1; // Peeking
+                     console.log("Foxy is peeking!");
+                      foxy.state = 'peeking';
+                 }
+             } else if (beingWatched && foxy.stage > 0) {
+                  // Being watched resets timer progress somewhat
+                  foxy.timer = Math.max(0, foxy.timer - ANIMATRONIC_MOVE_CHECK_INTERVAL * 1.5); // Drain timer faster than it builds
+             }
+         }
+
+         function moveFreddy() {
+              const freddy = gameState.animatronics.freddy;
+              // Freddy only starts moving later in the night (e.g., after 2 AM) and when aggression is > 0
+              if (gameState.time < 2 || freddy.aggression === 0) {
+                  return;
+              }
+
+             freddy.timer += ANIMATRONIC_MOVE_CHECK_INTERVAL;
+
+             // Freddy moves slower and less predictably
+             // Use a longer delay based on aggression
+             const requiredTime = (60 - freddy.aggression * 5) * 1000; // Longer intervals
+
+              if (freddy.timer >= requiredTime) {
+                  freddy.timer = 0; // Reset timer
+
+                  // Freddy's Path: 1A -> 1B -> 7 -> 6 -> 4A -> 4B -> R_HALL
+                  const freddyPath = ['1A', '1B', '7', '6', '4A', '4B', 'R_HALL'];
+                  const currentPosIndex = freddyPath.indexOf(freddy.pos);
+
+                  // Only move if not being watched on the CURRENT camera (more complex: check target cam too?)
+                  let beingWatchedNow = gameState.isMonitorUp && gameState.currentCamera === freddy.pos;
+
+                  if (!beingWatchedNow && currentPosIndex >= 0 && currentPosIndex < freddyPath.length - 1) {
+                        const nextPos = freddyPath[currentPosIndex + 1];
+                         // Check if target location is being watched
+                         let targetWatched = gameState.isMonitorUp && gameState.currentCamera === nextPos;
+
+                         if (!targetWatched) {
+                              removeFromLocation('freddy', freddy.pos);
+                              addToLocation('freddy', nextPos);
+                              freddy.pos = nextPos;
+                              freddy.atDoor = (nextPos === 'R_HALL');
+                             console.log(`Freddy moved to ${gameState.cameraLocations[nextPos].name} (${nextPos})`);
+                              // Play Freddy's laugh? (visual cue)
+                              console.log("Heh heh heh... (Freddy moved)");
+                         } else {
+                              console.log("Freddy waited, target location is being watched.");
+                              freddy.timer = requiredTime / 2; // Wait a bit less next time
+                         }
+                  } else if (freddy.pos === 'R_HALL') {
+                      // At door - attack handled elsewhere
+                  } else {
+                       // Failed to move or already at end
+                  }
+              }
+         }
+
+         function checkDoorAttack(side, potentialAttackers) {
+              if (gameState.gameOver || gameState.gameWon || gameState.powerOutage || gameState.isMonitorUp) return;
+
+              const doorClosed = side === 'left' ? gameState.leftDoorClosed : gameState.rightDoorClosed;
+              const relevantHall = side === 'left' ? 'L_HALL' : 'R_HALL';
+              let attacker = null;
+
+               const occupants = gameState.cameraLocations[relevantHall].occupants;
+               occupants.forEach(name => {
+                   if (potentialAttackers.includes(name)) {
+                       // Check if the animatronic is logically 'atDoor'
+                       if (gameState.animatronics[name].atDoor) {
+                           attacker = name;
+                       }
+                   }
+               });
+
+
+              if (attacker && !doorClosed) {
+                  console.log(`Attack by ${attacker} at open ${side} door!`);
+                 // Only trigger if light isn't on (light check handles its own attack)
+                  const lightOn = side === 'left' ? gameState.leftLightOn : gameState.rightLightOn;
+                  if (!lightOn) {
+                       triggerGameOver(attacker);
+                  }
+              }
+         }
+
+        // --- Event Listeners ---
+        leftDoorButton.addEventListener('click', () => toggleDoor('left'));
+        rightDoorButton.addEventListener('click', () => toggleDoor('right'));
+        leftLightButton.addEventListener('click', () => toggleLight('left'));
+        rightLightButton.addEventListener('click', () => toggleLight('right'));
+        monitorToggleButton.addEventListener('click', toggleMonitor);
+
+        camButtons.forEach(button => {
+            button.addEventListener('click', () => changeCamera(button.dataset.cam));
+        });
+
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', startGame);
+        restartButtonWin.addEventListener('click', startGame); // For now, restart game on win
+
+
+        // Initial Setup (Show loading screen)
+        // startGame(); // Call startGame when Start button is clicked
+
+    </script>
+</body>
+</html>

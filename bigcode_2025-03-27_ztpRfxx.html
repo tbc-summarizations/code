@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Interface</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #chat-container {
+            width: 90%;
+            max-width: 600px;
+            height: 80vh;
+            max-height: 700px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .bot-message {
+            background-color: #e9e9eb;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .bot-message pre {
+            background-color: #f0f0f0;
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-top: 5px;
+        }
+         .bot-message code {
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        #input-area {
+            display: flex;
+            padding: 15px;
+            background-color: #f8f9fa;
+        }
+        #user-input {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            margin-right: 10px;
+            font-size: 1em;
+        }
+        #send-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s ease;
+        }
+        #send-button:hover {
+            background-color: #0056b3;
+        }
+        .bot-thinking {
+            font-style: italic;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-box">
+            <div class="message bot-message">
+                🤖 Hello! I can help you with several commands:
+                <ul>
+                    <li><code>!describe [text]</code> - Describes an image 🖼️ (optionally based on text).</li>
+                    <li><code>!create [prompt]</code> - Generates an image 🖼️ based on your prompt.</li>
+                    <li><code>!edit [prompt]</code> - Edits an image 🖼️ based on your prompt.</li>
+                    <li><code>!code [prompt]</code> - Generates website code (faster).</li>
+                    <li><code>!bigcode [prompt]</code> - Generates website code (slower, better).</li>
+                </ul>
+                How can I assist you?
+            </div>
+        </div>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="Type your command...">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chat-box');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+
+        function displayMessage(sender, text, isHtml = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            if (sender === 'user') {
+                messageDiv.classList.add('user-message');
+                messageDiv.textContent = text;
+            } else { // bot
+                messageDiv.classList.add('bot-message');
+                if (isHtml) {
+                    messageDiv.innerHTML = text; // Use innerHTML for bot messages that might contain formatting
+                } else {
+                    messageDiv.textContent = text;
+                }
+            }
+            chatBox.appendChild(messageDiv);
+            // Scroll to the bottom
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function showThinking(show = true) {
+            let thinkingMsg = document.getElementById('thinking-message');
+            if (show) {
+                if (!thinkingMsg) {
+                    thinkingMsg = document.createElement('div');
+                    thinkingMsg.id = 'thinking-message';
+                    thinkingMsg.classList.add('message', 'bot-message', 'bot-thinking');
+                    thinkingMsg.textContent = '🤖 Thinking...';
+                    chatBox.appendChild(thinkingMsg);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            } else {
+                if (thinkingMsg) {
+                    thinkingMsg.remove();
+                }
+            }
+        }
+
+        function processCommand(inputText) {
+            const text = inputText.trim();
+            if (!text) return;
+
+            displayMessage('user', text);
+            userInput.value = ''; // Clear input after sending
+
+            const commandMatch = text.match(/^!(\w+)\s*(.*)/);
+
+            if (commandMatch) {
+                const command = commandMatch[1].toLowerCase();
+                const prompt = commandMatch[2].trim();
+
+                switch (command) {
+                    case 'describe':
+                        showThinking();
+                        setTimeout(() => {
+                            showThinking(false);
+                            let description = "This looks like a generic square shape. ⏹️";
+                            if (prompt) {
+                                description = `Based on your request "${prompt}", it appears to be: A simple square. ⏹️`;
+                            }
+                            displayMessage('bot', `🤖 Describing image: ${description}`);
+                        }, 800);
+                        break;
+
+                    case 'create':
+                        if (!prompt) {
+                             displayMessage('bot', `🤖 Please provide a prompt after !create. Example: !create a blue triangle`);
+                             break;
+                        }
+                        showThinking();
+                        setTimeout(() => {
+                            showThinking(false);
+                            displayMessage('bot', `🤖 Creating image based on "${prompt}": ✨🖼️✨`);
+                        }, 1500);
+                        break;
+
+                    case 'edit':
+                         if (!prompt) {
+                             displayMessage('bot', `🤖 Please provide editing instructions after !edit. Example: !edit make the square red`);
+                             break;
+                        }
+                        showThinking();
+                        setTimeout(() => {
+                            showThinking(false);
+                            displayMessage('bot', `🤖 Editing image based on "${prompt}": 🔧🖼️✨`);
+                        }, 1200);
+                        break;
+
+                    case 'code':
+                         if (!prompt) {
+                             displayMessage('bot', `🤖 Please provide a description for the website after !code. Example: !code a simple landing page`);
+                             break;
+                        }
+                        showThinking();
+                        setTimeout(() => {
+                            showThinking(false);
+                            const codeSnippet = `\`\`\`html
+<!-- Fast code generation for: ${prompt} -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>${prompt}</title>
+    <style>body { font-family: sans-serif; background-color: #eee; padding: 20px;} h1 { color: #333; } </style>
+</head>
+<body>
+    <h1>${prompt}</h1>
+    <p>Basic content area generated quickly.</p>
+    <div style="width: 50px; height: 50px; background-color: lightblue; border: 1px solid blue;"></div>
+</body>
+</html>
+\`\`\``;
+                            // Need to render markdown-like code block
+                            const formattedText = `🤖 Generating website (fast) for "${prompt}":\n${renderCodeBlock(codeSnippet)}`;
+                            displayMessage('bot', formattedText, true); // Pass true for isHtml
+                        }, 1000);
+                        break;
+
+                    case 'bigcode':
+                         if (!prompt) {
+                             displayMessage('bot', `🤖 Please provide a description for the website after !bigcode. Example: !bigcode an e-commerce product page`);
+                             break;
+                        }
+                        showThinking();
+                        setTimeout(() => {
+                            showThinking(false);
+                             const codeSnippet = `\`\`\`html
+<!-- Slower, more detailed code generation for: ${prompt} -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced: ${prompt}</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f9f9f9; color: #333; }
+        header { background-color: #4CAF50; color: white; padding: 1em 0; text-align: center; }
+        nav { background-color: #333; overflow: hidden; }
+        nav a { float: left; display: block; color: white; text-align: center; padding: 14px 16px; text-decoration: none; }
+        nav a:hover { background-color: #ddd; color: black; }
+        .container { padding: 20px; max-width: 1200px; margin: 20px auto; background-color: white; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1 { color: #4CAF50; }
+        footer { text-align: center; padding: 10px; margin-top: 20px; background-color: #ddd; color: #333; font-size: 0.9em; }
+        .placeholder-shape { width: 80px; height: 80px; background: linear-gradient(45deg, orange, red); margin: 10px; display: inline-block; border-radius: 5px;}
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Website for: ${prompt}</h1>
+    </header>
+    <nav>
+        <a href="#home">Home</a>
+        <a href="#about">About</a>
+        <a href="#contact">Contact</a>
+    </nav>
+    <div class="container">
+        <h2>Detailed Content Section</h2>
+        <p>This section provides more detailed content as requested for "${prompt}". It includes more structure and styling compared to the faster version.</p>
+        <div class="placeholder-shape"></div>
+        <div class="placeholder-shape" style="background: conic-gradient(blue, cyan, limegreen, yellow, blue); border-radius: 50%;"></div>
+    </div>
+    <footer>
+        Copyright &copy; 2023 - Generated Code
+    </footer>
+</body>
+</html>
+\`\`\``;
+                             const formattedText = `🤖 Generating website (slow) for "${prompt}":\n${renderCodeBlock(codeSnippet)}`;
+                             displayMessage('bot', formattedText, true); // Pass true for isHtml
+                        }, 3500); // Longer delay for bigcode
+                        break;
+
+                    default:
+                        displayMessage('bot', `🤖 Sorry, the command "!${command}" is not recognized. Try: !describe, !create, !edit, !code, !bigcode.`);
+                        break;
+                }
+            } else {
+                // Not a command
+                displayMessage('bot', "🤖 Sorry, I didn't understand that. Please start your message with a command like !create or !describe.");
+            }
+        }
+
+        // Helper function to roughly render markdown code blocks as HTML <pre><code>
+        function renderCodeBlock(textWithMarkdown) {
+             // Simple replacement for

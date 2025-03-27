@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: darkgreen;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: sans-serif;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: lightgreen;
+            border: 5px solid white;
+            overflow: hidden;
+        }
+
+        #pitch-lines {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 2px solid white;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .center-line {
+            width: 100%;
+            height: 2px;
+            background-color: white;
+        }
+
+        .penalty-area {
+            position: absolute;
+            border: 2px solid white;
+            height: 100px;
+            width: 150px;
+        }
+        .penalty-area.left {
+            left: 0;
+            bottom: 50%;
+            transform: translateY(50%);
+            border-left: none;
+        }
+        .penalty-area.right {
+            right: 0;
+            bottom: 50%;
+            transform: translateY(50%);
+            border-right: none;
+        }
+
+        .goal {
+            position: absolute;
+            background-color: white;
+            width: 20px;
+            height: 50px;
+        }
+        .goal.left {
+            left: -2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .goal.right {
+            right: -2px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+
+        #ball {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: white;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .player {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .player.team1 {
+            background-color: blue;
+            color: white;
+        }
+
+        .player.team2 {
+            background-color: red;
+            color: white;
+        }
+
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="pitch-lines">
+            <div class="center-line"></div>
+            <div class="penalty-area left"></div>
+            <div class="penalty-area right"></div>
+            <div class="goal left"></div>
+            <div class="goal right"></div>
+        </div>
+        <div id="ball">⚽</div>
+        <div class="player team1" id="player1">😀</div>
+        <div class="player team2" id="player2">😈</div>
+        <div id="score">Score: <span id="team1-score">0</span> - <span id="team2-score">0</span></div>
+        <div id="instructions">Use arrow keys to move blue player. 'A', 'S', 'W', 'D' for red player.</div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const ball = document.getElementById('ball');
+        const player1 = document.getElementById('player1');
+        const player2 = document.getElementById('player2');
+        const scoreTeam1 = document.getElementById('team1-score');
+        const scoreTeam2 = document.getElementById('team2-score');
+
+        let player1X = 100;
+        let player1Y = 270;
+        let player2X = 700;
+        let player2Y = 270;
+        let ballX = 400;
+        let ballY = 300;
+        let team1Score = 0;
+        let team2Score = 0;
+        const playerSpeed = 5;
+        const ballSpeed = 3;
+
+        player1.style.left = player1X + 'px';
+        player1.style.top = player1Y + 'px';
+        player2.style.left = player2X + 'px';
+        player2.style.top = player2Y + 'px';
+        ball.style.left = ballX + 'px';
+        ball.style.top = ballY + 'px';
+
+        function updateScore() {
+            scoreTeam1.textContent = team1Score;
+            scoreTeam2.textContent = team2Score;
+        }
+
+        function checkGoal() {
+            if (ballX < 0) {
+                team2Score++;
+                updateScore();
+                resetBall();
+            } else if (ballX > 800) {
+                team1Score++;
+                updateScore();
+                resetBall();
+            }
+        }
+
+        function resetBall() {
+            ballX = 400;
+            ballY = 300;
+            ball.style.left = ballX + 'px';
+            ball.style.top = ballY + 'px';
+        }
+
+        function moveBallTowards(targetX, targetY) {
+            const dx = targetX - ballX;
+            const dy = targetY - ballY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > 0) {
+                const moveX = (dx / distance) * ballSpeed;
+                const moveY = (dy / distance) * ballSpeed;
+                ballX += moveX;
+                ballY += moveY;
+                ball.style.left = ballX + 'px';
+                ball.style.top = ballY + 'px';
+            }
+        }
+
+
+        document.addEventListener('keydown', function(event) {
+            switch(event.key) {
+                // Player 1 controls (Blue)
+                case 'ArrowUp':
+                    player1Y -= playerSpeed;
+                    break;
+                case 'ArrowDown':
+                    player1Y += playerSpeed;
+                    break;
+                case 'ArrowLeft':
+                    player1X -= playerSpeed;
+                    break;
+                case 'ArrowRight':
+                    player1X += playerSpeed;
+                    break;
+
+                // Player 2 controls (Red)
+                case 'w':
+                case 'W':
+                    player2Y -= playerSpeed;
+                    break;
+                case 's':
+                case 'S':
+                    player2Y += playerSpeed;
+                    break;
+                case 'a':
+                case 'A':
+                    player2X -= playerSpeed;
+                    break;
+                case 'd':
+                case 'D':
+                    player2X += playerSpeed;
+                    break;
+            }
+
+            // Keep players within bounds
+            player1X = Math.max(0, Math.min(player1X, 770));
+            player1Y = Math.max(0, Math.min(player1Y, 570));
+            player2X = Math.max(0, Math.min(player2X, 770));
+            player2Y = Math.max(0, Math.min(player2Y, 570));
+
+            player1.style.left = player1X + 'px';
+            player1.style.top = player1Y + 'px';
+            player2.style.left = player2X + 'px';
+            player2.style.top = player2Y + 'px';
+
+            // Basic ball movement towards player1 (very simple AI example)
+            moveBallTowards(player1X + 15, player1Y + 15);
+
+
+            checkGoal();
+        });
+    </script>
+</body>
+</html>

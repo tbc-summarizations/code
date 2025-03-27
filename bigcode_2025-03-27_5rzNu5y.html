@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyper Realistic Super Mario Bros</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #76c7ff; /* Light sky blue */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            color: white;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #76c7ff 0%, #a0d8ff 70%, #d3eaff 100%); /* Sky gradient */
+            border: 5px solid #444;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        #world {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            /* Width will be set dynamically by JS */
+        }
+
+        .game-object {
+            position: absolute;
+            box-sizing: border-box;
+        }
+
+        #mario {
+            width: 32px;
+            height: 48px;
+            background: linear-gradient(to bottom, #ff4d4d, #cc0000); /* Red tones */
+            border: 1px solid #800000;
+            box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.5), 0 2px 4px rgba(0,0,0,0.4);
+            border-radius: 3px;
+            z-index: 10;
+            /* Add pseudo-elements for more detail */
+            transition: transform 0.1s linear; /* Smooth jump/fall */
+        }
+        #mario::before { /* Head/Hat */
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 4px;
+            width: 24px;
+            height: 16px;
+            background: linear-gradient(to bottom, #ff6666, #e60000);
+            border-bottom: 2px solid #800000;
+            border-radius: 3px 3px 0 0;
+        }
+        #mario::after { /* Overalls */
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 6px;
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(to bottom, #4d4dff, #0000cc); /* Blue tones */
+            border-top: 2px solid #000080;
+            border-radius: 0 0 3px 3px;
+        }
+
+
+        .platform {
+            background: linear-gradient(to bottom, #d2691e 0%, #a0522d 100%); /* Brown dirt/ground */
+            border-top: 4px solid #8b4513; /* Darker top edge */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            z-index: 1;
+        }
+
+        .block {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(to bottom right, #ffa500, #cc8400); /* Orange/Brown brick */
+            border: 2px solid #805300;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.3), 0 2px 3px rgba(0,0,0,0.3);
+            z-index: 2;
+            /* Basic brick pattern */
+            background-image:
+                linear-gradient(to right, rgba(0,0,0,0.1) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0,0,0,0.1) 1px, transparent 1px);
+            background-size: 10px 10px;
+        }
+
+        .question-block {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(to bottom right, #ffd700, #ccad00); /* Gold/Yellow */
+            border: 3px solid #b8860b; /* Darker gold border */
+            box-shadow: inset 0 0 8px rgba(255,255,255,0.4), 0 3px 5px rgba(0,0,0,0.4);
+            z-index: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #805300;
+            text-shadow: 1px 1px 1px rgba(255,255,255,0.5);
+        }
+        .question-block::before {
+            content: '?';
+        }
+
+        .pipe {
+            width: 80px;
+            height: 120px; /* Example height */
+            background: linear-gradient(to right, #228b22 0%, #55a555 50%, #228b22 100%); /* Green pipe */
+            border: 4px solid #006400; /* Dark green border */
+            border-radius: 10px 10px 0 0;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.4);
+            z-index: 3;
+        }
+        .pipe::before { /* Pipe opening */
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            width: 100px;
+            height: 20px;
+            background: linear-gradient(to right, #1c701c 0%, #448844 50%, #1c701c 100%);
+            border: 4px solid #004d00;
+            border-radius: 8px;
+        }
+
+        .goomba {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(to bottom, #a0522d, #803300); /* Brown mushroom */
+            border: 1px solid #4d1f00;
+            border-radius: 18px 18px 5px 5px; /* Rounded top */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            z-index: 5;
+        }
+        .goomba::before { /* Eyes */
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 6px;
+            width: 5px;
+            height: 8px;
+            background: white;
+            border: 1px solid black;
+            border-radius: 2px;
+            box-shadow: 18px 0 0 white, 18px 0 0 0 black inset; /* Second eye */
+        }
+         .goomba::after { /* Feet */
+            content: '';
+            position: absolute;
+            bottom: 0px;
+            left: 3px;
+            width: 10px;
+            height: 5px;
+            background: #5a3a1a;
+            border-radius: 3px 3px 0 0;
+             box-shadow: 20px 0 0 #5a3a1a; /* Second foot */
+        }
+        .goomba.squashed {
+            height: 10px;
+            background: #803300;
+            transition: height 0.2s, opacity 0.5s 0.2s;
+            opacity: 0;
+            margin-top: 26px; /* Keep bottom aligned */
+        }
+
+        .koopa {
+            width: 36px;
+            height: 54px; /* Taller for shell */
+            z-index: 6;
+        }
+        .koopa .shell {
+             width: 36px;
+             height: 36px;
+             background: linear-gradient(to bottom, #32cd32, #228b22); /* Green shell */
+             border: 2px solid #006400;
+             border-radius: 18px 18px 5px 5px;
+             position: absolute;
+             bottom: 0;
+             box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+             /* Hex pattern */
+             background-image: linear-gradient(rgba(0, 100, 0, 0.3) 2px, transparent 2px), linear-gradient(90deg, rgba(0, 100, 0, 0.3) 2px, transparent 2px), linear-gradient(rgba(0, 100, 0, 0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 100, 0, 0.2) 1px, transparent 1px);
+             background-size: 12px 12px, 12px 12px, 6px 6px, 6px 6px;
+             background-position: -2px -2px, -2px -2px, -1px -1px, -1px -1px;
+        }
+         .koopa .head {
+             width: 18px;
+             height: 18px;
+             background: linear-gradient(to bottom, #ffd700, #ccad00); /* Yellow head */
+             border-radius: 50%;
+             border: 1px solid #b8860b;
+             position: absolute;
+             top: 0;
+             left: 9px;
+         }
+          .koopa.in-shell .head, .koopa.in-shell .feet {
+              display: none;
+          }
+          .koopa.in-shell {
+              height: 36px;
+          }
+           .koopa .feet { /* Simple feet */
+                position: absolute;
+                bottom: 0px;
+                left: 3px;
+                width: 10px;
+                height: 5px;
+                background: #ccad00;
+                border-radius: 3px 3px 0 0;
+                box-shadow: 20px 0 0 #ccad00;
+                z-index: -1;
+           }
+
+
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 48px;
+            text-align: center;
+            padding-top: 200px;
+            display: none; /* Hidden by default */
+            z-index: 100;
+            cursor: pointer;
+        }
+         #game-over p {
+             font-size: 24px;
+             margin-top: 20px;
+         }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="world">
+            <div id="mario" class="game-object"></div>
+            <!-- Level objects will be added here by JS -->
+        </div>
+        <div id="game-over">
+            GAME OVER
+            <p>Click to Restart</p>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const world = document.getElementById('world');
+        const mario = document.getElementById('mario');
+        const gameOverScreen = document.getElementById('game-over');
+
+        // Game Settings
+        const gravity = 0.8;
+        const jumpForce = 16; // Initial upward velocity
+        const moveSpeed = 4; // Adjusted for "normal" speed
+        const enemySpeed = 1;
+        const shellSpeed = 6;
+
+        // Game State
+        let marioState = {
+            x: 100,
+            y: 400,
+            vx: 0,
+            vy: 0,
+            width: parseInt(mario.style.width || 32),
+            height: parseInt(mario.style.height || 48),
+            onGround: false,
+            isDead: false
+        };
+
+        let keys = {
+            left: false,
+            right: false,
+            up: false
+        };
+
+        let scrollX = 0;
+        let levelWidth = 0; // Will be calculated based on level data
+        let gameActive = true;
+
+        // Level Definition (Example - make it longer)
+        // y increases downwards, 0 is top
+        const levelData = [
+            // Ground platforms
+            { type: 'platform', x: 0, y: 560, width: 600, height: 40 },
+            { type: 'platform', x: 650, y: 560, width: 400, height: 40 },
+            { type: 'platform', x: 1100, y: 560, width: 500, height: 40 },
+            { type: 'platform', x: 1650, y: 560, width: 1000, height: 40 },
+            { type: 'platform', x: 2700, y: 560, width: 600, height: 40 },
+            { type: 'platform', x: 1800, y: 400, width: 120, height: 40 }, // Floating platform
+
+            // Blocks
+            { type: 'block', x: 200, y: 400 },
+            { type: 'question-block', x: 240, y: 400 },
+            { type: 'block', x: 280, y: 400 },
+            { type: 'block', x: 320, y: 400 },
+            { type: 'question-block', x: 800, y: 400 },
+            { type: 'block', x: 840, y: 240 }, // High block
+            { type: 'block', x: 880, y: 240 },
+            { type: 'question-block', x: 920, y: 240 },
+            { type: 'block', x: 1900, y: 200 },
+            { type: 'block', x: 1940, y: 200 },
+            { type: 'block', x: 1980, y: 200 },
+
+             // Pipes
+            { type: 'pipe', x: 450, y: 440, height: 120 }, // Ground pipe
+            { type: 'pipe', x: 1200, y: 400, height: 160 },
+            { type: 'pipe', x: 2100, y: 480, height: 80 },
+            { type: 'pipe', x: 2900, y: 440, height: 120 },
+
+            // Enemies
+            { type: 'goomba', x: 350, y: 524 },
+            { type: 'goomba', x: 550, y: 524 },
+            { type: 'koopa', x: 900, y: 506 },
+            { type: 'goomba', x: 1300, y: 524 },
+            { type: 'goomba', x: 1350, y: 524 },
+            { type: 'koopa', x: 1820, y: 346 }, // On platform
+            { type: 'goomba', x: 2200, y: 524 },
+            { type: 'koopa', x: 2400, y: 506 },
+            { type: 'goomba', x: 2800, y: 524 },
+
+        ];
+
+        let gameObjects = [];
+
+        function createGameObjectElement(objData) {
+            const elem = document.createElement('div');
+            elem.className = `game-object ${objData.type}`;
+            elem.style.left = `${objData.x}px`;
+            elem.style.top = `${objData.y}px`;
+            if (objData.width) elem.style.width = `${objData.width}px`;
+            if (objData.height) elem.style.height = `${objData.height}px`;
+
+            objData.elem = elem; // Reference to the DOM element
+            objData.initialX = objData.x; // Store initial position for reset
+            objData.initialY = objData.y;
+
+            // Enemy specific state
+            if (objData.type === 'goomba' || objData.type === 'koopa') {
+                objData.vx = -enemySpeed; // Start moving left
+                objData.vy = 0;
+                objData.width = objData.width || 36;
+                objData.height = objData.height || (objData.type === 'koopa' ? 54 : 36);
+                objData.isAlive = true;
+                objData.isSquashed = false; // For Goomba death animation
+                if (objData.type === 'koopa') {
+                    objData.isInShell = false;
+                    objData.isShellMoving = false;
+                    const shell = document.createElement('div');
+                    shell.className = 'shell';
+                    elem.appendChild(shell);
+                    const head = document.createElement('div');
+                    head.className = 'head';
+                    elem.appendChild(head);
+                    const feet = document.createElement('div');
+                    feet.className = 'feet';
+                    elem.appendChild(feet);
+                }
+            }
+
+            world.appendChild(elem);
+            return objData;
+        }
+
+        function isColliding(rect1, rect2) {
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        }
+
+        function handleCollisions() {
+            marioState.onGround = false;
+            let marioRect = { ...marioState }; // Current position for collision check
+
+            // 1. Mario vs Platforms/Blocks/Pipes
+            gameObjects.forEach(obj => {
+                if (obj.type === 'platform' || obj.type === 'block' || obj.type === 'question-block' || obj.type === 'pipe') {
+                    let objRect = { x: obj.x, y: obj.y, width: obj.width || 40, height: obj.height || 40 };
+                     if (obj.type === 'pipe') objRect.height = obj.height; // Use defined height for pipe
+
+                    if (isColliding(marioRect, objRect)) {
+                        // Check vertical collision (landing or hitting head)
+                        let prevMarioRect = { ...marioRect, y: marioRect.y - marioState.vy }; // Position before vertical move
+                        if (!isColliding(prevMarioRect, objRect)) {
+                            if (marioState.vy > 0) { // Moving down - landed on top
+                                marioState.y = objRect.y - marioState.height;
+                                marioState.vy = 0;
+                                marioState.onGround = true;
+                            } else if (marioState.vy < 0) { // Moving up - hit bottom
+                                marioState.y = objRect.y + objRect.height;
+                                marioState.vy = 0;
+                                // TODO: Add block hit effect (e.g., bump question block)
+                                if (obj.type === 'question-block' || obj.type === 'block') {
+                                    // Simple bump animation
+                                    obj.elem.style.transform = 'translateY(-5px)';
+                                    setTimeout(() => { obj.elem.style.transform = 'translateY(0)'; }, 100);
+                                }
+                            }
+                        }
+
+                        // Check horizontal collision
+                         let prevMarioXRect = { ...marioRect, x: marioRect.x - marioState.vx }; // Position before horizontal move
+                         // Need to re-check vertical position *after* vertical collision resolution
+                         prevMarioXRect.y = marioState.y;
+                         if (isColliding({...marioState}, objRect) && !isColliding(prevMarioXRect, objRect)) { // Check collision only after vertical adjust
+                             if (marioState.vx > 0) { // Moving right
+                                 marioState.x = objRect.x - marioState.width;
+                                 marioState.vx = 0;
+                             } else if (marioState.vx < 0) { // Moving left
+                                 marioState.x = objRect.x + objRect.width;
+                                 marioState.vx = 0;
+                             }
+                         }
+                    }
+                }
+            });
+
+             // 2. Mario vs Enemies
+            gameObjects.forEach(enemy => {
+                if ((enemy.type === 'goomba' || enemy.type === 'koopa') && enemy.isAlive) {
+                    let enemyRect = { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height };
+                    if (isColliding(marioRect, enemyRect)) {
+                        let prevMarioY = marioRect.y - marioState.vy;
+                        let hitFromAbove = marioState.vy > 0 && prevMarioY + marioState.height <= enemyRect.y;
+
+                        if (enemy.type === 'koopa' && enemy.isInShell && !enemy.isShellMoving) {
+                             // Kick shell
+                             marioState.vx > 0 ? enemy.vx = shellSpeed : enemy.vx = -shellSpeed;
+                             enemy.isShellMoving = true;
+                        } else if (enemy.type === 'koopa' && enemy.isInShell && enemy.isShellMoving) {
+                             if (hitFromAbove) { // Stop shell
+                                 enemy.vx = 0;
+                                 enemy.isShellMoving = false;
+                                 marioState.vy = -jumpForce / 2; // Small bounce
+                             } else {
+                                 // Die from moving shell
+                                 killMario();
+                             }
+                        } else if (hitFromAbove) {
+                             // Stomp enemy
+                            if (enemy.type === 'goomba') {
+                                enemy.isAlive = false;
+                                enemy.isSquashed = true; // Trigger squash animation
+                                enemy.elem.classList.add('squashed');
+                                setTimeout(() => {
+                                   if (enemy.elem.parentNode === world) world.removeChild(enemy.elem);
+                                }, 500); // Remove after animation
+                            } else if (enemy.type === 'koopa') {
+                                enemy.isInShell = true;
+                                enemy.vx = 0; // Stop walking
+                                enemy.height = 36; // Shell height
+                                enemy.elem.style.height = '36px';
+                                enemy.elem.classList.add('in-shell');
+                            }
+                            marioState.vy = -jumpForce / 1.5; // Bounce after stomp
+                            marioState.onGround = false;
+                        } else {
+                            // Collided from side or bottom - Mario dies
+                           if (!marioState.isDead) killMario();
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateEnemies() {
+             gameObjects.forEach(enemy => {
+                if ((enemy.type === 'goomba' || enemy.type === 'koopa') && enemy.isAlive) {
+                    if (enemy.isSquashed) return; // Skip squashed Goombas
+
+                    if (enemy.type === 'koopa' && enemy.isInShell) {
+                         if (enemy.isShellMoving) {
+                            // Shell movement and collision
+                             enemy.x += enemy.vx;
+
+                            // Shell vs other enemies
+                            gameObjects.forEach(other => {
+                                if (other !== enemy && (other.type === 'goomba' || other.type === 'koopa') && other.isAlive) {
+                                    let shellRect = { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height };
+                                    let otherRect = { x: other.x, y: other.y, width: other.width, height: other.height };
+                                    if (isColliding(shellRect, otherRect)) {
+                                        // Kill other enemy
+                                         other.isAlive = false;
+                                         // Add a visual effect (e.g., flip) - simple removal for now
+                                         if (other.elem.parentNode === world) world.removeChild(other.elem);
+                                         // Optional: Score points
+                                    }
+                                }
+                            });
+
+                             // Shell vs world obstacles (turn around)
+                             gameObjects.forEach(obj => {
+                                 if (obj.type === 'platform' || obj.type === 'block' || obj.type === 'question-block' || obj.type === 'pipe') {
+                                     let shellRect = { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height };
+                                     let objRect = { x: obj.x, y: obj.y, width: obj.width || 40, height: obj.height || 40 };
+                                      if (obj.type === 'pipe') objRect.height = obj.height;
+
+                                     if (isColliding(shellRect, objRect)) {
+                                          // Check horizontal collision only
+                                         let prevShellX = shellRect.x - enemy.vx;
+                                         let prevShellRect = {...shellRect, x: prevShellX};
+                                         if (!isColliding(prevShellRect, objRect)) {
+                                             if (enemy.vx > 0) enemy.x = objRect.x - enemy.width;
+                                             else enemy.x = objRect.x + objRect.width;
+                                             enemy.vx *= -1; // Reverse direction
+                                         }
+                                     }
+                                 }
+                             });
+
+
+                         }
+                         // No gravity for shell (usually)
+                    } else {
+                         // Normal enemy walking
+                         enemy.x += enemy.vx;
+
+                         // Basic gravity for enemies
+                         enemy.vy += gravity;
+                         enemy.y += enemy.vy;
+
+                         // Enemy collision with world
+                         let enemyOnGround = false;
+                         gameObjects.forEach(obj => {
+                             if (obj.type === 'platform' || obj.type === 'block' || obj.type === 'question-block' || obj.type === 'pipe') {
+                                 let enemyRect = { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height };
+                                 let objRect = { x: obj.x, y: obj.y, width: obj.width || 40, height: obj.height || 40 };
+                                 if (obj.type === 'pipe') objRect.height = obj.height;
+
+                                 if (isColliding(enemyRect, objRect)) {
+                                     // Vertical collision (landing)
+                                     let prevEnemyY = enemyRect.y - enemy.vy;
+                                      let prevEnemyRect = {...enemyRect, y: prevEnemyY};
+                                     if (!isColliding(prevEnemyRect, objRect)) {
+                                         if (enemy.vy > 0) { // Landed
+                                             enemy.y = objRect.y - enemy.height;
+                                             enemy.vy = 0;
+                                             enemyOnGround = true;
+                                         } else if (enemy.vy < 0) { // Hit head (unlikely for basic enemies)
+                                             enemy.y = objRect.y + objRect.height;
+                                             enemy.vy = 0;
+                                         }
+                                     }
+
+                                     // Horizontal collision (turn around)
+                                     let prevEnemyX = enemyRect.x - enemy.vx;
+                                     prevEnemyRect = { ...enemyRect, x: prevEnemyX, y: enemy.y }; // Use resolved Y
+                                      if (isColliding({...enemyRect, y: enemy.y}, objRect) && !isColliding(prevEnemyRect, objRect)) {
+                                         if (enemy.vx > 0) enemy.x = objRect.x - enemy.width;
+                                         else enemy.x = objRect.x + objRect.width;
+                                         enemy.vx *= -1; // Reverse direction
+                                     }
+                                 }
+                             }
+                         });
+                         enemy.onGround = enemyOnGround;
+
+                         // Turn around at edges of platforms (simple check)
+                         if (enemy.onGround) {
+                             let groundCheckX = enemy.vx > 0 ? enemy.x + enemy.width : enemy.x;
+                             let groundBelow = false;
+                             gameObjects.forEach(obj => {
+                                if (obj.type === 'platform') {
+                                    let checkRect = {x: groundCheckX, y: enemy.y + enemy.height + 1, width: 1, height: 1};
+                                    let objRect = {x: obj.x, y: obj.y, width: obj.width, height: obj.height};
+                                    if (isColliding(checkRect, objRect)) {
+                                        groundBelow = true;
+                                    }
+                                }
+                             });
+                             if (!groundBelow) {
+                                 enemy.vx *= -1; // Turn around if no ground ahead
+                             }
+                         }
+                    }
+
+                     // Remove enemies that fall off screen
+                    if (enemy.y > gameContainer.height + 100) {
+                         enemy.isAlive = false;
+                         if (enemy.elem.parentNode === world) world.removeChild(enemy.elem);
+                    }
+                }
+            });
+        }
+
+
+        function killMario() {
+            if (marioState.isDead) return;
+            console.log("Mario Died");
+            marioState.isDead = true;
+            gameActive = false;
+            marioState.vy = -jumpForce / 1.5; // Death bounce
+            mario.style.background = '#888'; // Indicate death visually
+            mario.style.transform = 'rotate(180deg)';
+            // No input, just fall off
+            // Show game over screen after a delay
+            setTimeout(() => {
+                 gameOverScreen.style.display = 'block';
+            }, 1500);
+        }
+
+        function restartGame() {
+            console.log("Restarting Game");
+            marioState = {
+                x: 100,
+                y: 400,
+                vx: 0,
+                vy: 0,
+                width: 32,
+                height: 48,
+                onGround: false,
+                isDead: false
+            };
+            keys = { left: false, right: false, up: false };
+            scrollX = 0;
+            gameActive = true;
+            gameOverScreen.style.display = 'none';
+            mario.style.background = ''; // Reset color
+            mario.style.transform = ''; // Reset rotation
+
+            // Reset all game objects to initial state
+             world.innerHTML = ''; // Clear existing elements
+             mario = document.createElement('div'); // Recreate Mario element
+             mario.id = 'mario';
+             mario.className = 'game-object';
+             world.appendChild(mario);
+             gameObjects = []; // Clear object array
+             initializeLevel(); // Rebuild level
+
+            requestAnimationFrame(gameLoop); // Restart loop
+        }
+
+        function gameLoop() {
+            if (marioState.isDead && marioState.y > gameContainer.height + 100) {
+                // Stop loop if Mario fell off after death
+                return;
+            }
+
+            if (gameActive) {
+                // --- Input Handling ---
+                marioState.vx = 0;
+                if (keys.left) {
+                    marioState.vx = -moveSpeed;
+                }
+                if (keys.right) {
+                    marioState.vx = moveSpeed;
+                }
+                if (keys.up && marioState.onGround) {
+                    marioState.vy = -jumpForce;
+                    marioState.onGround = false;
+                }
+            } else if (marioState.isDead) {
+                // Allow death bounce/fall even when game is not 'active'
+                marioState.vx = 0; // No horizontal control on death
+            }
+
+
+            // --- Physics ---
+            // Apply gravity
+            marioState.vy += gravity;
+
+            // Update position
+            marioState.x += marioState.vx;
+            marioState.y += marioState.vy;
+
+             // --- Collision Detection & Resolution ---
+            handleCollisions(); // Handles Mario vs World and Mario vs Enemies
+
+
+            // --- Boundary Checks ---
+            // Prevent moving left off the screen start
+            if (marioState.x < 0) {
+                marioState.x = 0;
+                marioState.vx = 0;
+            }
+            // Prevent moving too far right (beyond level width) - if needed
+             if (marioState.x + marioState.width > levelWidth) {
+                  marioState.x = levelWidth - marioState.width;
+                  marioState.vx = 0;
+             }
+
+
+            // --- Death Check ---
+            if (marioState.y > gameContainer.height && !marioState.isDead) {
+                 killMario();
+            }
+
+             // --- Enemy Updates ---
+             if (gameActive) {
+                 updateEnemies();
+             }
+
+
+            // --- Scrolling ---
+            // Scroll world left as Mario moves right past the center
+            let targetScrollX = Math.max(0, marioState.x - gameContainer.width / 2);
+             // Smooth scrolling (lerp)
+             scrollX += (targetScrollX - scrollX) * 0.1;
+             // Clamp scrollX to prevent scrolling beyond level bounds
+             scrollX = Math.min(scrollX, levelWidth - gameContainer.width);
+             if (scrollX < 0) scrollX = 0;
+
+
+            // --- Rendering ---
+             // Update Mario's visual position
+            mario.style.left = `${marioState.x}px`;
+            mario.style.top = `${marioState.y}px`;
+
+            // Update enemy visual positions
+            gameObjects.forEach(obj => {
+                if (obj.elem && (obj.type === 'goomba' || obj.type === 'koopa')) {
+                     if (obj.isAlive) {
+                        obj.elem.style.left = `${obj.x}px`;
+                        obj.elem.style.top = `${obj.y}px`;
+                        // Flip enemy sprite based on direction (simple)
+                        if (obj.vx !== 0) {
+                            obj.elem.style.transform = obj.vx > 0 ? 'scaleX(-1)' : 'scaleX(1)';
+                        }
+                    }
+                }
+            });
+
+
+             // Apply scrolling to the world container
+             world.style.left = `-${scrollX}px`;
+
+            // --- Loop ---
+            if (!marioState.isDead || marioState.y < gameContainer.height + 100) {
+                 requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+            if (marioState.isDead) return;
+            switch (e.code) {
+                case 'ArrowLeft':
+                case 'KeyA':
+                    keys.left = true;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    keys.right = true;
+                    break;
+                case 'ArrowUp':
+                case 'KeyW':
+                case 'Space':
+                    keys.up = true;
+                    break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            switch (e.code) {
+                case 'ArrowLeft':
+                case 'KeyA':
+                    keys.left = false;
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    keys.right = false;
+                    break;
+                case 'ArrowUp':
+                case 'KeyW':
+                case 'Space':
+                    keys.up = false;
+                    break;
+            }
+        });
+
+        gameOverScreen.addEventListener('click', restartGame);
+
+
+        // --- Initialization ---
+        function initializeLevel() {
+            levelWidth = 0; // Reset width calculation
+            levelData.forEach(objData => {
+                const newObj = createGameObjectElement(objData);
+                gameObjects.push(newObj);
+
+                // Calculate level width based on the rightmost object edge
+                let objRightEdge = (objData.x || 0) + (objData.width || 40);
+                if (objRightEdge > levelWidth) {
+                    levelWidth = objRightEdge;
+                }
+            });
+            levelWidth += 200; // Add some buffer at the end
+            world.style.width = `${levelWidth}px`; // Set the total width of the world
+            console.log("Level Initialized, Width:", levelWidth);
+        }
+
+        // Start the game
+        initializeLevel();
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>

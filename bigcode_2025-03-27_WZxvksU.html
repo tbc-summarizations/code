@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+ <html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Will Xonnek Respond to Henry?</title>
+  <style>
+  body {
+  font-family: 'Arial', sans-serif;
+  background-color: #f4f4f4;
+  color: #333;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  }
+  .container {
+  background-color: white;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  text-align: center;
+  width: 80%;
+  max-width: 700px;
+  }
+  h1 {
+  color: #2c3e50;
+  margin-bottom: 20px;
+  }
+  button {
+  padding: 12px 25px;
+  background-color: #5cb85c;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease;
+  margin-bottom: 15px;
+  }
+  button:hover {
+  background-color: #4cae4c;
+  }
+  #current-response {
+  font-size: 18px;
+  margin-bottom: 20px;
+  min-height: 24px; /* Ensure space is reserved even when empty */
+  }
+  #interaction-history {
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 15px;
+  max-height: 250px;
+  overflow-y: auto;
+  text-align: left;
+  background-color: #f9f9f9;
+  }
+  .interaction {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed #eee;
+  }
+  .interaction:last-child {
+  border-bottom: none;
+  }
+  .message-henry {
+  color: #007bff;
+  font-weight: bold;
+  }
+  .response-xonnek {
+  color: #28a745;
+  font-weight: bold;
+  }
+  #xonnek-response-probabilities {
+  margin-top: 25px;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+  text-align: left;
+  }
+  #xonnek-response-probabilities h3 {
+  margin-top: 0;
+  color: #2c3e50;
+  }
+  #xonnek-response-probabilities label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+  }
+  #xonnek-response-probabilities input[type="number"] {
+  width: 60px;
+  padding: 8px;
+  border-radius: 3px;
+  border: 1px solid #ccc;
+  margin-left: 10px;
+  }
+  #update-probabilities-button, #clear-history-button {
+  margin-top: 15px;
+  padding: 10px 20px;
+  font-size: 14px;
+  }
+  #clear-history-button {
+  background-color: #dc3545;
+  }
+  #clear-history-button:hover {
+  background-color: #c82333;
+  }
+  </style>
+ </head>
+ <body>
+  <div class="container">
+  <h1>Will Xonnek Respond to Henry?</h1>
+  <button id="send-message-button">Send Message</button>
+  <div id="current-response"></div>
+  <div id="interaction-history">
+  </div>
+ 
+
+  <div id="xonnek-response-probabilities">
+  <h3>Modify Xonnek's Response Probabilities (%)</h3>
+  <label for="response1">Yes, Henry, I'll respond: <input type="number" id="response1" value="20"></label>
+  <label for="response2">Maybe later, Henry: <input type="number" id="response2" value="30"></label>
+  <label for="response3">No: <input type="number" id="response3" value="40"></label>
+  <label for="response4">... (Silent Response): <input type="number" id="response4" value="10"></label>
+  <button id="update-probabilities-button">Update Probabilities</button>
+  </div>
+ 
+
+  <button id="clear-history-button">Clear Interaction History</button>
+  </div>
+ 
+
+  <script>
+  // I. Data Initialization & Storage
+  let xonnekResponses = [
+  { text: "Yes, Henry, I'll respond.", probability: 0.2 },
+  { text: "Maybe later, Henry.", probability: 0.3 },
+  { text: "No.", probability: 0.4 },
+  { text: "...", probability: 0.1} // Silent response
+  ];
+ 
+
+  let henryMessageHistory = [];
+  let interactionHistory = [];
+  let currentResponseState = null;
+ 
+
+  // UI Elements
+  const sendMessageButton = document.getElementById("send-message-button");
+  const currentResponseDiv = document.getElementById("current-response");
+  const interactionHistoryDiv = document.getElementById("interaction-history");
+  const clearHistoryButton = document.getElementById("clear-history-button");
+  const updateProbabilitiesButton = document.getElementById("update-probabilities-button");
+  const response1Input = document.getElementById("response1");
+  const response2Input = document.getElementById("response2");
+  const response3Input = document.getElementById("response3");
+  const response4Input = document.getElementById("response4");
+ 
+
+  // II. Henry's Message Generation & Submission
+  function generateHenryMessage() {
+  let messages = ["Hello Xonnek!", "Are you there?", "Please Respond!", "It's Henry!"];
+  let index = Math.floor(Math.random() * messages.length);
+  return messages[index];
+  }
+ 
+
+  function addMessageToHistory(message) {
+  henryMessageHistory.push(message);
+  }
+ 
+
+  function validateHenryMessage(message) {
+  if (henryMessageHistory.includes(message)) {
+  alert("Duplicate message. Not sending.");
+  return false;
+  }
+  if (message.length > 100) { // Max message length
+  alert("Message too long.");
+  return false;
+  }
+  return true;
+  }
+ 
+
+  // III. Xonnek's Response Logic
+  function willXonnekRespond() {
+  let randomNumber = Math.random();
+  let cumulativeProbability = 0;
+ 
+
+  for (let i = 0; i < xonnekResponses.length; i++) {
+  cumulativeProbability += xonnekResponses[i].probability;
+  if (randomNumber < cumulativeProbability) {
+  return xonnekResponses[i];
+  }
+  }
+  return { text: "No response.", probability: 1 }; // Default, unlikely response
+  }
+ 
+
+  function selectXonnekResponse() {
+  let response = willXonnekRespond();
+  return response.text;
+  }
+ 
+
+  function simulateResponseDelay() {
+  let delay = Math.floor(Math.random() * 3000) + 1000; // Delay between 1 and 4 seconds
+  return new Promise(resolve => setTimeout(resolve, delay));
+  }
+ 
+
+  // IV. Interaction Handling & History Logging
+  async function sendMessageAndHandleResponse() {
+  let message = generateHenryMessage();
+  if (validateHenryMessage(message)) {
+  addMessageToHistory(message);
+  currentResponseState = "pending";
+  currentResponseDiv.textContent = "Waiting for Xonnek's response...";
+ 
+
+  await simulateResponseDelay();
+ 
+
+  let response = selectXonnekResponse();
+  currentResponseState = response;
+  currentResponseDiv.textContent = "Xonnek's Response: " + response;
+ 
+
+  updateInteractionHistory(message, response);
+  displayInteractionHistory();
+  }
+  }
+ 
+
+  function updateInteractionHistory(message, response) {
+  interactionHistory.push({
+  message: message,
+  response: response,
+  timestamp: new Date()
+  });
+  }
+ 
+
+  function displayInteractionHistory() {
+  interactionHistoryDiv.innerHTML = ""; // Clear the history display
+  for (let i = 0; i < interactionHistory.length; i++) {
+  let interaction = interactionHistory[i];
+  const interactionElement = document.createElement("div");
+  interactionElement.classList.add("interaction");
+  const henryMsg = document.createElement("p");
+  henryMsg.classList.add("message-henry");
+  henryMsg.textContent = "Henry: " + interaction.message;
+  const xonnekResp = document.createElement("p");
+  xonnekResp.classList.add("response-xonnek");
+  xonnekResp.textContent = "Xonnek: " + interaction.response;
+  const timestamp = document.createElement("small");
+  timestamp.textContent = new Date(interaction.timestamp).toLocaleTimeString();
+  interactionElement.appendChild(henryMsg);
+  interactionElement.appendChild(xonnekResp);
+  interactionElement.appendChild(timestamp);
+  interactionHistoryDiv.appendChild(interactionElement);
+  }
+  interactionHistoryDiv.scrollTop = interactionHistoryDiv.scrollHeight; // Scroll to bottom
+  }
+ 
+
+  // V. Simulation & Control
+  sendMessageButton.addEventListener("click", simulateInteraction);
+ 
+
+  function simulateInteraction() {
+  sendMessageAndHandleResponse();
+  }
+ 
+
+  clearHistoryButton.addEventListener("click", clearInteractionHistory);
+ 
+
+  function clearInteractionHistory() {
+  interactionHistory = [];
+  henryMessageHistory = [];
+  interactionHistoryDiv.innerHTML = "";
+  currentResponseDiv.textContent = "";
+  }
+ 
+
+  updateProbabilitiesButton.addEventListener("click", updateXonnekProbabilities);
+ 
+
+  function updateXonnekProbabilities() {
+  let p1 = parseInt(response1Input.value);
+  let p2 = parseInt(response2Input.value);
+  let p3 = parseInt(response3Input.value);
+  let p4 = parseInt(response4Input.value);
+ 
+
+  let total = p1 + p2 + p3 + p4;
+ 
+
+  if (total !== 100) {
+  alert("Probabilities must add up to 100.");
+  return;
+  }
+ 
+
+  xonnekResponses[0].probability = p1 / 100;
+  xonnekResponses[1].probability = p2 / 100;
+  xonnekResponses[2].probability = p3 / 100;
+  xonnekResponses[3].probability = p4 / 100;
+  alert("Probabilities updated!");
+  }
+ 
+
+  // Initial display of history
+  displayInteractionHistory();
+ 
+
+  </script>
+ </body>
+ </html>

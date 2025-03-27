@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAZ vs SMR - Mini Football</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #1a1a1a;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+
+        #game-container {
+            position: relative;
+            width: 90vw;
+            height: 60vw; /* Maintain aspect ratio */
+            max-width: 1000px;
+            max-height: 667px; /* 1000 * (2/3) */
+            background-color: #4CAF50; /* Pitch green */
+            border: 5px solid white;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden; /* Keep elements inside */
+        }
+
+        .pitch-line {
+            position: absolute;
+            background-color: white;
+            z-index: 1;
+        }
+
+        /* Center line */
+        #center-line {
+            width: 3px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* Center circle */
+        #center-circle {
+            position: absolute;
+            width: 15%; /* Relative to pitch width */
+            height: 22.5%; /* Relative to pitch height (width * 1.5) */
+            border: 3px solid white;
+            border-radius: 50%;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+        }
+
+        /* Penalty areas */
+        .penalty-area {
+            position: absolute;
+            border: 3px solid white;
+            width: 18%;
+            height: 44%;
+            top: 28%;
+            z-index: 1;
+        }
+        #pa-left { left: 0; }
+        #pa-right { right: 0; }
+
+        /* Goal areas */
+        .goal-area {
+            position: absolute;
+            border: 2px solid white;
+            width: 8%;
+            height: 20%;
+            top: 40%;
+            z-index: 1;
+        }
+        #ga-left { left: 0; }
+        #ga-right { right: 0; }
+
+        /* Goals */
+        .goal {
+            position: absolute;
+            width: 2%;
+            height: 15%;
+            top: 42.5%;
+            background-color: #ddd; /* Light gray for net */
+            border: 2px solid #555; /* Darker gray posts */
+            z-index: 0; /* Behind pitch lines */
+        }
+        #goal-left { left: -2%; } /* Slightly outside the pitch line */
+        #goal-right { right: -2%; }
+
+        .player {
+            position: absolute;
+            width: 2%;
+            height: 3%; /* width * 1.5 */
+            border-radius: 50%;
+            z-index: 3;
+            transition: transform 0.1s linear; /* Smooth movement */
+            box-shadow: 0 0 5px rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.7em; /* Smaller font for number */
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 1px black;
+        }
+
+        .kazakhstan {
+            background-color: #0098D4; /* Kazakhstan Blue */
+            border: 1px solid #FFC72C; /* Kazakhstan Yellow border */
+        }
+        .kazakhstan.controlled::after {
+            content: '▼'; /* Indicator for controlled player */
+            position: absolute;
+            top: -15px;
+            color: #FFC72C;
+            font-size: 1.2em;
+            text-shadow: 1px 1px 2px black;
+        }
+
+        .sanmarino {
+            background-color: #FFFFFF; /* San Marino White */
+            border: 1px solid #5EB6E4; /* San Marino Light Blue border */
+            color: #002B7F; /* Dark blue number */
+            text-shadow: none;
+        }
+
+        #ball {
+            position: absolute;
+            width: 1.5%;
+            height: 2.25%; /* width * 1.5 */
+            background-color: #fff;
+            border: 1px solid black;
+            border-radius: 50%;
+            z-index: 4;
+            transition: transform 0.05s linear;
+            box-shadow: 0 0 3px rgba(0,0,0,0.5);
+        }
+
+        #scoreboard {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 8px 15px;
+            border-radius: 10px;
+            font-size: 1.5em;
+            z-index: 10;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+         #scoreboard span {
+            margin: 0 10px;
+        }
+         #timer {
+             font-weight: bold;
+         }
+         .flag {
+             font-size: 1.2em;
+             vertical-align: middle;
+         }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Pitch Lines -->
+        <div class="pitch-line" id="center-line"></div>
+        <div id="center-circle"></div>
+        <div class="penalty-area" id="pa-left"></div>
+        <div class="penalty-area" id="pa-right"></div>
+        <div class="goal-area" id="ga-left"></div>
+        <div class="goal-area" id="ga-right"></div>
+
+        <!-- Goals -->
+        <div class="goal" id="goal-left"></div>
+        <div class="goal" id="goal-right"></div>
+
+        <!-- Players and Ball will be added dynamically by JavaScript -->
+
+        <!-- Scoreboard -->
+        <div id="scoreboard">
+            <span class="flag">🇰🇿</span>
+            <span id="kaz-score">0</span>
+            <span id="timer">00:00</span>
+            <span id="smr-score">0</span>
+            <span class="flag">🇸🇲</span>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const scoreboardTimer = document.getElementById('timer');
+        const kazScoreEl = document.getElementById('kaz-score');
+        const smrScoreEl = document.getElementById('smr-score');
+        const ballElement = document.createElement('div');
+        ballElement.id = 'ball';
+
+        const PITCH_WIDTH = gameContainer.clientWidth;
+        const PITCH_HEIGHT = gameContainer.clientHeight;
+        const PLAYER_WIDTH = PITCH_WIDTH * 0.02;
+        const PLAYER_HEIGHT = PITCH_HEIGHT * 0.03;
+        const BALL_SIZE = PITCH_WIDTH * 0.015;
+
+        // Adjust sizes based on actual rendered dimensions
+        ballElement.style.width = `${BALL_SIZE}px`;
+        ballElement.style.height = `${BALL_SIZE}px`; // Keep ball round
+
+        let kazScore = 0;
+        let smrScore = 0;
+        let gameTimeSeconds = 0;
+        let gameRunning = true;
+        let kickOffState = true; // Start with kick-off
+
+        const KAZ = 'kazakhstan';
+        const SMR = 'sanmarino';
+
+        const players = [];
+        const ball = {
+            x: PITCH_WIDTH / 2 - BALL_SIZE / 2,
+            y: PITCH_HEIGHT / 2 - BALL_SIZE / 2,
+            dx: 0,
+            dy: 0,
+            element: ballElement,
+            controlledBy: null,
+            friction: 0.97 // Slows down the ball
+        };
+
+        const keysPressed = {};
+
+        // Player Setup Function
+        function createPlayer(team, number, initialX, initialY, isGK = false) {
+            const playerElement = document.createElement('div');
+            playerElement.classList.add('player', team);
+            playerElement.textContent = number;
+            playerElement.style.width = `${PLAYER_WIDTH}px`;
+            playerElement.style.height = `${PLAYER_HEIGHT}px`;
+            gameContainer.appendChild(playerElement);
+
+            const player = {
+                id: `${team}-${number}`,
+                element: playerElement,
+                team: team,
+                number: number,
+                x: initialX,
+                y: initialY,
+                dx: 0,
+                dy: 0,
+                speed: PITCH_WIDTH * 0.0035, // Base speed relative to pitch size
+                hasBall: false,
+                isGK: isGK,
+                isUserControlled: false,
+                targetX: initialX, // For AI movement
+                targetY: initialY
+            };
+            players.push(player);
+            return player;
+        }
+
+        // --- Initial Player Positions (Basic 4-3-3 formation, mirrored) ---
+        // Kazakhstan (User Controlled Team - Left Side)
+        createPlayer(KAZ, 1, PITCH_WIDTH * 0.05, PITCH_HEIGHT * 0.5 - PLAYER_HEIGHT / 2, true); // GK
+        createPlayer(KAZ, 2, PITCH_WIDTH * 0.15, PITCH_HEIGHT * 0.2 - PLAYER_HEIGHT / 2); // LB
+        createPlayer(KAZ, 5, PITCH_WIDTH * 0.15, PITCH_HEIGHT * 0.8 - PLAYER_HEIGHT / 2); // RB
+        createPlayer(KAZ, 3, PITCH_WIDTH * 0.25, PITCH_HEIGHT * 0.35 - PLAYER_HEIGHT / 2); // LCB
+        createPlayer(KAZ, 4, PITCH_WIDTH * 0.25, PITCH_HEIGHT * 0.65 - PLAYER_HEIGHT / 2); // RCB
+        createPlayer(KAZ, 6, PITCH_WIDTH * 0.35, PITCH_HEIGHT * 0.5 - PLAYER_HEIGHT / 2);  // CDM
+        createPlayer(KAZ, 8, PITCH_WIDTH * 0.4, PITCH_HEIGHT * 0.25 - PLAYER_HEIGHT / 2); // LCM
+        createPlayer(KAZ, 10, PITCH_WIDTH * 0.4, PITCH_HEIGHT * 0.75 - PLAYER_HEIGHT / 2); // RCM
+        createPlayer(KAZ, 7, PITCH_WIDTH * 0.45, PITCH_HEIGHT * 0.1 - PLAYER_HEIGHT / 2);  // LW
+        createPlayer(KAZ, 11, PITCH_WIDTH * 0.45, PITCH_HEIGHT * 0.9 - PLAYER_HEIGHT / 2); // RW
+        createPlayer(KAZ, 9, PITCH_WIDTH * 0.48, PITCH_HEIGHT * 0.5 - PLAYER_HEIGHT / 2);  // ST (Initial kickoff taker)
+
+        // San Marino (AI Controlled Team - Right Side)
+        createPlayer(SMR, 1, PITCH_WIDTH * 0.95 - PLAYER_WIDTH, PITCH_HEIGHT * 0.5 - PLAYER_HEIGHT / 2, true); // GK
+        createPlayer(SMR, 2, PITCH_WIDTH * 0.85 - PLAYER_WIDTH, PITCH_HEIGHT * 0.2 - PLAYER_HEIGHT / 2); // RB
+        createPlayer(SMR, 5, PITCH_WIDTH * 0.85 - PLAYER_WIDTH, PITCH_HEIGHT * 0.8 - PLAYER_HEIGHT / 2); // LB
+        createPlayer(SMR, 3, PITCH_WIDTH * 0.75 - PLAYER_WIDTH, PITCH_HEIGHT * 0.35 - PLAYER_HEIGHT / 2); // RCB
+        createPlayer(SMR, 4, PITCH_WIDTH * 0.75 - PLAYER_WIDTH, PITCH_HEIGHT * 0.65 - PLAYER_HEIGHT / 2); // LCB
+        createPlayer(SMR, 6, PITCH_WIDTH * 0.65 - PLAYER_WIDTH, PITCH_HEIGHT * 0.5 - PLAYER_HEIGHT / 2);  // CDM
+        createPlayer(SMR, 8, PITCH_WIDTH * 0.6 - PLAYER_WIDTH, PITCH_HEIGHT * 0.25 - PLAYER_HEIGHT / 2); // RCM
+        createPlayer(SMR, 10, PITCH_WIDTH * 0.6 - PLAYER_WIDTH, PITCH_HEIGHT * 0.75 - PLAYER_HEIGHT / 2); // LCM
+        createPlayer(SMR, 7, PITCH_WIDTH * 0.55 - PLAYER_WIDTH, PITCH_HEIGHT * 0.1 - PLAYER_HEIGHT / 2);  // RW
+        createPlayer(SMR, 11, PITCH_WIDTH * 0.55 - PLAYER_WIDTH, PITCH_HEIGHT * 0.9 - PLAYER_HEIGHT / 2); // LW
+        createPlayer(SMR, 9, PITCH_WIDTH * 0.52 - PLAYER_WIDTH, PITCH_HEIGHT * 0.5 - PLAYER_HEIGHT / 2);  // ST
+
+        gameContainer.appendChild(ball.element);
+
+        // --- Game Logic ---
+
+        function updatePlayerPositions() {
+            players.forEach(p => {
+                // Apply movement
+                p.x += p.dx;
+                p.y += p.dy;
+
+                // Pitch boundaries collision
+                p.x = Math.max(0, Math.min(PITCH_WIDTH - PLAYER_WIDTH, p.x));
+                p.y = Math.max(0, Math.min(PITCH_HEIGHT - PLAYER_HEIGHT, p.y));
+
+                // Simple player-player collision avoidance (basic repulsion)
+                 players.forEach(other => {
+                    if (p !== other) {
+                        const dist = distance(p.x, p.y, other.x, other.y);
+                        const minDist = PLAYER_WIDTH * 0.8; // Minimum distance
+                        if (dist < minDist) {
+                            const angle = Math.atan2(p.y - other.y, p.x - other.x);
+                            const overlap = minDist - dist;
+                            // Move both players apart slightly
+                            p.x += Math.cos(angle) * overlap * 0.1;
+                            p.y += Math.sin(angle) * overlap * 0.1;
+                            other.x -= Math.cos(angle) * overlap * 0.1;
+                            other.y -= Math.sin(angle) * overlap * 0.1;
+                        }
+                    }
+                });
+
+
+                // Update element position
+                p.element.style.transform = `translate(${p.x}px, ${p.y}px)`;
+
+                // Reset dx/dy for next frame (unless controlled)
+                 if (!p.isUserControlled) {
+                     p.dx = 0;
+                     p.dy = 0;
+                 }
+            });
+        }
+
+        function updateBallPosition() {
+            if (ball.controlledBy) {
+                // Ball sticks to the controlling player
+                const player = ball.controlledBy;
+                const angle = Math.atan2(player.dy, player.dx); // Move ball slightly in front
+                const ballOffsetX = Math.cos(angle) * PLAYER_WIDTH * 0.6;
+                const ballOffsetY = Math.sin(angle) * PLAYER_HEIGHT * 0.6;
+
+                ball.x = player.x + PLAYER_WIDTH / 2 - BALL_SIZE / 2 + ballOffsetX;
+                ball.y = player.y + PLAYER_HEIGHT / 2 - BALL_SIZE / 2 + ballOffsetY;
+                ball.dx = 0; // No independent movement when controlled
+                ball.dy = 0;
+            } else {
+                // Apply friction
+                ball.dx *= ball.friction;
+                ball.dy *= ball.friction;
+
+                // Stop ball if moving too slowly
+                if (Math.abs(ball.dx) < 0.1) ball.dx = 0;
+                if (Math.abs(ball.dy) < 0.1) ball.dy = 0;
+
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+
+                 // Pitch boundaries collision for ball
+                if (ball.x <= 0 || ball.x >= PITCH_WIDTH - BALL_SIZE) {
+                    // Check for goal
+                    if (ball.y > PITCH_HEIGHT * 0.425 && ball.y < PITCH_HEIGHT * (0.425 + 0.15)) {
+                        goalScored(ball.x <= 0 ? SMR : KAZ); // If ball hits left boundary, SMR scores, else KAZ
+                    } else {
+                        ball.dx *= -0.7; // Bounce off side walls (less energy)
+                        ball.x = Math.max(0, Math.min(PITCH_WIDTH - BALL_SIZE, ball.x)); // Keep in bounds
+                    }
+                }
+                if (ball.y <= 0 || ball.y >= PITCH_HEIGHT - BALL_SIZE) {
+                    ball.dy *= -0.7; // Bounce off top/bottom walls
+                    ball.y = Math.max(0, Math.min(PITCH_HEIGHT - BALL_SIZE, ball.y)); // Keep in bounds
+                }
+            }
+
+
+            ball.element.style.transform = `translate(${ball.x}px, ${ball.y}px)`;
+        }
+
+         function distance(x1, y1, x2, y2) {
+            return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+        }
+
+        function findClosestPlayer(team, targetX, targetY) {
+            let closestPlayer = null;
+            let minDist = Infinity;
+
+            players.forEach(p => {
+                if (p.team === team) {
+                    const d = distance(p.x, p.y, targetX, targetY);
+                    if (d < minDist) {
+                        minDist = d;
+                        closestPlayer = p;
+                    }
+                }
+            });
+            return closestPlayer;
+        }
+
+         function findClosestKazPlayerToBall() {
+             let closestPlayer = null;
+             let minDist = Infinity;
+
+             players.forEach(p => {
+                 if (p.team === KAZ) {
+                     const d = distance(p.x + PLAYER_WIDTH / 2, p.y + PLAYER_HEIGHT / 2, ball.x + BALL_SIZE / 2, ball.y + BALL_SIZE / 2);
+                     if (d < minDist) {
+                         minDist = d;
+                         closestPlayer = p;
+                     }
+                 }
+             });
+             return closestPlayer;
+         }
+
+
+        function handleUserInput() {
+            const controlledPlayer = players.find(p => p.isUserControlled);
+            if (!controlledPlayer) return;
+
+            controlledPlayer.dx = 0;
+            controlledPlayer.dy = 0;
+
+            const currentSpeed = controlledPlayer.speed * (keysPressed['Shift'] ? 1.5 : 1); // Sprint
+
+            if (keysPressed['ArrowUp']) {
+                controlledPlayer.dy = -currentSpeed;
+            }
+            if (keysPressed['ArrowDown']) {
+                controlledPlayer.dy = currentSpeed;
+            }
+            if (keysPressed['ArrowLeft']) {
+                controlledPlayer.dx = -currentSpeed;
+            }
+            if (keysPressed['ArrowRight']) {
+                controlledPlayer.dx = currentSpeed;
+            }
+
+             // Normalize diagonal movement
+            if (controlledPlayer.dx !== 0 && controlledPlayer.dy !== 0) {
+                controlledPlayer.dx /= Math.sqrt(2);
+                controlledPlayer.dy /= Math.sqrt(2);
+            }
+
+            // Shoot / Pass Action
+            if (keysPressed[' '] && controlledPlayer.hasBall) { // Space bar
+                shoot(controlledPlayer);
+            }
+        }
+
+        function shoot(player) {
+            if (!player.hasBall) return;
+
+            const shootPower = PITCH_WIDTH * 0.015; // Adjust power as needed
+            const inaccuracy = 0.2; // Radians, approx 11 degrees
+
+            // Calculate base direction (towards opponent goal for KAZ, towards own for SMR - basic logic)
+            let targetX, targetY;
+             if(player.team === KAZ){
+                 targetX = PITCH_WIDTH; // Aim right
+                 targetY = PITCH_HEIGHT / 2;
+             } else {
+                 targetX = 0; // Aim left
+                 targetY = PITCH_HEIGHT / 2;
+             }
+
+             // Add slight randomness/directionality based on player movement
+            const moveAngle = Math.atan2(player.dy, player.dx);
+            const shootAngle = (player.dx === 0 && player.dy === 0)
+                ? Math.atan2(targetY - player.y, targetX - player.x) // If standing still, aim towards goal center
+                : moveAngle; // If moving, shoot in that direction
+
+             const randomAngleOffset = (Math.random() - 0.5) * inaccuracy;
+             const finalAngle = shootAngle + randomAngleOffset;
+
+
+            ball.dx = Math.cos(finalAngle) * shootPower;
+            ball.dy = Math.sin(finalAngle) * shootPower;
+
+            ball.controlledBy = null;
+            player.hasBall = false;
+            setTimeout(() => { // Prevent immediate re-possession
+                 ball.controlledBy = null;
+             }, 100);
+        }
+
+
+        function aiMovement() {
+             players.forEach(p => {
+                 if (!p.isUserControlled) {
+                    // Define target based on game state
+                     let targetX = p.x;
+                     let targetY = p.y;
+                     const ballCenterX = ball.x + BALL_SIZE / 2;
+                     const ballCenterY = ball.y + BALL_SIZE / 2;
+                     const playerCenterX = p.x + PLAYER_WIDTH / 2;
+                     const playerCenterY = p.y + PLAYER_HEIGHT / 2;
+
+                     // --- Goalkeeper Logic ---
+                     if(p.isGK){
+                         if(p.team === KAZ) {
+                             targetX = PITCH_WIDTH * 0.06; // Stay near goal line
+                             targetY = PITCH_HEIGHT * 0.5 + (ballCenterY - PITCH_HEIGHT * 0.5) * 0.5; // Follow ball Y position loosely
+                             targetY = Math.max(PITCH_HEIGHT * 0.3, Math.min(PITCH_HEIGHT * 0.7, targetY)); // Stay within goal area vertically
+                         } else { // San Marino GK
+                             targetX = PITCH_WIDTH * 0.94 - PLAYER_WIDTH;
+                              targetY = PITCH_HEIGHT * 0.5 + (ballCenterY - PITCH_HEIGHT * 0.5) * 0.5;
+                             targetY = Math.max(PITCH_HEIGHT * 0.3, Math.min(PITCH_HEIGHT * 0.7, targetY));
+                         }
+                     }
+                     // --- Outfield Player Logic ---
+                     else {
+                         const playerWithBall = players.find(pl => pl.hasBall);
+                         const opponentGoalX = (p.team === KAZ) ? PITCH_WIDTH : 0;
+                         const defensivePositionX = (p.team === KAZ) ? PITCH_WIDTH * 0.25 : PITCH_WIDTH * 0.75; // Basic defensive line
+
+                         if (playerWithBall) {
+                             if (playerWithBall.team === p.team) {
+                                 // --- Teammate AI (Support Ball Carrier) ---
+                                 // Simple logic: move towards opponent goal, try to maintain some horizontal spacing
+                                 const baseTargetX = playerWithBall.x + (p.team === KAZ ? PITCH_WIDTH * 0.15 : -PITCH_WIDTH * 0.15); // Move ahead/parallel
+                                 targetX = baseTargetX + (Math.random() - 0.5) * PITCH_WIDTH * 0.1; // Add randomness
+                                 targetY = p.y + (Math.random() - 0.5) * PITCH_HEIGHT * 0.2; // Slight vertical drift
+
+                                // If behind the ball carrier significantly, move more directly towards goal
+                                 if((p.team === KAZ && p.x < playerWithBall.x - PITCH_WIDTH * 0.1) || (p.team === SMR && p.x > playerWithBall.x + PITCH_WIDTH * 0.1)){
+                                     targetX = opponentGoalX * 0.7 + Math.random() * opponentGoalX * 0.3; // Move towards goal general area
+                                     targetY = PITCH_HEIGHT * Math.random(); // Random Y
+                                 }
+
+                             } else {
+                                 // --- Opponent AI (Pressure Ball Carrier) ---
+                                 targetX = ballCenterX;
+                                 targetY = ballCenterY;
+                             }
+                         } else {
+                             // --- No one has the ball ---
+                             // Move towards the ball, but maybe biased towards own half if far
+                              const distToBall = distance(playerCenterX, playerCenterY, ballCenterX, ballCenterY);
+                             if(distToBall < PITCH_WIDTH * 0.3){ // If relatively close, go directly to ball
+                                targetX = ballCenterX;
+                                targetY = ballCenterY;
+                             } else { // If far, move towards a defensive position + ball general direction
+                                 targetX = defensivePositionX + (ballCenterX - defensivePositionX) * 0.3; // Move partially towards ball X
+                                 targetY = p.y + (ballCenterY - playerCenterY) * 0.1; // Drift slightly towards ball Y
+                             }
+                         }
+                     }
+
+                    // Move player towards target
+                    const angle = Math.atan2(targetY - playerCenterY, targetX - playerCenterX);
+                    const distToTarget = distance(playerCenterX, playerCenterY, targetX, targetY);
+
+                     // Only move if not already very close, prevent jittering
+                     if(distToTarget > PLAYER_WIDTH * 0.5) {
+                         p.dx = Math.cos(angle) * p.speed * 0.8; // AI moves slightly slower than user potential max
+                         p.dy = Math.sin(angle) * p.speed * 0.8;
+                     } else {
+                         p.dx = 0;
+                         p.dy = 0;
+                     }
+                 }
+             });
+        }
+
+        function checkBallPossession() {
+            let closestPlayerToBall = null;
+            let minDist = PLAYER_WIDTH * 1.5; // Interaction distance threshold
+
+             players.forEach(p => {
+                const playerCenterX = p.x + PLAYER_WIDTH / 2;
+                const playerCenterY = p.y + PLAYER_HEIGHT / 2;
+                const ballCenterX = ball.x + BALL_SIZE / 2;
+                const ballCenterY = ball.y + BALL_SIZE / 2;
+                const d = distance(playerCenterX, playerCenterY, ballCenterX, ballCenterY);
+
+                if (d < minDist) {
+                    minDist = d;
+                    closestPlayerToBall = p;
+                }
+            });
+
+             if (closestPlayerToBall && ball.controlledBy !== closestPlayerToBall) {
+                // If ball has no controller OR controller is far enough OR tackle happens
+                if (!ball.controlledBy || distance(ball.controlledBy.x, ball.controlledBy.y, ball.x, ball.y) > PLAYER_WIDTH * 2) {
+                    if (ball.controlledBy) {
+                        ball.controlledBy.hasBall = false; // Previous controller loses ball
+                    }
+                    ball.controlledBy = closestPlayerToBall;
+                    closestPlayerToBall.hasBall = true;
+                    // Small impulse on tackle/possession change
+                    ball.dx = (Math.random() - 0.5) * 2;
+                    ball.dy = (Math.random() - 0.5) * 2;
+                }
+            }
+        }
+
+
+        function updateControlledPlayer() {
+             // Remove 'controlled' class from everyone first
+            players.forEach(p => {
+                p.isUserControlled = false;
+                p.element.classList.remove('controlled');
+            });
+
+            // Find the Kazakhstan player closest to the ball
+            const closestKaz = findClosestKazPlayerToBall();
+
+            if (closestKaz) {
+                closestKaz.isUserControlled = true;
+                closestKaz.element.classList.add('controlled');
+            }
+        }
+
+        function updateTimer() {
+            gameTimeSeconds += (1 / 60) * 5; // Time goes 5x faster
+            const minutes = Math.floor(gameTimeSeconds / 60);
+            const seconds = Math.floor(gameTimeSeconds % 60);
+            scoreboardTimer.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+             if (minutes >= 90) { // End game condition (simplified)
+                 gameRunning = false;
+                 console.log("Full Time!");
+                 alert(`Full Time!\nFinal Score: Kazakhstan ${kazScore} - ${smrScore} San Marino`);
+                 // Could add a proper end screen here
+             }
+        }
+
+         function resetPositions(scoringTeam) {
+            kickOffState = true;
+             ball.dx = 0;
+             ball.dy = 0;
+             ball.x = PITCH_WIDTH / 2 - BALL_SIZE / 2;
+             ball.y = PITCH_HEIGHT / 2 - BALL_SIZE / 2;
+              if (ball.controlledBy) {
+                 ball.controlledBy.hasBall = false;
+                 ball.controlledBy = null;
+             }
+
+             // Define initial positions again (could refactor this)
+             const initialPositions = [
+                 // KAZ
+                 { team: KAZ, num: 1, x: 0.05, y: 0.5, gk: true }, { team: KAZ, num: 2, x: 0.15, y: 0.2 }, { team: KAZ, num: 5, x: 0.15, y: 0.8 },
+                 { team: KAZ, num: 3, x: 0.25, y: 0.35 }, { team: KAZ, num: 4, x: 0.25, y: 0.65 }, { team: KAZ, num: 6, x: 0.35, y: 0.5 },
+                 { team: KAZ, num: 8, x: 0.4, y: 0.25 }, { team: KAZ, num: 10, x: 0.4, y: 0.75 }, { team: KAZ, num: 7, x: 0.45, y: 0.1 },
+                 { team: KAZ, num: 11, x: 0.45, y: 0.9 }, { team: KAZ, num: 9, x: 0.48, y: 0.5 },
+                  // SMR
+                 { team: SMR, num: 1, x: 0.95, y: 0.5, gk: true }, { team: SMR, num: 2, x: 0.85, y: 0.2 }, { team: SMR, num: 5, x: 0.85, y: 0.8 },
+                 { team: SMR, num: 3, x: 0.75, y: 0.35 }, { team: SMR, num: 4, x: 0.75, y: 0.65 }, { team: SMR, num: 6, x: 0.65, y: 0.5 },
+                 { team: SMR, num: 8, x: 0.6, y: 0.25 }, { team: SMR, num: 10, x: 0.6, y: 0.75 }, { team: SMR, num: 7, x: 0.55, y: 0.1 },
+                 { team: SMR, num: 11, x: 0.55, y: 0.9 }, { team: SMR, num: 9, x: 0.52, y: 0.5 }
+             ];
+
+              players.forEach(p => {
+                 const pos = initialPositions.find(ip => ip.team === p.team && ip.num === p.number);
+                 if (pos) {
+                     p.x = PITCH_WIDTH * pos.x - (p.team === SMR ? PLAYER_WIDTH : 0); // Adjust for player width if on right
+                     p.y = PITCH_HEIGHT * pos.y - PLAYER_HEIGHT / 2;
+                     p.dx = 0;
+                     p.dy = 0;
+                     p.hasBall = false;
+                 }
+             });
+
+              // Kick-off logic: Non-scoring team gets the ball slightly offset
+              const kickingTeam = (scoringTeam === KAZ) ? SMR : KAZ;
+              const kickOffPlayer = players.find(p => p.team === kickingTeam && p.number === 9); // Usually striker
+              if (kickOffPlayer) {
+                  ball.controlledBy = kickOffPlayer;
+                  kickOffPlayer.hasBall = true;
+                   // Move ball slightly towards kickoff player
+                  ball.x = kickOffPlayer.x + (kickingTeam === KAZ ? PLAYER_WIDTH : -BALL_SIZE) ;
+                  ball.y = kickOffPlayer.y + PLAYER_HEIGHT/2 - BALL_SIZE/2;
+
+                 // User controls kickoff player if KAZ
+                 updateControlledPlayer(); // Ensure correct player is marked controllable
+              }
+
+
+             setTimeout(() => { kickOffState = false; }, 1500); // Allow kickoff after 1.5 seconds
+         }
+
+         function goalScored(scoringTeam) {
+            if (!gameRunning) return; // Prevent multiple goals after FT
+
+            console.log(`Goal for ${scoringTeam}!`);
+            if (scoringTeam === KAZ) {
+                kazScore++;
+                kazScoreEl.textContent = kazScore;
+            } else {
+                smrScore++;
+                smrScoreEl.textContent = smrScore;
+            }
+             gameRunning = false; // Pause game briefly
+             setTimeout(() => {
+                 resetPositions(scoringTeam);
+                 gameRunning = true; // Resume game
+             }, 2000); // Show goal message briefly
+         }
+
+
+        function gameLoop() {
+            if (!gameRunning || kickOffState) {
+                if(gameRunning && kickOffState){ // Still need to update positions during kickoff, but no AI moves/ball physics yet
+                    handleUserInput(); // Allow user positioning during kickoff
+                    updatePlayerPositions();
+                    updateBallPosition(); // Keep ball attached
+                }
+                 requestAnimationFrame(gameLoop); // Keep looping but don't advance game logic fully
+                return;
+            }
+
+            updateTimer();
+            updateControlledPlayer(); // Determine which KAZ player user controls
+            handleUserInput();
+            aiMovement();
+            updatePlayerPositions();
+            checkBallPossession();
+            updateBallPosition();
+
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event Listeners for User Input
+        window.addEventListener('keydown', (e) => {
+            keysPressed[e.key] = true;
+            // Prevent default space bar scrolling
+             if(e.key === ' '){
+                 e.preventDefault();
+             }
+             // Allow kickoff on first space press
+             if (kickOffState && e.key === ' ' && ball.controlledBy?.team === KAZ) {
+                 shoot(ball.controlledBy); // Kick off!
+                 kickOffState = false;
+             }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keysPressed[e.key] = false;
+        });
+
+         // Ensure initial rendering is correct
+         updatePlayerPositions();
+         updateBallPosition();
+         resetPositions(SMR); // Start with Kazakhstan kick-off
+
+        // Start the game loop
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>

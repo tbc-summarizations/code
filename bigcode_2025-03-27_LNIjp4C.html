@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kazakhstan Simulator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            background-color: #f0f8ff;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #0056b3; /* Blue similar to Kazakh flag */
+            border-bottom: 2px solid #ffd700; /* Gold similar to Kazakh flag */
+            padding-bottom: 5px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #e6f3ff;
+            border-radius: 5px;
+        }
+        .section h2 {
+            margin-top: 0;
+            font-size: 1.4em;
+        }
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #003d80;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            font-weight: bold;
+            font-size: 1.2em;
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #ffd700;
+            color: #0056b3;
+            border-radius: 5px;
+        }
+        .data-point {
+            margin-bottom: 8px;
+        }
+        .data-point strong {
+            color: #0056b3;
+        }
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            height: 100px;
+            border-bottom: 1px solid #ccc;
+            margin-top: 10px;
+        }
+        .bar {
+            background-color: #4682b4; /* Steel Blue */
+            margin: 0 2px;
+            flex-grow: 1;
+            text-align: center;
+            font-size: 0.8em;
+            color: white;
+            position: relative;
+        }
+        .bar span {
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            color: #333;
+            font-size: 0.7em;
+        }
+         .event-log {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #f9f9f9;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        .map-placeholder {
+            width: 100%;
+            height: 150px;
+            background-color: #90ee90; /* Light green */
+            border: 2px solid #228b22; /* Forest green */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5em;
+            color: #228b22;
+            position: relative;
+            margin-top: 10px;
+        }
+        .map-placeholder::before {
+            content: '🇰🇿'; /* Kazakhstan flag emoji */
+            font-size: 3em;
+            opacity: 0.5;
+        }
+        .neighbour {
+             position: absolute;
+             padding: 2px 5px;
+             background-color: rgba(255, 255, 255, 0.7);
+             border: 1px solid #aaa;
+             font-size: 0.7em;
+             border-radius: 3px;
+        }
+        .north { top: 5px; left: 50%; transform: translateX(-50%); }
+        .south { bottom: 5px; left: 50%; transform: translateX(-50%); }
+        .east { top: 50%; right: 5px; transform: translateY(-50%); }
+        .west { top: 50%; left: 5px; transform: translateY(-50%); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🇰🇿 Kazakhstan Simulator 🇰🇿</h1>
+
+    <div class="status">
+        Year: <span id="simYear">1991</span> | Status: <span id="simStatus">Paused</span>
+    </div>
+
+    <div class="controls">
+        <button id="startButton">Start</button>
+        <button id="stopButton" disabled>Stop</button>
+        <button id="resetButton">Reset</button>
+        <button id="advanceButton">Advance 1 Year</button>
+    </div>
+
+    <div class="section" id="geography">
+        <h2>Geography</h2>
+        <div class="data-point"><strong>Area:</strong> 2,724,900 sq km (9th largest)</div>
+        <div class="data-point"><strong>Location:</strong> Central Asia, west of the Ural River in Eastern Europe</div>
+        <div class="data-point"><strong>Terrain:</strong> Vast flat steppes, hills, deserts, mountains in east/southeast</div>
+        <div class="data-point"><strong>Climate:</strong> Continental (cold winters, hot summers), arid/semi-arid</div>
+        <div class="data-point"><strong>Current Climate Condition:</strong> <span id="geoClimate">Normal</span></div>
+        <div class="map-placeholder">
+            Simplified Map
+            <div class="neighbour north">Russia</div>
+            <div class="neighbour east">China</div>
+            <div class="neighbour south">Kyrgyzstan, Uzbekistan, Turkmenistan</div>
+            <div class="neighbour west">Caspian Sea</div>
+        </div>
+    </div>
+
+    <div class="section" id="demographics">
+        <h2>Demographics</h2>
+        <div class="data-point"><strong>Population:</strong> <span id="demoPopulation">16,500,000</span></div>
+        <div class="data-point"><strong>Growth Rate:</strong> <span id="demoGrowthRate">1.0</span>%</div>
+        <div class="data-point"><strong>Urbanization:</strong> <span id="demoUrbanization">55</span>%</div>
+        <div class="data-point"><strong>Major Ethnic Groups (Approx):</strong></div>
+        <div class="bar-chart">
+            <div class="bar" id="demoKazakhBar" style="height: 60%; background-color: #0056b3;"><span>Kazakh</span></div>
+            <div class="bar" id="demoRussianBar" style="height: 30%; background-color: #dc143c;"><span>Russian</span></div>
+            <div class="bar" id="demoOtherBar" style="height: 10%; background-color: #6a5acd;"><span>Others</span></div>
+        </div>
+    </div>
+
+    <div class="section" id="economy">
+        <h2>Economy</h2>
+        <div class="data-point"><strong>GDP (Nominal):</strong> $<span id="ecoGDP">25</span> Billion</div>
+        <div class="data-point"><strong>GDP Growth:</strong> <span id="ecoGrowth">0.0</span>%</div>
+        <div class="data-point"><strong>Primary Resources:</strong> <span id="ecoResources">Oil, Natural Gas, Uranium, Coal, Metals</span></div>
+        <div class="data-point"><strong>Resource Level (Oil):</strong> <span id="ecoOilLevel">High</span></div>
+        <div class="data-point"><strong>Currency:</strong> Tenge (KZT)</div>
+        <div class="data-point"><strong>Economic Focus:</strong> <span id="ecoFocus">Transitioning</span></div>
+    </div>
+
+    <div class="section" id="government">
+        <h2>Government & Politics</h2>
+        <div class="data-point"><strong>Government Type:</strong> <span id="govType">Presidential Republic</span></div>
+        <div class="data-point"><strong>Head of State:</strong> <span id="govHeadState">President</span></div>
+        <div class="data-point"><strong>Capital:</strong> <span id="govCapital">Almaty (Moving Soon)</span></div>
+        <div class="data-point"><strong>Political Stability:</strong> <span id="govStability">Moderate</span></div>
+        <div class="data-point"><strong>Current Policy Focus:</strong> <span id="govPolicy">Establishing Sovereignty</span></div>
+    </div>
+
+     <div class="section" id="culture">
+        <h2>Culture</h2>
+        <div class="data-point"><strong>Official Language:</strong> <span id="cultLang">Kazakh (State), Russian (Official)</span></div>
+        <div class="data-point"><strong>Dominant Religion:</strong> <span id="cultReligion">Islam (Sunni)</span>, Christianity (Orthodox)</div>
+        <div class="data-point"><strong>Key Traditions:</strong> Hospitality, Respect for Elders, Equestrian Culture 🐎, Nomadic Heritage  yurt 🛖</div>
+        <div class="data-point"><strong>Cuisine Highlights:</strong> Beshbarmak, Kazy, Kumis 🥛</div>
+        <div class="data-point"><strong>Cultural Influence:</strong> <span id="cultInfluence">Growing National Identity</span></div>
+    </div>
+
+    <div class="section" id="history">
+        <h2>History & Events</h2>
+        <div class="data-point"><strong>Current Era:</strong> <span id="histEra">Post-Soviet Independence</span></div>
+        <div class="event-log" id="eventLog">
+            <div>1991: Kazakhstan declares independence from the Soviet Union. Nursultan Nazarbayev becomes President.</div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // Simulation State Variables
+    let simState = {
+        year: 1991,
+        isRunning: false,
+        intervalId: null,
+        // Geography
+        climateCondition: "Normal",
+        // Demographics
+        population: 16500000,
+        growthRate: 1.0,
+        urbanization: 55,
+        ethnicKazakh: 40, // Percentage
+        ethnicRussian: 38, // Percentage
+        // Economy
+        gdp: 25, // Billions USD
+        gdpGrowth: 0.0,
+        oilLevel: 100, // Represents relative abundance/exploitation level
+        economicFocus: "Transitioning",
+        // Government
+        govType: "Presidential Republic",
+        capital: "Almaty (Moving Soon)",
+        stability: 70, // Out of 100
+        policyFocus: "Establishing Sovereignty",
+        // Culture
+        languageFocus: "Bilingual", // Kazakh, Russian, etc.
+        nationalIdentity: 60, // Strength out of 100
+        // History
+        era: "Post-Soviet Independence",
+        events: ["1991: Kazakhstan declares independence from the Soviet Union. Nursultan Nazarbayev becomes President."]
+    };
+
+    // DOM Elements
+    const yearDisplay = document.getElementById('simYear');
+    const statusDisplay = document.getElementById('simStatus');
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+    const resetButton = document.getElementById('resetButton');
+    const advanceButton = document.getElementById('advanceButton');
+
+    // Geography
+    const geoClimate = document.getElementById('geoClimate');
+
+    // Demographics
+    const demoPopulation = document.getElementById('demoPopulation');
+    const demoGrowthRate = document.getElementById('demoGrowthRate');
+    const demoUrbanization = document.getElementById('demoUrbanization');
+    const demoKazakhBar = document.getElementById('demoKazakhBar');
+    const demoRussianBar = document.getElementById('demoRussianBar');
+    const demoOtherBar = document.getElementById('demoOtherBar');
+
+    // Economy
+    const ecoGDP = document.getElementById('ecoGDP');
+    const ecoGrowth = document.getElementById('ecoGrowth');
+    const ecoResources = document.getElementById('ecoResources');
+    const ecoOilLevel = document.getElementById('ecoOilLevel');
+    const ecoFocus = document.getElementById('ecoFocus');
+
+    // Government
+    const govType = document.getElementById('govType');
+    const govCapital = document.getElementById('govCapital');
+    const govStability = document.getElementById('govStability');
+    const govPolicy = document.getElementById('govPolicy');
+
+    // Culture
+    const cultLang = document.getElementById('cultLang');
+    const cultReligion = document.getElementById('cultReligion');
+    const cultInfluence = document.getElementById('cultInfluence');
+
+    // History
+    const histEra = document.getElementById('histEra');
+    const eventLog = document.getElementById('eventLog');
+
+    // --- Simulation Logic ---
+
+    function updateDisplay() {
+        yearDisplay.textContent = simState.year;
+        statusDisplay.textContent = simState.isRunning ? 'Running' : 'Paused';
+
+        // Geography
+        geoClimate.textContent = simState.climateCondition;
+
+        // Demographics
+        demoPopulation.textContent = formatPopulation(simState.population);
+        simState.growthRate = Math.max(0.1, simState.growthRate + (Math.random() - 0.5) * 0.1); // Fluctuate growth rate slightly
+        demoGrowthRate.textContent = simState.growthRate.toFixed(1);
+        demoUrbanization.textContent = Math.min(95, simState.urbanization);
+        // Update ethnic bars (simplified representation)
+        let otherPercent = 100 - simState.ethnicKazakh - simState.ethnicRussian;
+        demoKazakhBar.style.height = `${simState.ethnicKazakh}%`;
+        demoRussianBar.style.height = `${simState.ethnicRussian}%`;
+        demoOtherBar.style.height = `${Math.max(0, otherPercent)}%`;
+
+        // Economy
+        ecoGDP.textContent = simState.gdp.toFixed(1);
+        ecoGrowth.textContent = simState.gdpGrowth.toFixed(1);
+        ecoOilLevel.textContent = getOilLevelDescription(simState.oilLevel);
+        ecoFocus.textContent = simState.economicFocus;
+
+        // Government
+        govType.textContent = simState.govType;
+        govCapital.textContent = simState.capital;
+        govStability.textContent = getStabilityDescription(simState.stability);
+        govPolicy.textContent = simState.policyFocus;
+
+        // Culture
+        cultLang.textContent = getLanguageStatus();
+        cultInfluence.textContent = getNationalIdentityDescription(simState.nationalIdentity);
+
+        // History
+        histEra.textContent = simState.era;
+        // Update event log is handled by addEvent function
+    }
+
+    function formatPopulation(pop) {
+        return Math.round(pop).toLocaleString();
+    }
+
+    function getOilLevelDescription(level) {
+        if (level > 80) return "Very High";
+        if (level > 60) return "High";
+        if (level > 40) return "Medium";
+        if (level > 20) return "Low";
+        return "Depleting";
+    }
+
+    function getStabilityDescription(level) {
+        if (level > 85) return "Very High";
+        if (level > 65) return "High";
+        if (level > 45) return "Moderate";
+        if (level > 25) return "Low";
+        return "Very Low 😟";
+    }
+
+     function getNationalIdentityDescription(level) {
+        if (level > 85) return "Very Strong National Identity ✨";
+        if (level > 65) return "Strong National Identity";
+        if (level > 45) return "Developing National Identity";
+        if (level > 25) return "Emerging National Identity";
+        return "Fragmented Identity";
+    }
+
+    function getLanguageStatus() {
+         if (simState.languageFocus === "Kazakh Dominant") return "Kazakh (State), Russian";
+         if (simState.languageFocus === "Russian Dominant") return "Russian (Official), Kazakh";
+         return "Kazakh (State), Russian (Official)"; // Bilingual default
+    }
+
+
+    function addEvent(year, description) {
+        const eventText = `${year}: ${description}`;
+        simState.events.push(eventText);
+        const newEventDiv = document.createElement('div');
+        newEventDiv.textContent = eventText;
+        eventLog.appendChild(newEventDiv);
+        eventLog.scrollTop = eventLog.scrollHeight; // Auto-scroll to bottom
+    }
+
+    function advanceYear() {
+        simState.year++;
+
+        // --- Update Logic ---
+
+        // Demographics
+        let netMigrationFactor = (simState.stability / 100 - 0.5) * 0.1 + (simState.gdpGrowth / 50); // Simplified migration based on stability & economy
+        simState.population *= (1 + (simState.growthRate / 100) + (netMigrationFactor / 100));
+        simState.urbanization += Math.random() * 0.5; // Gradual urbanization
+         // Simulate ethnic shift (very simplified - Kazakh proportion tends to increase slowly)
+        if (simState.ethnicKazakh < 75) { // Cap increase
+             simState.ethnicKazakh += (Math.random() * 0.3);
+        }
+        if (simState.ethnicRussian > 15) { // Floor decrease
+             simState.ethnicRussian -= (Math.random() * 0.2);
+        }
+        simState.ethnicKazakh = Math.min(100, Math.max(0, simState.ethnicKazakh));
+        simState.ethnicRussian = Math.min(100 - simState.ethnicKazakh, Math.max(0, simState.ethnicRussian));
+
+
+        // Economy
+        let baseGrowth = (Math.random() * 6 - 2); // Base random growth/recession
+        let oilFactor = (simState.oilLevel / 50) * (Math.random() * 2); // Impact of oil
+        let stabilityFactor = (simState.stability - 50) / 20; // Impact of stability
+        simState.gdpGrowth = baseGrowth + oilFactor + stabilityFactor;
+        simState.gdp *= (1 + simState.gdpGrowth / 100);
+        simState.gdp = Math.max(1, simState.gdp); // Ensure GDP doesn't go below 1B
+
+        // Simulate oil depletion (slowly)
+        simState.oilLevel -= Math.random() * 0.3;
+        simState.oilLevel = Math.max(0, simState.oilLevel);
+
+        // Government/Politics Stability Fluctuation
+        simState.stability += (Math.random() * 4 - 2) + (simState.gdpGrowth / 5); // Economy affects stability
+        simState.stability = Math.min(100, Math.max(0, simState.stability));
+
+        // Culture - National Identity Growth
+        simState.nationalIdentity += Math.random() * 0.5 + (simState.stability - 50) / 100;
+        simState.nationalIdentity = Math.min(100, Math.max(0, simState.nationalIdentity));
+
+
+        // --- Trigger Events & Changes Based on Year ---
+        handleHistoricalEvents();
+
+        // --- Update Display ---
+        updateDisplay();
+    }
+
+    function handleHistoricalEvents() {
+        const year = simState.year;
+        let eventHappened = false;
+
+        // Specific Year Events
+        if (year === 1992) {
+            addEvent(year, "Kazakhstan joins the United Nations. 🇺🇳"); eventHappened = true;
+            simState.stability += 2;
+        } else if (year === 1993) {
+            addEvent(year, "National currency, the Tenge (KZT), is introduced. 💰"); eventHappened = true;
+            simState.policyFocus = "Economic Reforms";
+            simState.stability -= 3; // Currency changes can cause temporary instability
+        } else if (year === 1994) {
+            addEvent(year, "Kazakhstan signs nuclear disarmament agreements (Lisbon Protocol). Removes strategic nuclear weapons. ⚛️➡️🕊️"); eventHappened = true;
+            simState.stability += 5;
+        } else if (year === 1997) {
+            addEvent(year, "Capital city moved from Almaty to Akmola (later renamed Astana, then Nur-Sultan, then Astana again). 🏛️➡️ Astana"); eventHappened = true;
+            simState.capital = "Astana";
+            simState.policyFocus = "National Development Projects";
+            simState.stability -= 2; // Moving capital is disruptive
+            simState.urbanization += 1; // Boost urbanization slightly
+        } else if (year === 2000) {
+            addEvent(year, "Significant foreign investment in oil and gas begins. ⛽️💲"); eventHappened = true;
+            simState.economicFocus = "Resource Extraction";
+            simState.gdpGrowth += 2; // Boost economy
+            simState.oilLevel -= 1; // Increase exploitation rate
+        } else if (year === 2006) {
+             addEvent(year, "Nazarbayev re-elected with large majority. Political landscape solidifies."); eventHappened = true;
+             simState.stability += 3;
+        } else if (year === 2010) {
+             addEvent(year, "Kazakhstan chairs the OSCE (Organization for Security and Co-operation in Europe). 🌍🤝"); eventHappened = true;
+             simState.stability += 2;
+             simState.nationalIdentity += 1;
+             simState.policyFocus = "International Standing";
+        } else if (year === 2011) {
+             addEvent(year, "Zhanaozen strikes and unrest occur. 😟"); eventHappened = true;
+             simState.stability -= 10;
+        } else if (year === 2015) {
+             addEvent(year, "Kazakhstan joins the Eurasian Economic Union (EAEU). 🇷🇺🇧🇾🇦🇲🇰🇬"); eventHappened = true;
+             simState.economicFocus = "Regional Integration";
+        } else if (year === 2019) {
+             addEvent(year, "Nursultan Nazarbayev resigns as President. Kassym-Jomart Tokayev becomes President. Capital renamed Nur-Sultan."); eventHappened = true;
+             simState.stability -= 5; // Leadership change uncertainty
+             simState.capital = "Nur-Sultan";
+             simState.policyFocus = "Political Transition";
+        } else if (year === 2022) {
+             addEvent(year, "January Unrest ('Bloody January') occurs across the country. 💥 Capital renamed back to Astana."); eventHappened = true;
+             simState.stability -= 15;
+             simState.capital = "Astana";
+             simState.policyFocus = "Constitutional Reforms";
+             simState.govType = "Presidential Republic (Reforms Underway)";
+        }
+
+
+        // Generic Random Events (only if specific year event didn't happen)
+        if (!eventHappened && Math.random() < 0.15) { // 15% chance of a random event per year
+            const randomEventType = Math.random();
+            if (randomEventType < 0.2) {
+                addEvent(year, "Drought impacts agriculture in the steppe region. ☀️🌾");
+                simState.climateCondition = "Drought";
+                simState.gdpGrowth -= 0.5;
+                simState.stability -= 1;
+            } else if (randomEventType < 0.4) {
+                addEvent(year, "Successful discovery of new mineral deposits. 💎");
+                simState.gdpGrowth += 0.3;
+                // Could add specific resource tracking here later
+            } else if (randomEventType < 0.6) {
+                addEvent(year, "Cultural festival celebrates nomadic heritage. 🐎🛖");
+                simState.nationalIdentity += 0.5;
+            } else if (randomEventType < 0.7) {
+                addEvent(year, "Fluctuations in global oil prices impact economy. 📉📈");
+                let oilPriceImpact = (Math.random() - 0.5) * 4; // +/- 2% GDP growth impact
+                simState.gdpGrowth += oilPriceImpact;
+                if(oilPriceImpact < 0) simState.stability -=1; else simState.stability += 0.5;
+            } else if (randomEventType < 0.8 && simState.year > 1995) {
+                addEvent(year, "Government announces new infrastructure project (e.g., road, rail). 🏗️");
+                simState.policyFocus = "Infrastructure Development";
+                simState.stability += 1;
+                simState.gdpGrowth += 0.2; // Delayed effect usually, simplified here
+            } else if (randomEventType < 0.9 && simState.year > 2005) {
+                 addEvent(year, "Debate arises over language policy (Kazakh vs Russian). 🗣️");
+                 simState.languageFocus = Math.random() < 0.5 ? "Kazakh Focus Debated" : "Bilingualism Stressed";
+                 simState.stability -= 0.5;
+            } else {
+                addEvent(year, "Period of relative calm and steady progress observed. 👍");
+                simState.stability += 0.5;
+                simState.climateCondition = "Normal"; // Reset climate condition after a while
+            }
+        } else if (!eventHappened) {
+             simState.climateCondition = "Normal"; // Reset if no other event
+        }
+
+        // Update Era based on year milestones
+        if (year >= 2020) simState.era = "Modern Reforms & Challenges";
+        else if (year >= 2005) simState.era = "Economic Growth & Consolidation";
+        else if (year >= 1991) simState.era = "Post-Soviet Independence";
+
+    }
+
+
+    // --- Control Functions ---
+
+    function startSimulation() {
+        if (!simState.isRunning) {
+            simState.isRunning = true;
+            simState.intervalId = setInterval(advanceYear, 1000); // Advance 1 year every 1 second
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            advanceButton.disabled = true;
+            resetButton.disabled = true;
+            statusDisplay.textContent = 'Running';
+        }
+    }
+
+    function stopSimulation() {
+        if (simState.isRunning) {
+            clearInterval(simState.intervalId);
+            simState.isRunning = false;
+            simState.intervalId = null;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            advanceButton.disabled = false;
+            resetButton.disabled = false;
+            statusDisplay.textContent = 'Paused';
+        }
+    }
+
+    function resetSimulation() {
+        stopSimulation(); // Ensure it's stopped
+
+        // Reset state to initial values
+        simState = {
+            year: 1991,
+            isRunning: false,
+            intervalId: null,
+            climateCondition: "Normal",
+            population: 16500000,
+            growthRate: 1.0,
+            urbanization: 55,
+            ethnicKazakh: 40,
+            ethnicRussian: 38,
+            gdp: 25,
+            gdpGrowth: 0.0,
+            oilLevel: 100,
+            economicFocus: "Transitioning",
+            govType: "Presidential Republic",
+            capital: "Almaty (Moving Soon)",
+            stability: 70,
+            policyFocus: "Establishing Sovereignty",
+            languageFocus: "Bilingual",
+            nationalIdentity: 60,
+            era: "Post-Soviet Independence",
+            events: ["1991: Kazakhstan declares independence from the Soviet Union. Nursultan Nazarbayev becomes President."]
+        };
+
+        // Clear event log display and add initial event
+        eventLog.innerHTML = '';
+        addEvent(simState.year, simState.events[0].substring(6)); // Add the initial event back
+
+        updateDisplay(); // Update display with reset values
+        console.log("Simulation Reset");
+    }
+
+    function advanceOneYear() {
+        if (!simState.isRunning) {
+            advanceYear();
+        }
+    }
+
+    // --- Event Listeners ---
+    startButton.addEventListener('click', startSimulation);
+    stopButton.addEventListener('click', stopSimulation);
+    resetButton.addEventListener('click', resetSimulation);
+    advanceButton.addEventListener('click', advanceOneYear);
+
+    // --- Initial Setup ---
+    updateDisplay(); // Initialize display on page load
+    stopButton.disabled = true; // Stop button initially disabled
+
+</script>
+
+</body>
+</html>

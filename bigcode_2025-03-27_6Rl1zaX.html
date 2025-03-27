@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Plants vs Zombies (Simplified)</title>
+<style>
+body { font-family: monospace; background-color: #d2b48c; margin: 0; overflow: hidden; }
+#game-container { display: flex; flex-direction: column; align-items: center; width: 100vw; height: 100vh; }
+#level-display { margin-top: 10px; font-size: 20px; }
+#lawn { display: grid; grid-template-columns: repeat(9, 50px); grid-template-rows: repeat(5, 50px); border: 2px solid black; background-color: #a0d6b4; }
+.cell { width: 50px; height: 50px; border: 1px dashed #c0c0c0; box-sizing: border-box; position: relative; }
+.plant-area { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; font-size: 30px; }
+.zombie-area { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; font-size: 30px; }
+.plant {  }
+.zombie {  }
+#sun-display { background-color: #ffdd88; padding: 10px; margin-top: 10px; border: 1px solid black; }
+#plant-selection { display: flex; margin-top: 10px; }
+.plant-option { width: 50px; height: 50px; border: 1px solid black; margin: 5px; display: flex; justify-content: center; align-items: center; font-size: 30px; cursor: pointer; background-color: #eee; }
+.sun-icon { font-size: 20px; vertical-align: middle; }
+#conveyor-belt { display: flex; overflow-x: auto; margin-top: 10px; border: 1px solid black; background-color: #eee; padding: 5px; }
+.conveyor-item { width: 50px; height: 50px; margin: 5px; border: 1px solid black; display: flex; justify-content: center; align-items: center; font-size: 30px; cursor: pointer; background-color: #fff; }
+
+.tutorial-text { position: absolute; top: 20px; left: 20px; background-color: rgba(255, 255, 255, 0.8); padding: 10px; border: 1px solid black; }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <div id="level-display">Level <span id="level-number">1-1</span></div>
+  <div id="sun-display">Sun: <span id="sun-count">50</span> <span class="sun-icon">🔆</span></div>
+  <div id="lawn"></div>
+  <div id="plant-selection"></div>
+  <div id="conveyor-belt" style="display:none;"></div>
+</div>
+
+<script>
+  const lawn = document.getElementById('lawn');
+  const sunCountDisplay = document.getElementById('sun-count');
+  const plantSelection = document.getElementById('plant-selection');
+  const levelNumberDisplay = document.getElementById('level-number');
+  const conveyorBelt = document.getElementById('conveyor-belt');
+
+  let sun = 50;
+  let selectedPlantType = null;
+  let gameGrid = [];
+  let zombies = [];
+  let plants = [];
+  let level = 1;
+  let levelData = {};
+  let zombieSpawnInterval;
+  let sunGenerationInterval;
+  let conveyorBeltInterval;
+  let availablePlants = [];
+
+  const plantTypes = {
+    peashooter: { emoji: '🟢', cost: 10, damage: 1, type: 'peashooter' },
+    sunflower: { emoji: '🟡', cost: 25, sunProduction: 25, type: 'sunflower' },
+    cherrybomb: { emoji: '🔴', cost: 150, damage: 10, type: 'cherrybomb', area: true },
+    wallnut: { emoji: '🟫', cost: 50, health: 5, type: 'wallnut' },
+    potatomine: { emoji: '🥔', cost: 25, damage: 5, type: 'potatomine', armingTime: 3000, armed: false },
+    snowpea: { emoji: '🥶', cost: 175, damage: 1, slow: true, type: 'snowpea' },
+    chomper: { emoji: '👄', cost: 150, damage: 3, type: 'chomper', eating: false, eatTimer: 0 },
+    repeater: { emoji: '〰️🟢', cost: 200, damage: 2, type: 'repeater' },
+    puffshroom: { emoji: '🍄', cost: 0, damage: 0.5, type: 'puffshroom', range: 3 }
+  };
+
+  const zombieTypes = {
+    regular: { emoji: '🧟', health: 3, speed: 1, type: 'regular' },
+    flag: { emoji: '🚩🧟', health: 3, speed: 1, type: 'flag' },
+    conehead: { emoji: '🪖🧟', health: 6, speed: 1, type: 'conehead' },
+    buckethead: { emoji: '🪣🧟', health: 9, speed: 1, type: 'buckethead' },
+    polevaulting: { emoji: '🤸🧟', health: 3, speed: 2, type: 'polevaulting', vaulting: false }
+  };
+
+  function updateSunDisplay() {
+    sunCountDisplay.textContent = sun;
+  }
+
+  function createPlantSelection(plantsToSelect) {
+    plantSelection.innerHTML = '';
+    plantsToSelect.forEach(plantName => {
+      const plantOption = document.createElement('div');
+      plantOption.classList.add('plant-option');
+      plantOption.textContent = plantTypes[plantName].emoji;
+      plantOption.addEventListener('click', () => {
+        selectedPlantType = plantName;
+        plantSelection.querySelectorAll('.plant-option').forEach(opt => opt.style.backgroundColor = '#eee');
+        plantOption.style.backgroundColor = 'lightblue';
+      });
+      plantSelection.appendChild(plantOption);
+    });
+  }
+
+  function createConveyorBelt(items) {
+    conveyorBelt.innerHTML = '';
+    conveyorBelt.style.display = 'flex';
+    items.forEach(itemName => {
+      const item = document.createElement('div');
+      item.classList.add('conveyor-item');
+      item.textContent = plantTypes[itemName].emoji;
+      item.dataset.plant = itemName;
+      conveyorBelt.appendChild(item);
+    });
+    conveyorBeltInterval = setInterval(() => {
+        const firstItem = conveyorBelt.firstChild;
+        if (firstItem) {
+            conveyorBelt.removeChild(firstItem);
+            conveyorBelt.appendChild(firstItem);
+        }
+    }, 3000);
+  }
+
+
+  function setupLevel(levelNumber) {
+    level = levelNumber;
+    levelNumberDisplay.textContent = `1-${level}`;
+    gameGrid = Array.from({ length: 5 }, () => Array(9).fill(null));
+    lawn.innerHTML = '';
+    zombies = [];
+    plants = [];
+    selectedPlantType = null;
+    clearInterval(zombieSpawnInterval);
+    clearInterval(sunGenerationInterval);
+    clearInterval(conveyorBeltInterval);
+    conveyorBelt.style.display = 'none';
+    plantSelection.style.display = 'flex';
+
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 9; col++) {
+        const cell = document.createElement('div');
+        cell.classList.add('cell');
+        cell.dataset.row = row;
+        cell.dataset.col = col;
+
+        const plantArea = document.createElement('div');
+        plantArea.classList.add('plant-area');
+        cell.appendChild(plantArea);
+
+        const zombieArea = document.createElement('div');
+        zombieArea.classList.add('zombie-area');
+        cell.appendChild(zombieArea);
+
+
+        cell.addEventListener('click', () => {
+          if (selectedPlantType) {
+            if (sun >= plantTypes[selectedPlantType].cost && !gameGrid[row][col]) {
+              if (selectedPlantType === 'sunflower') {
+                createPlant(selectedPlantType, row, col);
+                sun -= plantTypes[selectedPlantType].cost;
+                updateSunDisplay();
+              } else if (selectedPlantType === 'wallnut' || selectedPlantType === 'peashooter' || selectedPlantType === 'potatomine' || selectedPlantType === 'snowpea' || selectedPlantType === 'chomper' || selectedPlantType === 'repeater' || selectedPlantType === 'puffshroom') {
+                createPlant(selectedPlantType, row, col);
+                sun -= plantTypes[selectedPlantType].cost;
+                updateSunDisplay();
+              }
+              selectedPlantType = null;
+              plantSelection.querySelectorAll('.plant-option').forEach(opt => opt.style.backgroundColor = '#eee');
+            } else if (gameGrid[row][col]) {
+              if (selectedPlantType === 'shovel') {
+                  removePlant(row, col);
+                  selectedPlantType = null;
+                  plantSelection.querySelectorAll('.plant-option').forEach(opt => opt.style.backgroundColor = '#eee');
+              }
+            }
+          } else if (selectedPlantType === 'cherrybomb') {
+              if (sun >= plantTypes['cherrybomb'].cost) {
+                  cherryBombAction(row, col);
+                  sun -= plantTypes['cherrybomb'].cost;
+                  updateSunDisplay();
+                  selectedPlantType = null;
+                  plantSelection.querySelectorAll('.plant-option').forEach(opt => opt.style.backgroundColor = '#eee');
+              }
+          }
+        });
+        lawn.appendChild(cell);
+      }
+    }
+
+    levelData = getLevelData(levelNumber);
+    availablePlants = levelData.availablePlants;
+    createPlantSelection(availablePlants);
+
+    if (levelData.conveyorBelt) {
+      plantSelection.style.display = 'none';
+      createConveyorBelt(levelData.conveyorBeltPlants);
+      conveyorBelt.addEventListener('click', function(event) {
+        if (event.target.classList.contains('conveyor-item')) {
+          selectedPlantType = event.target.dataset.plant;
+          conveyorBelt.querySelectorAll('.conveyor-item').forEach(item => item.style.backgroundColor = '#fff');
+          event.target.style.backgroundColor = 'lightblue';
+        }
+      });
+    }
+
+    startLevel(levelData);
+  }
+
+    function removePlant(row, col) {
+        const plantToRemoveIndex = plants.findIndex(plant => plant.row === row && plant.col === col);
+        if (plantToRemoveIndex > -1) {
+            plants.splice(plantToRemoveIndex, 1);
+            gameGrid[row][col] = null;
+            updateCellDisplay(row, col);
+        }
+    }
+
+    function updateCellDisplay(row, col) {
+        const cell = lawn.children[row * 9 + col];
+        const plantArea = cell.querySelector('.plant-area');
+        const zombieArea = cell.querySelector('.zombie-area');
+
+        plantArea.textContent = gameGrid[row][col]?.emoji || '';
+        let zombieEmoji = '';
+        zombies.filter(zombie => zombie.row === row && zombie.col === col).forEach(zombie => {
+            zombieEmoji += zombie.emoji;
+        });
+        zombieArea.textContent = zombieEmoji;
+    }
+
+
+  function startLevel(levelDetails) {
+    sun = levelDetails.startingSun;
+    updateSunDisplay();
+
+    sunGenerationInterval = setInterval(() => {
+      sun += 25;
+      updateSunDisplay();
+    }, 7000);
+
+    let zombieWaveIndex = 0;
+    zombieSpawnInterval = setInterval(() => {
+      if (zombieWaveIndex < levelDetails.waves.length) {
+        const wave = levelDetails.waves[zombieWaveIndex];
+        for (let i = 0; i < wave.count; i++) {
+          setTimeout(() => {
+            spawnZombie(wave.type, wave.row);
+          }, i * 500);
+        }
+        zombieWaveIndex++;
+      } else if (zombies.length === 0) {
+        clearInterval(zombieSpawnInterval);
+        clearInterval(sunGenerationInterval);
+        clearInterval(conveyorBeltInterval);
+        level++;
+        if (level <= 10) {
+            setupLevel(level);
+        } else {
+            alert("You win the demo!");
+        }
+      }
+    }, levelDetails.waveInterval);
+
+    gameLoop();
+  }
+
+  function getLevelData(levelNumber) {
+    switch (levelNumber) {
+      case 1: return {
+        level: '1-1', startingSun: 50, availablePlants: ['peashooter', 'sunflower'], waves: [{ type: 'regular', count: 5, row: 2 }], waveInterval: 15000, tutorial: true
+      };
+      case 2: return {
+        level: '1-2', startingSun: 100, availablePlants: ['peashooter', 'sunflower', 'cherrybomb'], waves: [{ type: 'flag', count: 1, row: 2 }, { type: 'regular', count: 3, row: 2 }], waveInterval: 15000
+      };
+      case 3: return {
+        level: '1-3', startingSun: 100, availablePlants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut'], waves: [{ type: 'flag', count: 1, row: 2 }, { type: 'conehead', count: 4, row: [1,3] }], waveInterval: 15000
+      };
+      case 4: return {
+        level: '1-4', startingSun: 150, availablePlants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'shovel'], waves: [{ type: 'flag', count: 1, row: [0,4] }, { type: 'regular', count: 5, row: [1,2,3] }], waveInterval: 15000
+      };
+      case 5: return {
+        level: '1-5', startingSun: 0, conveyorBelt: true, conveyorBeltPlants: ['wallnut', 'wallnut', 'wallnut', 'peashooter', 'peashooter', 'cherrybomb'], availablePlants: ['shovel'], waves: [{ type: 'flag', count: 1, row: 2 }, { type: 'regular', count: 4, row: 2 }], waveInterval: 15000
+      };
+      case 6: return {
+        level: '1-6', startingSun: 150, availablePlants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'shovel', 'potatomine'], waves: [{ type: 'flag', count: 1, row: [1,3] }, { type: 'polevaulting', count: 3, row: [0,2,4] }], waveInterval: 15000
+      };
+      case 7: return {
+        level: '1-7', startingSun: 200, availablePlants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'shovel', 'potatomine', 'snowpea'], waves: [{ type: 'flag', count: 2, row: [0,4] }, { type: 'regular', count: 5, row: [1,2,3] }], waveInterval: 15000
+      };
+      case 8: return {
+        level: '1-8', startingSun: 200, availablePlants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'shovel', 'potatomine', 'snowpea', 'chomper'], waves: [{ type: 'flag', count: 1, row: [2] }, { type: 'buckethead', count: 3, row: [1,3] }], waveInterval: 15000
+      };
+      case 9: return {
+        level: '1-9', startingSun: 250, availablePlants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'shovel', 'potatomine', 'snowpea', 'chomper', 'repeater'], waves: [{ type: 'flag', count: 2, row: [0,4] }, { type: 'buckethead', count: 2, row: [1,3] }, { type: 'polevaulting', count: 2, row: [2] }], waveInterval: 15000
+      };
+      case 10: return {
+        level: '1-10', startingSun: 0, conveyorBelt: true, conveyorBeltPlants: ['peashooter', 'peashooter', 'wallnut', 'wallnut', 'sunflower', 'sunflower', 'cherrybomb', 'snowpea', 'repeater', 'chomper', 'potatomine', 'buckethead', 'conehead', 'flag', 'regular'], availablePlants: ['shovel'], waves: [{ type: 'flag', count: 2, row: [1,3] }, { type: 'conehead', count: 3, row: [0,2,4]}, { type: 'buckethead', count: 2, row: [1,3]}, { type: 'polevaulting', count: 2, row: [2]}, { type: 'regular', count: 5, row: [0,1,2,3,4] }], waveInterval: 10000
+      };
+      default: return {
+        level: '1-?', startingSun: 100, availablePlants: ['peashooter', 'sunflower'], waves: [{ type: 'regular', count: 3, row: 2 }], waveInterval: 15000
+      };
+    }
+  }
+
+
+    function cherryBombAction(row, col) {
+        const affectedZombies = zombies.filter(zombie =>
+            Math.abs(zombie.row - row) <= 1 && Math.abs(zombie.col - col) <= 1
+        );
+
+        affectedZombies.forEach(zombie => {
+            zombie.health -= plantTypes.cherrybomb.damage;
+        });
+        plants.push({ type: 'cherrybomb', row: row, col: col, timer: 1500 });
+        gameGrid[row][col] = plantTypes.cherrybomb;
+        updateCellDisplay(row, col);
+    }
+
+
+  function createPlant(plantType, row, col) {
+    if (plantTypes[plantType]) {
+      plants.push({ ...plantTypes[plantType], row: row, col: col, health: plantTypes[plantType].health || 1 });
+      gameGrid[row][col] = plantTypes[plantType];
+      updateCellDisplay(row, col);
+      if (plantType === 'potatomine') {
+        plants[plants.length - 1].armingTimer = setTimeout(() => {
+          plants[plants.length - 1].armed = true;
+            plants[plants.length - 1].emoji = '💣';
+            updateCellDisplay(row, col);
+        }, plantTypes.potatomine.armingTime);
+      }
+    }
+  }
+
+  function spawnZombie(zombieType, targetRow) {
+    let row = typeof targetRow === 'number' ? targetRow : targetRow[Math.floor(Math.random() * targetRow.length)];
+    let col = 8;
+    zombies.push({ ...zombieTypes[zombieType], row: row, col: col, health: zombieTypes[zombieType].health, speed: zombieTypes[zombieType].speed });
+    updateCellDisplay(row, col);
+  }
+
+
+  function gameLoop() {
+    plants.forEach(plant => {
+        if (plant.type === 'sunflower') {
+            plant.sunTimer = plant.sunTimer || 0;
+            plant.sunTimer += 16;
+            if (plant.sunTimer >= 7000) {
+                sun += plantTypes.sunflower.sunProduction;
+                updateSunDisplay();
+                plant.sunTimer = 0;
+            }
+        }
+        if (plant.type === 'peashooter' || plant.type === 'repeater' || plant.type === 'snowpea' || plant.type === 'puffshroom') {
+            let attackCol = plant.col + 1;
+            if (plant.type === 'puffshroom') attackCol = plant.col + 1;
+
+            let targetZombies = zombies.filter(zombie => zombie.row === plant.row && zombie.col >= plant.col && (plant.type === 'puffshroom' ? zombie.col <= plant.col + plantTypes.puffshroom.range : true) );
+            if (targetZombies.length > 0) {
+                const closestZombie = targetZombies.sort((a, b) => a.col - b.col)[0];
+
+                plant.attackTimer = plant.attackTimer || 0;
+                plant.attackTimer += 16;
+                let attackInterval = 1500;
+                if (plant.type === 'repeater') attackInterval = 750;
+                if (plant.type === 'puffshroom') attackInterval = 2500;
+
+
+                if (plant.attackTimer >= attackInterval) {
+                    closestZombie.health -= plant.damage;
+                    if (plant.type === 'snowpea' && closestZombie.speed > 0.5) {
+                        closestZombie.speed = 0.5;
+                        closestZombie.emoji = '🥶' + zombieTypes[closestZombie.type].emoji.substring(1);
+                    }
+
+                    if (closestZombie.health <= 0) {
+                        zombies = zombies.filter(z => z !== closestZombie);
+                    }
+                    updateCellDisplay(closestZombie.row, closestZombie.col);
+                    plant.attackTimer = 0;
+                }
+            }
+        }
+        if (plant.type === 'cherrybomb') {
+            if (plant.timer > 0) {
+                plant.timer -= 16;
+            } else {
+                gameGrid[plant.row][plant.col] = null;
+                plants = plants.filter(p => p !== plant);
+                updateCellDisplay(plant.row, plant.col);
+            }
+        }
+        if (plant.type === 'potatomine') {
+            if (plant.armed) {
+                let targetZombies = zombies.filter(zombie => zombie.row === plant.row && zombie.col === plant.col);
+                if (targetZombies.length > 0) {
+                    targetZombies.forEach(zombie => zombie.health -= plant.damage);
+                    zombies = zombies.filter(zombie => zombie.health > 0);
+                    gameGrid[plant.row][plant.col] = null;
+                    plants = plants.filter(p => p !== plant);
+                    updateCellDisplay(plant.row, plant.col);
+                }
+            }
+        }
+        if (plant.type === 'chomper') {
+            if (!plant.eating) {
+                let targetZombie = zombies.find(zombie => zombie.row === plant.row && zombie.col === plant.col + 1);
+                if (targetZombie) {
+                    plant.eating = true;
+                    plant.eatenZombie = targetZombie;
+                    plant.emoji = '😋';
+                    updateCellDisplay(plant.row, plant.col);
+                }
+            } else {
+                plant.eatTimer += 16;
+                if (plant.eatTimer >= 5000) {
+                    plant.eating = false;
+                    plant.eatTimer = 0;
+                    plant.emoji = '👄';
+                    zombies = zombies.filter(z => z !== plant.eatenZombie);
+                    updateCellDisplay(plant.row, plant.col);
+                }
+            }
+        }
+    });
+
+
+    zombies.forEach(zombie => {
+        if (!zombie.reachedEnd) {
+            let targetCellPlant = gameGrid[zombie.row][zombie.col];
+
+            if (targetCellPlant && targetCellPlant.type === 'wallnut') {
+                zombie.attackTimer = zombie.attackTimer || 0;
+                zombie.attackTimer += 16;
+                if (zombie.attackTimer >= 1000) {
+                    plants.find(plant => plant.row === zombie.row && plant.col === zombie.col).health -= 1;
+                    if (plants.find(plant => plant.row === zombie.row && plant.col === zombie.col).health <= 0) {
+                        gameGrid[zombie.row][zombie.col] = null;
+                        plants = plants.filter(plant => !(plant.row === zombie.row && plant.col === zombie.col));
+                        updateCellDisplay(zombie.row, zombie.col);
+                    }
+                    zombie.attackTimer = 0;
+                }
+            } else if (targetCellPlant && targetCellPlant.type === 'potatomine' && plants.find(p => p.row === zombie.row && p.col === zombie.col).armed) {
+                //Potato mine already handled in plant logic
+            }
+            else if (targetCellPlant && targetCellPlant.type === 'chomper' && plants.find(p => p.row === zombie.row && p.col === zombie.col).eating) {
+                //Chomper eating, zombie waits
+            }
+
+            else {
+                zombie.moveTimer = zombie.moveTimer || 0;
+                zombie.moveTimer += 16;
+                let moveInterval = 2500 / zombie.speed;
+                if (zombie.type === 'polevaulting' && !zombie.vaulting) moveInterval = 500;
+
+                if (zombie.moveTimer >= moveInterval) {
+
+                    if (zombie.type === 'polevaulting' && !zombie.vaulting) {
+                        let vaultTarget = gameGrid[zombie.row][zombie.col -1];
+                        if (vaultTarget && vaultTarget.type === 'wallnut') {
+                            zombie.vaulting = true;
+                            zombie.emoji = '🦘🧟';
+                            updateCellDisplay(zombie.row, zombie.col);
+                            setTimeout(() => {
+                                zombie.col -= 2;
+                                zombie.vaulting = false;
+                                zombie.emoji = '🤸🧟';
+                                updateCellDisplay(zombie.row, zombie.col + 2);
+                                updateCellDisplay(zombie.row, zombie.col);
+                            }, 1000);
+
+                        } else {
+                            zombie.col -= 1;
+                        }
+
+
+                    } else {
+                        zombie.col -= 1;
+                    }
+
+
+                    if (zombie.col < 0) {
+                        zombie.reachedEnd = true;
+                        alert("Zombies ate your brains! Game Over!");
+                        clearInterval(zombieSpawnInterval);
+                        clearInterval(sunGenerationInterval);
+                        clearInterval(conveyorBeltInterval);
+                    }
+                    updateCellDisplay(zombie.row, zombie.col + 1);
+                    updateCellDisplay(zombie.row, zombie.col);
+                    zombie.moveTimer = 0;
+                }
+            }
+        }
+    });
+
+    requestAnimationFrame(gameLoop);
+  }
+
+
+  setupLevel(level);
+</script>
+
+</body>
+</html>

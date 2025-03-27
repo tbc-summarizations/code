@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HENRY X PILLOW: The Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #game-container {
+            background-color: #fff;
+            border: 2px solid #ccc;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            width: 90%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #game-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #game-screen {
+            background-color: #e0e0e0;
+            border: 1px solid #bbb;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            min-height: 150px;
+            text-align: center;
+            overflow-y: auto;
+        }
+        #actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #health-container {
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        #infinite-health-btn {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #eee;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        #infinite-health-btn.active {
+            background-color: #cce;
+        }
+        #assets-container {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .asset {
+            width: 50px;
+            height: 50px;
+            border: 1px solid black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .square {
+            background-color: blue;
+        }
+        .triangle {
+            width: 0;
+            height: 0;
+            border-left: 25px solid transparent;
+            border-right: 25px solid transparent;
+            border-bottom: 50px solid red;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1 id="game-title">HENRY X PILLOW: The Game</h1>
+        <div id="health-container">
+            Health: <span id="health">100</span> <button id="infinite-health-btn">Infinite Health: OFF</button>
+        </div>
+        <div id="assets-container">
+            <div class="asset square">🟦</div>
+            <div class="asset triangle"></div>
+            <div><span style="font-size: 50px;">🛏️</span></div>
+        </div>
+        <div id="game-screen">
+            <p id="game-text">Game starts...</p>
+        </div>
+        <div id="actions">
+            <button id="action1" onclick="gameAction('action1')">Action 1</button>
+            <button id="action2" onclick="gameAction('action2')">Action 2</button>
+            <button id="action3" onclick="gameAction('action3')">Action 3</button>
+        </div>
+    </div>
+
+    <script>
+        let gameTextElement = document.getElementById('game-text');
+        let healthElement = document.getElementById('health');
+        let action1Button = document.getElementById('action1');
+        let action2Button = document.getElementById('action2');
+        let action3Button = document.getElementById('action3');
+        let infiniteHealthButton = document.getElementById('infinite-health-btn');
+
+        let currentStage = 0;
+        let health = 100;
+        let infiniteHealth = false;
+
+        const gameStages = [
+            {
+                text: "Henry tells Clyde: 'I want to cuddle pillow'",
+                actions: [
+                    { text: "Do Nothing", outcome: "Clyde is confused." },
+                    { text: "Insist on Pillow", outcome: "Clyde tries to stop you!" },
+                    { text: "Run Away", outcome: "Game Over - Coward." }
+                ],
+                onEnter: function() {
+                    updateActions(this.actions);
+                }
+            },
+            {
+                text: "Tutorial Boss: Clyde appears!",
+                boss: "Clyde",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Clyde is defeated!", nextStage: 2 },
+                    { text: "Pillow Talk", outcome: "Clyde is unmoved, and attacks!" },
+                    { text: "Run", outcome: "Can't run from destiny." }
+                ],
+                onEnter: function() {
+                    updateActions(this.actions);
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        setTimeout(() => nextStage(), 1500);
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        takeDamage(20);
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Clyde parts roam around...",
+                enemies: "Clyde Enemy",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Clyde Enemy down!", nextStage: 3 },
+                    { text: "Ignore", outcome: "Clyde Enemy attacks!" },
+                    { text: "Pillow Shield", outcome: "Ineffective." }
+                ],
+                onEnter: function() {
+                    updateActions(this.actions);
+                },
+                 onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        setTimeout(() => nextStage(), 1500);
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        takeDamage(10);
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Walking... Walking... Prepare for Boss Fight!",
+                actions: [
+                    { text: "Continue", outcome: "...", nextStage: 4 },
+                    { text: "Wait", outcome: "Nothing happens." },
+                    { text: "Check Inventory", outcome: "Benchod Gun (equipped)" }
+                ],
+                onEnter: function() {
+                    updateActions(this.actions);
+                },
+                 onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        setTimeout(() => nextStage(), 1500);
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "First Boss: Meeththexep (The Best Friend) approaches!",
+                boss: "Meeththexep",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Meeththexep is confused but hurt!", bossHealthEffect: -30 },
+                    { text: "Talk", outcome: "Meeththexep: 'Why pillow?'" },
+                    { text: "Run", outcome: "Meeththexep blocks your path!" }
+                ],
+                bossHealth: 100,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 100;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Meeththexep is defeated!";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+             {
+                text: "Continue on the normal path... more Clydes!",
+                enemies: "Clyde Enemy",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Another Clyde Enemy down!", nextStage: 6 },
+                    { text: "Ignore", outcome: "Clyde Enemy attacks!" },
+                    { text: "Pillow Shield", outcome: "Still ineffective." }
+                ],
+                onEnter: function() {
+                    updateActions(this.actions);
+                },
+                 onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        setTimeout(() => nextStage(), 1500);
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        takeDamage(10);
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Second Boss: SC0J (The Unknown BFCS Member) appears!",
+                boss: "SC0J",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! SC0J stumbles back...", bossHealthEffect: -20 },
+                    { text: "Talk", outcome: "SC0J: 'Pillow... maybe not so bad?'" },
+                    { text: "Insist on Pillow", outcome: "SC0J sighs, 'Fine, do what you want.'" }
+                ],
+                bossHealth: 80,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 80;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " SC0J defeated... easily?";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Small idea why pillow isn't bad... Clyde's resistance +1!",
+                actions: [
+                    { text: "Continue", outcome: "...", nextStage: 8 },
+                    { text: "Reflect", outcome: "Hmm... pillow..." },
+                    { text: "Check Benchod Gun", outcome: "Slightly less effective now." }
+                ],
+                onEnter: function() {
+                    updateActions(this.actions);
+                },
+                 onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        setTimeout(() => nextStage(), 1500);
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Third Boss: Frank (???) approaches!",
+                boss: "Frank",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Frank is startled!", bossHealthEffect: -25 },
+                    { text: "Talk", outcome: "Frank: 'Pillows? Whatever floats your boat.'" },
+                    { text: "Pillow Fight!", outcome: "Frank laughs and throws a pillow back!" }
+                ],
+                bossHealth: 90,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 90;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Frank shrugs and walks away.";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+             {
+                text: "Fourth Boss: Admiral (The Football Fan) appears!",
+                boss: "Admiral",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Admiral is slightly annoyed!", bossHealthEffect: -15 },
+                    { text: "Talk Football", outcome: "Admiral: 'Football is life! Pillows... are soft?'" },
+                    { text: "Kick a Football", outcome: "Admiral is impressed! But still fights." }
+                ],
+                bossHealth: 120,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 120;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Admiral concedes, 'Fine, pillows are okay, I guess.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Football Cannons are laid out! Time your moves!",
+                actions: [
+                    { text: "Wait for opening", outcome: "You carefully pass the cannons.", nextStage: 11 },
+                    { text: "Rush through!", outcome: "OUCH! Cannon fire hits you!" },
+                    { text: "Disable Cannons (Not possible)", outcome: "You can't disable them!" }
+                ],
+                onEnter: function() {
+                    updateActions(this.actions);
+                },
+                 onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        setTimeout(() => nextStage(), 1500);
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        takeDamage(30);
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Fifth Boss: BDYT (The Siren Enthusiast.) appears!",
+                boss: "BDYT",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! BDYT seems unaffected!", bossHealthEffect: -5 },
+                    { text: "Play Siren Sounds", outcome: "BDYT is distracted! But still fights." },
+                    { text: "Talk about Sirens", outcome: "BDYT: 'Sirens are mesmerizing! Pillows... are comfy?'" }
+                ],
+                bossHealth: 150,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 150;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " BDYT sighs, 'Okay, pillows are... acceptable.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+             {
+                text: "Sixth Boss: Memo (???) appears!",
+                boss: "Memo",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Memo barely reacts.", bossHealthEffect: -2 },
+                    { text: "Offer a Snack", outcome: "Memo pauses... 'Snacks are good. Pillows... are okay too?'" },
+                    { text: "Talk about Food", outcome: "Memo: 'Food is essential! Pillows... are optional comfort?'" }
+                ],
+                bossHealth: 200,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 200;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Memo nods slowly, 'Pillows... I get it now.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Seventh Boss: Adam (The Programmer) approaches!",
+                boss: "Adam",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Adam barely notices.", bossHealthEffect: -1 },
+                    { text: "Show Code", outcome: "Adam examines... 'Code is elegant. Pillows... are ergonomic?'" },
+                    { text: "Talk about Programming", outcome: "Adam: 'Logic is key! Pillows... are efficient comfort?'" }
+                ],
+                bossHealth: 250,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 250;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Adam nods, 'Pillows... logically sound.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Eighth Boss: HappyMan (The Strongest Chicken) appears!",
+                boss: "HappyMan",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! HappyMan clucks angrily!", bossHealthEffect: -10 },
+                    { text: "Offer Seeds", outcome: "HappyMan pecks at seeds... 'Seeds good. Pillows... soft like feathers?'" },
+                    { text: "Talk about Chickens", outcome: "HappyMan: 'Cluck cluck! Pillows... good nest?'" }
+                ],
+                bossHealth: 180,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 180;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " HappyMan nods wisely, 'Cluck... pillows good.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Ninth Boss: Alan (???) approaches!",
+                boss: "Alan",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Alan is unfazed.", bossHealthEffect: -3 },
+                    { text: "Offer a Book", outcome: "Alan glances... 'Books are knowledge. Pillows... are comfort in knowledge?'" },
+                    { text: "Talk about Reading", outcome: "Alan: 'Stories are worlds! Pillows... are soft worlds?'" }
+                ],
+                bossHealth: 220,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 220;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Alan smiles slightly, 'Pillows... a good chapter in life.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Tenth Boss: Dekoder (The Half-Life Enthusiast) appears!",
+                boss: "Dekoder",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Dekoder adjusts his HEV suit.", bossHealthEffect: -8 },
+                    { text: "Talk Half-Life", outcome: "Dekoder: 'Half-Life is perfection! Pillows... are like... comfort stations?'" },
+                    { text: "Crowbar Attack (Ineffective)", outcome: "Dekoder laughs, 'Wrong game!'" }
+                ],
+                bossHealth: 160,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 160;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Dekoder nods, 'Pillows... like medkits for the soul.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Eleventh Boss: Nagg (The Most Annoying BFCS Member) appears!",
+                boss: "Nagg",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Nagg complains, 'Ugh, again?!'", bossHealthEffect: -12 },
+                    { text: "Ignore Nagg", outcome: "Nagg keeps talking... and talking... and talking..." },
+                    { text: "Talk about Annoyance", outcome: "Nagg: 'Annoying? Me? Pillows are annoying too, sometimes! But comfy!'" }
+                ],
+                bossHealth: 140,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 140;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Nagg grumbles, 'Fine, pillows... whatever, just be quiet now.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Twelfth Boss: Uami Bosim (The BFCS Host - Your Own Creation Goes Against You.)",
+                boss: "Uami Bosim",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! Uami Bosim glitches...", bossHealthEffect: -20 },
+                    { text: "Reason with Uami", outcome: "Uami Bosim: 'I was created to host... but pillows... are they part of the hosting?'" },
+                    { text: "Self-Destruct (Not Possible)", outcome: "Uami Bosim: 'Nice try, but I control the system now!'" }
+                ],
+                bossHealth: 100,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 100;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " Uami Bosim shuts down... 'Pillows... hosted successfully.'";
+                            setTimeout(() => nextStage(), 2000);
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                    }
+                }
+            },
+            {
+                text: "Final Boss: KAMRAN IBRAHIM ABDULLAH (THE BEST FRIEND MAKES A RETURN TO SAVE HENRY!)",
+                boss: "KAMRAN",
+                actions: [
+                    { text: "Benchod Gun", outcome: "Benchod! KAMRAN is shocked, 'Henry! What are you doing?!'", bossHealthEffect: -10 },
+                    { text: "Explain Pillow Need", outcome: "KAMRAN listens... 'Pillows... for comfort... I understand now, Henry.' " },
+                    { text: "Hug KAMRAN", outcome: "KAMRAN hugs back, 'Friends cuddle too, right?'" }
+                ],
+                bossHealth: 100,
+                onEnter: function() {
+                    updateActions(this.actions);
+                    this.bossHealth = 100;
+                },
+                onAction: function(actionIndex) {
+                    if (actionIndex === 0) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        this.bossHealth += this.actions[actionIndex].bossHealthEffect;
+                        if (this.bossHealth <= 0) {
+                            gameTextElement.textContent += " KAMRAN smiles, 'Pillows... and friends... perfect.' You Win!";
+                        } else {
+                             gameTextElement.textContent += ` Boss Health: ${this.bossHealth}`;
+                        }
+                    } else if (actionIndex === 1) {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        gameTextElement.textContent += " KAMRAN understands. A truce is formed.";
+                         setTimeout(() => gameTextElement.textContent += " KAMRAN smiles, 'Pillows... and friends... perfect.' You Win!", 2500);
+                    } else {
+                        gameTextElement.textContent = this.actions[actionIndex].outcome;
+                        gameTextElement.textContent += " KAMRAN hugs you warmly. Friendship prevails. You Win!";
+                    }
+                    disableActions();
+                }
+            },
+            {
+                text: "Congratulations! You won HENRY X PILLOW: The Game! You have embraced the pillow and friendship!",
+                actions: [],
+                onEnter: function() {
+                    updateActions(this.actions);
+                }
+            }
+        ];
+
+        function updateActions(actions) {
+            action1Button.textContent = actions[0]?.text || "";
+            action2Button.textContent = actions[1]?.text || "";
+            action3Button.textContent = actions[2]?.text || "";
+
+            action1Button.style.display = actions[0] ? 'block' : 'none';
+            action2Button.style.display = actions[1] ? 'block' : 'none';
+            action3Button.style.display = actions[2] ? 'block' : 'none';
+        }
+         function disableActions() {
+            action1Button.disabled = true;
+            action2Button.disabled = true;
+            action3Button.disabled = true;
+        }
+        function enableActions() {
+            action1Button.disabled = false;
+            action2Button.disabled = false;
+            action3Button.disabled = false;
+        }
+
+
+        function nextStage() {
+            currentStage++;
+            if (currentStage < gameStages.length) {
+                gameTextElement.textContent = gameStages[currentStage].text;
+                gameStages[currentStage].onEnter();
+                enableActions();
+            } else {
+                gameTextElement.textContent = "Game Over. Thanks for playing!";
+                disableActions();
+            }
+        }
+
+        function takeDamage(damage) {
+            if (!infiniteHealth) {
+                health -= damage;
+                if (health < 0) health = 0;
+                healthElement.textContent = health;
+                if (health <= 0) {
+                    gameTextElement.textContent = "You have been defeated! Game Over.";
+                    disableActions();
+                }
+            }
+        }
+
+        function gameAction(actionId) {
+            if (currentStage < gameStages.length) {
+                const stage = gameStages[currentStage];
+                let actionIndex;
+                if (actionId === 'action1') actionIndex = 0;
+                else if (actionId === 'action2') actionIndex = 1;
+                else if (actionId === 'action3') actionIndex = 2;
+
+                if (stage.onAction) {
+                    stage.onAction(actionIndex);
+                } else if (stage.actions && stage.actions[actionIndex]) {
+                    gameTextElement.textContent = stage.actions[actionIndex].outcome;
+                    if(stage.actions[actionIndex].nextStage !== undefined) {
+                         setTimeout(() => nextStage(), 1500);
+                    }
+                }
+            }
+        }
+
+
+        infiniteHealthButton.addEventListener('click', () => {
+            infiniteHealth = !infiniteHealth;
+            infiniteHealthButton.classList.toggle('active', infiniteHealth);
+            infiniteHealthButton.textContent = `Infinite Health: ${infiniteHealth ? 'ON' : 'OFF'}`;
+        });
+
+
+        // Start the game
+        gameTextElement.textContent = gameStages[currentStage].text;
+        gameStages[currentStage].onEnter();
+    </script>
+</body>
+</html>

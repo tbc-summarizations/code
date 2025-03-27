@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Strawberry Bird Platformer</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0ff; /* Light lavender background */
+            font-family: 'Arial', sans-serif;
+            color: #333;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        h1 {
+            color: #e53935; /* Strawberry red */
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+        canvas {
+            border: 2px solid #ff8a80; /* Light strawberry border */
+            background-color: #e1f5fe; /* Light sky blue */
+            display: block;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        #controls {
+            margin-top: 15px;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            background: linear-gradient(145deg, #ff758c, #ff7eb3); /* Pink gradient */
+            color: white;
+            border: none;
+            border-radius: 20px;
+            margin: 5px;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 3px 5px rgba(255, 100, 150, 0.4);
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.2);
+        }
+        button:hover {
+            background: linear-gradient(145deg, #ff6b81, #ff758c);
+            box-shadow: 0 4px 7px rgba(255, 80, 130, 0.5);
+            transform: translateY(-2px);
+        }
+         button:active {
+            transform: translateY(0px);
+            box-shadow: 0 2px 4px rgba(255, 100, 150, 0.3);
+         }
+        #level-display {
+            margin-top: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #4CAF50; /* Green color for level */
+        }
+        #controls p {
+            margin: 5px 0 10px 0;
+            color: #555;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🍓 Strawberry Bird Adventures 🐦</h1>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="level-display">Level: 1 / 1000</div>
+    <div id="controls">
+        <p>Controls: Left/Right Arrow Keys, Up Arrow Key to Jump</p>
+        <button id="skipLevelBtn">Skip Level</button>
+    </div>
+
+    <script>
+        // Game setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('level-display');
+        const skipLevelBtn = document.getElementById('skipLevelBtn');
+
+        const GRAVITY = 0.55;
+        const JUMP_FORCE = -11; // Slightly stronger jump
+        const PLAYER_SPEED = 5;
+        const PLAYER_WIDTH = 28; // Slightly smaller
+        const PLAYER_HEIGHT = 28;
+        const PLATFORM_HEIGHT = 18; // Slightly thinner
+        const GOAL_SIZE = 35; // Slightly larger goal
+
+        let currentLevel = 1;
+        const MAX_LEVELS = 1000;
+
+        let player = {
+            x: 50,
+            y: canvas.height - 50 - PLAYER_HEIGHT,
+            width: PLAYER_WIDTH,
+            height: PLAYER_HEIGHT,
+            vx: 0,
+            vy: 0,
+            onGround: false
+        };
+
+        let platforms = [];
+        let goal = { x: 0, y: 0, width: GOAL_SIZE, height: GOAL_SIZE };
+
+        let keys = {
+            left: false,
+            right: false,
+            up: false // Track key state to prevent hold-jump
+        };
+
+        // --- Level Generation ---
+        function seededRandom(seed) {
+            let x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        }
+
+        function generateLevel(levelNumber) {
+            const generatedPlatforms = [];
+            const seed = levelNumber * 9876 + (levelNumber % 123); // More varied seed
+
+            // --- Define Level Parameters based on levelNumber ---
+            // Difficulty increases: more platforms, wider gaps, smaller platforms
+            const basePlatformCount = 6;
+            const maxExtraPlatforms = 25;
+            const platformCount = basePlatformCount + Math.min(Math.floor(levelNumber / 25), maxExtraPlatforms);
+
+            const maxHorizScale = Math.min(1.0 + levelNumber / 500, 1.8); // Scale max jump distance needed
+            const minHorizScale = 1.0 + levelNumber / 1000;
+            const minPlatWidthScale = Math.max(1.0 - levelNumber / 400, 0.4); // Scale min platform width down
+            const maxPlatWidthScale = Math.max(1.0 - levelNumber / 1000, 0.7); // Scale max platform width down slightly
+
+            // Player physics constants used for generation bounds
+            const maxHorizontalDist = 190 * maxHorizScale; // Max distance reachable horizontally
+            const minHorizontalDist = 40 * minHorizScale;   // Min distance to next platform
+            const maxVerticalDistUp = 100; // Max height diff upwards (based on JUMP_FORCE/GRAVITY)
+            const maxVerticalDistDown = 180; // Max height diff downwards
+
+            const minPlatformWidth = 50 * minPlatWidthScale;
+            const maxPlatformWidth = 120 * maxPlatWidthScale;
+
+
+            // --- Platform Placement Logic ---
+            // Start platform ensures player doesn't fall immediately
+            const startPlatformWidth = 150;
+            const startX = 40;
+            const startY = canvas.height - 60;
+            generatedPlatforms.push({ x: startX, y: startY, width: startPlatformWidth, height: PLATFORM_HEIGHT });
+
+            let playerStartX = startX + startPlatformWidth / 2 - PLAYER_WIDTH / 2;
+            let playerStartY = startY - PLAYER_HEIGHT - 1;
+
+            let lastPlatform = generatedPlatforms[0];
+            let currentSeed = seed; // Use a running seed
+
+            for (let i = 0; i < platformCount; i++) {
+                currentSeed++;
+                let randX = seededRandom(currentSeed * 1.1);
+                currentSeed++;
+                let randY = seededRandom(currentSeed * 1.2);
+                currentSeed++;
+                let randWidth = seededRandom(currentSeed * 1.3);
+                currentSeed++;
+                let randDir = seededRandom(currentSeed * 1.4);
+
+                let nextX, nextY, nextWidth;
+
+                let dx = minHorizontalDist + randX * (maxHorizontalDist - minHorizontalDist);
+
+                // Allow backtracking occasionally, more often in early levels? No, keep it simple.
+                 let goLeftChance = 0.15; // Chance to place next platform to the left
+                 if (randDir < goLeftChance && lastPlatform.x > dx + minPlatformWidth + 20) { // Ensure space to go left
+                    dx = -dx * (0.5 + randDir / (goLeftChance * 2)); // Vary backtrack distance
+                 }
+
+                nextX = lastPlatform.x + lastPlatform.width / 2 + dx - (minPlatformWidth / 2); // Center point placement adjusted for width
+
+                let dy = 0;
+                if (randY < 0.45) { // Go up
+                    dy = -(randY / 0.45 * maxVerticalDistUp);
+                } else { // Go down or level
+                    dy = (randY - 0.45) / 0.55 * maxVerticalDistDown;
+                }
+                // Add slight random jitter to Y to avoid perfectly aligned platforms
+                currentSeed++;
+                dy += (seededRandom(currentSeed) - 0.5) * 10;
+
+                nextY = lastPlatform.y + dy;
+
+                // Clamp positions within canvas bounds (with margin)
+                nextX = Math.max(10, Math.min(canvas.width - minPlatformWidth - 10, nextX));
+                nextY = Math.max(40, Math.min(canvas.height - PLATFORM_HEIGHT - 20, nextY));
+
+                // Ensure vertical distance isn't impossible (add buffer)
+                if (lastPlatform.y - nextY >= maxVerticalDistUp - 5) {
+                    nextY = lastPlatform.y - (maxVerticalDistUp - 15);
+                }
+                 // Ensure downwards distance is reasonably jumpable (not strictly needed but helps flow)
+                 if(nextY - lastPlatform.y > maxVerticalDistDown) {
+                     nextY = lastPlatform.y + maxVerticalDistDown;
+                 }
+
+                nextWidth = minPlatformWidth + randWidth * (maxPlatformWidth - minPlatformWidth);
+                nextX = Math.min(canvas.width - nextWidth - 10, nextX); // Ensure width doesn't push it offscreen
+
+                // --- Overlap Prevention (Simple Iterative Adjustment) ---
+                let attempts = 0;
+                let adjusted = false;
+                do {
+                    adjusted = false;
+                    for (const p of generatedPlatforms) {
+                        // Check for significant overlap
+                        if (Math.abs(nextY - p.y) < PLATFORM_HEIGHT * 1.5 && // Vertical proximity
+                            nextX < p.x + p.width + 10 && nextX + nextWidth > p.x - 10) // Horizontal overlap (with buffer)
+                        {
+                            // Try adjusting Y slightly
+                            currentSeed++;
+                            nextY += (seededRandom(currentSeed) > 0.5 ? 1 : -1) * (PLATFORM_HEIGHT * 1.5 + 5);
+                            nextY = Math.max(40, Math.min(canvas.height - PLATFORM_HEIGHT - 20, nextY));
+                            adjusted = true;
+                            attempts++;
+                            break; // Re-check against all platforms after adjustment
+                        }
+                    }
+                } while (adjusted && attempts < 5); // Limit attempts to prevent infinite loops
+
+                // Only add if not excessively adjusted or still overlapping badly
+                let finalOverlap = false;
+                 if (attempts >= 5) {
+                      for (const p of generatedPlatforms) {
+                           if (Math.abs(nextY - p.y) < PLATFORM_HEIGHT && nextX < p.x + p.width && nextX + nextWidth > p.x) {
+                               finalOverlap = true;
+                               break;
+                           }
+                      }
+                 }
+
+                if (!finalOverlap) {
+                     const newPlatform = { x: nextX, y: nextY, width: nextWidth, height: PLATFORM_HEIGHT };
+                     generatedPlatforms.push(newPlatform);
+                     lastPlatform = newPlatform; // Update last platform for next iteration
+                }
+                 // If placement failed, platformCount effectively decreases, making level shorter.
+            }
+
+            // --- Place Goal ---
+            // Try to place it above the last generated platform, ensuring reachability
+             let goalX = lastPlatform.x + lastPlatform.width / 2 - GOAL_SIZE / 2;
+             let goalY = lastPlatform.y - GOAL_SIZE - 10; // Place slightly above last platform
+
+              // If goal Y is too high, place it further right/left if possible, or lower it
+              if (goalY < 30) {
+                   goalY = 30;
+                   // Try shifting horizontally if too high? Complicates things. Let's just ensure it's reachable from last platform.
+              }
+
+              // Final check: Ensure vertical distance from last platform is possible
+              if (lastPlatform.y - (goalY + GOAL_SIZE) > maxVerticalDistUp - 15) {
+                   goalY = lastPlatform.y - GOAL_SIZE - (maxVerticalDistUp - 20);
+              }
+
+
+            // Ensure goal isn't off-screen
+             goalX = Math.max(GOAL_SIZE / 2, Math.min(canvas.width - GOAL_SIZE * 1.5, goalX));
+             goalY = Math.max(GOAL_SIZE / 2, Math.min(canvas.height - GOAL_SIZE, goalY));
+
+
+            // Guarantee Possibility: The sequential placement based on jump physics makes it *highly probable*
+            // that each platform is reachable from the previous one. Placing the goal near the last one extends this.
+            // The Skip button remains the ultimate fallback for any generation bugs or edge cases.
+
+            return {
+                platforms: generatedPlatforms,
+                playerStart: { x: playerStartX, y: playerStartY },
+                goal: { x: goalX, y: goalY, width: GOAL_SIZE, height: GOAL_SIZE }
+            };
+        }
+
+
+        // --- Game Logic ---
+        function resetPlayer(startPos) {
+            player.x = startPos.x;
+            player.y = startPos.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = true; // Assume starting on ground
+        }
+
+        function loadLevel(levelNumber) {
+             if (levelNumber > MAX_LEVELS) {
+                 // Simple win message and reset
+                 alert("🍓🐦 Wow! You completed all 1000 levels! Amazing! 🐦🍓\nRestarting from Level 1.");
+                 currentLevel = 1;
+             } else if (levelNumber < 1) {
+                 currentLevel = 1; // Should not happen, but safety check
+             }
+
+             console.log(`Loading Level ${levelNumber}...`);
+            try {
+                const levelData = generateLevel(levelNumber);
+                if (!levelData || !levelData.platforms || levelData.platforms.length === 0 || !levelData.goal) {
+                    console.error(`Failed to generate level ${levelNumber}. Trying next level.`);
+                    currentLevel++; // Skip potentially broken level
+                    loadLevel(currentLevel);
+                    return;
+                }
+                platforms = levelData.platforms;
+                goal = levelData.goal;
+                resetPlayer(levelData.playerStart);
+                levelDisplay.textContent = `Level: ${currentLevel} / ${MAX_LEVELS}`;
+                console.log(`Level ${currentLevel} loaded successfully.`);
+            } catch (error) {
+                 console.error(`Error generating level ${levelNumber}:`, error);
+                 alert(`An error occurred generating level ${levelNumber}. Skipping to the next level.`);
+                 currentLevel++;
+                 loadLevel(currentLevel); // Try to load the next one
+            }
+        }
+
+        function update() {
+            // --- Input Handling ---
+            // Horizontal movement applied directly (less slippery)
+            if (keys.left) {
+                player.vx = -PLAYER_SPEED;
+            } else if (keys.right) {
+                player.vx = PLAYER_SPEED;
+            } else {
+                player.vx = 0;
+            }
+
+            // Vertical movement
+            player.vy += GRAVITY;
+             // Limit max fall speed
+             if (player.vy > 15) {
+                 player.vy = 15;
+             }
+
+            // --- Collision Detection & Response ---
+            // Store upcoming position
+            let nextX = player.x + player.vx;
+            let nextY = player.y + player.vy;
+            let futurePlayer = { x: nextX, y: nextY, width: player.width, height: player.height };
+
+            player.onGround = false; // Assume not on ground until collision check proves otherwise
+
+            for (const p of platforms) {
+                // Check broad phase (simple bounding box overlap)
+                if (futurePlayer.x < p.x + p.width &&
+                    futurePlayer.x + futurePlayer.width > p.x &&
+                    futurePlayer.y < p.y + p.height &&
+                    futurePlayer.y + futurePlayer.height > p.y)
+                {
+                    // Collision detected, resolve axis separately
+
+                    // --- Vertical Collision Resolution ---
+                    // Check if moving down and intersecting top face
+                    if (player.vy >= 0 && player.y + player.height <= p.y) {
+                         player.y = p.y - player.height; // Snap to top
+                         player.vy = 0;
+                         player.onGround = true;
+                         nextY = player.y; // Update nextY to prevent passing through in the same frame
+                    }
+                    // Check if moving up and intersecting bottom face
+                    else if (player.vy < 0 && player.y >= p.y + p.height) {
+                        player.y = p.y + p.height; // Snap to bottom
+                        player.vy = 0;
+                        nextY = player.y;
+                    }
+
+                    // --- Horizontal Collision Resolution ---
+                    // Must re-check vertical position after potential vertical snap before resolving horizontal
+                     if (player.y < p.y + p.height && player.y + player.height > p.y) {
+                         // Check if moving right and intersecting left face
+                         if (player.vx > 0 && player.x + player.width <= p.x) {
+                              player.x = p.x - player.width; // Snap to left
+                              player.vx = 0;
+                              nextX = player.x; // Update nextX
+                         }
+                         // Check if moving left and intersecting right face
+                         else if (player.vx < 0 && player.x >= p.x + p.width) {
+                              player.x = p.x + p.width; // Snap to right
+                              player.vx = 0;
+                              nextX = player.x;
+                         }
+                     }
+                }
+            }
+
+             // Apply movement if no collision stopped it on that axis
+             // Check final intended position (nextX, nextY) against adjusted player pos
+             if (!player.onGround) { // Only apply vertical velocity if not grounded
+                 player.y += player.vy;
+             }
+             player.x += player.vx; // Horizontal velocity applied regardless
+
+
+            // --- World Boundaries ---
+            // Keep player within canvas horizontally
+            if (player.x < 0) {
+                player.x = 0;
+                player.vx = 0; // Stop movement at edge
+            } else if (player.x + player.width > canvas.width) {
+                player.x = canvas.width - player.width;
+                player.vx = 0;
+            }
+
+            // Check if player fell off the bottom
+            if (player.y > canvas.height + 50) { // Give a little buffer before reset
+                // console.log("Player fell off!");
+                loadLevel(currentLevel); // Reload current level
+            }
+
+            // --- Check Win Condition (Collision with Goal) ---
+            if (player.x < goal.x + goal.width &&
+                player.x + player.width > goal.x &&
+                player.y < goal.y + goal.height &&
+                player.y + player.height > goal.y)
+            {
+                // console.log(`Level ${currentLevel} complete!`);
+                currentLevel++;
+                loadLevel(currentLevel);
+            }
+        }
+
+
+        function draw() {
+            // Clear canvas with background color
+            ctx.fillStyle = '#e1f5fe'; // Light sky blue
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw platforms - Green with slight 3D effect
+            for (const p of platforms) {
+                // Main platform color
+                ctx.fillStyle = '#9ccc65'; // Light Green
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+
+                 // Darker top edge/shadow for depth
+                 ctx.fillStyle = '#7cb342'; // Darker Green
+                 ctx.fillRect(p.x, p.y, p.width, 3); // Top edge shade
+
+                 // Very light bottom highlight (optional)
+                 // ctx.fillStyle = '#aed581';
+                 // ctx.fillRect(p.x, p.y + p.height - 2, p.width, 2);
+            }
+
+            // Draw goal (Strawberry Emoji)
+             ctx.font = `${GOAL_SIZE * 1.1}px Arial`; // Slightly larger emoji rendering
+             ctx.fillText('🍓', goal.x, goal.y + goal.height * 0.9); // Adjust vertical alignment
+
+
+            // Draw player (Bird - Simple Shape)
+             // Body
+             ctx.fillStyle = '#ff7043'; // Orange-Red Bird
+             ctx.fillRect(player.x, player.y, player.width, player.height);
+
+             // Eye (simple black square)
+             ctx.fillStyle = '#212121'; // Dark Gray/Black
+             const eyeSize = 4;
+             const eyeX = player.vx >= 0 ? player.x + player.width * 0.65 : player.x + player.width * 0.35 - eyeSize; // Eye faces movement direction
+             const eyeY = player.y + player.height * 0.25;
+             ctx.fillRect(eyeX, eyeY, eyeSize, eyeSize);
+
+             // Beak (Yellow Triangle)
+             ctx.fillStyle = '#fdd835'; // Yellow
+             ctx.beginPath();
+             const beakSize = 8;
+             const beakY = player.y + player.height * 0.55;
+             if (player.vx >= 0) { // Facing right (or still)
+                 ctx.moveTo(player.x + player.width, beakY - beakSize / 3);
+                 ctx.lineTo(player.x + player.width + beakSize, beakY);
+                 ctx.lineTo(player.x + player.width, beakY + beakSize / 3);
+             } else { // Facing left
+                 ctx.moveTo(player.x, beakY - beakSize / 3);
+                 ctx.lineTo(player.x - beakSize, beakY);
+                 ctx.lineTo(player.x, beakY + beakSize / 3);
+             }
+             ctx.closePath();
+             ctx.fill();
+        }
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Note: Simple implementation doesn't use deltaTime, runs at display refresh rate.
+            // For more consistent physics, calculations could be scaled by deltaTime.
+            // E.g., player.vy += GRAVITY * (deltaTime / 16.67); // Assuming target 60fps
+
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') {
+                keys.left = true;
+            } else if (e.key === 'ArrowRight') {
+                keys.right = true;
+            } else if (e.key === 'ArrowUp') {
+                // Only jump if on the ground and the key was just pressed
+                if (player.onGround && !keys.up) {
+                    player.vy = JUMP_FORCE;
+                    player.onGround = false; // Leave the ground
+                }
+                 keys.up = true; // Register key is being held
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft') {
+                keys.left = false;
+            } else if (e.key === 'ArrowRight') {
+                keys.right = false;
+            } else if (e.key === 'ArrowUp') {
+                 keys.up = false; // Key is released, ready for next jump press
+            }
+        });
+
+        skipLevelBtn.addEventListener('click', () => {
+            if (currentLevel <= MAX_LEVELS) {
+                console.log(`Player skipped Level ${currentLevel}`);
+                currentLevel++;
+                loadLevel(currentLevel);
+            }
+        });
+
+        // --- Start Game ---
+        loadLevel(currentLevel); // Load the first level
+        requestAnimationFrame(gameLoop); // Start the game loop
+
+    </script>
+</body>
+</html>

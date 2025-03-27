@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mechanic Platformer</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #222;
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            color: #eee;
+            flex-direction: column;
+        }
+        #gameContainer {
+            border: 2px solid #eee;
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: #333;
+            overflow: hidden; /* Keep elements within bounds */
+        }
+        canvas {
+            display: block;
+            background-color: #445; /* Canvas background */
+        }
+        #uiContainer {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.5em;
+            pointer-events: none; /* Allow clicks through UI */
+            color: #fff;
+            text-shadow: 1px 1px 2px #000;
+        }
+        #messageOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 2em;
+            flex-direction: column;
+        }
+        #messageOverlay button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 0.8em;
+            cursor: pointer;
+            background-color: #5c5;
+            border: none;
+            border-radius: 5px;
+            color: #111;
+        }
+         #messageOverlay button:hover {
+             background-color: #7e7;
+         }
+    </style>
+</head>
+<body>
+    <h1>Mechanic Platformer</h1>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="uiContainer">
+            <span id="levelDisplay">Level: 1</span>
+            <span id="keyDisplay">🔑: No</span>
+        </div>
+        <div id="messageOverlay">
+            <p id="messageText"></p>
+            <button id="messageButton">Continue</button>
+        </div>
+    </div>
+    <p>Controls: Left/Right Arrows (Move), Up Arrow (Jump), R (Restart Level)</p>
+    <p id="mechanicTip">Level 1: Move and Jump!</p>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const keyDisplay = document.getElementById('keyDisplay');
+        const mechanicTip = document.getElementById('mechanicTip');
+        const messageOverlay = document.getElementById('messageOverlay');
+        const messageText = document.getElementById('messageText');
+        const messageButton = document.getElementById('messageButton');
+
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 600;
+
+        // Game Constants
+        const GRAVITY_NORMAL = 0.5;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE_NORMAL = -12;
+        const JUMP_PAD_FORCE = -20;
+        const PLAYER_SIZE = 25;
+        const TILE_SIZE = 40; // Used for easier level design, though elements can vary
+
+        // Game State
+        let currentLevelIndex = 0;
+        let player;
+        let levels = [];
+        let keysPressed = {};
+        let currentGravity = GRAVITY_NORMAL;
+        let currentJumpForce = JUMP_FORCE_NORMAL;
+        let onGround = false;
+        let hasKey = false;
+        let switches = {}; // Store switch states { switchId: boolean }
+        let gameActive = true;
+        let wallSlide = false;
+        let canWallJump = false;
+        let wallJumpTimer = 0;
+        const WALL_JUMP_COOLDOWN = 15; // Frames
+
+        // --- Player Object ---
+        function createPlayer(x, y) {
+            return {
+                x: x,
+                y: y,
+                width: PLAYER_SIZE,
+                height: PLAYER_SIZE,
+                vx: 0,
+                vy: 0,
+                color: '#3af', // Blue player
+                canJump: true,
+                onMovingPlatform: null,
+                wallDir: 0 // -1 for left, 1 for right wall
+            };
+        }
+
+        // --- Level Data ---
+        // Define platforms and other elements for each level
+        function defineLevels() {
+            levels = [
+                // Level 1: Basic Movement
+                {
+                    message: "Level 1: Use Left/Right Arrows to Move, Up Arrow to Jump.",
+                    playerStart: { x: 50, y: 500 },
+                    goal: { x: 700, y: 50, width: 40, height: 40, color: '#0f0' }, // Green Triangle Goal
+                    platforms: [
+                        { x: 0, y: 560, width: 800, height: 40, color: '#888' },
+                        { x: 200, y: 480, width: 150, height: 20, color: '#888' },
+                        { x: 450, y: 400, width: 150, height: 20, color: '#888' },
+                        { x: 650, y: 320, width: 100, height: 20, color: '#888' },
+                        { x: 500, y: 200, width: 100, height: 20, color: '#888' },
+                        { x: 650, y: 90, width: 150, height: 20, color: '#888' },
+                    ],
+                    elements: []
+                },
+                // Level 2: Hazards
+                {
+                    message: "Level 2: Avoid the red squares!",
+                    playerStart: { x: 50, y: 500 },
+                    goal: { x: 700, y: 50, width: 40, height: 40, color: '#0f0' },
+                    platforms: [
+                        { x: 0, y: 560, width: 800, height: 40, color: '#888' },
+                        { x: 150, y: 480, width: 100, height: 20, color: '#888' },
+                        { x: 350, y: 400, width: 100, height: 20, color: '#888' },
+                        { x: 550, y: 320, width: 100, height: 20, color: '#888' },
+                        { x: 650, y: 150, width: 150, height: 20, color: '#888' },
+                    ],
+                    elements: [
+                        { type: 'hazard', x: 250, y: 540, width: 50, height: 20, color: '#f00' }, // Red Square
+                        { type: 'hazard', x: 450, y: 540, width: 50, height: 20, color: '#f00' },
+                        { type: 'hazard', x: 400, y: 380, width: 100, height: 20, color: '#f00' },
+                        { type: 'hazard', x: 550, y: 130, width: 100, height: 20, color: '#f00' },
+                    ]
+                },
+                // Level 3: Moving Platforms
+                {
+                    message: "Level 3: Ride the moving platforms.",
+                    playerStart: { x: 50, y: 100 },
+                    goal: { x: 700, y: 520, width: 40, height: 40, color: '#0f0' },
+                    platforms: [
+                        { x: 0, y: 160, width: 150, height: 20, color: '#888' },
+                        { x: 650, y: 560, width: 150, height: 40, color: '#888' },
+                    ],
+                    elements: [
+                        { type: 'movingPlatform', x: 200, y: 250, width: 100, height: 20, color: '#aaa', speedX: 2, rangeX: [200, 400] },
+                        { type: 'movingPlatform', x: 400, y: 400, width: 100, height: 20, color: '#aaa', speedY: 1.5, rangeY: [350, 500] },
+                        { type: 'movingPlatform', x: 100, y: 500, width: 100, height: 20, color: '#aaa', speedX: -1.5, rangeX: [50, 250] },
+                    ]
+                },
+                // Level 4: Disappearing Platforms
+                {
+                    message: "Level 4: Don't linger on the light grey platforms!",
+                    playerStart: { x: 50, y: 500 },
+                    goal: { x: 700, y: 50, width: 40, height: 40, color: '#0f0' },
+                    platforms: [
+                        { x: 0, y: 560, width: 100, height: 40, color: '#888' },
+                        { x: 700, y: 90, width: 100, height: 20, color: '#888' },
+                    ],
+                    elements: [
+                        { type: 'disappearingPlatform', x: 150, y: 520, width: 100, height: 20, color: '#bbb', visible: true, timer: 0, disappearTime: 30, reappearTime: 90 }, // Disappears 0.5s after touch, reappears 1.5s later
+                        { type: 'disappearingPlatform', x: 300, y: 450, width: 100, height: 20, color: '#bbb', visible: true, timer: 0, disappearTime: 30, reappearTime: 90 },
+                        { type: 'disappearingPlatform', x: 450, y: 380, width: 100, height: 20, color: '#bbb', visible: true, timer: 0, disappearTime: 30, reappearTime: 90 },
+                        { type: 'disappearingPlatform', x: 600, y: 310, width: 100, height: 20, color: '#bbb', visible: true, timer: 0, disappearTime: 30, reappearTime: 90 },
+                        { type: 'disappearingPlatform', x: 550, y: 200, width: 100, height: 20, color: '#bbb', visible: true, timer: 0, disappearTime: 30, reappearTime: 90 },
+                    ]
+                },
+                // Level 5: Jump Pads
+                {
+                    message: "Level 5: Yellow squares give you a boost!",
+                    playerStart: { x: 50, y: 500 },
+                    goal: { x: 700, y: 50, width: 40, height: 40, color: '#0f0' },
+                    platforms: [
+                        { x: 0, y: 560, width: 800, height: 40, color: '#888' },
+                        { x: 300, y: 400, width: 100, height: 20, color: '#888' },
+                        { x: 650, y: 90, width: 150, height: 20, color: '#888' },
+                    ],
+                    elements: [
+                        { type: 'jumpPad', x: 150, y: 540, width: 30, height: 20, color: '#ff0' }, // Yellow Square
+                        { type: 'jumpPad', x: 450, y: 540, width: 30, height: 20, color: '#ff0' },
+                         { type: 'hazard', x: 200, y: 300, width: 400, height: 20, color: '#f00' },
+                    ]
+                },
+                // Level 6: Switches
+                {
+                    message: "Level 6: Touch the purple square to toggle the barrier.",
+                    playerStart: { x: 50, y: 500 },
+                    goal: { x: 700, y: 500, width: 40, height: 40, color: '#0f0' },
+                    platforms: [
+                        { x: 0, y: 560, width: 800, height: 40, color: '#888' },
+                        { x: 300, y: 450, width: 100, height: 20, color: '#888' },
+                    ],
+                    elements: [
+                        { type: 'switch', id: 'barrierSwitch', x: 330, y: 420, width: 30, height: 30, color: '#a0f', state: false }, // Purple Switch
+                        { type: 'togglePlatform', switchId: 'barrierSwitch', x: 500, y: 400, width: 20, height: 160, color: '#f80', activeState: true }, // Orange Barrier, active when switch is true
+                    ]
+                },
+                // Level 7: Keys and Locks
+                {
+                    message: "Level 7: Find the key (🔑) to unlock the door.",
+                    playerStart: { x: 50, y: 100 },
+                    goal: { x: 700, y: 500, width: 40, height: 40, color: '#0f0' },
+                    platforms: [
+                         { x: 0, y: 160, width: 150, height: 20, color: '#888' },
+                         { x: 200, y: 250, width: 100, height: 20, color: '#888' },
+                         { x: 0, y: 400, width: 400, height: 20, color: '#888' },
+                         { x: 450, y: 560, width: 350, height: 40, color: '#888' },
+                         { x: 650, y: 500, width: 20, height: 60, color: '#888' }, // Wall for key door
+                    ],
+                    elements: [
+                        { type: 'key', x: 50, y: 370, width: 30, height: 30, color: '#ff0', collected: false }, // Represent key as yellow square 🔑
+                        { type: 'door', x: 650, y: 500, width: 20, height: 60, color: '#a65', locked: true } // Brown rectangle
+                    ]
+                },
+                // Level 8: Gravity Flip
+                {
+                    message: "Level 8: Hit the cyan square to flip gravity!",
+                    playerStart: { x: 50, y: 500 },
+                    goal: { x: 700, y: 50, width: 40, height: 40, color: '#0f0' }, // Goal at top
+                    platforms: [
+                        { x: 0, y: 560, width: 200, height: 40, color: '#888' }, // Bottom start
+                        { x: 0, y: 0, width: 800, height: 20, color: '#888' },   // Ceiling
+                        { x: 300, y: 280, width: 200, height: 40, color: '#888' }, // Middle platform
+                        { x: 600, y: 560, width: 200, height: 40, color: '#888' }, // Bottom end
+                        { x: 650, y: 70, width: 150, height: 20, color: '#888' }, // Platform near goal (on ceiling)
+                    ],
+                    elements: [
+                        { type: 'gravitySwitch', x: 385, y: 240, width: 30, height: 30, color: '#0ff' } // Cyan Square
+                    ]
+                },
+                // Level 9: Wall Jump
+                {
+                    message: "Level 9: Jump against walls to climb!",
+                    playerStart: { x: 50, y: 500 },
+                    goal: { x: 400, y: 50, width: 40, height: 40, color: '#0f0' },
+                    platforms: [
+                        { x: 0, y: 560, width: 150, height: 40, color: '#888' },
+                        { x: 0, y: 100, width: 20, height: 460, color: '#888' },    // Left Wall
+                        { x: 250, y: 100, width: 20, height: 460, color: '#888' }, // Middle Wall 1
+                        { x: 500, y: 100, width: 20, height: 460, color: '#888' }, // Middle Wall 2
+                        { x: 780, y: 100, width: 20, height: 460, color: '#888' }, // Right Wall
+                        { x: 350, y: 90, width: 100, height: 20, color: '#888' }, // Goal platform
+                    ],
+                    elements: [
+                        { type: 'hazard', x: 20, y: 540, width: 760, height: 20, color: '#f00' }, // Floor is lava
+                    ]
+                },
+                 // Level 10: Combination
+                {
+                    message: "Level 10: Combine your skills! Get the key, flip gravity, dodge hazards!",
+                    playerStart: { x: 50, y: 500 },
+                    goal: { x: 700, y: 50, width: 40, height: 40, color: '#0f0' },
+                    platforms: [
+                        { x: 0, y: 560, width: 100, height: 40, color: '#888' },
+                        { x: 0, y: 0, width: 800, height: 20, color: '#888' }, // Ceiling
+                        { x: 700, y: 90, width: 100, height: 20, color: '#888' }, // Goal platform (top)
+                        { x: 400, y: 300, width: 20, height: 300, color: '#888' }, // Wall for wall jump
+                         { x: 600, y: 200, width: 20, height: 200, color: '#a65', isDoor: true } // Locked Door (use platform with flag)
+                    ],
+                    elements: [
+                        { type: 'movingPlatform', x: 150, y: 500, width: 80, height: 20, color: '#aaa', speedX: 2, rangeX: [150, 300] },
+                        { type: 'hazard', x: 150, y: 480, width: 80, height: 10, color: '#f00' }, // Hazard on moving platform
+                        { type: 'gravitySwitch', x: 50, y: 530, width: 20, height: 20, color: '#0ff' }, // Gravity switch near start
+                        { type: 'key', x: 450, y: 50, width: 30, height: 30, color: '#ff0', collected: false }, // Key at top near wall
+                        { type: 'jumpPad', x: 200, y: 20, width: 30, height: 10, color: '#ff0' }, // Jump pad on ceiling
+                        { type: 'disappearingPlatform', x: 500, y: 400, width: 80, height: 20, color: '#bbb', visible: true, timer: 0, disappearTime: 30, reappearTime: 90 },
+                    ]
+                },
+            ];
+        }
+
+        // --- Input Handling ---
+        document.addEventListener('keydown', (e) => {
+            keysPressed[e.code] = true;
+             // Prevent default scrolling behavior for arrow keys and space
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+                e.preventDefault();
+            }
+            // Restart Level
+             if (e.code === 'KeyR') {
+                 loadLevel(currentLevelIndex);
+             }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keysPressed[e.code] = false;
+        });
+
+         // --- Collision Detection ---
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // --- Game Update Logic ---
+        function updateGame() {
+            if (!gameActive) return;
+
+            const level = levels[currentLevelIndex];
+            let dx = 0; // Delta x for this frame
+
+            // --- Handle Input ---
+            if (keysPressed['ArrowLeft']) {
+                player.vx = -PLAYER_SPEED;
+            } else if (keysPressed['ArrowRight']) {
+                player.vx = PLAYER_SPEED;
+            } else {
+                player.vx = 0;
+            }
+
+            // Apply horizontal velocity from moving platform if player is on one
+            if (player.onMovingPlatform) {
+                 if(player.onMovingPlatform.speedX) dx += player.onMovingPlatform.speedX;
+            }
+
+            // --- Jumping and Gravity ---
+            const effectiveGravity = currentGravity;
+            const effectiveJumpForce = currentJumpForce;
+
+            player.vy += effectiveGravity;
+
+            // Wall Sliding / Jumping Logic Reset
+            let touchingWall = false;
+            player.wallDir = 0;
+
+            // Decrement wall jump cooldown timer
+            if (wallJumpTimer > 0) {
+                wallJumpTimer--;
+            }
+
+
+            // --- Horizontal Movement & Collision ---
+            player.x += player.vx + dx; // Apply player movement + platform movement
+
+            // Check horizontal collisions with platforms
+             level.platforms.forEach(p => {
+                 if (p.isDoor && !hasKey) { // Treat locked door as solid platform
+                      if (checkCollision(player, p)) {
+                           handlePlatformCollisionX(player, p);
+                      }
+                 } else if (!p.isDoor) { // Normal platforms
+                     if (checkCollision(player, p)) {
+                         handlePlatformCollisionX(player, p);
+                         // Check for wall slide/jump possibility
+                        if (!onGround && player.vy > 0 && wallJumpTimer <= 0) { // Only allow if falling or moving slightly up, and cooldown is over
+                             touchingWall = true;
+                             player.wallDir = player.vx > 0 ? 1 : -1; // Wall is on the right if moving right, left if moving left
+                         }
+                     }
+                 }
+             });
+             level.elements.forEach(el => {
+                 if (el.type === 'togglePlatform' && switches[el.switchId] !== el.activeState) { return; } // Skip inactive toggle platforms
+                  if (el.type === 'door' && el.locked) { // Treat locked door as solid platform
+                      if (checkCollision(player, el)) {
+                           handlePlatformCollisionX(player, el);
+                      }
+                 } else if (el.type === 'movingPlatform' || el.type === 'disappearingPlatform' || el.type === 'togglePlatform') {
+                    if (!el.visible && el.type === 'disappearingPlatform') return; // Skip invisible disappearing platforms
+                    if (checkCollision(player, el)) {
+                        handlePlatformCollisionX(player, el);
+                         if (!onGround && player.vy > 0 && wallJumpTimer <= 0) {
+                             touchingWall = true;
+                             player.wallDir = player.vx > 0 ? 1 : -1;
+                         }
+                    }
+                }
+             });
+
+
+            // Wall Sliding activation
+            wallSlide = touchingWall && (keysPressed['ArrowLeft'] || keysPressed['ArrowRight']);
+
+             if (wallSlide) {
+                 player.vy = Math.min(player.vy, 1.5); // Slow down fall speed
+                 canWallJump = true;
+             } else {
+                 canWallJump = false;
+             }
+
+
+            // Handle Jump Input
+            if (keysPressed['ArrowUp'] && player.canJump) {
+                 if (onGround) {
+                     player.vy = effectiveJumpForce;
+                     player.canJump = false; // Prevent double jump immediately
+                     onGround = false;
+                     player.onMovingPlatform = null; // Detach from platform when jumping
+                 } else if (canWallJump) {
+                    // Wall jump pushes away from wall and up
+                     player.vy = effectiveJumpForce * 0.9; // Slightly less high than ground jump
+                     player.vx = -player.wallDir * PLAYER_SPEED * 1.2; // Push away strongly
+                     canWallJump = false;
+                     wallSlide = false;
+                     wallJumpTimer = WALL_JUMP_COOLDOWN; // Start cooldown
+                     player.canJump = false; // Used jump
+                 }
+            }
+             // Allow jumping again when key is released after landing
+             if (!keysPressed['ArrowUp'] && onGround) {
+                 player.canJump = true;
+             }
+
+
+            // --- Vertical Movement & Collision ---
+            player.y += player.vy;
+            onGround = false; // Assume not on ground until collision check proves otherwise
+            let onPlatformThisFrame = null; // Track the specific platform landed on
+
+            // Check vertical collisions with platforms
+            level.platforms.forEach(p => {
+                if (p.isDoor && !hasKey) { // Locked door collision
+                     if (checkCollision(player, p)) {
+                         onPlatformThisFrame = handlePlatformCollisionY(player, p, effectiveGravity);
+                     }
+                } else if (!p.isDoor) { // Normal platform collision
+                    if (checkCollision(player, p)) {
+                        onPlatformThisFrame = handlePlatformCollisionY(player, p, effectiveGravity);
+                    }
+                }
+            });
+            level.elements.forEach(el => {
+                 if (el.type === 'togglePlatform' && switches[el.switchId] !== el.activeState) { return; }
+                 if (el.type === 'door' && el.locked) { // Locked door collision
+                      if (checkCollision(player, el)) {
+                           onPlatformThisFrame = handlePlatformCollisionY(player, el, effectiveGravity);
+                      }
+                 } else if (el.type === 'movingPlatform' || el.type === 'disappearingPlatform' || el.type === 'togglePlatform') {
+                     if (!el.visible && el.type === 'disappearingPlatform') return;
+                     if (checkCollision(player, el)) {
+                        const platformLandedOn = handlePlatformCollisionY(player, el, effectiveGravity);
+                        if(platformLandedOn) {
+                            onPlatformThisFrame = platformLandedOn; // Store the specific platform
+
+                            // Handle disappearing platform logic
+                            if(el.type === 'disappearingPlatform' && el.visible && el.timer === 0) {
+                                el.timer = 1; // Start timer on first contact while visible
+                            }
+                        }
+                    }
+                }
+            });
+
+            if (onPlatformThisFrame) {
+                 onGround = true;
+                 player.onMovingPlatform = (onPlatformThisFrame.type === 'movingPlatform') ? onPlatformThisFrame : null;
+                 // Reset wall jump ability when landing
+                 canWallJump = false;
+                 wallSlide = false;
+            } else {
+                 player.onMovingPlatform = null; // Ensure detached if not on a moving platform this frame
+            }
+
+             // --- Update Moving Platforms ---
+             level.elements.forEach(el => {
+                 if (el.type === 'movingPlatform') {
+                     if (el.speedX) {
+                         el.x += el.speedX;
+                         if (el.x <= el.rangeX[0] || el.x + el.width >= el.rangeX[1] + el.width) {
+                            el.speedX *= -1;
+                            // Clamp position to avoid getting stuck outside range due to large speed
+                            el.x = Math.max(el.rangeX[0], Math.min(el.x, el.rangeX[1]));
+                         }
+                     }
+                     if (el.speedY) {
+                         el.y += el.speedY;
+                         if (el.y <= el.rangeY[0] || el.y + el.height >= el.rangeY[1] + el.height) {
+                            el.speedY *= -1;
+                            el.y = Math.max(el.rangeY[0], Math.min(el.y, el.rangeY[1]));
+                         }
+                     }
+                 }
+                 // --- Update Disappearing Platforms ---
+                 else if (el.type === 'disappearingPlatform') {
+                     if (el.timer > 0) { // Timer is running
+                         el.timer++;
+                         if (el.visible && el.timer > el.disappearTime) {
+                             el.visible = false;
+                             el.timer = 1; // Start reappear timer
+                         } else if (!el.visible && el.timer > el.reappearTime) {
+                             el.visible = true;
+                             el.timer = 0; // Reset timer
+                         }
+                     }
+                 }
+             });
+
+
+            // --- Check Other Element Collisions ---
+            level.elements.forEach((el, index) => {
+                if (checkCollision(player, el)) {
+                    switch (el.type) {
+                        case 'hazard':
+                            playSound('hit');
+                            resetLevel();
+                            break;
+                        case 'jumpPad':
+                             if ((effectiveGravity > 0 && player.vy > 0 && player.y + player.height <= el.y + el.height / 2) ||
+                                 (effectiveGravity < 0 && player.vy < 0 && player.y >= el.y + el.height / 2))
+                             {
+                                 player.vy = (effectiveGravity > 0 ? JUMP_PAD_FORCE : -JUMP_PAD_FORCE);
+                                 playSound('jumpPad');
+                                 onGround = false; // Make sure player isn't grounded after bounce
+                                 player.canJump = false; // Used jump
+                             }
+                            break;
+                         case 'switch':
+                            if (!el.triggered) { // Trigger only once per touch usually, reset on level load
+                                switches[el.id] = !switches[el.id];
+                                el.color = switches[el.id] ? '#e0f' : '#a0f'; // Change color to show state
+                                el.triggered = true; // Mark as triggered in this contact instance
+                                playSound('switch');
+                                // Update platforms linked to this switch immediately
+                                level.elements.forEach(p => {
+                                    if (p.type === 'togglePlatform' && p.switchId === el.id) {
+                                        // Optionally add visual feedback here if needed
+                                    }
+                                });
+                            }
+                            break;
+                        case 'key':
+                            if (!el.collected) {
+                                el.collected = true;
+                                hasKey = true;
+                                updateUI();
+                                playSound('collect');
+                            }
+                            break;
+                        case 'door':
+                             if (el.locked && hasKey) {
+                                 el.locked = false; // Unlock the door
+                                 // Optionally change door appearance or remove it
+                                 playSound('unlock');
+                             }
+                            break;
+                        case 'gravitySwitch':
+                             if (!el.triggered) { // Only trigger once per pass
+                                currentGravity *= -1;
+                                currentJumpForce *= -1;
+                                player.vy *= -0.5; // Reduce velocity slightly on switch to prevent overshoot
+                                el.triggered = true; // Avoid rapid flipping if player stays on switch
+                                playSound('gravity');
+                             }
+                             break;
+                    }
+                } else {
+                     // Reset triggered flags when player moves off
+                     if (el.type === 'switch' || el.type === 'gravitySwitch') {
+                        el.triggered = false;
+                     }
+                }
+            });
+
+            // --- Check Boundaries ---
+            if (player.y > GAME_HEIGHT || player.y + player.height < 0) { // Fell off bottom or top
+                playSound('fall');
+                resetLevel();
+            }
+             if (player.x < 0) player.x = 0;
+             if (player.x + player.width > GAME_WIDTH) player.x = GAME_WIDTH - player.width;
+
+            // --- Check Goal ---
+            if (checkCollision(player, level.goal)) {
+                levelComplete();
+            }
+        }
+
+        function handlePlatformCollisionX(p, platform) {
+            if (p.vx > 0) { // Moving right
+                p.x = platform.x - p.width;
+            } else if (p.vx < 0) { // Moving left
+                p.x = platform.x + platform.width;
+            }
+            p.vx = 0; // Stop horizontal movement
+            return true; // Collision occurred
+        }
+
+        function handlePlatformCollisionY(p, platform, grav) {
+             let landedOnPlatform = null;
+             if (grav > 0) { // Normal gravity
+                 if (p.vy > 0 && p.y + p.height > platform.y && p.y < platform.y) { // Landing on top
+                     p.y = platform.y - p.height;
+                     p.vy = 0;
+                     p.canJump = true; // Allow jumping again
+                     landedOnPlatform = platform;
+                 } else if (p.vy < 0 && p.y < platform.y + platform.height && p.y + p.height > platform.y + platform.height) { // Hitting bottom
+                     p.y = platform.y + platform.height;
+                     p.vy = 0;
+                 }
+             } else { // Flipped gravity
+                 if (p.vy < 0 && p.y < platform.y + platform.height && p.y + p.height > platform.y + platform.height) { // "Landing" on bottom (ceiling)
+                     p.y = platform.y + platform.height;
+                     p.vy = 0;
+                     p.canJump = true; // Allow jumping again
+                     landedOnPlatform = platform;
+                 } else if (p.vy > 0 && p.y + p.height > platform.y && p.y < platform.y) { // Hitting top
+                     p.y = platform.y - p.height;
+                     p.vy = 0;
+                 }
+             }
+             return landedOnPlatform; // Return the platform if landed on, else null
+        }
+
+
+        // --- Game Rendering ---
+        function renderGame() {
+            // Clear canvas
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            ctx.fillStyle = '#445'; // Background
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            const level = levels[currentLevelIndex];
+
+            // Draw platforms
+            level.platforms.forEach(p => {
+                // Skip drawing door platform if it's unlocked (if using isDoor flag)
+                 if (p.isDoor && !hasKey && currentLevelIndex === 9) { // Special case for Level 10 door platform
+                      ctx.fillStyle = p.color;
+                      ctx.fillRect(p.x, p.y, p.width, p.height);
+                 } else if (!p.isDoor) {
+                      ctx.fillStyle = p.color;
+                      ctx.fillRect(p.x, p.y, p.width, p.height);
+                 }
+            });
+
+             // Draw elements
+             level.elements.forEach(el => {
+                 // Skip collected keys
+                 if (el.type === 'key' && el.collected) return;
+                 // Skip unlocked doors
+                 if (el.type === 'door' && !el.locked) return;
+                 // Skip invisible disappearing platforms
+                 if (el.type === 'disappearingPlatform' && !el.visible) return;
+                 // Skip inactive toggle platforms
+                 if (el.type === 'togglePlatform' && switches[el.switchId] !== el.activeState) return;
+
+                 ctx.fillStyle = el.color;
+                 if (el.type === 'key') { // Draw 🔑 emoji or shape
+                     ctx.font = `${el.width}px Arial`;
+                     ctx.fillText('🔑', el.x, el.y + el.height * 0.8); // Adjust position for emoji baseline
+                 } else {
+                     ctx.fillRect(el.x, el.y, el.width, el.height);
+                 }
+             });
+
+            // Draw goal (Triangle)
+            ctx.fillStyle = level.goal.color;
+            ctx.beginPath();
+             // Adjust points based on gravity for visual cue
+             if (currentGravity > 0) {
+                 ctx.moveTo(level.goal.x + level.goal.width / 2, level.goal.y); // Top point
+                 ctx.lineTo(level.goal.x, level.goal.y + level.goal.height); // Bottom left
+                 ctx.lineTo(level.goal.x + level.goal.width, level.goal.y + level.goal.height); // Bottom right
+             } else {
+                 ctx.moveTo(level.goal.x + level.goal.width / 2, level.goal.y + level.goal.height); // Bottom point
+                 ctx.lineTo(level.goal.x, level.goal.y); // Top left
+                 ctx.lineTo(level.goal.x + level.goal.width, level.goal.y); // Top right
+             }
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw player
+            ctx.fillStyle = player.color;
+            // Optional: flip player sprite if gravity is reversed
+            if (currentGravity < 0) {
+                ctx.save();
+                ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
+                ctx.scale(1, -1);
+                ctx.fillRect(-player.width / 2, -player.height / 2, player.width, player.height);
+                ctx.restore();
+            } else {
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+            }
+            // Draw wall slide indication
+            if (wallSlide) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.fillRect(player.x + (player.wallDir === 1 ? player.width - 5 : 0), player.y, 5, player.height);
+            }
+
+        }
+
+        // --- UI Update ---
+        function updateUI() {
+            levelDisplay.textContent = `Level: ${currentLevelIndex + 1}`;
+            keyDisplay.textContent = `🔑: ${hasKey ? 'Yes' : 'No'}`;
+            mechanicTip.textContent = levels[currentLevelIndex].message || `Level ${currentLevelIndex + 1}`;
+            // Hide/show key display based on level
+            keyDisplay.style.display = (currentLevelIndex === 6 || currentLevelIndex === 9) ? 'inline' : 'none';
+        }
+
+         // --- Level Management ---
+         function resetLevel() {
+             loadLevel(currentLevelIndex); // Reload current level
+         }
+
+         function levelComplete() {
+             playSound('goal');
+             currentLevelIndex++;
+             if (currentLevelIndex >= levels.length) {
+                 showEndGameMessage("Congratulations! You beat all levels!");
+             } else {
+                showMessage(`Level ${currentLevelIndex} Complete!`, () => {
+                    loadLevel(currentLevelIndex);
+                 });
+
+             }
+         }
+
+         function loadLevel(index) {
+             if (index >= levels.length) {
+                 console.error("Attempted to load invalid level index:", index);
+                 return;
+             }
+             currentLevelIndex = index;
+             const level = levels[currentLevelIndex];
+
+             // Reset player state
+             player = createPlayer(level.playerStart.x, level.playerStart.y);
+             currentGravity = GRAVITY_NORMAL; // Reset gravity
+             currentJumpForce = JUMP_FORCE_NORMAL;
+             hasKey = false;
+             onGround = false;
+             player.canJump = true;
+             wallSlide = false;
+             canWallJump = false;
+             wallJumpTimer = 0;
+
+             // Reset level elements state
+              switches = {}; // Clear switch states
+              level.elements.forEach(el => {
+                 if (el.type === 'key') el.collected = false;
+                 if (el.type === 'door') el.locked = true;
+                 if (el.type === 'switch') {
+                     el.state = false; // Reset internal state if needed
+                     el.color = '#a0f'; // Reset color
+                     switches[el.id] = false; // Ensure it's registered in global state
+                 }
+                 if (el.type === 'disappearingPlatform') {
+                     el.visible = true;
+                     el.timer = 0;
+                 }
+                  if (el.type === 'gravitySwitch') {
+                      el.triggered = false; // Reset trigger state
+                  }
+                  // Reset moving platform positions
+                 if(el.type === 'movingPlatform') {
+                    // Find the initial position if stored, otherwise use the defined start pos
+                    // For simplicity, we'll just reset to the defined 'x', 'y' which might not be the *true* initial start if range is complex, but good enough here.
+                     if (el.hasOwnProperty('startX')) el.x = el.startX; // Requires startX/startY to be defined in level data
+                     if (el.hasOwnProperty('startY')) el.y = el.startY;
+                     // Reset direction if needed based on start position relative to range
+                     if(el.speedX && el.rangeX && el.x === el.rangeX[1]) el.speedX = Math.abs(el.speedX) * -1;
+                     else if (el.speedX) el.speedX = Math.abs(el.speedX);
+                     if(el.speedY && el.rangeY && el.y === el.rangeY[1]) el.speedY = Math.abs(el.speedY) * -1;
+                     else if (el.speedY) el.speedY = Math.abs(el.speedY);
+                 }
+             });
+             // Special setup for Level 10 door platform
+             if (index === 9) {
+                 const doorPlatform = level.platforms.find(p => p.isDoor);
+                 if (doorPlatform) doorPlatform.color = '#a65'; // Ensure correct color initially
+             }
+
+
+             updateUI();
+             gameActive = true; // Ensure game is active
+         }
+
+         // --- Message Overlay ---
+         function showMessage(text, buttonAction) {
+             messageText.textContent = text;
+             messageOverlay.style.display = 'flex';
+             gameActive = false; // Pause game
+             messageButton.onclick = () => {
+                 messageOverlay.style.display = 'none';
+                 gameActive = true; // Resume game
+                 if (buttonAction) buttonAction();
+             };
+         }
+
+        function showEndGameMessage(text) {
+            messageText.textContent = text;
+            messageOverlay.style.display = 'flex';
+            gameActive = false; // Stop game
+            messageButton.textContent = "Play Again?";
+            messageButton.onclick = () => {
+                messageOverlay.style.display = 'none';
+                currentLevelIndex = 0; // Restart from level 1
+                loadLevel(currentLevelIndex);
+                messageButton.textContent = "Continue"; // Reset button text
+            };
+        }
+
+        // --- Simple Sound Placeholders ---
+        // In a real game, you'd use Web Audio API
+        function playSound(soundName) {
+            // console.log("Sound:", soundName); // Log sound events for now
+             // Add subtle visual feedback instead
+             switch(soundName) {
+                 case 'jump':
+                     // Could add small particle effect at player feet
+                     break;
+                 case 'hit':
+                 case 'fall':
+                     // Flash screen red briefly
+                     gameContainer.style.animation = 'flashRed 0.2s ease-out';
+                     setTimeout(() => gameContainer.style.animation = '', 200);
+                     break;
+                 case 'goal':
+                 case 'collect':
+                 case 'unlock':
+                     // Flash screen green briefly
+                     gameContainer.style.animation = 'flashGreen 0.2s ease-out';
+                     setTimeout(() => gameContainer.style.animation = '', 200);
+                     break;
+                case 'jumpPad':
+                case 'gravity':
+                case 'switch':
+                     gameContainer.style.animation = 'flashWhite 0.1s ease-out';
+                     setTimeout(() => gameContainer.style.animation = '', 100);
+                    break;
+
+             }
+        }
+        // Add CSS for flashes
+        const styleSheet = document.createElement("style");
+        styleSheet.type = "text/css";
+        styleSheet.innerText = `
+            @keyframes flashRed { 0%, 100% { background-color: #333; } 50% { background-color: #800; } }
+            @keyframes flashGreen { 0%, 100% { background-color: #333; } 50% { background-color: #080; } }
+            @keyframes flashWhite { 0%, 100% { background-color: #333; } 50% { background-color: #aaa; } }
+        `;
+        document.head.appendChild(styleSheet);
+
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            updateGame();
+            renderGame();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Initialize Game ---
+        function initGame() {
+            defineLevels();
+            loadLevel(currentLevelIndex); // Load the first level
+            requestAnimationFrame(gameLoop); // Start the game loop
+        }
+
+        // Start the game when the page loads
+        initGame();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+html
+ <!DOCTYPE html>
+ <html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>World Cup Group Predictor - Brutally Honest Edition</title>
+  <style>
+  body {
+  font-family: 'Arial', sans-serif;
+  color: #333;
+  background-color: #f4f4f4;
+  margin: 20px;
+  }
+  .container {
+  max-width: 960px;
+  margin: 0 auto;
+  }
+  .group {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 25px;
+  padding: 20px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
+  .group-title {
+  font-size: 1.8em;
+  font-weight: bold;
+  color: #e44d26; /* A strong, slightly aggressive color */
+  margin-bottom: 15px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e44d26;
+  }
+  .match-result {
+  margin-bottom: 8px;
+  color: #555;
+  }
+  .standings-title {
+  font-weight: bold;
+  margin-top: 15px;
+  margin-bottom: 10px;
+  font-size: 1.2em;
+  }
+  .standings {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  }
+  .standings th, .standings td {
+  border: 1px solid #eee;
+  padding: 10px;
+  text-align: left;
+  }
+  .standings th {
+  background-color: #f9f9f9;
+  font-weight: bold;
+  color: #777;
+  }
+  .standings tbody tr:nth-child(odd) {
+  background-color: #fefefe;
+  }
+  .standings tbody tr:nth-child(even) {
+  background-color: #fdfdfd;
+  }
+  .commentary {
+  font-style: italic;
+  color: #777;
+  margin-top: 5px;
+  font-size: 0.95em;
+  }
+  .team-name {
+  font-weight: bold;
+  color: #3a3a3a;
+  }
+  </style>
+ </head>
+ <body>
+  <div class="container">
+  <div id="results"></div>
+  </div>
+ 
+
+  <script>
+  // 1. Data Representation: Team strengths, brutally honest and biased.
+  const teamStrengths = {
+  'Italy 🇮🇹': { offense: 7, defense: 8, midfield: 7, stereotype: "Overrated, coasting on past glory." },
+  'Czechia 🇨🇿': { offense: 6, defense: 6, midfield: 6, stereotype: "Technically sound, but ultimately bland." },
+  'Serbia 🇷🇸': { offense: 7, defense: 6, midfield: 7, stereotype: "Talented chaos merchants, prone to self-destruction." },
+  'Qatar 🇶🇦': { offense: 2, defense: 3, midfield: 3, stereotype: "Bought their way in, a stain on football." },
+  'Argentina 🇦🇷': { offense: 9, defense: 7, midfield: 8, stereotype: "Messi or bust, historically choke under pressure." },
+  'Denmark 🇩🇰': { offense: 7, defense: 7, midfield: 7, stereotype: "Solid, dependable, utterly forgettable." },
+  'Poland 🇵🇱': { offense: 7, defense: 6, midfield: 6, stereotype: "Lewandowski's brilliance wasted on mediocrity." },
+  'Norway 🇳🇴': { offense: 6, defense: 6, midfield: 6, stereotype: "Haaland is wasted here, carrying donkeys." },
+  'France 🇫🇷': { offense: 9, defense: 8, midfield: 9, stereotype: "Talent oozing, but arrogance and infighting are their kryptonite." },
+  'Senegal 🇸🇳': { offense: 7, defense: 7, midfield: 7, stereotype: "Physical, energetic, strategically naive." },
+  'Peru 🇵🇪': { offense: 6, defense: 6, midfield: 6, stereotype: "Lucky to qualify, will be utterly dismantled." },
+  'Slovenia 🇸🇮': { offense: 5, defense: 6, midfield: 5, stereotype: "Oblak deserves better, rest of the team is Championship level." },
+  'Spain 🇪🇸': { offense: 8, defense: 8, midfield: 8, stereotype: "Tiki-taka zombies, possession without penetration." },
+  'United States 🇺🇸': { offense: 6, defense: 6, midfield: 7, stereotype: "Overhyped by clueless media, zero big-game mentality." },
+  'Australia 🇦🇺': { offense: 5, defense: 6, midfield: 5, stereotype: "Spirit and grit, but ultimately lambs to the slaughter." },
+  'Ecuador 🇪🇨': { offense: 6, defense: 6, midfield: 6, stereotype: "Altitude bullies, road form worse than Sunday league." },
+  'England 🏴󠁧󠁢󠁥󠁮󠁧󠁿': { offense: 8, defense: 8, midfield: 8, stereotype: "Perennial underachievers, media hype beyond parody." },
+  'Sweden 🇸🇪': { offense: 7, defense: 7, midfield: 7, stereotype: "Organized, disciplined, creativity levels of a brick." },
+  'Costa Rica 🇨🇷': { offense: 5, defense: 6, midfield: 5, stereotype: "2014 miracle was a fluke, back to being irrelevant." },
+  'Turkey 🇹🇷': { offense: 6, defense: 6, midfield: 6, stereotype: "Passionate fans, team's brain-to-passion ratio is abysmal." },
+  'Netherlands 🇳🇱': { offense: 8, defense: 7, midfield: 8, stereotype: "Always a nearly-team, destined for glorious failure." },
+  'Portugal 🇵🇹': { offense: 9, defense: 7, midfield: 8, stereotype: "Ronaldo ego-system, past their peak, style over substance." },
+  'Croatia 🇭🇷': { offense: 7, defense: 7, midfield: 8, stereotype: "Aging legends, relying on Modric's geriatric magic." },
+  'Russia 🇷🇺': { offense: 6, defense: 7, midfield: 6, stereotype: "International pariahs, footballing irrelevance confirmed." },
+  'Belgium 🇧🇪': { offense: 8, defense: 7, midfield: 8, stereotype: "Golden generation? More like tarnished bronze, choked at every hurdle." },
+  'Uruguay 🇺🇾': { offense: 7, defense: 7, midfield: 7, stereotype: "Cynical, dirty tactics, the dark arts personified." },
+  'South Korea 🇰🇷': { offense: 6, defense: 6, midfield: 7, stereotype: "Industrious, disciplined, lacking the spark of genius." },
+  'Ghana 🇬🇭': { offense: 6, defense: 6, midfield: 6, stereotype: "Wildcard chaos, capable of brilliance and utter collapse in the same game." },
+  'Brazil 🇧🇷': { offense: 9, defense: 8, midfield: 9, stereotype: "Overconfident samba showboaters, spectacularly bottle it when it matters." },
+  'Colombia 🇨🇴': { offense: 7, defense: 7, midfield: 7, stereotype: "Perennial dark horses that always stumble before the finish line." },
+  'Ukraine 🇺🇦': { offense: 6, defense: 7, midfield: 6, stereotype: "Resilient spirit, but heart only gets you so far in elite football." },
+  'Montenegro 🇲🇪': { offense: 5, defense: 5, midfield: 5, stereotype: "Happy to be here, statistically guaranteed to finish bottom." }
+  };
+ 
+
+  // 2. Group Definitions
+  const groups = {
+  'Group A': ['Italy 🇮🇹', 'Czechia 🇨🇿', 'Serbia 🇷🇸', 'Qatar 🇶🇦'],
+  'Group B': ['Argentina 🇦🇷', 'Denmark 🇩🇰', 'Poland 🇵🇱', 'Norway 🇳🇴'],
+  'Group C': ['France 🇫🇷', 'Senegal 🇸🇳', 'Peru 🇵🇪', 'Slovenia 🇸🇮'],
+  'Group D': ['Spain 🇪🇸', 'United States 🇺🇸', 'Australia 🇦🇺', 'Ecuador 🇪🇨'],
+  'Group E': ['England 🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Sweden 🇸🇪', 'Costa Rica 🇨🇷', 'Turkey 🇹🇷'],
+  'Group F': ['Netherlands 🇳🇱', 'Portugal 🇵🇹', 'Croatia 🇭🇷', 'Russia 🇷🇺'],
+  'Group G': ['Belgium 🇧🇪', 'Uruguay 🇺🇾', 'South Korea 🇰🇷', 'Ghana 🇬🇭'],
+  'Group H': ['Brazil 🇧🇷', 'Colombia 🇨🇴', 'Ukraine 🇺🇦', 'Montenegro 🇲🇪']
+  };
+ 
+
+  // 3. Simulation Function (Brutally Honest)
+  function simulateMatch(team1, team2) {
+  const team1Strength = teamStrengths[team1];
+  const team2Strength = teamStrengths[team2];
+ 
+
+  let team1Score = team1Strength.offense + team1Strength.midfield + (Math.random() * 3 - 1.5);
+  let team2Score = team2Strength.offense + team2Strength.midfield + (Math.random() * 3 - 1.5);
+ 
+
+  team1Score -= team2Strength.defense * 0.5;
+  team2Score -= team1Strength.defense * 0.5;
+ 
+
+  team1Score += 0.5; // Home advantage (in group stage context)
+ 
+
+  if (team1Strength.stereotype.includes("choke")) team1Score *= (0.8 + Math.random() * 0.2);
+  if (team2Strength.stereotype.includes("choke")) team2Score *= (0.8 + Math.random() * 0.2);
+  if (team1Strength.stereotype.includes("overrated")) team1Score *= (0.7 + Math.random() * 0.3);
+  if (team2Strength.stereotype.includes("overrated")) team2Score *= (0.7 + Math.random() * 0.3);
+ 
+
+  if (team1Score > team2Score) {
+  return { winner: team1, loser: team2, draw: false, team1Goals: Math.max(0, Math.round(team1Score)), team2Goals: Math.max(0, Math.round(team2Score)) };
+  } else if (team2Score > team1Score) {
+  return { winner: team2, loser: team1, draw: false, team1Goals: Math.max(0, Math.round(team1Score)), team2Goals: Math.max(0, Math.round(team2Score)) };
+  } else {
+  return { winner: null, loser: null, draw: true, team1Goals: Math.max(0, Math.round(team1Score)), team2Goals: Math.max(0, Math.round(team2Score)) };
+  }
+  }
+ 
+
+  // 4. Group Stage Simulation
+  function simulateGroup(groupName) {
+  const teams = groups[groupName];
+  const results = [];
+  const standings = {};
+  teams.forEach(team => standings[team] = { points: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0 });
+ 
+
+  for (let i = 0; i < teams.length; i++) {
+  for (let j = i + 1; j < teams.length; j++) {
+  const team1 = teams[i];
+  const team2 = teams[j];
+  const matchResult = simulateMatch(team1, team2);
+  results.push(`${team1} vs ${team2}: ${matchResult.team1Goals} - ${matchResult.team2Goals} (${matchResult.winner ? matchResult.winner : 'Draw'})`);
+ 
+
+  if (matchResult.draw) {
+  standings[team1].points += 1;
+  standings[team2].points += 1;
+  } else {
+  standings[matchResult.winner].points += 3;
+  }
+ 
+
+  standings[team1].goalsFor += matchResult.team1Goals;
+  standings[team1].goalsAgainst += matchResult.team2Goals;
+  standings[team1].goalDifference = standings[team1].goalsFor - standings[team1].goalsAgainst;
+ 
+
+  standings[team2].goalsFor += matchResult.team2Goals;
+  standings[team2].goalsAgainst += matchResult.team1Goals;
+  standings[team2].goalDifference = standings[team2].goalsFor - standings[team2].goalsAgainst;
+  }
+  }
+ 
+
+  const sortedStandings = Object.entries(standings).sort(([, a], [, b]) => {
+  if (b.points !== a.points) {
+  return b.points - a.points;
+  }
+  return b.goalDifference - a.goalDifference;
+  });
+ 
+
+  return { results: results, standings: sortedStandings };
+  }
+ 
+
+  // 5.  Run Simulations and Output Results
+  const resultsDiv = document.getElementById('results');
+ 
+
+  for (const groupName in groups) {
+  const simulationResult = simulateGroup(groupName);
+ 
+
+  const groupDiv = document.createElement('div');
+  groupDiv.classList.add('group');
+ 
+
+  const groupTitle = document.createElement('div');
+  groupTitle.classList.add('group-title');
+  groupTitle.textContent = `--- ${groupName} ---`;
+  groupDiv.appendChild(groupTitle);
+ 
+
+  simulationResult.results.forEach(result => {
+  const matchResultDiv = document.createElement('div');
+  matchResultDiv.classList.add('match-result');
+  matchResultDiv.innerHTML = result.replace(/ vs /, ' <span style="font-weight: normal;">vs</span> '); //Styling "vs"
+  groupDiv.appendChild(matchResultDiv);
+  });
+ 
+
+  const standingsTitle = document.createElement('div');
+  standingsTitle.classList.add('standings-title');
+  standingsTitle.textContent = "Standings:";
+  groupDiv.appendChild(standingsTitle);
+ 
+
+  const standingsTable = document.createElement('table');
+  standingsTable.classList.add('standings');
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  const headers = ['Rank', 'Team', 'Points', 'GD'];
+  headers.forEach(headerText => {
+  const th = document.createElement('th');
+  th.textContent = headerText;
+  headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  standingsTable.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  standingsTable.appendChild(tbody); // Append tbody here before rows
+  groupDiv.appendChild(standingsTable); // Append table to group div
+ 
+
+  simulationResult.standings.forEach((team, index) => {
+  const teamName = team[0];
+  const teamData = team[1];
+  const tableRow = document.createElement('tr');
+ 
+
+  const rankCell = document.createElement('td');
+  rankCell.textContent = index + 1;
+  tableRow.appendChild(rankCell);
+ 
+
+  const teamCell = document.createElement('td');
+  teamCell.innerHTML = `<span class="team-name">${teamName}</span>`; // Apply team-name styling
+  tableRow.appendChild(teamCell);
+ 
+
+  const pointsCell = document.createElement('td');
+  pointsCell.textContent = teamData.points;
+  tableRow.appendChild(pointsCell);
+ 
+
+  const gdCell = document.createElement('td');
+  gdCell.textContent = teamData.goalDifference;
+  tableRow.appendChild(gdCell);
+ 
+
+  tbody.appendChild(tableRow);
+ 
+
+  let commentaryText = "";
+  if (index === 0) {
+  commentaryText = `Expected to dominate, barely scraped through. Probably got lucky.`;
+  } else if (index === 1) {
+  commentaryText = `A decent effort, but realistically, round of 16 exit is their ceiling.`;
+  } else if (index === 2) {
+  commentaryText = `Typical performance. Exactly as mediocre as predicted.`;
+  } else {
+  commentaryText = `An utter disgrace. Should be banned from international football.`;
+  }
+ 
+
+  const commentaryDiv = document.createElement('div');
+  commentaryDiv.classList.add('commentary');
+  commentaryDiv.textContent = `${teamName}: ${commentaryText}`;
+  groupDiv.appendChild(commentaryDiv); //Append commentary to groupDiv, not tbody
+  });
+ 
+
+  resultsDiv.appendChild(groupDiv);
+  }
+  </script>
+ </body>
+ </html>

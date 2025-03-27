@@ -1,0 +1,1851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tanks!</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #333;
+            color: white;
+            font-family: 'Arial', sans-serif;
+        }
+        #game-container {
+            position: relative;
+            border: 2px solid #666;
+            background-color: #ddd; /* Arena background */
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        canvas {
+            display: block;
+            background-color: #ccc; /* Fallback if canvas context fails */
+        }
+        #game-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none; /* Allow canvas interaction */
+            text-shadow: 1px 1px 2px black;
+        }
+        #menu {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: all; /* Enable buttons */
+            z-index: 10;
+        }
+        #menu h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+        #menu button {
+            padding: 15px 30px;
+            font-size: 1.5em;
+            margin: 10px;
+            cursor: pointer;
+            background-color: #555;
+            color: white;
+            border: 2px solid #888;
+            border-radius: 5px;
+            pointer-events: all;
+        }
+         #menu button:hover {
+            background-color: #777;
+         }
+        #hud {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.2em;
+            font-weight: bold;
+            z-index: 5;
+            pointer-events: none;
+        }
+        #message-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 2em;
+            z-index: 8;
+            pointer-events: all; /* Allow clicking 'continue' */
+        }
+        #message-overlay button {
+             padding: 10px 20px;
+             font-size: 0.8em;
+             margin-top: 20px;
+             cursor: pointer;
+             background-color: #555;
+             color: white;
+             border: 2px solid #888;
+             border-radius: 5px;
+        }
+        .hidden {
+            display: none !important;
+        }
+        #p1-score, #p2-score { margin: 0 10px; }
+        #lives { margin-left: auto; margin-right: 10px; }
+        #mission-display { margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="game-ui">
+            <div id="menu">
+                <h1>Tanks!</h1>
+                <button id="start-sp">Single Player</button>
+                <button id="start-mp">Multiplayer</button>
+            </div>
+            <div id="hud" class="hidden">
+                <span id="p1-stats">P1: 🟥 <span id="p1-score">0</span></span>
+                <span id="p2-stats" class="hidden">P2: 🟦 <span id="p2-score">0</span></span>
+                <span id="lives">Lives: ❤️❤️❤️</span>
+                <span id="mission-display">Mission: 1</span>
+            </div>
+            <div id="message-overlay" class="hidden">
+                <div id="message-text">Message Here</div>
+                <button id="continue-button" class="hidden">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameContainer = document.getElementById('game-container');
+
+        // UI Elements
+        const menuDiv = document.getElementById('menu');
+        const hudDiv = document.getElementById('hud');
+        const messageOverlay = document.getElementById('message-overlay');
+        const messageText = document.getElementById('message-text');
+        const continueButton = document.getElementById('continue-button');
+        const startSpButton = document.getElementById('start-sp');
+        const startMpButton = document.getElementById('start-mp');
+        const p1StatsDiv = document.getElementById('p1-stats');
+        const p2StatsDiv = document.getElementById('p2-stats');
+        const p1ScoreSpan = document.getElementById('p1-score');
+        const p2ScoreSpan = document.getElementById('p2-score');
+        const livesSpan = document.getElementById('lives');
+        const missionDisplaySpan = document.getElementById('mission-display');
+
+        // Game Constants
+        const WIDTH = canvas.width;
+        const HEIGHT = canvas.height;
+        const TANK_SIZE = 30;
+        const TURRET_LENGTH = TANK_SIZE * 0.7;
+        const TURRET_WIDTH = 6;
+        const BULLET_SIZE = 6;
+        const BULLET_SPEED = 6;
+        const MINE_SIZE = 15;
+        const MINE_TIMER = 3000; // 3 seconds
+        const MINE_FUSE_TIME = 500; // 0.5 second flashing before boom
+        const MINE_PROXIMITY = MINE_SIZE * 1.5;
+        const MINE_EXPLOSION_RADIUS = 60;
+        const MINE_EXPLOSION_DURATION = 300; // ms
+        const MAX_BULLETS = 5;
+        const MAX_MINES = 3; // Per player tank
+        const BLOCK_SIZE = 40;
+        const TANK_COLORS = {
+            player1: 'crimson', // Red
+            player2: 'royalblue', // Blue
+            brown: '#A0522D', // Brown
+            ash: '#808080', // Ash (Gray)
+            marine: '#008080', // Marine (Teal)
+            yellow: '#FFD700', // Yellow
+            pink: '#FF69B4', // Pink
+            green: '#228B22', // Green
+            violet: '#9400D3', // Violet
+            white: '#FFFFFF', // White
+            black: '#111111' // Black
+        };
+        const ENEMY_FIRE_DELAY_BASE = 1500; // ms base, varies per type
+        const ENEMY_MOVE_INTERVAL = 500; // ms base interval to decide movement
+        const EXTRA_LIFE_INTERVAL = 5; // missions
+        const MAX_MISSIONS = 100;
+        const MISSION_UNLOCK_THRESHOLD = 20;
+
+        // Game State
+        let gameState = {
+            mode: 'menu', // 'menu', 'sp', 'mp', 'paused', 'gameover', 'mission_complete', 'victory'
+            mission: 1,
+            lives: 3,
+            p1Score: 0,
+            p2Score: 0,
+            enemiesRemainingInMission: [], // Store initial enemies for restart logic
+            missionCompleteStatus: {}, // Store completion status { 1: true, 2: false ... }
+            missionsUnlocked: MISSION_UNLOCK_THRESHOLD,
+            player1: null,
+            player2: null,
+            enemies: [],
+            bullets: [],
+            mines: [],
+            blocks: [],
+            explosions: [],
+            keys: {},
+            mouse: { x: 0, y: 0, down: false, rightDown: false },
+            lastTimestamp: 0,
+            deltaTime: 0,
+            gameStartTime: 0,
+            pausedState: null, // To store state before pause
+            missionStartTime: 0,
+        };
+
+        // Utility Functions
+        function distSq(x1, y1, x2, y2) {
+            return (x1 - x2) ** 2 + (y1 - y2) ** 2;
+        }
+
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        function checkCircleRectCollision(circle, rect) {
+            let testX = circle.x;
+            let testY = circle.y;
+
+            if (circle.x < rect.x) testX = rect.x; // left edge
+            else if (circle.x > rect.x + rect.width) testX = rect.x + rect.width; // right edge
+            if (circle.y < rect.y) testY = rect.y; // top edge
+            else if (circle.y > rect.y + rect.height) testY = rect.y + rect.height; // bottom edge
+
+            let distanceSq = distSq(circle.x, circle.y, testX, testY);
+            return distanceSq < circle.radius ** 2;
+        }
+
+         function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        // Base Class
+        class GameObject {
+            constructor(x, y, width, height, color) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+                this.id = Math.random().toString(36).substr(2, 9); // Unique ID
+                this.active = true; // Flag for removal
+            }
+            draw(ctx) { /* Base draw method (optional) */ }
+            update(deltaTime) { /* Base update method (optional) */ }
+        }
+
+        // --- Game Objects ---
+
+        class Tank extends GameObject {
+            constructor(x, y, color, type = 'base') {
+                super(x, y, TANK_SIZE, TANK_SIZE, color);
+                this.type = type;
+                this.angle = 0; // Body angle (for movement direction)
+                this.turretAngle = 0; // Turret angle (for aiming)
+                this.speed = 0;
+                this.turnSpeed = Math.PI / 60; // Radians per frame step
+                this.maxSpeed = 2;
+                this.bullets = []; // References to active bullets
+                this.mines = []; // References to active mines
+                this.lastShotTime = 0;
+                this.fireRate = 500; // ms between shots
+                this.lastMineTime = 0;
+                this.mineRate = 1000; // ms between mines
+                this.isMoving = false;
+                this.tracks = []; // Array of {x, y, time} for track marks
+                this.maxTracks = 20; // Max number of track segments
+                this.trackInterval = 100; // ms between track marks
+                this.lastTrackTime = 0;
+                this.isInvisible = false; // For white tanks
+            }
+
+            setSpeed(speed) { this.maxSpeed = speed; }
+            setFireRate(rate) { this.fireRate = rate; }
+
+            move(dx, dy) {
+                this.x += dx;
+                this.y += dy;
+                this.isMoving = (dx !== 0 || dy !== 0);
+
+                // Add track marks if moving
+                const now = performance.now();
+                if (this.isMoving && now - this.lastTrackTime > this.trackInterval) {
+                    this.tracks.push({ x: this.x + this.width / 2, y: this.y + this.height / 2, time: now });
+                    if (this.tracks.length > this.maxTracks) {
+                        this.tracks.shift();
+                    }
+                    this.lastTrackTime = now;
+                }
+            }
+
+            canShoot() {
+                const now = performance.now();
+                return now - this.lastShotTime >= this.fireRate && this.bullets.length < MAX_BULLETS;
+            }
+
+            shoot() {
+                if (!this.canShoot()) return null;
+
+                this.lastShotTime = performance.now();
+                const bulletX = this.x + this.width / 2 + Math.cos(this.turretAngle) * (TURRET_LENGTH + 5);
+                const bulletY = this.y + this.height / 2 + Math.sin(this.turretAngle) * (TURRET_LENGTH + 5);
+                const bullet = new Bullet(bulletX, bulletY, this.turretAngle, BULLET_SPEED, this);
+                gameState.bullets.push(bullet);
+                this.bullets.push(bullet);
+                return bullet;
+            }
+
+             canLayMine() {
+                 const now = performance.now();
+                 return this.mines.length < MAX_MINES && now - this.lastMineTime >= this.mineRate;
+             }
+
+            layMine() {
+                if (!this.canLayMine()) return null;
+
+                this.lastMineTime = performance.now();
+                // Place mine behind the tank based on movement direction or just center if stationary
+                const mineX = this.x + this.width / 2;
+                const mineY = this.y + this.height / 2;
+                const mine = new Mine(mineX, mineY, this);
+                gameState.mines.push(mine);
+                this.mines.push(mine);
+                return mine;
+            }
+
+            update(deltaTime) {
+                 // Remove references to inactive bullets/mines
+                this.bullets = this.bullets.filter(b => b.active);
+                this.mines = this.mines.filter(m => m.active);
+
+                // Fade out old tracks
+                const now = performance.now();
+                this.tracks = this.tracks.filter(t => now - t.time < 2000); // Tracks visible for 2 seconds
+            }
+
+            draw(ctx) {
+                const centerX = this.x + this.width / 2;
+                const centerY = this.y + this.height / 2;
+
+                // Draw Tracks (before tank body)
+                if (this.tracks.length > 1) {
+                    ctx.strokeStyle = '#666'; // Track color
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(this.tracks[0].x, this.tracks[0].y);
+                    for (let i = 1; i < this.tracks.length; i++) {
+                         ctx.lineTo(this.tracks[i].x, this.tracks[i].y);
+                    }
+                    // Fade effect (optional, could impact performance)
+                     // const opacity = Math.max(0, 1 - (performance.now() - this.tracks[0].time) / 2000);
+                     // ctx.globalAlpha = opacity;
+                    ctx.stroke();
+                    // ctx.globalAlpha = 1.0; // Reset alpha
+                }
+
+                // Tank Body
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(this.angle); // Rotate body if needed (optional, using square for now)
+                ctx.fillStyle = this.color;
+
+                 if (this.isInvisible) {
+                    // Draw only tracks or a very faint outline for white tank
+                     ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; // Very faint body
+                     ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+                     // Tracks are drawn above
+                } else {
+                    ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+                    // Simple decoration
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+                    ctx.fillRect(-this.width/4, -this.height/4, this.width/2, this.height/2);
+                }
+
+                ctx.restore(); // Restore translation/rotation for body
+
+                 // Turret Base (optional decoration)
+                ctx.fillStyle = 'grey';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, TANK_SIZE / 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Turret Barrel
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(this.turretAngle);
+                ctx.fillStyle = 'darkgrey';
+                ctx.fillRect(0, -TURRET_WIDTH / 2, TURRET_LENGTH, TURRET_WIDTH);
+                ctx.restore();
+            }
+
+            handleCollision(other) {
+                // Basic collision response: stop movement against walls/blocks
+                // Implemented in the main collision checking logic
+            }
+
+            destroy() {
+                this.active = false;
+                // Could add an explosion effect here
+                 const explosion = new Explosion(this.x + this.width/2, this.y + this.height/2, TANK_SIZE * 1.5, 200);
+                 gameState.explosions.push(explosion);
+            }
+        }
+
+        class PlayerTank extends Tank {
+            constructor(x, y, color, playerNumber) {
+                super(x, y, color, `player${playerNumber}`);
+                this.playerNumber = playerNumber;
+                this.score = 0;
+                this.controls = playerNumber === 1 ?
+                    { up: 'w', down: 's', left: 'a', right: 'd', shoot: 'mouse', mine: 'rightMouse' } :
+                    { up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright', shoot: 'shift', mine: '/' }; // Example P2 controls
+            }
+
+            update(deltaTime) {
+                super.update(deltaTime);
+
+                let dx = 0;
+                let dy = 0;
+                let targetSpeed = 0;
+
+                // Determine movement keys based on player number
+                const keys = gameState.keys;
+                const ctrl = this.controls;
+                if (keys[ctrl.up]) { dy = -1; targetSpeed = this.maxSpeed; }
+                if (keys[ctrl.down]) { dy = 1; targetSpeed = this.maxSpeed; }
+                if (keys[ctrl.left]) { dx = -1; targetSpeed = this.maxSpeed; }
+                if (keys[ctrl.right]) { dx = 1; targetSpeed = this.maxSpeed; }
+
+                // Normalize diagonal movement
+                if (dx !== 0 && dy !== 0) {
+                    targetSpeed /= Math.sqrt(2);
+                }
+
+                this.speed = targetSpeed; // For simplicity, instantly reach max speed
+                let moveX = dx * this.speed;
+                let moveY = dy * this.speed;
+
+                // --- Collision Detection & Response ---
+                 const originalX = this.x;
+                 const originalY = this.y;
+                 let potentialX = this.x + moveX;
+                 let potentialY = this.y + moveY;
+
+                 let collidedX = false;
+                 let collidedY = false;
+
+                 // Check against walls
+                 if (potentialX < 0 || potentialX + this.width > WIDTH) {
+                     moveX = 0; collidedX = true;
+                     potentialX = this.x; // Prevent moving into wall X
+                 }
+                 if (potentialY < 0 || potentialY + this.height > HEIGHT) {
+                     moveY = 0; collidedY = true;
+                      potentialY = this.y; // Prevent moving into wall Y
+                 }
+
+                // Check against blocks and other tanks
+                const obstacles = [...gameState.blocks, ...gameState.enemies, gameState.player1, gameState.player2].filter(o => o && o !== this && o.active);
+                for (const obstacle of obstacles) {
+                    // Check collision if moving only in X
+                    if (!collidedX && checkCollision({ ...this, x: potentialX }, obstacle)) {
+                         moveX = 0; collidedX = true; potentialX = this.x;
+                    }
+                    // Check collision if moving only in Y
+                    if (!collidedY && checkCollision({ ...this, y: potentialY }, obstacle)) {
+                         moveY = 0; collidedY = true; potentialY = this.y;
+                    }
+                }
+                // If still colliding after restricting X and Y separately (corner case), try moving only X or only Y
+                if (moveX !== 0 && moveY !== 0 && !collidedX && !collidedY) {
+                    let tempCollidedX = false;
+                    let tempCollidedY = false;
+                     for (const obstacle of obstacles) {
+                        if (checkCollision({ ...this, x: originalX + moveX }, obstacle)) tempCollidedX = true;
+                        if (checkCollision({ ...this, y: originalY + moveY }, obstacle)) tempCollidedY = true;
+                     }
+                      if (tempCollidedX && tempCollidedY) { // Colliding in both directions independently
+                          // Check if moving only X is fine
+                           let collisionWithOnlyX = false;
+                           for (const obstacle of obstacles) {
+                                if (checkCollision({ ...this, x: originalX + moveX }, obstacle)) {
+                                    collisionWithOnlyX = true; break;
+                                }
+                            }
+                            if (!collisionWithOnlyX) {
+                                moveY = 0; // Allow only X movement
+                            } else {
+                                // Check if moving only Y is fine
+                                let collisionWithOnlyY = false;
+                                for (const obstacle of obstacles) {
+                                    if (checkCollision({ ...this, y: originalY + moveY }, obstacle)) {
+                                        collisionWithOnlyY = true; break;
+                                    }
+                                }
+                                if (!collisionWithOnlyY) {
+                                    moveX = 0; // Allow only Y movement
+                                } else {
+                                    moveX = 0; moveY = 0; // Stop if can't move either way
+                                }
+                            }
+
+                      }
+                }
+
+
+                this.move(moveX, moveY);
+
+
+                // Aiming
+                if (this.playerNumber === 1) {
+                    const dxAim = gameState.mouse.x - (this.x + this.width / 2);
+                    const dyAim = gameState.mouse.y - (this.y + this.height / 2);
+                    this.turretAngle = Math.atan2(dyAim, dxAim);
+                     // Shooting / Mine
+                    if (gameState.mouse.down) this.shoot();
+                    if (gameState.mouse.rightDown) this.layMine();
+                } else {
+                     // P2 Aiming (simple: use movement direction or default forward)
+                    if (moveX !== 0 || moveY !== 0) {
+                        this.turretAngle = Math.atan2(moveY, moveX);
+                    }
+                    // P2 Shooting / Mine (using keyboard binds)
+                     if (keys[ctrl.shoot]) this.shoot();
+                     if (keys[ctrl.mine]) this.layMine();
+                }
+            }
+             addScore(points) {
+                this.score += points;
+                if (this.playerNumber === 1) gameState.p1Score = this.score;
+                else gameState.p2Score = this.score;
+                updateHUD();
+            }
+        }
+
+        class EnemyTank extends Tank {
+            constructor(x, y, type) {
+                super(x, y, TANK_COLORS[type], type);
+                this.aiState = 'idle'; // 'idle', 'moving', 'attacking', 'fleeing'
+                this.target = null; // Usually player1 or player2
+                this.lastMoveDecisionTime = 0;
+                this.moveInterval = ENEMY_MOVE_INTERVAL + getRandomInt(-100, 100);
+                this.fireDelay = ENEMY_FIRE_DELAY_BASE;
+                this.moveDirection = { x: 0, y: 0 };
+                this.predictiveFactor = 0; // For green tanks
+                this.laysMines = false; // For yellow tanks
+                this.avoidsPlayerMines = false; // For mine-laying tanks (yellow)
+                this.visionRangeSq = (WIDTH / 2) ** 2; // Default vision range squared
+
+                // Type-specific initialization
+                this.initTypeProperties();
+            }
+
+             initTypeProperties() {
+                switch (this.type) {
+                    case 'brown':
+                        this.setSpeed(0);
+                        this.setFireRate(2500 + getRandomInt(-500, 500));
+                        this.aiState = 'attacking'; // Stationary tanks are always 'attacking'
+                        break;
+                    case 'ash':
+                        this.setSpeed(1 + Math.random() * 0.5);
+                        this.setFireRate(2000 + getRandomInt(-400, 400));
+                        this.aiState = 'defensive'; // Will add specific logic later
+                        break;
+                    case 'marine':
+                         this.setSpeed(1 + Math.random() * 0.5);
+                         this.setFireRate(1800 + getRandomInt(-300, 300)); // Fire rate normal, bullet speed fast
+                         // Bullet speed handled in Bullet constructor based on owner type
+                         this.aiState = 'defensive';
+                        break;
+                    case 'yellow':
+                        this.setSpeed(1.8 + Math.random() * 0.4);
+                        this.setFireRate(2200 + getRandomInt(-300, 300));
+                        this.mineRate = 3000 + getRandomInt(-500, 500); // Lays mines often
+                        this.laysMines = true;
+                        this.avoidsPlayerMines = true; // Yellow tanks avoid mines
+                        this.aiState = 'patrolling';
+                        break;
+                    case 'pink':
+                        this.setSpeed(1.2 + Math.random() * 0.3);
+                        this.setFireRate(800 + getRandomInt(-200, 200)); // Fast firing
+                        this.aiState = 'attacking';
+                        break;
+                    case 'green':
+                        this.setSpeed(0);
+                        this.setFireRate(700 + getRandomInt(-150, 150)); // Fast firing
+                        this.predictiveFactor = 20 + Math.random() * 10; // Predictive aiming
+                         this.aiState = 'attacking';
+                        break;
+                    case 'violet':
+                        this.setSpeed(2 + Math.random() * 0.5);
+                        this.setFireRate(900 + getRandomInt(-200, 200)); // Fast firing
+                        this.aiState = 'attacking';
+                        break;
+                    case 'white':
+                         this.setSpeed(1.3 + Math.random() * 0.3);
+                         this.setFireRate(1000 + getRandomInt(-200, 200)); // Fast firing
+                         this.isInvisible = true;
+                         this.aiState = 'attacking';
+                         this.maxTracks = 40; // More tracks for white tank
+                         this.trackInterval = 80;
+                         break;
+                    case 'black':
+                        this.setSpeed(3 + Math.random() * 0.8); // Fast
+                        this.setFireRate(750 + getRandomInt(-150, 150)); // Fast firing
+                        this.aiState = 'attacking'; // Aggressive
+                        break;
+                }
+            }
+
+            update(deltaTime) {
+                super.update(deltaTime);
+                if (!this.active) return;
+
+                const now = performance.now();
+
+                 // Find nearest active player target
+                let P1 = gameState.player1;
+                let P2 = gameState.player2;
+                let target = null;
+                let distSqP1 = P1 && P1.active ? distSq(this.x, this.y, P1.x, P1.y) : Infinity;
+                let distSqP2 = P2 && P2.active ? distSq(this.x, this.y, P2.x, P2.y) : Infinity;
+
+                if (distSqP1 < distSqP2 && distSqP1 < this.visionRangeSq) target = P1;
+                else if (distSqP2 !== Infinity && distSqP2 < this.visionRangeSq) target = P2;
+                this.target = target;
+
+                 // AI Decision Making
+                 if (now - this.lastMoveDecisionTime > this.moveInterval) {
+                     this.decideAction();
+                     this.lastMoveDecisionTime = now;
+                 }
+
+                 // Execute Movement
+                 if (this.aiState === 'moving' || (this.aiState === 'attacking' && this.speed > 0)) {
+                      // Basic obstacle avoidance (simplified: stop if blocked)
+                      let moveX = this.moveDirection.x * this.speed;
+                      let moveY = this.moveDirection.y * this.speed;
+
+                       const originalX = this.x;
+                       const originalY = this.y;
+                       let potentialX = this.x + moveX;
+                       let potentialY = this.y + moveY;
+                       let collidedX = false;
+                       let collidedY = false;
+
+                       // Check walls
+                      if (potentialX < 0 || potentialX + this.width > WIDTH) { moveX = 0; collidedX = true; potentialX = this.x; }
+                      if (potentialY < 0 || potentialY + this.height > HEIGHT) { moveY = 0; collidedY = true; potentialY = this.y; }
+
+                        // Check blocks and other tanks (including players)
+                       const obstacles = [...gameState.blocks, ...gameState.enemies, gameState.player1, gameState.player2].filter(o => o && o !== this && o.active);
+                       for (const obstacle of obstacles) {
+                             // Check collision if moving only in X
+                             if (!collidedX && checkCollision({ ...this, x: potentialX }, obstacle)) {
+                                 moveX = 0; collidedX = true; potentialX = this.x;
+                            }
+                             // Check collision if moving only in Y
+                             if (!collidedY && checkCollision({ ...this, y: potentialY }, obstacle)) {
+                                 moveY = 0; collidedY = true; potentialY = this.y;
+                            }
+                       }
+                        // Corner case check similar to player
+                       if (moveX !== 0 && moveY !== 0 && !collidedX && !collidedY) {
+                            let tempCollidedX = false;
+                            let tempCollidedY = false;
+                            for (const obstacle of obstacles) {
+                                if (checkCollision({ ...this, x: originalX + moveX }, obstacle)) tempCollidedX = true;
+                                if (checkCollision({ ...this, y: originalY + moveY }, obstacle)) tempCollidedY = true;
+                            }
+                             if (tempCollidedX && tempCollidedY) {
+                                  // Simplified: just stop if cornered
+                                  moveX = 0; moveY = 0;
+                             }
+                       }
+
+
+                       // Mine avoidance for specific types
+                        if (this.avoidsPlayerMines) {
+                            for (const mine of gameState.mines) {
+                                if (mine.active && mine.owner instanceof PlayerTank) {
+                                    const distToMineSq = distSq(potentialX + this.width / 2, potentialY + this.height / 2, mine.x, mine.y);
+                                    if (distToMineSq < (MINE_PROXIMITY * 2)**2) { // Avoid mines within a certain radius
+                                        // Very simple avoidance: stop moving or try to reverse? Stop for now.
+                                        moveX = 0;
+                                        moveY = 0;
+                                        // Could implement more complex steering away from mine direction
+                                         break; // Stop checking mines if one is too close
+                                    }
+                                }
+                            }
+                        }
+
+
+                       this.move(moveX, moveY);
+                        if (moveX === 0 && moveY === 0 && this.speed > 0 && (collidedX || collidedY)) {
+                           // If blocked, maybe try a new direction next time
+                           this.lastMoveDecisionTime = 0; // Force decision recalculation
+                           this.moveDirection = {x:0, y:0}; // Stop current move attempt
+                        }
+                 }
+
+                 // Execute Attacking (Aiming & Shooting)
+                 if (this.target) {
+                     let targetX = this.target.x + this.target.width / 2;
+                     let targetY = this.target.y + this.target.height / 2;
+
+                     // Predictive aiming for Green tanks
+                     if (this.type === 'green' && this.target.isMoving) {
+                        // Estimate time to hit: distance / bullet_speed
+                        const dist = Math.sqrt(distSq(this.x, this.y, targetX, targetY));
+                        const bulletSpeed = (this.type === 'marine') ? BULLET_SPEED * 1.5 : BULLET_SPEED;
+                        const timeToHit = dist / bulletSpeed;
+
+                        // Predict target future position (simple linear prediction)
+                        // Target velocity estimation needed - use target's speed and angle?
+                        // Or just use last known movement? For simplicity:
+                        // Assume target continues in current direction (if PlayerTank, need vx, vy)
+                        // PlayerTank speed/direction isn't stored directly, calculate from dx/dy?
+                        // Simplified prediction: aim ahead based on target's last known pos change
+                         // This requires storing previous target pos - let's use a fixed factor for now.
+                         let playerSpeed = this.target.speed; // Accessing player speed
+                         let playerAngle = Math.atan2(this.target.y - targetY, this.target.x - targetX); // Hacky angle
+                         targetX += Math.cos(playerAngle) * playerSpeed * timeToHit * 0.5; // Adjust prediction factor
+                         targetY += Math.sin(playerAngle) * playerSpeed * timeToHit * 0.5;
+
+                         // Alternative simpler prediction: aim slightly ahead based on current target velocity vector
+                         // Requires player tanks to expose vx, vy. Assume 0 for now.
+                         // targetX += this.target.vx * this.predictiveFactor;
+                         // targetY += this.target.vy * this.predictiveFactor;
+                     }
+                      // Aiming for White tanks (ahead of tracks)
+                     if (this.type === 'white' && this.target.tracks.length > 0) {
+                         // Aim where the target is likely heading based on last track mark
+                         const lastTrack = this.target.tracks[this.target.tracks.length - 1];
+                         targetX = lastTrack.x;
+                         targetY = lastTrack.y;
+                     }
+
+
+                     const dxAim = targetX - (this.x + this.width / 2);
+                     const dyAim = targetY - (this.y + this.height / 2);
+                     this.turretAngle = Math.atan2(dyAim, dxAim);
+
+                      // Check Line of Sight (simple: check blocks between tank and target)
+                      let hasLOS = true;
+                      const steps = 10;
+                      for(let i = 1; i <= steps; i++) {
+                          const checkX = (this.x + this.width/2) + dxAim * (i/steps);
+                          const checkY = (this.y + this.height/2) + dyAim * (i/steps);
+                           for (const block of gameState.blocks) {
+                               if (checkX > block.x && checkX < block.x + block.width &&
+                                   checkY > block.y && checkY < block.y + block.height) {
+                                   hasLOS = false;
+                                   break;
+                               }
+                           }
+                           if (!hasLOS) break;
+                      }
+
+
+                      if (hasLOS) {
+                           this.shoot();
+                      }
+                 }
+
+                  // Lay Mines (Yellow tanks)
+                 if (this.laysMines && this.target) { // Only lay mines if target is seen? Or always? Let's say always when moving.
+                     if (this.isMoving || Math.random() < 0.1) { // Lay mines while moving or sometimes when idle near player
+                          this.layMine();
+                     }
+                 }
+            }
+
+             decideAction() {
+                 // If no target or target out of range, patrol or idle
+                 if (!this.target) {
+                     if (this.speed > 0) { // If mobile, patrol randomly
+                         this.aiState = 'moving';
+                         // Choose a random direction
+                         const angle = Math.random() * Math.PI * 2;
+                         this.moveDirection = { x: Math.cos(angle), y: Math.sin(angle) };
+                     } else {
+                         this.aiState = 'idle'; // Stay idle if stationary type
+                         this.moveDirection = { x: 0, y: 0 };
+                     }
+                     return;
+                 }
+
+                 // If target is visible
+                 const distToTargetSq = distSq(this.x, this.y, this.target.x, this.target.y);
+
+                 switch (this.type) {
+                      case 'brown': // Stationary, always attacks if target in LOS
+                      case 'green':
+                          this.aiState = 'attacking';
+                          this.moveDirection = { x: 0, y: 0 };
+                          break;
+                      case 'ash': // Defensive: Move away if too close, attack otherwise
+                      case 'marine':
+                           if (distToTargetSq < (TANK_SIZE * 4) ** 2) { // Flee if too close
+                               this.aiState = 'moving'; // Flee state technically
+                               const angleToTarget = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                               this.moveDirection = { x: -Math.cos(angleToTarget), y: -Math.sin(angleToTarget) };
+                           } else { // Attack from distance
+                               this.aiState = 'attacking';
+                               this.moveDirection = { x: 0, y: 0 }; // Stop moving to fire
+                           }
+                           break;
+                      case 'yellow': // Mine layer, somewhat incautious
+                           this.aiState = 'moving'; // Keep moving, laying mines
+                           // Move towards target generally, but prioritize mine laying/avoidance
+                           const angleToTarget = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                           // Maybe add randomness or circling behavior?
+                           this.moveDirection = { x: Math.cos(angleToTarget), y: Math.sin(angleToTarget) };
+                           // Mine avoidance check happens during movement execution
+                           break;
+                       case 'pink': // Offensive, moves towards target
+                       case 'violet':
+                       case 'white':
+                       case 'black':
+                            this.aiState = 'attacking';
+                            // Move towards target
+                            const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                            this.moveDirection = { x: Math.cos(angle), y: Math.sin(angle) };
+                            // Black tanks might add flanking logic later (e.g., move perpendicular if close)
+                            break;
+                      default:
+                           this.aiState = 'idle';
+                           this.moveDirection = { x: 0, y: 0 };
+                 }
+            }
+        }
+
+        class Bullet extends GameObject {
+            constructor(x, y, angle, speed, owner) {
+                super(x - BULLET_SIZE / 2, y - BULLET_SIZE / 2, BULLET_SIZE, BULLET_SIZE, 'orange');
+                this.angle = angle;
+                 // Marine tanks have faster bullets
+                 this.speed = (owner.type === 'marine') ? speed * 1.5 : speed;
+                this.vx = Math.cos(angle) * this.speed;
+                this.vy = Math.sin(angle) * this.speed;
+                this.owner = owner; // The tank that fired it
+                this.bounces = 0;
+                this.maxBounces = 3; // Max ricochets
+            }
+
+            update(deltaTime) {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Wall collisions (Ricochet)
+                let bounced = false;
+                if (this.x < 0 || this.x + this.width > WIDTH) {
+                    this.vx *= -1;
+                    this.x = Math.max(0, Math.min(WIDTH - this.width, this.x)); // Clamp position
+                    bounced = true;
+                }
+                if (this.y < 0 || this.y + this.height > HEIGHT) {
+                    this.vy *= -1;
+                    this.y = Math.max(0, Math.min(HEIGHT - this.height, this.y)); // Clamp position
+                    bounced = true;
+                }
+
+                if (bounced) {
+                    this.bounces++;
+                    if (this.bounces > this.maxBounces) {
+                        this.active = false;
+                    }
+                }
+
+                // Check collisions with other objects in main loop
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                // Draw as a small square or circle
+                //ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.beginPath();
+                ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'white'; // Inner dot
+                 ctx.beginPath();
+                ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+         class Mine extends GameObject {
+             constructor(x, y, owner) {
+                 super(x - MINE_SIZE / 2, y - MINE_SIZE / 2, MINE_SIZE, MINE_SIZE, 'darkred');
+                 this.owner = owner;
+                 this.placeTime = performance.now();
+                 this.detonationTime = this.placeTime + MINE_TIMER;
+                 this.fuseStartTime = this.detonationTime - MINE_FUSE_TIME;
+                 this.isFusing = false;
+                 this.flashOn = false;
+                 this.lastFlashTime = 0;
+                 this.flashInterval = 100; // ms
+             }
+
+             update(deltaTime) {
+                 const now = performance.now();
+
+                 if (now >= this.fuseStartTime && !this.isFusing) {
+                     this.isFusing = true;
+                     this.lastFlashTime = now;
+                     this.flashOn = true;
+                 }
+
+                 if (this.isFusing) {
+                     if (now - this.lastFlashTime > this.flashInterval) {
+                         this.flashOn = !this.flashOn;
+                         this.lastFlashTime = now;
+                     }
+                 }
+
+                 if (now >= this.detonationTime) {
+                     this.detonate();
+                 } else {
+                      // Proximity check (only for active tanks, ignore owner briefly after placement?)
+                      const proximityCheckTime = this.placeTime + 500; // 0.5 sec grace period
+                      if (now > proximityCheckTime) {
+                            const tanksToCheck = [...gameState.enemies, gameState.player1, gameState.player2].filter(t => t && t.active);
+                            for (const tank of tanksToCheck) {
+                               const distToObjectSq = distSq(this.x + this.width / 2, this.y + this.height / 2, tank.x + tank.width / 2, tank.y + tank.height / 2);
+                               if (distToObjectSq < (MINE_PROXIMITY + tank.width / 2) ** 2) {
+                                   this.detonate();
+                                   return; // Stop checking once detonated
+                               }
+                            }
+                      }
+                 }
+             }
+
+             draw(ctx) {
+                const centerX = this.x + this.width / 2;
+                const centerY = this.y + this.height / 2;
+                 ctx.fillStyle = (this.isFusing && this.flashOn) ? 'red' : this.color;
+                 ctx.beginPath();
+                 ctx.arc(centerX, centerY, this.width / 2, 0, Math.PI * 2);
+                 ctx.fill();
+                 // Fuse light?
+                 ctx.fillStyle = (this.isFusing && this.flashOn) ? 'yellow' : 'orange';
+                 ctx.beginPath();
+                 ctx.arc(centerX, centerY, this.width / 4, 0, Math.PI * 2);
+                 ctx.fill();
+             }
+
+             detonate() {
+                 if (!this.active) return; // Prevent double detonation
+                 this.active = false;
+                 const explosion = new Explosion(this.x + this.width / 2, this.y + this.height / 2, MINE_EXPLOSION_RADIUS, MINE_EXPLOSION_DURATION, this.owner);
+                 gameState.explosions.push(explosion);
+             }
+         }
+
+        class Block extends GameObject {
+            constructor(x, y) {
+                super(x, y, BLOCK_SIZE, BLOCK_SIZE, '#778899'); // Slate gray
+                this.isDestructible = true; // Assume all blocks are destructible by mines
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.strokeStyle = '#556677';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+                 // Simple brick pattern (optional)
+                 ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                 ctx.lineWidth = 1;
+                 ctx.beginPath();
+                 ctx.moveTo(this.x, this.y + this.height/2);
+                 ctx.lineTo(this.x + this.width, this.y + this.height/2);
+                 ctx.moveTo(this.x + this.width/2, this.y);
+                 ctx.lineTo(this.x + this.width/2, this.y + this.height/2);
+                  ctx.moveTo(this.x + this.width/4, this.y + this.height/2);
+                  ctx.lineTo(this.x + this.width/4, this.y + this.height);
+                  ctx.moveTo(this.x + (this.width*3)/4, this.y + this.height/2);
+                  ctx.lineTo(this.x + (this.width*3)/4, this.y + this.height);
+                 ctx.stroke();
+            }
+
+            destroy() {
+                this.active = false;
+                // Maybe add debris effect later
+            }
+        }
+
+         class Explosion extends GameObject {
+             constructor(x, y, radius, duration, owner = null) {
+                 // Position is center, width/height represent radius for collision check
+                 super(x - radius, y - radius, radius * 2, radius * 2, 'rgba(255, 165, 0, 0.8)'); // Orange, semi-transparent
+                 this.radius = radius;
+                 this.centerX = x;
+                 this.centerY = y;
+                 this.startTime = performance.now();
+                 this.duration = duration;
+                 this.owner = owner; // Tank that caused the explosion (from mine)
+             }
+
+             update(deltaTime) {
+                 const now = performance.now();
+                 if (now - this.startTime > this.duration) {
+                     this.active = false;
+                 }
+                 // Collision checks happen in the main loop during the explosion's lifetime
+             }
+
+             draw(ctx) {
+                 const elapsed = performance.now() - this.startTime;
+                 const progress = elapsed / this.duration;
+                 if (progress > 1) return;
+
+                 const currentRadius = this.radius * Math.sin(progress * Math.PI); // Expanding/shrinking effect
+                 const alpha = 0.8 * (1 - progress); // Fade out
+
+                 ctx.fillStyle = `rgba(255, ${165 * (1-progress)}, 0, ${alpha})`; // Fade color and alpha
+                 ctx.beginPath();
+                 ctx.arc(this.centerX, this.centerY, currentRadius, 0, Math.PI * 2);
+                 ctx.fill();
+
+                  // Inner core (brighter)
+                  ctx.fillStyle = `rgba(255, 255, 100, ${alpha * 0.8})`;
+                  ctx.beginPath();
+                  ctx.arc(this.centerX, this.centerY, currentRadius * 0.5, 0, Math.PI * 2);
+                  ctx.fill();
+             }
+         }
+
+        // --- Mission Definitions ---
+        const missions = {
+             1: {
+                 player1Start: { x: 50, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                 player2Start: { x: WIDTH - 50 - TANK_SIZE, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                 enemies: [
+                     { type: 'brown', x: WIDTH / 2 - TANK_SIZE / 2, y: 100 },
+                     { type: 'brown', x: WIDTH / 2 - TANK_SIZE / 2, y: HEIGHT - 100 - TANK_SIZE },
+                 ],
+                 blocks: [
+                     // Center blocks
+                     { x: WIDTH/2 - BLOCK_SIZE/2, y: HEIGHT/2 - BLOCK_SIZE * 1.5 },
+                     { x: WIDTH/2 - BLOCK_SIZE/2, y: HEIGHT/2 - BLOCK_SIZE * 0.5 },
+                     { x: WIDTH/2 - BLOCK_SIZE/2, y: HEIGHT/2 + BLOCK_SIZE * 0.5 },
+                 ]
+             },
+            2: {
+                 player1Start: { x: WIDTH / 4, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                 player2Start: { x: WIDTH * 3 / 4 - TANK_SIZE, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                 enemies: [
+                      { type: 'ash', x: WIDTH / 2 - TANK_SIZE / 2, y: 50 },
+                      { type: 'ash', x: 50, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                      { type: 'ash', x: WIDTH - 50 - TANK_SIZE, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                 ],
+                 blocks: [
+                     { x: 150, y: 150 }, { x: 150, y: HEIGHT - 150 - BLOCK_SIZE },
+                     { x: WIDTH - 150 - BLOCK_SIZE, y: 150 }, { x: WIDTH - 150 - BLOCK_SIZE, y: HEIGHT - 150 - BLOCK_SIZE },
+                 ]
+            },
+            // Define more missions (up to 20 preset)
+            3: {
+                 player1Start: { x: 50, y: 50 },
+                 player2Start: { x: WIDTH - 50 - TANK_SIZE, y: HEIGHT - 50 - TANK_SIZE },
+                 enemies: [
+                     { type: 'marine', x: WIDTH / 2 - TANK_SIZE / 2, y: 150 },
+                     { type: 'marine', x: WIDTH / 2 - TANK_SIZE / 2, y: HEIGHT - 150 - TANK_SIZE},
+                     { type: 'brown', x: 100, y: HEIGHT / 2 - TANK_SIZE/2 },
+                     { type: 'brown', x: WIDTH - 100 - TANK_SIZE, y: HEIGHT / 2 - TANK_SIZE/2 },
+                 ],
+                 blocks: [
+                      // Four corner blocks
+                      { x: WIDTH/4, y: HEIGHT/4 }, { x: WIDTH*3/4 - BLOCK_SIZE, y: HEIGHT/4 },
+                      { x: WIDTH/4, y: HEIGHT*3/4 - BLOCK_SIZE }, { x: WIDTH*3/4 - BLOCK_SIZE, y: HEIGHT*3/4 - BLOCK_SIZE },
+                      // Center structure
+                       { x: WIDTH/2 - BLOCK_SIZE*1.5, y: HEIGHT/2 - BLOCK_SIZE/2 },
+                       { x: WIDTH/2 - BLOCK_SIZE*0.5, y: HEIGHT/2 - BLOCK_SIZE/2 },
+                       { x: WIDTH/2 + BLOCK_SIZE*0.5, y: HEIGHT/2 - BLOCK_SIZE/2 },
+                 ]
+            },
+             4: {
+                  player1Start: { x: WIDTH / 2 - TANK_SIZE / 2, y: HEIGHT - 50 - TANK_SIZE },
+                  player2Start: { x: WIDTH / 2 - TANK_SIZE / 2, y: 50 },
+                  enemies: [
+                      { type: 'yellow', x: 100, y: 100 },
+                      { type: 'yellow', x: WIDTH - 100 - TANK_SIZE, y: 100 },
+                      { type: 'yellow', x: 100, y: HEIGHT - 100 - TANK_SIZE },
+                      { type: 'yellow', x: WIDTH - 100 - TANK_SIZE, y: HEIGHT - 100 - TANK_SIZE },
+                  ],
+                  blocks: [
+                      // Maze-like structure (simple example)
+                      { x: WIDTH/4, y: 0 }, { x: WIDTH/4, y: BLOCK_SIZE }, { x: WIDTH/4, y: BLOCK_SIZE*2 },
+                      { x: WIDTH*3/4 - BLOCK_SIZE, y: HEIGHT - BLOCK_SIZE }, { x: WIDTH*3/4 - BLOCK_SIZE, y: HEIGHT - BLOCK_SIZE*2 }, { x: WIDTH*3/4 - BLOCK_SIZE, y: HEIGHT - BLOCK_SIZE*3 },
+                       { x: 0, y: HEIGHT/2 - BLOCK_SIZE/2 }, { x: BLOCK_SIZE, y: HEIGHT/2 - BLOCK_SIZE/2 },
+                       { x: WIDTH-BLOCK_SIZE, y: HEIGHT/2 - BLOCK_SIZE/2 }, { x: WIDTH-BLOCK_SIZE*2, y: HEIGHT/2 - BLOCK_SIZE/2 },
+                  ]
+             },
+             5: { // First medal mission
+                  player1Start: { x: 50, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                  player2Start: { x: WIDTH - 50 - TANK_SIZE, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                  enemies: [
+                      { type: 'pink', x: WIDTH / 4, y: 100 },
+                      { type: 'pink', x: WIDTH * 3 / 4 - TANK_SIZE, y: 100 },
+                       { type: 'ash', x: WIDTH / 4, y: HEIGHT - 100 - TANK_SIZE },
+                      { type: 'ash', x: WIDTH * 3 / 4 - TANK_SIZE, y: HEIGHT - 100 - TANK_SIZE },
+                      { type: 'brown', x: WIDTH/2 - TANK_SIZE/2, y: HEIGHT/2 - TANK_SIZE/2 }, // Center guard
+                  ],
+                   blocks: [
+                        // Vertical walls
+                       { x: WIDTH/3, y: 100 }, { x: WIDTH/3, y: 100+BLOCK_SIZE }, { x: WIDTH/3, y: 100+BLOCK_SIZE*2 }, { x: WIDTH/3, y: 100+BLOCK_SIZE*3 }, { x: WIDTH/3, y: 100+BLOCK_SIZE*4 },
+                       { x: WIDTH*2/3 - BLOCK_SIZE, y: 100 }, { x: WIDTH*2/3 - BLOCK_SIZE, y: 100+BLOCK_SIZE*1 }, { x: WIDTH*2/3 - BLOCK_SIZE, y: 100+BLOCK_SIZE*2 }, { x: WIDTH*2/3 - BLOCK_SIZE, y: 100+BLOCK_SIZE*3 }, { x: WIDTH*2/3 - BLOCK_SIZE, y: 100+BLOCK_SIZE*4 },
+                   ]
+             },
+            // ... Add missions 6 to 19 ...
+             10: { // Second medal mission
+                  player1Start: { x: 100, y: 100 },
+                  player2Start: { x: WIDTH - 100 - TANK_SIZE, y: HEIGHT - 100 - TANK_SIZE },
+                  enemies: [
+                      { type: 'green', x: WIDTH / 2 - TANK_SIZE / 2, y: 50 },
+                      { type: 'green', x: WIDTH / 2 - TANK_SIZE / 2, y: HEIGHT - 50 - TANK_SIZE },
+                      { type: 'green', x: 50, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                      { type: 'green', x: WIDTH - 50 - TANK_SIZE, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                      { type: 'violet', x: WIDTH/4, y: HEIGHT/4 },
+                      { type: 'violet', x: WIDTH*3/4 - TANK_SIZE, y: HEIGHT*3/4 - TANK_SIZE},
+                  ],
+                   blocks: [
+                       // + shape in center
+                        { x: WIDTH/2 - BLOCK_SIZE/2, y: HEIGHT/2 - BLOCK_SIZE * 1.5 },
+                        { x: WIDTH/2 - BLOCK_SIZE/2, y: HEIGHT/2 - BLOCK_SIZE * 0.5 },
+                        { x: WIDTH/2 - BLOCK_SIZE/2, y: HEIGHT/2 + BLOCK_SIZE * 0.5 },
+                        { x: WIDTH/2 - BLOCK_SIZE * 1.5, y: HEIGHT/2 - BLOCK_SIZE/2 },
+                        { x: WIDTH/2 + BLOCK_SIZE * 0.5, y: HEIGHT/2 - BLOCK_SIZE/2 },
+                   ]
+             },
+             // ... Add missions 11 to 19 ...
+              20: { // Final preset mission, third medal
+                  player1Start: { x: WIDTH / 2 - TANK_SIZE * 1.5, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                  player2Start: { x: WIDTH / 2 + TANK_SIZE * 0.5, y: HEIGHT / 2 - TANK_SIZE / 2 },
+                  enemies: [
+                      { type: 'black', x: 50, y: 50 },
+                      { type: 'black', x: WIDTH - 50 - TANK_SIZE, y: 50 },
+                       { type: 'black', x: 50, y: HEIGHT - 50 - TANK_SIZE },
+                       { type: 'black', x: WIDTH - 50 - TANK_SIZE, y: HEIGHT - 50 - TANK_SIZE },
+                       { type: 'white', x: WIDTH/2 - TANK_SIZE/2, y: 100 },
+                       { type: 'white', x: WIDTH/2 - TANK_SIZE/2, y: HEIGHT - 100 - TANK_SIZE },
+                       { type: 'green', x: 100, y: HEIGHT/2 - TANK_SIZE/2 },
+                       { type: 'green', x: WIDTH - 100- TANK_SIZE, y: HEIGHT/2 - TANK_SIZE/2 },
+                  ],
+                   blocks: [ // Open arena with some scattered blocks
+                        { x: 100, y: 200 }, { x: WIDTH - 100 - BLOCK_SIZE, y: 200 },
+                        { x: 100, y: HEIGHT - 200 - BLOCK_SIZE }, { x: WIDTH - 100 - BLOCK_SIZE, y: HEIGHT - 200 - BLOCK_SIZE },
+                        { x: WIDTH/2 - BLOCK_SIZE/2, y: 50 }, { x: WIDTH/2 - BLOCK_SIZE/2, y: HEIGHT - 50 - BLOCK_SIZE },
+                   ]
+             },
+        };
+
+        // --- Game Logic Functions ---
+
+        function loadMission(missionNumber) {
+            // Clear previous state
+             gameState.bullets = [];
+             gameState.mines = [];
+             gameState.blocks = [];
+             gameState.explosions = [];
+             gameState.enemies = [];
+             gameState.player1 = null;
+             gameState.player2 = null;
+             gameState.enemiesRemainingInMission = []; // Reset for restart logic
+
+             let missionData;
+             if (missionNumber <= MISSION_UNLOCK_THRESHOLD && missions[missionNumber]) {
+                 missionData = missions[missionNumber];
+             } else if (missionNumber <= MAX_MISSIONS) {
+                 // Generate random mission
+                 missionData = generateRandomMission(missionNumber);
+                 missions[missionNumber] = missionData; // Store generated mission
+             } else {
+                 console.error("Mission number out of range:", missionNumber);
+                 // Handle game completion or error state
+                 setGameState('victory');
+                 return;
+             }
+
+              // Add Blocks
+             if (missionData.blocks) {
+                 missionData.blocks.forEach(b => gameState.blocks.push(new Block(b.x, b.y)));
+             }
+
+             // Add Player 1
+             if (gameState.mode === 'sp' || gameState.mode === 'mp') {
+                 const startPos = missionData.player1Start;
+                 gameState.player1 = new PlayerTank(startPos.x, startPos.y, TANK_COLORS.player1, 1);
+                 gameState.player1.score = gameState.p1Score; // Carry over score
+             }
+
+              // Add Player 2 (Multiplayer)
+             if (gameState.mode === 'mp') {
+                 const startPos = missionData.player2Start;
+                 gameState.player2 = new PlayerTank(startPos.x, startPos.y, TANK_COLORS.player2, 2);
+                 gameState.player2.score = gameState.p2Score; // Carry over score
+             }
+
+              // Add Enemies (create new instances)
+              missionData.enemies.forEach(e => {
+                  const enemy = new EnemyTank(e.x, e.y, e.type);
+                  gameState.enemies.push(enemy);
+                  // Store a reference or identifier for restart logic
+                  gameState.enemiesRemainingInMission.push(enemy.id);
+              });
+
+             // Reset timers and state for the new mission
+             gameState.missionStartTime = performance.now();
+             updateHUD();
+             messageOverlay.classList.add('hidden'); // Ensure message overlay is hidden
+        }
+
+         function generateRandomMission(missionNumber) {
+             const enemyTypes = ['brown', 'ash', 'marine', 'yellow', 'pink', 'green', 'violet', 'white', 'black'];
+             const numEnemies = Math.min(15, 3 + Math.floor((missionNumber - MISSION_UNLOCK_THRESHOLD) / 3)); // Increase enemies slowly
+             const numBlocks = getRandomInt(10, 30);
+
+             const missionData = {
+                 player1Start: { x: getRandomInt(50, WIDTH / 3), y: getRandomInt(50, HEIGHT - 50) },
+                 player2Start: { x: getRandomInt(WIDTH * 2 / 3, WIDTH - 50), y: getRandomInt(50, HEIGHT - 50) },
+                 enemies: [],
+                 blocks: []
+             };
+
+              // Generate Blocks (avoiding player start zones)
+              for (let i = 0; i < numBlocks; i++) {
+                  let blockX, blockY;
+                  let placed = false;
+                  let attempts = 0;
+                   while(!placed && attempts < 20) {
+                       attempts++;
+                        blockX = getRandomInt(0, WIDTH - BLOCK_SIZE);
+                        blockY = getRandomInt(0, HEIGHT - BLOCK_SIZE);
+                        // Crude check to avoid spawning directly on players - improve later
+                         let tooCloseToP1 = distSq(blockX + BLOCK_SIZE/2, blockY + BLOCK_SIZE/2, missionData.player1Start.x + TANK_SIZE/2, missionData.player1Start.y + TANK_SIZE/2) < (BLOCK_SIZE + TANK_SIZE * 2)**2;
+                         let tooCloseToP2 = distSq(blockX + BLOCK_SIZE/2, blockY + BLOCK_SIZE/2, missionData.player2Start.x + TANK_SIZE/2, missionData.player2Start.y + TANK_SIZE/2) < (BLOCK_SIZE + TANK_SIZE * 2)**2;
+                         // Check overlap with existing blocks (simplified check - center distance)
+                         let overlapsExisting = missionData.blocks.some(b => distSq(blockX + BLOCK_SIZE/2, blockY + BLOCK_SIZE/2, b.x + BLOCK_SIZE/2, b.y + BLOCK_SIZE/2) < BLOCK_SIZE**2);
+
+                         if (!tooCloseToP1 && !tooCloseToP2 && !overlapsExisting) {
+                              missionData.blocks.push({ x: blockX, y: blockY });
+                              placed = true;
+                         }
+                   }
+              }
+
+             // Generate Enemies (avoiding players and blocks)
+             const availableTypes = enemyTypes.slice(0, Math.min(enemyTypes.length, 3 + Math.floor((missionNumber - MISSION_UNLOCK_THRESHOLD)/10))); // Introduce types gradually
+             for (let i = 0; i < numEnemies; i++) {
+                  let enemyX, enemyY;
+                  let placed = false;
+                  let attempts = 0;
+                  while (!placed && attempts < 50) {
+                       attempts++;
+                       enemyX = getRandomInt(0, WIDTH - TANK_SIZE);
+                       enemyY = getRandomInt(0, HEIGHT - TANK_SIZE);
+                        let tooCloseToP1 = distSq(enemyX + TANK_SIZE/2, enemyY + TANK_SIZE/2, missionData.player1Start.x + TANK_SIZE/2, missionData.player1Start.y + TANK_SIZE/2) < (TANK_SIZE * 3)**2;
+                        let tooCloseToP2 = distSq(enemyX + TANK_SIZE/2, enemyY + TANK_SIZE/2, missionData.player2Start.x + TANK_SIZE/2, missionData.player2Start.y + TANK_SIZE/2) < (TANK_SIZE * 3)**2;
+                       let overlapsBlock = missionData.blocks.some(b => checkCollision({x: enemyX, y: enemyY, width: TANK_SIZE, height: TANK_SIZE}, b));
+                       let overlapsEnemy = missionData.enemies.some(e => checkCollision({x: enemyX, y: enemyY, width: TANK_SIZE, height: TANK_SIZE}, e));
+
+                       if (!tooCloseToP1 && !tooCloseToP2 && !overlapsBlock && !overlapsEnemy) {
+                            const type = availableTypes[getRandomInt(0, availableTypes.length - 1)];
+                            missionData.enemies.push({ type: type, x: enemyX, y: enemyY });
+                            placed = true;
+                       }
+                  }
+             }
+
+             return missionData;
+         }
+
+
+        function updateHUD() {
+            if (gameState.mode === 'sp') {
+                livesSpan.textContent = 'Lives: ' + '❤️'.repeat(Math.max(0, gameState.lives));
+                p1ScoreSpan.textContent = gameState.p1Score;
+                p1StatsDiv.style.display = 'inline';
+                p2StatsDiv.style.display = 'none';
+                livesSpan.style.display = 'inline';
+            } else if (gameState.mode === 'mp') {
+                p1ScoreSpan.textContent = gameState.p1Score;
+                p2ScoreSpan.textContent = gameState.p2Score;
+                 p1StatsDiv.style.display = 'inline';
+                p2StatsDiv.style.display = 'inline';
+                 livesSpan.style.display = 'none'; // No lives in MP
+            }
+            missionDisplaySpan.textContent = `Mission: ${gameState.mission}`;
+            hudDiv.classList.remove('hidden');
+        }
+
+        function showMessage(text, showContinue = false, continueCallback = null) {
+            messageText.innerHTML = text; // Use innerHTML to allow basic formatting like <br>
+             if (showContinue) {
+                continueButton.classList.remove('hidden');
+                continueButton.onclick = continueCallback || (() => messageOverlay.classList.add('hidden'));
+            } else {
+                continueButton.classList.add('hidden');
+                 continueButton.onclick = null;
+            }
+            messageOverlay.classList.remove('hidden');
+        }
+
+        function setGameState(newState) {
+            const oldState = gameState.mode;
+            gameState.mode = newState;
+             console.log(`Game state changed from ${oldState} to ${newState}`);
+
+            // Handle state transitions
+             menuDiv.classList.add('hidden');
+             hudDiv.classList.add('hidden');
+             messageOverlay.classList.add('hidden');
+
+            switch (newState) {
+                case 'menu':
+                    menuDiv.classList.remove('hidden');
+                     resetGame(); // Reset scores, lives etc when returning to menu
+                    break;
+                case 'sp':
+                case 'mp':
+                    hudDiv.classList.remove('hidden');
+                    updateHUD();
+                    if (oldState === 'paused') {
+                         // Resume game - state restored in gameLoop
+                    } else if (oldState === 'mission_complete') {
+                         // Start next mission
+                         gameState.mission++;
+                         // Award extra life
+                         if (gameState.mode === 'sp' && gameState.mission > 1 && (gameState.mission -1) % EXTRA_LIFE_INTERVAL === 0) {
+                              gameState.lives++;
+                              // Maybe show a quick message?
+                         }
+                         loadMission(gameState.mission);
+                    } else if (oldState === 'gameover' || oldState === 'menu') {
+                         // Starting a new game
+                         resetGame(newState); // Reset with appropriate mode
+                         loadMission(gameState.mission);
+                    }
+                    // Ensure game runs
+                     gameState.pausedState = null;
+                     if (gameState.lastTimestamp === 0) { // Start loop if not running
+                          gameState.gameStartTime = performance.now();
+                          gameState.lastTimestamp = performance.now();
+                         requestAnimationFrame(gameLoop);
+                     }
+                    break;
+                case 'paused':
+                    // Store current state if not already paused
+                    if (oldState !== 'paused') gameState.pausedState = oldState;
+                    showMessage('Paused', true, () => setGameState(gameState.pausedState || 'sp'));
+                    break;
+                case 'mission_complete':
+                     // Mark mission as complete
+                    gameState.missionCompleteStatus[gameState.mission] = true;
+
+                    // Check for unlocks/medals
+                     let message = `Mission ${gameState.mission} Complete!`;
+                     if (gameState.mission === 5 || gameState.mission === 10 || gameState.mission === 20) {
+                         message += `<br>🏅 Medal Awarded!`;
+                     }
+                     if (gameState.mission === MISSION_UNLOCK_THRESHOLD && gameState.missionsUnlocked === MISSION_UNLOCK_THRESHOLD) {
+                          gameState.missionsUnlocked = MAX_MISSIONS;
+                          message += `<br>Congratulations! Missions up to ${MAX_MISSIONS} unlocked!`;
+                     }
+                      if (gameState.mission >= 30 && gameState.mission % 10 === 0) { // Example Platinum medal logic
+                           message += `<br>✨ Platinum Medal! ✨`;
+                      }
+
+
+                     if (gameState.mode === 'mp' && gameState.mission === MISSION_UNLOCK_THRESHOLD) {
+                         // End multiplayer game after mission 20
+                         let winnerMsg = `Game Over! Final Scores:<br>Player 1: ${gameState.p1Score}<br>Player 2: ${gameState.p2Score}<br>`;
+                         if (gameState.p1Score > gameState.p2Score) winnerMsg += "Player 1 Wins!";
+                         else if (gameState.p2Score > gameState.p1Score) winnerMsg += "Player 2 Wins!";
+                         else winnerMsg += "It's a Tie!";
+                         showMessage(winnerMsg, true, () => setGameState('menu'));
+                     } else if (gameState.mission === MAX_MISSIONS) {
+                         setGameState('victory'); // All missions complete
+                     }
+                     else {
+                          showMessage(message, true, () => setGameState(gameState.mode)); // Continue to next mission
+                     }
+                    break;
+                case 'gameover': // Only in SP
+                    showMessage(`Game Over!<br>You reached Mission ${gameState.mission}.<br>Final Score: ${gameState.p1Score}`, true, () => setGameState('menu'));
+                    break;
+                 case 'victory': // SP game completion
+                     showMessage(`Congratulations!<br>All ${MAX_MISSIONS} Missions Complete!<br>Final Score: ${gameState.p1Score}`, true, () => setGameState('menu'));
+                     break;
+            }
+        }
+
+         function resetGame(mode = 'menu') {
+             gameState.mission = 1;
+             gameState.lives = 3;
+             gameState.p1Score = 0;
+             gameState.p2Score = 0;
+             gameState.missionCompleteStatus = {};
+             gameState.missionsUnlocked = MISSION_UNLOCK_THRESHOLD;
+             // Keep mode if starting sp/mp directly
+             if (mode === 'sp' || mode === 'mp') {
+                 gameState.mode = mode;
+             } else {
+                  gameState.mode = 'menu';
+             }
+         }
+
+         function restartMission() {
+             if (gameState.mode === 'sp') {
+                 gameState.lives--;
+                 updateHUD();
+                 if (gameState.lives < 0) { // Should be 0 lives remaining is game over
+                     setGameState('gameover');
+                 } else {
+                     // Reload mission, keeping track of already defeated enemies (more complex)
+                     // Simpler approach: Just restart the mission fully, but show lives lost.
+                     // Let's try the specified approach: keep defeated enemies dead.
+                      showMessage(`Lost a life! Restarting Mission ${gameState.mission}...`, false);
+                      setTimeout(() => { // Short delay before restart
+                          // Restore only the remaining enemies
+                           const currentMissionData = missions[gameState.mission];
+                           const remainingEnemyIds = new Set(gameState.enemiesRemainingInMission); // Use the list saved at mission start
+
+                           // Clear current state
+                            gameState.bullets = [];
+                            gameState.mines = [];
+                            // Keep blocks? Or reset them? Let's reset them.
+                            gameState.blocks = [];
+                            gameState.explosions = [];
+                            gameState.enemies = [];
+                            gameState.player1 = null;
+                            gameState.player2 = null;
+
+                             // Add Blocks
+                            if (currentMissionData.blocks) {
+                                currentMissionData.blocks.forEach(b => gameState.blocks.push(new Block(b.x, b.y)));
+                            }
+                            // Respawn Player(s)
+                             const p1StartPos = currentMissionData.player1Start;
+                             gameState.player1 = new PlayerTank(p1StartPos.x, p1StartPos.y, TANK_COLORS.player1, 1);
+                             gameState.player1.score = gameState.p1Score; // Keep score
+
+                             // Respawn *remaining* enemies
+                             currentMissionData.enemies.forEach(eData => {
+                                 // Need a way to link eData to the original enemy ID. Assume order or add id to missionData?
+                                 // For now, let's assume we can recreate based on type/pos and check if ID was in remaining list.
+                                 // This requires enemies to have consistent IDs based on mission data. Let's simplify:
+                                 // We stored the IDs of enemies present at the START of the attempt.
+                                 // We need the IDs of enemies defeated DURING this attempt.
+                                 // --> Let's change logic: `enemiesRemainingInMission` stores IDs of those ALIVE when player died.
+
+                                 // Recreate the enemy instance temporarily to get its ID based on data
+                                 // This is fragile. A better way is needed if IDs aren't deterministic.
+                                 // Let's use the simple full restart for now, and display lives lost.
+                                 loadMission(gameState.mission); // Full reload
+                                 messageOverlay.classList.add('hidden'); // Hide the "restarting" message
+                      }, 1500); // 1.5 second delay
+                 }
+             } else if (gameState.mode === 'mp') {
+                  // Game ends if both players are dead.
+                  // If only one died, they respawn next mission.
+                  // If both die simultaneously, end MP game? Rules say "game ends if both players are defeated IN A MISSION"
+                  let p1Alive = gameState.player1 && gameState.player1.active;
+                  let p2Alive = gameState.player2 && gameState.player2.active;
+                   if (!p1Alive && !p2Alive) {
+                       // Both players defeated in the mission
+                       let winnerMsg = `Mission Failed! Both players defeated.<br>Final Scores:<br>Player 1: ${gameState.p1Score}<br>Player 2: ${gameState.p2Score}<br>`;
+                         if (gameState.p1Score > gameState.p2Score) winnerMsg += "Player 1 Wins!";
+                         else if (gameState.p2Score > gameState.p1Score) winnerMsg += "Player 2 Wins!";
+                         else winnerMsg += "It's a Tie!";
+                       showMessage(winnerMsg, true, () => setGameState('menu'));
+                   } else {
+                        // Should not happen - mission ends when all enemies are dead.
+                        // This function is mainly for SP life loss.
+                        console.log("RestartMission called in MP context unexpectedly?");
+                   }
+             }
+         }
+
+        // --- Collision Handling ---
+        function handleCollisions() {
+            const allTanks = [gameState.player1, gameState.player2, ...gameState.enemies].filter(t => t && t.active);
+
+             // Bullets vs Tanks
+             gameState.bullets.forEach(bullet => {
+                 if (!bullet.active) return;
+
+                 allTanks.forEach(tank => {
+                     if (!tank.active || bullet.owner === tank) return; // Don't hit self
+                     // Friendly fire check
+                      if (gameState.mode === 'mp' && bullet.owner instanceof PlayerTank && tank instanceof PlayerTank) {
+                           // Player vs Player collision
+                           if (checkCollision(bullet, tank)) {
+                                console.log(`Player ${bullet.owner.playerNumber} hit Player ${tank.playerNumber}!`);
+                                tank.destroy();
+                                bullet.active = false;
+                                // Score for friendly fire? Rules don't specify, let's assume no score.
+                                // bullet.owner.addScore(-5); // Optional penalty?
+                           }
+                      } else if (!(bullet.owner instanceof PlayerTank && tank instanceof PlayerTank)) { // Allow Player vs Enemy, Enemy vs Player, Enemy vs Enemy
+                            if (checkCollision(bullet, tank)) {
+                                console.log(`${bullet.owner.type} hit ${tank.type}`);
+                                tank.destroy();
+                                bullet.active = false;
+                                // Award score if player hit enemy or enemy hit player (in MP maybe?)
+                                if (bullet.owner instanceof PlayerTank && tank instanceof EnemyTank) {
+                                    bullet.owner.addScore(10); // Player gets score for killing enemy
+                                } else if (gameState.mode === 'mp' && bullet.owner instanceof EnemyTank && tank instanceof PlayerTank) {
+                                     // Enemy killed player in MP - maybe score for other player? No, just affects game end.
+                                } else if (bullet.owner instanceof EnemyTank && tank instanceof EnemyTank) {
+                                     // Enemy killed enemy - no score change? Or reward player indirectly? No score.
+                                }
+                            }
+                      }
+                 });
+             });
+
+              // Bullets vs Blocks
+              gameState.bullets.forEach(bullet => {
+                  if (!bullet.active) return;
+                  gameState.blocks.forEach(block => {
+                      if (!block.active) return;
+                      if (checkCollision(bullet, block)) {
+                          bullet.active = false; // Bullet is destroyed by block
+                          // Blocks are only destroyed by mines according to description
+                      }
+                  });
+              });
+
+             // Bullets vs Bullets
+             for (let i = 0; i < gameState.bullets.length; i++) {
+                 const b1 = gameState.bullets[i];
+                 if (!b1.active) continue;
+                 for (let j = i + 1; j < gameState.bullets.length; j++) {
+                     const b2 = gameState.bullets[j];
+                     if (!b2.active) continue;
+
+                      // Optional: Don't let bullets from the same tank destroy each other
+                      // if (b1.owner === b2.owner) continue;
+
+                     if (checkCollision(b1, b2)) {
+                         b1.active = false;
+                         b2.active = false;
+                     }
+                 }
+             }
+
+              // Bullets vs Mines
+              gameState.bullets.forEach(bullet => {
+                  if (!bullet.active) return;
+                  gameState.mines.forEach(mine => {
+                      if (!mine.active) return;
+                      if (checkCollision(bullet, mine)) {
+                          bullet.active = false;
+                          mine.detonate(); // Shooting a mine detonates it
+                      }
+                  });
+              });
+
+             // Explosions vs Everything
+             gameState.explosions.forEach(explosion => {
+                  if (!explosion.active) return;
+
+                   // vs Tanks
+                   allTanks.forEach(tank => {
+                       if (!tank.active) return;
+                        if (checkCircleRectCollision({ x: explosion.centerX, y: explosion.centerY, radius: explosion.radius }, tank)) {
+                            console.log(`Explosion hit ${tank.type}`);
+                            tank.destroy();
+                            // Award score if player's mine killed enemy
+                            if (explosion.owner instanceof PlayerTank && tank instanceof EnemyTank) {
+                                explosion.owner.addScore(15); // More points for mine kill?
+                            }
+                            // Handle friendly fire mine kills (MP)
+                             else if (gameState.mode === 'mp' && explosion.owner instanceof PlayerTank && tank instanceof PlayerTank && explosion.owner !== tank) {
+                                 console.log(`Player ${explosion.owner.playerNumber}'s mine hit Player ${tank.playerNumber}!`);
+                                  // explosion.owner.addScore(-10); // Optional penalty
+                            }
+                        }
+                   });
+
+                   // vs Blocks
+                   gameState.blocks.forEach(block => {
+                       if (!block.active) return;
+                       if (checkCircleRectCollision({ x: explosion.centerX, y: explosion.centerY, radius: explosion.radius }, block)) {
+                            block.destroy(); // Mines destroy blocks
+                       }
+                   });
+
+                   // vs Bullets
+                   gameState.bullets.forEach(bullet => {
+                       if (!bullet.active) return;
+                       // Approximate bullet as a point or small circle for collision
+                       const bulletCenterX = bullet.x + bullet.width / 2;
+                       const bulletCenterY = bullet.y + bullet.height / 2;
+                       if (distSq(explosion.centerX, explosion.centerY, bulletCenterX, bulletCenterY) < explosion.radius ** 2) {
+                           bullet.active = false; // Explosions destroy bullets
+                       }
+                   });
+
+                    // vs Mines
+                    gameState.mines.forEach(mine => {
+                        if (!mine.active) return;
+                         const mineCenterX = mine.x + mine.width / 2;
+                         const mineCenterY = mine.y + mine.height / 2;
+                         if (distSq(explosion.centerX, explosion.centerY, mineCenterX, mineCenterY) < explosion.radius ** 2) {
+                             mine.detonate(); // Chain reaction
+                         }
+                    });
+             });
+
+            // Tank vs Tank Pushing (simplified: prevent overlap)
+            // This is partially handled in the movement collision logic.
+            // Enemies pushing each other is mentioned - could add a small pushing force if overlapped.
+            // For now, the collision avoidance in movement should suffice.
+        }
+
+        // --- Game Loop ---
+        function gameLoop(timestamp) {
+            if (gameState.mode === 'menu') {
+                 // Stop the loop if we go back to the menu
+                 gameState.lastTimestamp = 0; // Reset timestamp to allow restarting loop
+                 return;
+            }
+             if (gameState.mode === 'paused') {
+                 // Draw paused state but don't update logic
+                 draw();
+                 requestAnimationFrame(gameLoop); // Keep drawing
+                 return;
+             }
+              if (gameState.mode === 'gameover' || gameState.mode === 'victory' || (gameState.mode === 'mission_complete' && gameState.mission === MAX_MISSIONS) || (gameState.mode === 'mission_complete' && gameState.mission === MISSION_UNLOCK_THRESHOLD && gameState._modeBeforeComplete === 'mp') ) {
+                   // Game end states handled by setGameState, stop game loop updates
+                    draw(); // Draw the final state once?
+                    gameState.lastTimestamp = 0;
+                   return;
+              }
+              if (gameState.mode === 'mission_complete') {
+                   // Mission complete message is shown by setGameState
+                   // Wait for player to click continue, loop does nothing until state changes
+                   draw(); // Draw the state before message? Or let message overlay handle it.
+                   requestAnimationFrame(gameLoop);
+                   return;
+              }
+
+
+            gameState.deltaTime = (timestamp - gameState.lastTimestamp) / 1000; // Delta time in seconds
+            gameState.lastTimestamp = timestamp;
+
+            // --- Update ---
+            // Update Player(s)
+            if (gameState.player1 && gameState.player1.active) gameState.player1.update(gameState.deltaTime);
+            if (gameState.player2 && gameState.player2.active) gameState.player2.update(gameState.deltaTime);
+
+            // Update Enemies
+            gameState.enemies.forEach(enemy => {
+                if (enemy.active) enemy.update(gameState.deltaTime);
+            });
+
+            // Update Bullets
+            gameState.bullets.forEach(bullet => {
+                 if (bullet.active) bullet.update(gameState.deltaTime);
+            });
+
+            // Update Mines
+             gameState.mines.forEach(mine => {
+                  if (mine.active) mine.update(gameState.deltaTime);
+             });
+
+             // Update Explosions
+              gameState.explosions.forEach(explosion => {
+                   if (explosion.active) explosion.update(gameState.deltaTime);
+              });
+
+
+            // --- Handle Collisions ---
+            handleCollisions();
+
+
+            // --- Clean up inactive objects ---
+            gameState.bullets = gameState.bullets.filter(b => b.active);
+            gameState.mines = gameState.mines.filter(m => m.active);
+            gameState.blocks = gameState.blocks.filter(b => b.active);
+            gameState.explosions = gameState.explosions.filter(e => e.active);
+            gameState.enemies = gameState.enemies.filter(e => e.active);
+            // Don't filter players here, handle death logic below
+
+
+            // --- Check Win/Loss Conditions ---
+             const activeEnemies = gameState.enemies.filter(e => e.active);
+             if (activeEnemies.length === 0 && (gameState.mode === 'sp' || gameState.mode === 'mp')) {
+                 // Mission Complete!
+                  gameState._modeBeforeComplete = gameState.mode; // Store mode before setting mission_complete
+                 setGameState('mission_complete');
+             } else {
+                 // Check Player Death
+                 let p1Alive = gameState.player1 && gameState.player1.active;
+                 let p2Alive = gameState.player2 && gameState.player2.active;
+
+                 if (gameState.mode === 'sp' && !p1Alive) {
+                      // Player 1 died in Single Player
+                      restartMission(); // Handles life decrement and game over check
+                      // Need to pause the loop briefly or handle the restart state correctly
+                      // The restartMission function now uses setTimeout, so the loop continues.
+                      // We might need a state like 'restarting' to prevent actions during the delay.
+                      // For now, rely on the message overlay and the fact player is inactive.
+                 } else if (gameState.mode === 'mp' && !p1Alive && !p2Alive) {
+                      // Both players died in Multiplayer
+                      restartMission(); // Handles MP game over
+                 }
+                 // If only one player dies in MP, nothing happens until next mission (they respawn then)
+             }
+
+
+            // --- Draw ---
+            draw();
+
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Drawing Function ---
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#ccc'; // Arena floor color
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+             // Draw Blocks first (background elements)
+             gameState.blocks.forEach(block => block.draw(ctx));
+
+            // Draw Mines
+             gameState.mines.forEach(mine => mine.draw(ctx));
+
+             // Draw Tracks (drawn by tanks themselves)
+
+            // Draw Tanks (Enemies first, then Players)
+            gameState.enemies.forEach(enemy => {
+                if (enemy.active) enemy.draw(ctx);
+                else if (enemy.isInvisible && enemy.tracks.length > 0) {
+                    // Draw lingering tracks even if tank body is gone/fully invisible
+                     enemy.draw(ctx); // Let draw handle track drawing
+                }
+            });
+            if (gameState.player1 && gameState.player1.active) gameState.player1.draw(ctx);
+            if (gameState.player2 && gameState.player2.active) gameState.player2.draw(ctx);
+
+             // Draw Bullets
+             gameState.bullets.forEach(bullet => bullet.draw(ctx));
+
+            // Draw Explosions (on top)
+             gameState.explosions.forEach(explosion => explosion.draw(ctx));
+
+             // Draw HUD (already handled via HTML overlay)
+        }
+
+        // --- Input Handling ---
+        function setupInputHandlers() {
+            window.addEventListener('keydown', (e) => {
+                gameState.keys[e.key.toLowerCase()] = true;
+                 // Pause Toggle (use 'p' key)
+                if (e.key.toLowerCase() === 'p') {
+                    if (gameState.mode === 'paused') {
+                        setGameState(gameState.pausedState || 'sp'); // Resume
+                    } else if (gameState.mode === 'sp' || gameState.mode === 'mp') {
+                        setGameState('paused'); // Pause
+                    }
+                }
+                 // Debug / Cheat keys (optional)
+                 if (e.key.toLowerCase() === 'k') { // Kill all enemies
+                    gameState.enemies.forEach(e => e.active = false);
+                 }
+                 if (e.key.toLowerCase() === 'n') { // Next level
+                     if (gameState.mode === 'sp' || gameState.mode === 'mp') {
+                          setGameState('mission_complete');
+                     }
+                 }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                gameState.keys[e.key.toLowerCase()] = false;
+            });
+
+             // Mouse tracking for Player 1 aiming
+             canvas.addEventListener('mousemove', (e) => {
+                 const rect = canvas.getBoundingClientRect();
+                 gameState.mouse.x = e.clientX - rect.left;
+                 gameState.mouse.y = e.clientY - rect.top;
+             });
+
+             // Mouse buttons for Player 1 shooting/mines
+             canvas.addEventListener('mousedown', (e) => {
+                  if (e.button === 0) { // Left click
+                      gameState.mouse.down = true;
+                  } else if (e.button === 2) { // Right click
+                      gameState.mouse.rightDown = true;
+                       e.preventDefault(); // Prevent context menu
+                  }
+             });
+
+             canvas.addEventListener('mouseup', (e) => {
+                  if (e.button === 0) { // Left click
+                      gameState.mouse.down = false;
+                  } else if (e.button === 2) { // Right click
+                      gameState.mouse.rightDown = false;
+                       e.preventDefault();
+                  }
+             });
+             // Prevent context menu on right click within canvas
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+
+             // Menu Buttons
+             startSpButton.addEventListener('click', () => {
+                 setGameState('sp');
+             });
+             startMpButton.addEventListener('click', () => {
+                 setGameState('mp');
+             });
+        }
+
+        // --- Initialization ---
+        function init() {
+            console.log("Tanks! Initializing...");
+            setupInputHandlers();
+            // Start in menu state
+            setGameState('menu');
+            // Game loop will be started when a mode is selected
+        }
+
+        // Start the game initialization when the page loads
+        window.onload = init;
+
+    </script>
+</body>
+</html>

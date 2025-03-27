@@ -1,0 +1,2216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plants vs Zombies - First 10 Levels</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #333;
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+
+        #game-container {
+            position: relative;
+            width: 900px;
+            height: 600px;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="rgb(120, 200, 80)" /><line x1="0" y1="100" x2="900" y2="100" stroke="rgba(0,0,0,0.1)" stroke-width="2"/><line x1="0" y1="200" x2="900" y2="200" stroke="rgba(0,0,0,0.1)" stroke-width="2"/><line x1="0" y1="300" x2="900" y2="300" stroke="rgba(0,0,0,0.1)" stroke-width="2"/><line x1="0" y1="400" x2="900" y2="400" stroke="rgba(0,0,0,0.1)" stroke-width="2"/><line x1="0" y1="500" x2="900" y2="500" stroke="rgba(0,0,0,0.1)" stroke-width="2"/><line x1="100" y1="0" x2="100" y2="600" stroke="rgba(0,0,0,0.05)" stroke-width="1"/><line x1="200" y1="0" x2="200" y2="600" stroke="rgba(0,0,0,0.05)" stroke-width="1"/><line x1="300" y1="0" x2="300" y2="600" stroke="rgba(0,0,0,0.05)" stroke-width="1"/><line x1="400" y1="0" x2="400" y2="600" stroke="rgba(0,0,0,0.05)" stroke-width="1"/><line x1="500" y1="0" x2="500" y2="600" stroke="rgba(0,0,0,0.05)" stroke-width="1"/><line x1="600" y1="0" x2="600" y2="600" stroke="rgba(0,0,0,0.05)" stroke-width="1"/><line x1="700" y1="0" x2="700" y2="600" stroke="rgba(0,0,0,0.05)" stroke-width="1"/><line x1="800" y1="0" x2="800" y2="600" stroke="rgba(0,0,0,0.05)" stroke-width="1"/></svg>') center center / cover no-repeat;
+            /* background-color: #78c850; */
+            border: 5px solid #4a412a;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+
+        #lawn {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(9, 100px);
+            grid-template-rows: repeat(5, 100px);
+            /* Padding to align grid cells visually */
+            padding-top: 0px; /* Adjust if needed based on background */
+            padding-left: 0px; /* Adjust if needed based on background */
+            box-sizing: border-box;
+        }
+        
+        .grid-cell {
+            /* border: 1px solid rgba(0, 0, 0, 0.1); */
+            width: 100px;
+            height: 100px;
+            position: relative;
+            box-sizing: border-box;
+            user-select: none;
+            /* background-color: rgba(255, 255, 255, 0.1); */
+        }
+
+        .plant, .zombie, .sun, .projectile, .bowling-nut {
+            position: absolute;
+            font-size: 40px; /* Adjust size as needed */
+            text-align: center;
+            line-height: 1;
+            user-select: none;
+            transition: transform 0.1s linear;
+        }
+
+        .plant {
+            width: 70px;
+            height: 70px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            bottom: 15px; /* Adjust vertical position within cell */
+            left: 15px;  /* Adjust horizontal position within cell */
+            z-index: 10;
+            cursor: default;
+        }
+        .plant.eating { /* Chomper */
+             animation: chew 0.5s infinite alternate;
+        }
+        @keyframes chew {
+            from { transform: scale(1); }
+            to { transform: scale(1.1); }
+        }
+         .plant.cooldown { /* Chomper */
+             opacity: 0.6;
+         }
+
+        .zombie {
+            width: 80px;
+            height: 90px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            bottom: 5px;
+            right: -80px; /* Start off-screen */
+            z-index: 20;
+            transition: right 0.1s linear; /* Smoother movement */
+        }
+        .zombie .health-bar {
+            width: 60px;
+            height: 5px;
+            background-color: #ccc;
+            border: 1px solid #555;
+            margin-top: 2px;
+            position: relative;
+        }
+         .zombie .health-fill {
+             height: 100%;
+             background-color: red;
+             width: 100%; /* Set by JS */
+             transition: width 0.2s linear;
+         }
+         .zombie.frozen {
+            filter: drop-shadow(0 0 5px cyan) brightness(0.9);
+            transition-duration: 0.2s; /* Slower transition when frozen */
+         }
+          .zombie.polevaulting-jump {
+              animation: jump 0.8s ease-out forwards;
+              z-index: 25; /* Ensure jumper is on top during jump */
+          }
+          @keyframes jump {
+              0% { transform: translateY(0) scale(1); }
+              50% { transform: translateY(-80px) scale(1.2); } /* Apex of jump */
+              100% { transform: translateY(0) scale(1); }
+          }
+
+        .sun {
+            width: 50px;
+            height: 50px;
+            font-size: 45px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 50;
+            animation: fall 5s linear, pulse 1.5s infinite alternate ease-in-out;
+            transition: top 0.5s ease-out, left 0.5s ease-out;
+        }
+        @keyframes fall {
+            from { transform: translateY(-100px); }
+            to { transform: translateY(0); }
+        }
+        @keyframes pulse {
+            from { transform: scale(1); filter: brightness(1); }
+            to { transform: scale(1.1); filter: brightness(1.2); }
+        }
+        .sun.collected {
+            animation: none; /* Stop falling/pulsing */
+            transition: top 0.3s ease-in, left 0.3s ease-in, transform 0.3s ease-in, opacity 0.3s ease-in;
+            z-index: 100; /* Ensure collected sun goes over everything */
+        }
+
+        .projectile {
+            width: 25px;
+            height: 25px;
+            font-size: 20px;
+            border-radius: 50%;
+            z-index: 15;
+            transition: left 0.05s linear;
+        }
+        .projectile.pea { background-color: transparent; } /* Emoji has color */
+        .projectile.snow-pea { background-color: transparent; filter: drop-shadow(0 0 3px cyan); }
+
+        #ui-top {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 85px; /* Height for seed packets + sun counter */
+            background-color: rgba(74, 65, 42, 0.85); /* Brownish panel */
+            display: flex;
+            align-items: center;
+            padding: 5px;
+            box-sizing: border-box;
+            z-index: 100;
+            border-bottom: 3px solid #4a412a;
+        }
+
+        #seed-packets {
+            display: flex;
+            gap: 5px;
+            margin-left: 130px; /* Space after sun counter */
+        }
+
+        .seed-packet {
+            width: 60px;
+            height: 75px;
+            background-color: #5d4c31;
+            border: 2px solid #3b301d;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 0;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+            transition: background-color 0.2s;
+        }
+        .seed-packet.selected {
+             background-color: #7e6743;
+             border-color: #fff;
+        }
+        .seed-packet.disabled {
+            background-color: #888;
+            cursor: not-allowed;
+            filter: grayscale(80%);
+        }
+        .seed-packet span {
+            font-size: 28px;
+        }
+        .seed-packet .cost {
+            font-size: 14px;
+            font-weight: bold;
+            color: #fff;
+            background-color: rgba(0,0,0,0.6);
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+         .seed-packet .cooldown-overlay {
+             position: absolute;
+             bottom: 0;
+             left: 0;
+             width: 100%;
+             height: 0%; /* Controlled by JS */
+             background-color: rgba(0, 0, 0, 0.7);
+             transition: height 0.1s linear; /* Smooth cooldown indicator */
+             z-index: 1;
+         }
+         .seed-packet span, .seed-packet .cost {
+             position: relative;
+             z-index: 2;
+         }
+
+        #sun-counter {
+            width: 120px;
+            height: 60px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #3b301d;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            margin-left: 5px;
+        }
+        #sun-counter span:first-child {
+            font-size: 30px; /* Sun emoji */
+            margin-right: 5px;
+        }
+
+        #shovel-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 60px;
+            height: 60px;
+            background-color: #a05a2c;
+            border: 2px solid #5a3a1a;
+            border-radius: 5px;
+            font-size: 35px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 101;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+        }
+        #shovel-button.selected {
+             background-color: #c07a4c;
+             border-color: #fff;
+        }
+
+        #level-indicator, #message-area, #progress-bar-container {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 18px;
+            z-index: 200;
+            text-align: center;
+            pointer-events: none; /* Don't block clicks */
+        }
+        #level-indicator {
+            top: 95px;
+            right: 10px;
+        }
+         #message-area {
+             top: 50%;
+             left: 50%;
+             transform: translate(-50%, -50%);
+             font-size: 24px;
+             display: none; /* Hidden by default */
+             pointer-events: auto; /* Allow interaction if needed, e.g., "Start Level" button */
+         }
+         #message-area button {
+             display: block;
+             margin: 15px auto 0;
+             padding: 10px 20px;
+             font-size: 18px;
+             cursor: pointer;
+         }
+         #progress-bar-container {
+            bottom: 10px;
+            right: 10px;
+            width: 200px;
+            height: 20px;
+            padding: 0;
+            background-color: #555;
+            border: 1px solid #ccc;
+         }
+          #progress-bar {
+              width: 0%; /* Start empty */
+              height: 100%;
+              background-color: #a00;
+              position: relative;
+              transition: width 0.5s linear;
+          }
+          .flag-marker {
+              position: absolute;
+              top: -25px; /* Position above the bar */
+              transform: translateX(-50%);
+              font-size: 20px;
+              color: white;
+          }
+
+
+        /* Plant/Zombie specific visuals */
+        .plant[data-type="peashooter"] span::before { content: '🌱'; }
+        .plant[data-type="sunflower"] span::before { content: '🌻'; }
+        .plant[data-type="cherrybomb"] span::before { content: '🍒'; animation: fuse 1.5s linear forwards; }
+        @keyframes fuse { from { filter: brightness(1); } to { filter: brightness(1.5) saturate(2); } }
+        .plant[data-type="wallnut"] span::before { content: '🧱'; }
+        .plant[data-type="potatomine"] span::before { content: '🥔'; }
+        .plant[data-type="potatomine"].armed span::before { content: '💥'; } /* Or a different visual */
+        .plant[data-type="snowpea"] span::before { content: '❄️'; }
+        .plant[data-type="chomper"] span::before { content: '🌿'; } /* Using a generic plant emoji, maybe <0xF0><0x9F><0xAA><0xB4>? */
+        .plant[data-type="repeater"] span::before { content: '🌿'; filter: hue-rotate(120deg); } /* Double pea? Hard with emoji */
+
+        .zombie[data-type="normal"] span::before { content: '🚶'; }
+        .zombie[data-type="flag"] span::before { content: '🚩'; }
+        .zombie[data-type="conehead"] span::before { content: '👷'; }
+        .zombie[data-type="polevaulting"] span::before { content: '🤸'; }
+        .zombie[data-type="buckethead"] span::before { content: '🪣'; }
+
+        .projectile[data-type="pea"]::before { content: '🟢'; }
+        .projectile[data-type="snow-pea"]::before { content: '🔵'; }
+
+        /* Conveyor Belt Styling */
+        #conveyor-belt {
+            position: absolute;
+            top: 0;
+            left: 0; /* Or adjust if conveyor is not full width */
+            width: 100%; /* Or fixed width */
+            height: 85px;
+            background-color: rgba(100, 100, 100, 0.8);
+            z-index: 99; /* Below UI top but above lawn */
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            border-bottom: 3px solid #444;
+        }
+        .conveyor-item {
+             width: 60px;
+             height: 75px;
+             background-color: #eee;
+             border: 1px solid #555;
+             border-radius: 5px;
+             display: flex;
+             flex-direction: column;
+             align-items: center;
+             justify-content: center;
+             margin: 0 10px;
+             cursor: grab;
+             position: absolute; /* Positioned by JS */
+             transition: left 0.1s linear;
+             font-size: 30px;
+             flex-shrink: 0; /* Prevent shrinking */
+        }
+        .conveyor-item.dragging {
+            opacity: 0.7;
+            transform: scale(1.1);
+            z-index: 150;
+        }
+
+        /* Wall-nut Bowling Specific */
+        .bowling-nut {
+            width: 60px;
+            height: 60px;
+            font-size: 50px;
+            z-index: 25;
+            transition: top 0.05s linear, left 0.05s linear, transform 0.2s;
+            cursor: pointer;
+        }
+        .bowling-nut::before { content: '🧱'; }
+        .bowling-nut.rolling {
+            animation: roll 0.5s linear infinite;
+        }
+        @keyframes roll {
+             from { transform: rotate(0deg); }
+             to { transform: rotate(360deg); }
+        }
+
+         /* Plant Selection Screen */
+         #plant-selection-screen {
+             position: absolute;
+             inset: 0;
+             background-color: rgba(0, 0, 0, 0.85);
+             z-index: 500;
+             display: none; /* Hidden initially */
+             flex-direction: column;
+             align-items: center;
+             justify-content: center;
+             color: white;
+         }
+          #plant-selection-screen h2 {
+              margin-bottom: 20px;
+          }
+          #plant-selection-available, #plant-selection-chosen {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 15px;
+              padding: 15px;
+              background-color: rgba(255, 255, 255, 0.1);
+              border-radius: 10px;
+              margin-bottom: 20px;
+              min-height: 90px;
+          }
+           #plant-selection-available .seed-packet,
+           #plant-selection-chosen .seed-packet {
+                position: static; /* Override absolute positioning */
+                cursor: pointer;
+                transition: transform 0.2s;
+           }
+           #plant-selection-available .seed-packet:hover,
+           #plant-selection-chosen .seed-packet:hover {
+               transform: scale(1.1);
+           }
+           #plant-selection-chosen {
+               min-width: 400px; /* Adjust as needed */
+               border: 2px dashed #ccc;
+           }
+           #start-level-button {
+                padding: 12px 25px;
+                font-size: 20px;
+                cursor: pointer;
+           }
+           #start-level-button.disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+           }
+
+
+           /* Specific Level Adjustments */
+           body[data-level="1-1"] #lawn { grid-template-rows: 100px; top: 200px; height: 100px; } /* Only middle row */
+           body[data-level="1-2"] #lawn { grid-template-rows: 100px; top: 200px; height: 100px; } /* Only middle row */
+           body[data-level="1-3"] #lawn { grid-template-rows: repeat(3, 100px); top: 100px; height: 300px; } /* Middle 3 rows */
+           /* Level 1-4 onwards use full 5 rows */
+
+           /* Tutorial Highlighting/Guidance */
+           .highlight {
+                outline: 3px solid yellow;
+                box-shadow: 0 0 15px yellow;
+                animation: highlight-pulse 1s infinite alternate;
+                z-index: 1000 !important; /* Ensure highlight is visible */
+           }
+           @keyframes highlight-pulse {
+               from { outline-offset: 0px; }
+               to { outline-offset: 3px; }
+           }
+           #tutorial-text {
+                position: absolute;
+                top: 100px;
+                left: 150px;
+                background-color: rgba(0,0,0,0.7);
+                color: yellow;
+                padding: 15px;
+                border-radius: 5px;
+                font-size: 18px;
+                z-index: 1001;
+                max-width: 300px;
+                display: none; /* Show via JS */
+           }
+
+    </style>
+</head>
+<body data-level="1-1">
+
+    <div id="game-container">
+        <div id="ui-top">
+            <div id="sun-counter"><span>☀️</span><span id="sun-amount">50</span></div>
+            <div id="seed-packets">
+                <!-- Seed packets will be added by JavaScript -->
+            </div>
+            <div id="shovel-button" style="display: none;">⛏️</div>
+        </div>
+
+        <div id="conveyor-belt" style="display: none;">
+            <!-- Conveyor items added by JS -->
+        </div>
+
+        <div id="lawn">
+            <!-- Grid cells generated by JavaScript -->
+        </div>
+
+        <div id="level-indicator">Level 1-1</div>
+        <div id="message-area"></div>
+        <div id="progress-bar-container" style="display: none;">
+            <div id="progress-bar">
+                 <!-- Flag markers added by JS -->
+            </div>
+        </div>
+        <div id="tutorial-text"></div>
+
+         <!-- Plant Selection Screen -->
+         <div id="plant-selection-screen">
+             <h2>Choose Your Plants</h2>
+             <div id="plant-selection-available">
+                 <!-- Available plants populated by JS -->
+             </div>
+             <h3>Selected Plants (<span id="selection-count">0</span>/<span id="selection-limit">0</span>):</h3>
+             <div id="plant-selection-chosen">
+                 <!-- Chosen plants moved here -->
+             </div>
+             <button id="start-level-button">Let's Rock!</button>
+         </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const lawn = document.getElementById('lawn');
+        const sunAmountEl = document.getElementById('sun-amount');
+        const seedPacketsContainer = document.getElementById('seed-packets');
+        const shovelButton = document.getElementById('shovel-button');
+        const levelIndicator = document.getElementById('level-indicator');
+        const messageArea = document.getElementById('message-area');
+        const progressBarContainer = document.getElementById('progress-bar-container');
+        const progressBar = document.getElementById('progress-bar');
+        const body = document.body;
+        const conveyorBelt = document.getElementById('conveyor-belt');
+        const plantSelectionScreen = document.getElementById('plant-selection-screen');
+        const plantSelectionAvailable = document.getElementById('plant-selection-available');
+        const plantSelectionChosen = document.getElementById('plant-selection-chosen');
+        const startLevelButton = document.getElementById('start-level-button');
+        const selectionCountEl = document.getElementById('selection-count');
+        const selectionLimitEl = document.getElementById('selection-limit');
+        const tutorialTextEl = document.getElementById('tutorial-text');
+
+        const TILE_SIZE = 100;
+        const ROWS = 5;
+        const COLS = 9;
+
+        let sun = 50;
+        let currentLevel = 1;
+        let currentWave = 0;
+        let gameInterval;
+        let sunInterval;
+        let waveInterval;
+        let selectedSeedPacket = null;
+        let isShoveling = false;
+        let plants = []; // { id, type, row, col, hp, element, ...otherProps }
+        let zombies = []; // { id, type, row, hp, element, speed, x, state, ...otherProps }
+        let projectiles = []; // { id, type, row, x, element, damage, speed, slow }
+        let sunItems = []; // { id, element, targetY }
+        let plantIdCounter = 0;
+        let zombieIdCounter = 0;
+        let projectileIdCounter = 0;
+        let sunIdCounter = 0;
+        let gridCells = []; // Store references to grid cell elements
+        let levelData = {}; // Loaded based on currentLevel
+        let unlockedPlants = ['peashooter']; // Start with peashooter for level 1
+        let zombiesToSpawn = [];
+        let totalWaves = 0;
+        let zombiesInLevel = 0;
+        let zombiesKilled = 0;
+        let gameActive = false;
+        let plantCooldowns = {}; // { plantType: Date.now() }
+        let conveyorItems = []; // { id, type, element, x }
+        let draggingConveyorItem = null; // { id, type, element, offsetX, offsetY }
+        let bowlingNuts = []; // { id, element, row, x, rolling }
+        let bowlingNutIdCounter = 0;
+        let plantSelectionSlots = 6; // Default, adjusted later
+        let chosenPlantsForLevel = []; // From plant selection
+
+
+        const PLANT_DATA = {
+            peashooter: { cost: 100, hp: 100, cooldown: 7500, shootInterval: 1500, emoji: '🌱', projectile: 'pea', damage: 20 },
+            sunflower: { cost: 50, hp: 80, cooldown: 7500, sunInterval: 24000, emoji: '🌻' },
+            cherrybomb: { cost: 150, hp: Infinity, cooldown: 35000, explodeDelay: 1200, radius: 1.5, damage: 1800, emoji: '🍒'},
+            wallnut: { cost: 50, hp: 4000, cooldown: 30000, emoji: '🧱' },
+            potatomine: { cost: 25, hp: 50, cooldown: 30000, armDelay: 15000, damage: 1800, emoji: '🥔', armedEmoji: '💥' },
+            snowpea: { cost: 175, hp: 100, cooldown: 7500, shootInterval: 1500, emoji: '❄️', projectile: 'snow-pea', damage: 20, slowDuration: 3000 },
+            chomper: { cost: 150, hp: 150, cooldown: 7500, eatRange: 0.5, digestTime: 40000, emoji: '🌿' /* <0xF0><0x9F><0xAA><0xB4> */ },
+            repeater: { cost: 200, hp: 100, cooldown: 7500, shootInterval: 1500, emoji: '🌿', projectile: 'pea', damage: 20, shots: 2 }
+        };
+
+        const ZOMBIE_DATA = {
+            normal: { hp: 100, speed: 0.3, damage: 50, emoji: '🚶' },
+            flag: { hp: 100, speed: 0.4, damage: 50, emoji: '🚩' }, // Slightly faster?
+            conehead: { hp: 370, speed: 0.3, damage: 50, emoji: '👷' },
+            polevaulting: { hp: 250, speed: 0.6, jumpSpeed: 0.8, damage: 50, emoji: '🤸', hasPole: true, jumped: false },
+            buckethead: { hp: 1100, speed: 0.3, damage: 50, emoji: '🪣' }
+        };
+
+        const LEVELS = {
+             1: { name: "1-1", rows: [2], sun: 50, plants: ['peashooter'], waves: [[{ type: 'normal', time: 15 }],[{ type: 'normal', time: 30 }]], unlocks: 'sunflower', flags: 0, tutorial: true },
+             2: { name: "1-2", rows: [2], sun: 50, plants: ['peashooter', 'sunflower'], waves: [[{ type: 'normal', time: 10 }], [{ type: 'normal', time: 20 }], [{ type: 'normal', time: 30 }], [{ type: 'normal', time: 40 }, { type: 'flag', time: 45 }]], unlocks: 'cherrybomb', flags: 1 },
+             3: { name: "1-3", rows: [1, 2, 3], sun: 75, plants: ['peashooter', 'sunflower', 'cherrybomb'], waves: [[{ type: 'normal', time: 10 }], [{ type: 'normal', time: 20 }, {type: 'conehead', time: 25}], [{ type: 'normal', time: 35 }], [{ type: 'conehead', time: 45 }, { type: 'flag', time: 50 }]], unlocks: 'wallnut', flags: 1 },
+             4: { name: "1-4", rows: [0, 1, 2, 3, 4], sun: 100, plants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut'], waves: [[{ type: 'normal', time: 10 }], [{ type: 'normal', time: 20 }, {type: 'conehead', time: 25}], [{ type: 'normal', time: 35 }, {type: 'conehead', time: 40}], [{ type: 'conehead', time: 50 }, { type: 'flag', time: 55 }]], unlocks: 'shovel', flags: 1 },
+             5: { name: "1-5", rows: [0, 1, 2, 3, 4], sun: 0, plants: [], waves: [[{ type: 'normal', time: 5 }], [{ type: 'normal', time: 12 }], [{ type: 'conehead', time: 20 }], [{ type: 'normal', time: 28 }, {type: 'conehead', time: 30 }], [{ type: 'conehead', time: 38 }, {type: 'flag', time: 45}]], unlocks: 'potatomine', flags: 1, type: 'minigame', minigame: 'wallnut-bowling', conveyorPlants: ['wallnut', 'wallnut', 'wallnut', 'wallnut', 'wallnut'] /* Simplified conveyor */ },
+             6: { name: "1-6", rows: [0, 1, 2, 3, 4], sun: 100, plants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'potatomine'], waves: [[{ type: 'normal', time: 10 }], [{ type: 'polevaulting', time: 20 }], [{ type: 'normal', time: 30 }, { type: 'conehead', time: 35 }], [{ type: 'polevaulting', time: 45 }, { type: 'flag', time: 50 }]], unlocks: 'snowpea', flags: 1 },
+             7: { name: "1-7", rows: [0, 1, 2, 3, 4], sun: 100, plants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'potatomine', 'snowpea'], waves: [[{ type: 'normal', time: 10 }, { type: 'conehead', time: 15 }], [{ type: 'polevaulting', time: 25 }, { type: 'flag', time: 30 }], [{ type: 'normal', time: 40 }, { type: 'conehead', time: 45 }], [{ type: 'polevaulting', time: 55 }, { type: 'flag', time: 60 }]], unlocks: 'chomper', flags: 2 },
+             8: { name: "1-8", rows: [0, 1, 2, 3, 4], sun: 125, plants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'potatomine', 'snowpea', 'chomper'], waves: [[{ type: 'normal', time: 10 }], [{ type: 'buckethead', time: 20 }], [{ type: 'conehead', time: 30 }, { type: 'normal', time: 35 }], [{ type: 'buckethead', time: 45 }, { type: 'flag', time: 50 }]], unlocks: 'repeater', flags: 1, selection: true, slots: 6 },
+             9: { name: "1-9", rows: [0, 1, 2, 3, 4], sun: 125, plants: ['peashooter', 'sunflower', 'cherrybomb', 'wallnut', 'potatomine', 'snowpea', 'chomper', 'repeater'], waves: [[{ type: 'polevaulting', time: 10 }, { type: 'conehead', time: 15 }], [{ type: 'buckethead', time: 25 }, { type: 'flag', time: 30 }], [{ type: 'polevaulting', time: 40 }, { type: 'conehead', time: 45 }], [{ type: 'buckethead', time: 55 }, { type: 'flag', time: 60 }]], unlocks: 'note', flags: 2, selection: true, slots: 7 },
+            10: { name: "1-10", rows: [0, 1, 2, 3, 4], sun: 50, /* Sun comes from sky only */ plants: [], waves: [[{ type: 'normal', time: 10 }], [{ type: 'conehead', time: 20 }], [{ type: 'polevaulting', time: 30 }, { type: 'flag', time: 35 }], [{ type: 'buckethead', time: 45 }], [{ type: 'normal', time: 55 }, { type: 'conehead', time: 60 }, { type: 'polevaulting', time: 65 }, { type: 'buckethead', time: 70 }, { type: 'flag', time: 75 }]], unlocks: 'puffshroom', flags: 2, type: 'conveyor', conveyorPlants: ['peashooter', 'snowpea', 'wallnut', 'repeater', 'cherrybomb', 'potatomine'] }
+        };
+
+        // --- Initialization ---
+
+        function initGame() {
+            lawn.innerHTML = '';
+            gridCells = [];
+            // Setup Lawn Grid
+            const numRows = levelData.rows ? levelData.rows.length : ROWS;
+            const numCols = COLS;
+            const startRow = levelData.rows ? levelData.rows[0] : 0;
+            
+            lawn.style.gridTemplateRows = `repeat(${numRows}, ${TILE_SIZE}px)`;
+            lawn.style.gridTemplateColumns = `repeat(${numCols}, ${TILE_SIZE}px)`;
+            lawn.style.height = `${numRows * TILE_SIZE}px`;
+            
+            if (numRows < ROWS) {
+                 const topOffset = ((ROWS - numRows) / 2) * TILE_SIZE;
+                 lawn.style.top = `${topOffset}px`;
+             } else {
+                 lawn.style.top = `0px`;
+             }
+             
+            body.setAttribute('data-level', levelData.name); // For CSS adjustments
+
+            for (let r = 0; r < numRows; r++) {
+                for (let c = 0; c < numCols; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('grid-cell');
+                    cell.dataset.row = startRow + r; // Actual row index
+                    cell.dataset.col = c;
+                    cell.style.gridRow = r + 1;
+                    cell.style.gridColumn = c + 1;
+                    cell.addEventListener('click', onCellClick);
+                    lawn.appendChild(cell);
+                    gridCells.push(cell);
+                }
+            }
+
+            updateSun(levelData.sun || 0);
+            plants = [];
+            zombies = [];
+            projectiles = [];
+            sunItems = [];
+            conveyorItems = [];
+            bowlingNuts = [];
+            currentWave = 0;
+            zombiesKilled = 0;
+            zombiesToSpawn = [];
+            totalWaves = levelData.waves.length;
+            zombiesInLevel = levelData.waves.flat().length;
+            plantCooldowns = {};
+            selectedSeedPacket = null;
+            isShoveling = false;
+            shovelButton.classList.remove('selected');
+            shovelButton.style.display = levelData.unlocks === 'shovel' || unlockedPlants.includes('shovel') ? 'flex' : 'none'; // Show shovel from Lvl 1-4 unlock onwards
+            if (unlockedPlants.includes('shovel')) { // Make shovel available if already unlocked
+                shovelButton.style.display = 'flex';
+            }
+            levelIndicator.textContent = `Level ${levelData.name}`;
+            messageArea.style.display = 'none';
+            messageArea.innerHTML = '';
+            conveyorBelt.style.display = levelData.type === 'conveyor' || levelData.type === 'minigame' ? 'flex' : 'none';
+            conveyorBelt.innerHTML = '';
+            progressBarContainer.style.display = levelData.flags > 0 ? 'flex' : 'none';
+            updateProgressBar(0); // Reset progress bar
+            setupProgressBarFlags();
+            tutorialTextEl.style.display = 'none'; // Hide tutorial text
+
+            if (levelData.type === 'conveyor' || levelData.type === 'minigame') {
+                 // Disable regular planting UI
+                 seedPacketsContainer.style.display = 'none';
+                 sunCounter.style.display = levelData.type === 'minigame' ? 'none' : 'flex'; // Hide sun counter for bowling
+                 initConveyorBelt();
+            } else {
+                // Setup normal seed packets
+                seedPacketsContainer.style.display = 'flex';
+                sunCounter.style.display = 'flex';
+                if (levelData.selection) {
+                    setupPlantSelection(); // Show selection screen
+                    return; // Don't start game loop yet
+                } else {
+                    chosenPlantsForLevel = levelData.plants; // Use predefined plants
+                    createSeedPackets();
+                    startGameLoop();
+                }
+            }
+             
+            if (levelData.tutorial) {
+                startTutorial();
+            } else if (levelData.type !== 'minigame' && !levelData.selection) { // Don't auto-start minigame or selection levels
+                startGameLoop();
+            } else if (levelData.type === 'minigame') {
+                // Maybe show a start button for minigame?
+                showMessage(`Level ${levelData.name}<br>${levelData.minigame === 'wallnut-bowling' ? 'Wall-nut Bowling!' : ''}`, true, startGameLoop);
+            }
+        }
+        
+        function setupPlantSelection() {
+            plantSelectionScreen.style.display = 'flex';
+            plantSelectionAvailable.innerHTML = '';
+            plantSelectionChosen.innerHTML = '';
+            chosenPlantsForLevel = [];
+            plantSelectionSlots = levelData.slots || 6;
+            selectionLimitEl.textContent = plantSelectionSlots;
+            updateSelectionCount();
+
+            // Populate available plants
+            unlockedPlants.forEach(plantType => {
+                if (PLANT_DATA[plantType] && PLANT_DATA[plantType].cost !== undefined) { // Exclude shovel etc.
+                    const packet = createSeedPacketElement(plantType, false); // Create non-functional packet
+                    packet.addEventListener('click', () => selectPlantForLevel(plantType, packet));
+                    plantSelectionAvailable.appendChild(packet);
+                }
+            });
+
+            startLevelButton.classList.add('disabled');
+            startLevelButton.onclick = () => {
+                 if (chosenPlantsForLevel.length > 0) { // Allow starting even if not full? Or enforce === plantSelectionSlots
+                     plantSelectionScreen.style.display = 'none';
+                     createSeedPackets(); // Create functional packets for chosen plants
+                     startGameLoop();
+                 }
+             };
+        }
+
+        function selectPlantForLevel(plantType, packetElement) {
+            if (chosenPlantsForLevel.includes(plantType)) {
+                // Move back to available
+                chosenPlantsForLevel = chosenPlantsForLevel.filter(p => p !== plantType);
+                plantSelectionAvailable.appendChild(packetElement);
+            } else if (chosenPlantsForLevel.length < plantSelectionSlots) {
+                // Move to chosen
+                chosenPlantsForLevel.push(plantType);
+                plantSelectionChosen.appendChild(packetElement);
+            }
+            updateSelectionCount();
+        }
+        
+        function updateSelectionCount() {
+            selectionCountEl.textContent = chosenPlantsForLevel.length;
+            if (chosenPlantsForLevel.length >= 1) { // Let's allow starting with at least one plant
+                 startLevelButton.classList.remove('disabled');
+             } else {
+                 startLevelButton.classList.add('disabled');
+             }
+        }
+
+        function createSeedPackets() {
+            seedPacketsContainer.innerHTML = ''; // Clear existing
+            chosenPlantsForLevel.forEach(plantType => {
+                const data = PLANT_DATA[plantType];
+                if (!data) return;
+                
+                const packet = createSeedPacketElement(plantType, true); // Create functional packet
+                seedPacketsContainer.appendChild(packet);
+            });
+        }
+        
+        function createSeedPacketElement(plantType, isFunctional) {
+             const data = PLANT_DATA[plantType];
+             const packet = document.createElement('div');
+             packet.classList.add('seed-packet');
+             packet.dataset.plantType = plantType;
+             packet.innerHTML = `
+                 <span>${data.emoji}</span>
+                 <div class="cost">${data.cost !== undefined ? data.cost : ''}</div>
+                 <div class="cooldown-overlay"></div>
+             `;
+             
+             if (isFunctional) {
+                packet.addEventListener('click', () => selectSeedPacket(packet, plantType));
+                checkSeedPacketAvailability(packet, plantType); // Initial check
+             }
+             return packet;
+        }
+        
+        function checkSeedPacketAvailability(packet, plantType) {
+            const data = PLANT_DATA[plantType];
+            const lastUsed = plantCooldowns[plantType] || 0;
+            const cooldown = data.cooldown || 0;
+            const now = Date.now();
+            const timeElapsed = now - lastUsed;
+            const timeRemaining = cooldown - timeElapsed;
+            const sunAvailable = sun >= (data.cost || 0);
+            
+            const cooldownOverlay = packet.querySelector('.cooldown-overlay');
+
+            if (sunAvailable && timeRemaining <= 0) {
+                packet.classList.remove('disabled');
+                cooldownOverlay.style.height = '0%';
+            } else {
+                packet.classList.add('disabled');
+                if (timeRemaining > 0) {
+                     const cooldownPercent = Math.min(100, (timeRemaining / cooldown) * 100);
+                     cooldownOverlay.style.height = `${cooldownPercent}%`;
+                 } else {
+                      cooldownOverlay.style.height = '0%'; // Ensure overlay is hidden if disabled only by sun cost
+                 }
+                 if (!sunAvailable && selectedSeedPacket === packet) {
+                     deselectSeedPacket(); // Deselect if player can no longer afford it
+                 }
+            }
+        }
+
+        // --- Game Loop ---
+
+        function startGameLoop() {
+            console.log(`Starting Level ${levelData.name}`);
+            gameActive = true;
+            messageArea.style.display = 'none'; // Hide any previous messages
+
+            // Clear any existing intervals
+            clearInterval(gameInterval);
+            clearInterval(sunInterval);
+            clearInterval(waveInterval);
+
+            gameInterval = setInterval(updateGame, 50); // Approx 20 FPS game update
+            if (levelData.type !== 'conveyor' && levelData.type !== 'minigame') {
+                 sunInterval = setInterval(spawnFallingSun, 10000); // Natural sun fall interval
+            }
+            waveInterval = setInterval(spawnWave, 1000); // Check waves every second
+
+            // Spawn initial sun if specified (e.g., for tutorial)
+            if (levelData.initialSunDrops) {
+                 levelData.initialSunDrops.forEach(drop => {
+                     setTimeout(() => spawnFallingSun(drop.col, drop.row), drop.time * 1000);
+                 });
+            }
+        }
+
+        function updateGame() {
+            if (!gameActive) return;
+
+            const now = Date.now();
+
+            // Update Sun Items
+            sunItems.forEach(item => {
+                 if (!item.collected) {
+                     // Simple gravity/check if reached target
+                     let currentTop = parseFloat(item.element.style.top || 0);
+                     if (currentTop < item.targetY) {
+                         item.element.style.top = `${Math.min(item.targetY, currentTop + 3)}px`; // Sun fall speed
+                     }
+                     // Add decay timer?
+                 }
+             });
+
+            // Update Projectiles
+            projectiles.forEach((p, index) => {
+                p.x += p.speed;
+                p.element.style.left = `${p.x}px`;
+
+                // Check collision with zombies
+                zombies.forEach(z => {
+                    if (z.row === p.row && !z.isDead) {
+                        const zombieLeft = z.x;
+                        const zombieRight = z.x + 60; // Approx zombie width
+                        if (p.x > zombieLeft && p.x < zombieRight) {
+                            // Hit!
+                            dealDamage(z, p.damage);
+                            if (p.slow && !z.isFrozen) {
+                                applySlow(z, p.slowDuration);
+                            }
+                            // Remove projectile
+                            p.element.remove();
+                            projectiles.splice(index, 1);
+                            return; // Only hit one zombie per projectile update
+                        }
+                    }
+                });
+
+                // Remove projectile if off-screen
+                if (p.x > gameContainer.offsetWidth) {
+                    p.element.remove();
+                    projectiles.splice(index, 1);
+                }
+            });
+
+            // Update Zombies
+            zombies.forEach((z, index) => {
+                 if (z.isDead) return;
+
+                 let currentSpeed = z.speed * (z.isFrozen ? 0.5 : 1); // Slow effect
+                 let stopped = false;
+                 let isEating = false;
+                 let isJumping = z.state === 'jumping';
+
+                 if (!isJumping) {
+                     // Check for plants in the way
+                     plants.forEach(p => {
+                         if (p.row === z.row && !p.isExploding) {
+                             const plantLeft = p.col * TILE_SIZE + 10; // Plant position approx
+                             const plantRight = plantLeft + 70;
+                             const zombieFront = z.x + 10; // Approx front of zombie
+                             
+                              // Pole Vaulter logic
+                              if (z.type === 'polevaulting' && z.hasPole && !z.jumped && zombieFront > plantLeft && zombieFront < plantRight + 30) {
+                                  console.log("Pole vaulter attempting jump over plant:", p.id);
+                                  z.state = 'jumping';
+                                  z.jumpTargetX = plantLeft - 40; // Land slightly before the plant column
+                                  z.jumpStartY = parseFloat(z.element.style.bottom);
+                                  z.element.classList.add('polevaulting-jump');
+                                  z.hasPole = false; // Pole used
+                                  z.jumped = true;
+                                  z.element.style.zIndex = '25'; // Bring to front during jump
+                                  
+                                  // Short pause before landing? Or let animation handle timing
+                                  setTimeout(() => {
+                                       z.element.classList.remove('polevaulting-jump');
+                                       // Force position update after jump animation
+                                       z.x = z.jumpTargetX;
+                                       z.element.style.right = `${gameContainer.offsetWidth - z.x - 80}px`; // Update right based on new x
+                                       z.state = 'walking'; // Resume walking after jump
+                                       z.element.style.zIndex = '20'; // Reset z-index
+                                       console.log("Pole vaulter landed at x:", z.x);
+                                   }, 800); // Match animation duration
+                                   
+                                  stopped = true; // Stop horizontal movement during jump setup
+                                  isJumping = true; // Set flag to skip normal movement/eating
+                                  return; // Skip further checks for this zombie this tick
+                              }
+
+                             if (!isJumping && zombieFront > plantLeft && zombieFront < plantRight) {
+                                 stopped = true;
+                                 // Only eat if not Chomper digesting or Potato Mine not armed
+                                 if (!(p.type === 'chomper' && p.isDigesting) && !(p.type === 'potatomine' && !p.isArmed)) {
+                                     isEating = true;
+                                     p.hp -= z.damage / (1000 / 50); // Damage per tick
+                                     // Add visual feedback for plant damage?
+                                     if (p.hp <= 0) {
+                                         removePlant(p);
+                                         stopped = false; // Can walk again
+                                         isEating = false;
+                                     }
+                                 }
+                             }
+                         }
+                     });
+                 }
+                 
+                 // Chomper Eating Logic
+                 plants.forEach(p => {
+                      if (p.type === 'chomper' && p.row === z.row && !p.isDigesting && !z.isDead) {
+                          const plantPos = p.col * TILE_SIZE + TILE_SIZE / 2; // Center of plant tile
+                          const eatPos = plantPos + PLANT_DATA.chomper.eatRange * TILE_SIZE;
+                          const zombieFront = z.x + 20; // Front of zombie
+                          
+                          if (zombieFront > plantPos && zombieFront <= eatPos) {
+                               console.log(`Chomper ${p.id} eating zombie ${z.id}`);
+                               p.isDigesting = true;
+                               p.element.classList.add('eating'); // Animation trigger
+                               p.element.classList.add('cooldown'); // Visual for digesting
+                               
+                               removeZombie(z, false); // Remove zombie visually and logically
+                               
+                               setTimeout(() => {
+                                    if (plants.find(pl => pl.id === p.id)) { // Check if plant still exists
+                                         p.isDigesting = false;
+                                         p.element.classList.remove('eating');
+                                         p.element.classList.remove('cooldown');
+                                         console.log(`Chomper ${p.id} finished digesting`);
+                                    }
+                               }, PLANT_DATA.chomper.digestTime);
+                               
+                               stopped = true; // Zombie is gone, but effectively stopped it
+                               return; // Zombie dealt with
+                          }
+                      }
+                 });
+
+
+                 if (!stopped && !isJumping) {
+                     z.x -= currentSpeed * (50 / 16.67); // Adjust speed based on game loop interval relative to ~60fps
+                     z.element.style.right = `${gameContainer.offsetWidth - z.x - 80}px`; // Update right based on x
+                 }
+                 
+                 // Update zombie animation state (basic)
+                 z.element.style.filter = z.isFrozen ? 'drop-shadow(0 0 5px cyan) brightness(0.9)' : '';
+                 // Add eating animation toggle here if implemented
+
+                 // Check if zombie reached the house
+                 if (z.x < 0) {
+                     gameOver();
+                     return;
+                 }
+            });
+
+            // Update Plants
+            plants.forEach(p => {
+                // Shooting
+                if ((p.type === 'peashooter' || p.type === 'snowpea' || p.type === 'repeater') && (!p.lastShot || now - p.lastShot > PLANT_DATA[p.type].shootInterval)) {
+                    // Check if zombie in row
+                    const zombieInRow = zombies.some(z => z.row === p.row && !z.isDead && z.x < gameContainer.offsetWidth - 50); // Check within lawn bounds
+                    if (zombieInRow) {
+                        p.lastShot = now;
+                        const numShots = PLANT_DATA[p.type].shots || 1;
+                        for (let i = 0; i < numShots; i++) {
+                            setTimeout(() => {
+                                 // Check again if plant still exists before firing
+                                 if (plants.find(pl => pl.id === p.id)) {
+                                    spawnProjectile(p.row, p.col, PLANT_DATA[p.type].projectile);
+                                 }
+                            }, i * 150); // Delay for repeater shots
+                        }
+                    }
+                }
+                // Sun generation
+                if (p.type === 'sunflower' && (!p.lastSun || now - p.lastSun > PLANT_DATA[p.type].sunInterval)) {
+                     p.lastSun = now;
+                     spawnSunFromPlant(p);
+                }
+                // Cherry Bomb explosion
+                if (p.type === 'cherrybomb' && !p.exploded && (!p.plantedTime || now - p.plantedTime > PLANT_DATA[p.type].explodeDelay)) {
+                    explodeCherryBomb(p);
+                }
+                 // Potato Mine arming
+                 if (p.type === 'potatomine' && !p.isArmed && !p.isArming && !p.exploded) {
+                      if (!p.plantedTime || now - p.plantedTime > PLANT_DATA[p.type].armDelay) {
+                          p.isArmed = true;
+                           p.element.querySelector('span').textContent = PLANT_DATA.potatomine.armedEmoji; // Change visual
+                           p.element.classList.add('armed'); // Add class for styling/targeting
+                           console.log(`Potato Mine ${p.id} armed`);
+                      } else if (!p.isArming) {
+                          // Maybe add visual indication of arming?
+                          p.isArming = true; // Prevent re-checking every tick
+                      }
+                 }
+                 // Potato Mine detonation
+                 if (p.type === 'potatomine' && p.isArmed && !p.exploded) {
+                      zombies.forEach(z => {
+                           if (z.row === p.row && !z.isDead) {
+                               const plantCenter = p.col * TILE_SIZE + TILE_SIZE / 2;
+                               const zombieCenter = z.x + 40; // Approx center of zombie
+                               if (Math.abs(plantCenter - zombieCenter) < 40) { // Collision range
+                                   explodePotatoMine(p);
+                                   return; // Explode once
+                               }
+                           }
+                      });
+                 }
+                 
+                 // Update Wallnut appearance based on HP? (Optional)
+                 if (p.type === 'wallnut') {
+                     const hpPercent = p.hp / PLANT_DATA.wallnut.hp;
+                     if (hpPercent < 0.33) p.element.style.opacity = 0.5;
+                     else if (hpPercent < 0.66) p.element.style.opacity = 0.75;
+                     else p.element.style.opacity = 1;
+                 }
+            });
+            
+            // Update Seed Packet Cooldowns/Availability
+             const plantTypesAvailable = levelData.selection ? chosenPlantsForLevel : levelData.plants;
+             plantTypesAvailable.forEach(plantType => {
+                 const packet = seedPacketsContainer.querySelector(`.seed-packet[data-plant-type="${plantType}"]`);
+                 if (packet) {
+                     checkSeedPacketAvailability(packet, plantType);
+                 }
+             });
+             
+             // Update Conveyor Belt Items (Move them)
+             if (levelData.type === 'conveyor' || levelData.type === 'minigame') {
+                 const beltSpeed = 1.5; // Pixels per update
+                 let requiresNewItem = false;
+                 const itemSpacing = 80; // Width + margin
+                 
+                 conveyorItems.forEach((item, index) => {
+                     if (item.element !== draggingConveyorItem?.element) { // Don't move the item being dragged
+                         item.x -= beltSpeed;
+                         item.element.style.left = `${item.x}px`;
+                         
+                         // Remove if off-screen left
+                         if (item.x < -80) {
+                             item.element.remove();
+                             conveyorItems.splice(index, 1);
+                         }
+                     }
+                 });
+                 
+                 // Check if space for a new item
+                 const lastItem = conveyorItems[conveyorItems.length - 1];
+                 if (!lastItem || lastItem.x < conveyorBelt.offsetWidth - itemSpacing) {
+                      requiresNewItem = true;
+                 }
+                 
+                 if (requiresNewItem && conveyorItems.length < 10) { // Limit number of items on belt?
+                      spawnConveyorItem();
+                 }
+             }
+             
+             // Update Wall-nut Bowling Nuts
+             bowlingNuts.forEach((nut, index) => {
+                 if (nut.rolling) {
+                     nut.x += 8; // Rolling speed
+                     nut.element.style.left = `${nut.x}px`;
+                     nut.element.classList.add('rolling'); // Ensure animation is running
+                     
+                     // Check collision with zombies
+                     zombies.forEach(z => {
+                          if (z.row === nut.row && !z.isDead) {
+                              const zombieLeft = z.x;
+                              const zombieRight = z.x + 60;
+                              if (nut.x + 30 > zombieLeft && nut.x + 30 < zombieRight) { // Nut center hits zombie body
+                                   dealDamage(z, 1800); // Bowling nuts are powerful
+                                   // Make nut bounce? For simplicity, just pass through or disappear?
+                                   // Let's make it disappear on first hit for simplicity
+                                   nut.element.remove();
+                                   bowlingNuts.splice(index, 1);
+                                   return; // Only hit one zombie per nut update
+                              }
+                          }
+                     });
+                     
+                     // Remove nut if off-screen
+                     if (nut.x > gameContainer.offsetWidth) {
+                         nut.element.remove();
+                         bowlingNuts.splice(index, 1);
+                     }
+                 }
+             });
+
+             // Update Tutorial State
+             updateTutorial();
+
+        }
+
+        function stopGameLoop(message) {
+            gameActive = false;
+            clearInterval(gameInterval);
+            clearInterval(sunInterval);
+            clearInterval(waveInterval);
+            console.log("Game stopped:", message);
+        }
+        
+        function updateProgressBar(zombiesDefeatedRatio) {
+             const percent = Math.min(100, zombiesDefeatedRatio * 100);
+             progressBar.style.width = `${percent}%`;
+        }
+        
+        function setupProgressBarFlags() {
+             progressBar.innerHTML = ''; // Clear old flags
+             if (!levelData || levelData.flags <= 0) return;
+             
+             const totalZombiePoints = levelData.waves.flat().length; // Simple count for now
+             let zombiePointsElapsed = 0;
+             let flagIndex = 0;
+             
+             levelData.waves.forEach((wave, index) => {
+                 const waveSize = wave.length;
+                 const isFlagWave = wave.some(z => z.type === 'flag');
+                 
+                 if (isFlagWave && flagIndex < levelData.flags) {
+                     const flagPositionPercent = (zombiePointsElapsed / totalZombiePoints) * 100; // Position based on zombies before flag wave
+                     const flagMarker = document.createElement('div');
+                     flagMarker.classList.add('flag-marker');
+                     flagMarker.textContent = '🚩';
+                     flagMarker.style.left = `${flagPositionPercent}%`;
+                     progressBar.appendChild(flagMarker);
+                     flagIndex++;
+                 }
+                 zombiePointsElapsed += waveSize;
+             });
+        }
+
+        // --- Spawning ---
+
+        function spawnFallingSun(forceCol, forceRow) {
+            const sunItem = createSunElement();
+            let randomX, targetY;
+
+            if (forceCol !== undefined && forceRow !== undefined) {
+                 // Specific spawn for tutorial or special events
+                 const gridOffsetY = parseFloat(lawn.style.top || 0);
+                 randomX = forceCol * TILE_SIZE + Math.random() * (TILE_SIZE - 50);
+                 targetY = gridOffsetY + forceRow * TILE_SIZE + Math.random() * (TILE_SIZE - 50);
+                 sunItem.element.style.animation = 'none'; // Disable falling animation if placed directly
+                 sunItem.element.style.top = `${targetY}px`;
+            } else {
+                 // Random spawn from sky
+                 randomX = Math.random() * (gameContainer.offsetWidth - 50);
+                 const possibleRows = levelData.rows ? levelData.rows.length : ROWS;
+                 const gridOffsetY = parseFloat(lawn.style.top || 0);
+                 targetY = gridOffsetY + Math.floor(Math.random() * possibleRows) * TILE_SIZE + Math.random() * (TILE_SIZE - 50); // Land somewhere on the lawn rows
+                 sunItem.element.style.top = `-50px`; // Start above screen
+                 sunItem.element.style.animation = `fall ${2 + Math.random() * 3}s linear forwards, pulse 1.5s infinite alternate ease-in-out`; // Random fall duration + pulse
+            }
+             
+            sunItem.element.style.left = `${randomX}px`;
+            sunItem.targetY = targetY;
+
+            gameContainer.appendChild(sunItem.element);
+            sunItems.push(sunItem);
+            
+             // Auto-remove sun after some time if not collected
+             setTimeout(() => {
+                 if (sunItem.element && !sunItem.collected) {
+                     sunItem.element.remove();
+                     sunItems = sunItems.filter(s => s.id !== sunItem.id);
+                 }
+             }, 10000); // Sun disappears after 10 seconds
+        }
+
+        function spawnSunFromPlant(plant) {
+            const sunItem = createSunElement();
+            const plantRect = plant.element.getBoundingClientRect();
+            const gameRect = gameContainer.getBoundingClientRect();
+
+            const startX = plantRect.left - gameRect.left + plantRect.width / 2 - 25; // Center of plant
+            const startY = plantRect.top - gameRect.top + 10; // Slightly above plant
+
+            sunItem.element.style.left = `${startX}px`;
+            sunItem.element.style.top = `${startY}px`;
+             sunItem.targetY = startY + 20; // Small pop-up effect target
+             sunItem.element.style.animation = 'pulse 1.5s infinite alternate ease-in-out'; // Just pulse
+
+            gameContainer.appendChild(sunItem.element);
+            sunItems.push(sunItem);
+            
+            // Add slight pop-up animation via JS transition
+             setTimeout(() => {
+                 if (sunItem.element) sunItem.element.style.top = `${sunItem.targetY}px`;
+             }, 50);
+
+             // Auto-remove sun after some time
+             setTimeout(() => {
+                 if (sunItem.element && !sunItem.collected) {
+                     sunItem.element.remove();
+                     sunItems = sunItems.filter(s => s.id !== sunItem.id);
+                 }
+             }, 10000);
+        }
+        
+        function createSunElement() {
+            const id = sunIdCounter++;
+            const element = document.createElement('div');
+            element.classList.add('sun');
+            element.textContent = '☀️';
+            element.dataset.id = id;
+            element.addEventListener('click', collectSun);
+            
+            const sunItem = { id: id, element: element, collected: false, targetY: 0 };
+            return sunItem;
+        }
+
+        function spawnProjectile(row, col, type) {
+            const id = projectileIdCounter++;
+            const element = document.createElement('div');
+            element.classList.add('projectile');
+            element.classList.add(type); // For styling pea vs snow-pea
+            element.dataset.id = id;
+            element.dataset.type = type; // Store type for visuals if needed
+
+            const startX = col * TILE_SIZE + 60; // Start near the front of the plant
+            const startY = getRowTop(row) + 35; // Middle of the row, adjusted for projectile size
+
+             const projData = {
+                 id: id,
+                 type: type,
+                 row: row,
+                 x: startX,
+                 element: element,
+                 damage: PLANT_DATA[type === 'snow-pea' ? 'snowpea' : 'peashooter'].damage, // Get damage from plant type
+                 speed: 5, // Projectile speed (pixels per update)
+                 slow: type === 'snow-pea' ? PLANT_DATA.snowpea.slowDuration : 0
+             };
+             
+             element.style.top = `${startY}px`;
+             element.style.left = `${startX}px`;
+
+            gameContainer.appendChild(element);
+            projectiles.push(projData);
+        }
+
+        function spawnWave() {
+            if (!gameActive || zombiesToSpawn.length === 0) return;
+
+            const nowSeconds = (Date.now() - (levelStartTime || Date.now())) / 1000; // Time since level start
+            
+            let spawnedThisTick = false;
+
+             // Sort by time to ensure correct spawn order
+             zombiesToSpawn.sort((a, b) => a.time - b.time);
+
+            for (let i = zombiesToSpawn.length - 1; i >= 0; i--) {
+                const zombieInfo = zombiesToSpawn[i];
+                 if (nowSeconds >= zombieInfo.time) {
+                    let spawnRow = zombieInfo.row;
+                    // If row is not specified, pick a random valid row for this level
+                    if (spawnRow === undefined) {
+                        const availableRows = levelData.rows || [0, 1, 2, 3, 4];
+                        spawnRow = availableRows[Math.floor(Math.random() * availableRows.length)];
+                    }
+                     spawnZombie(zombieInfo.type, spawnRow);
+                     zombiesToSpawn.splice(i, 1); // Remove from spawn list
+                     spawnedThisTick = true;
+                     
+                     // Check if this was the last zombie of a wave (marked by flag zombie usually)
+                     if (zombieInfo.type === 'flag') {
+                         currentWave++;
+                         console.log(`Flag zombie spawned, advancing to wave ${currentWave}`);
+                         // Maybe add huge wave announcement?
+                     }
+                 }
+            }
+             
+            // Prepare next wave if current wave is cleared (optional, original PvZ uses timing)
+            // For simplicity, we rely on timed spawns defined in LEVELS
+        }
+        
+        function scheduleWaves() {
+            levelStartTime = Date.now();
+            zombiesToSpawn = [];
+            levelData.waves.forEach((wave, waveIndex) => {
+                wave.forEach(zombieDef => {
+                     // Add wave index and potentially adjust time based on wave?
+                     zombiesToSpawn.push({ ...zombieDef, waveIndex: waveIndex });
+                });
+            });
+            console.log("Scheduled zombies:", zombiesToSpawn);
+        }
+
+        function spawnZombie(type, row) {
+            const id = zombieIdCounter++;
+            const data = ZOMBIE_DATA[type];
+            const element = document.createElement('div');
+            element.classList.add('zombie');
+            element.dataset.id = id;
+            element.dataset.type = type;
+
+             // Health Bar
+             const healthBar = document.createElement('div');
+             healthBar.classList.add('health-bar');
+             const healthFill = document.createElement('div');
+             healthFill.classList.add('health-fill');
+             healthBar.appendChild(healthFill);
+
+            const span = document.createElement('span'); // For emoji
+            element.appendChild(span);
+             element.appendChild(healthBar); // Add health bar below emoji
+
+
+             const startX = gameContainer.offsetWidth - 30; // Start slightly off-screen right
+             const startY = getRowTop(row) + 5; // Bottom of the row
+
+            element.style.bottom = `${gameContainer.offsetHeight - startY - 90}px`; // Use bottom positioning
+             element.style.right = `-80px`; // Start off screen right
+
+             const zombie = {
+                 id: id,
+                 type: type,
+                 row: row,
+                 hp: data.hp,
+                 maxHp: data.hp,
+                 speed: data.speed,
+                 damage: data.damage,
+                 element: element,
+                 x: startX,
+                 isDead: false,
+                 isFrozen: false,
+                 freezeTimer: null,
+                 healthFillElement: healthFill, // Reference to health fill div
+                 hasPole: data.hasPole || false, // For pole vaulter
+                 jumped: false,
+                 state: 'walking' // walking, eating, jumping, dying
+             };
+             
+             // Update visual content based on type
+             element.querySelector('span').textContent = data.emoji;
+             if (type === 'conehead' || type === 'buckethead') {
+                 // Maybe add a visual indicator on top? E.g., element.style.borderTop = '5px solid gray';
+             }
+
+            gameContainer.appendChild(element);
+            zombies.push(zombie);
+        }
+        
+        function spawnConveyorItem() {
+             if (!levelData.conveyorPlants || levelData.conveyorPlants.length === 0) return;
+             
+             const type = levelData.conveyorPlants[Math.floor(Math.random() * levelData.conveyorPlants.length)];
+             const data = PLANT_DATA[type] || (type === 'wallnut' ? { emoji: '🧱' } : null); // Handle wallnut bowling too
+             if (!data) return;
+
+             const id = plantIdCounter++; // Reuse plant ID counter?
+             const element = document.createElement('div');
+             element.classList.add('conveyor-item');
+             element.dataset.id = id;
+             element.dataset.plantType = type;
+             element.textContent = data.emoji;
+             element.draggable = true; // Make it draggable
+
+             const startX = conveyorBelt.offsetWidth; // Start off-screen right within the belt
+             const startY = (conveyorBelt.offsetHeight - 75) / 2; // Center vertically
+
+             element.style.left = `${startX}px`;
+             element.style.top = `${startY}px`;
+
+             // Drag and Drop Handlers
+             element.addEventListener('dragstart', (e) => handleDragStart(e, id, type));
+             element.addEventListener('dragend', handleDragEnd);
+
+             conveyorBelt.appendChild(element);
+             conveyorItems.push({ id, type, element, x: startX });
+        }
+        
+        function spawnBowlingNut(row, startCol = 0) {
+             const id = bowlingNutIdCounter++;
+             const element = document.createElement('div');
+             element.classList.add('bowling-nut');
+             element.dataset.id = id;
+             
+             const startX = startCol * TILE_SIZE + 20;
+             const startY = getRowTop(row) + 20; // Center vertically
+             
+             element.style.top = `${startY}px`;
+             element.style.left = `${startX}px`;
+             
+             const nut = {
+                 id: id,
+                 element: element,
+                 row: row,
+                 x: startX,
+                 rolling: false // Starts stationary
+             };
+             
+             // Click to roll
+             element.onclick = () => {
+                 if (!nut.rolling) {
+                     nut.rolling = true;
+                     element.onclick = null; // Prevent re-clicking
+                     element.style.cursor = 'default';
+                 }
+             };
+
+             gameContainer.appendChild(element);
+             bowlingNuts.push(nut);
+        }
+
+
+        // --- Interactions ---
+
+        function onCellClick(event) {
+             if (!gameActive && levelData.type !== 'minigame') return; // Allow clicks for bowling setup
+             
+             const cell = event.currentTarget;
+             const row = parseInt(cell.dataset.row);
+             const col = parseInt(cell.dataset.col);
+
+             // Shovel Interaction
+             if (isShoveling) {
+                 const plantToRemove = plants.find(p => p.row === row && p.col === col);
+                 if (plantToRemove) {
+                     removePlant(plantToRemove);
+                 }
+                 deselectShovel();
+                 return;
+             }
+             
+             // Conveyor/Bowling Item Drop (Uses Drag n Drop now, but keep click as fallback?)
+             // Maybe handle drop zone highlighting here?
+
+             // Planting Interaction
+             if (selectedSeedPacket) {
+                 const plantType = selectedSeedPacket.dataset.plantType;
+                 const data = PLANT_DATA[plantType];
+                 const canAfford = sun >= data.cost;
+                 const cooldownReady = !selectedSeedPacket.classList.contains('disabled') || (Date.now() - (plantCooldowns[plantType] || 0) > data.cooldown); // Check cooldown status
+                 const cellOccupied = plants.some(p => p.row === row && p.col === col);
+
+                 if (canAfford && cooldownReady && !cellOccupied) {
+                     plantPlant(plantType, row, col);
+                     updateSun(sun - data.cost);
+                     plantCooldowns[plantType] = Date.now(); // Start cooldown timer
+                     checkSeedPacketAvailability(selectedSeedPacket, plantType); // Update packet visual immediately
+                     
+                     // Deselect after planting (optional, PvZ style)
+                     // deselectSeedPacket();
+                     
+                     // Tutorial Hook
+                     if (tutorialState === 'plant_peashooter' && plantType === 'peashooter') {
+                          advanceTutorial('collect_sun');
+                     }
+                     if (tutorialState === 'plant_sunflower' && plantType === 'sunflower') {
+                          advanceTutorial('wait_for_zombie');
+                     }
+
+                 } else {
+                     // Indicate failure? (e.g., red flash on cell or sound)
+                     console.log("Cannot plant:", {canAfford, cooldownReady, cellOccupied});
+                 }
+             }
+        }
+
+        function selectSeedPacket(packet, plantType) {
+            if (packet.classList.contains('disabled') || isShoveling) {
+                deselectSeedPacket(); // Deselect if clicking a disabled packet or while shoveling
+                return;
+            }
+             
+             deselectShovel(); // Deselect shovel if a plant packet is clicked
+
+            // Deselect previous packet
+            if (selectedSeedPacket) {
+                selectedSeedPacket.classList.remove('selected');
+            }
+
+            // Select new packet
+            selectedSeedPacket = packet;
+            selectedSeedPacket.classList.add('selected');
+             
+             // Tutorial Hook
+             if (tutorialState === 'select_peashooter' && plantType === 'peashooter') {
+                  advanceTutorial('plant_peashooter');
+             }
+             if (tutorialState === 'select_sunflower' && plantType === 'sunflower') {
+                  advanceTutorial('plant_sunflower');
+             }
+        }
+        
+        function deselectSeedPacket() {
+             if (selectedSeedPacket) {
+                selectedSeedPacket.classList.remove('selected');
+                selectedSeedPacket = null;
+            }
+        }
+        
+        shovelButton.addEventListener('click', () => {
+             if (isShoveling) {
+                 deselectShovel();
+             } else {
+                 selectShovel();
+             }
+        });
+        
+        function selectShovel() {
+             deselectSeedPacket(); // Cannot shovel and plant at the same time
+             isShoveling = true;
+             shovelButton.classList.add('selected');
+             gameContainer.style.cursor = 'grab'; // Use a shovel cursor? Needs image/css
+        }
+        
+        function deselectShovel() {
+             isShoveling = false;
+             shovelButton.classList.remove('selected');
+             gameContainer.style.cursor = 'default';
+        }
+
+        function collectSun(event) {
+             const sunElement = event.currentTarget;
+             const id = parseInt(sunElement.dataset.id);
+             const sunItem = sunItems.find(s => s.id === id);
+
+             if (sunItem && !sunItem.collected) {
+                 sunItem.collected = true;
+                 updateSun(sun + 25); // Standard sun value
+
+                 // Animate collection towards the sun counter
+                 const counterRect = sunCounter.getBoundingClientRect();
+                 const gameRect = gameContainer.getBoundingClientRect();
+                 sunElement.style.transition = 'top 0.3s ease-in, left 0.3s ease-in, transform 0.3s ease-in, opacity 0.3s ease-in';
+                 sunElement.style.left = `${counterRect.left - gameRect.left + counterRect.width / 2 - 25}px`;
+                 sunElement.style.top = `${counterRect.top - gameRect.top + counterRect.height / 2 - 25}px`;
+                 sunElement.style.transform = 'scale(0.5)';
+                 sunElement.style.opacity = '0';
+                 sunElement.classList.add('collected'); // Add class to manage animation/state
+                 sunElement.removeEventListener('click', collectSun); // Prevent multi-clicks
+
+                 setTimeout(() => {
+                     sunElement.remove();
+                     sunItems = sunItems.filter(s => s.id !== id);
+                 }, 300); // Remove after animation
+                 
+                 // Tutorial Hook
+                 if (tutorialState === 'collect_sun') {
+                      advanceTutorial('select_sunflower'); // Or wait for more sun? Adjust as needed
+                 }
+                 if (tutorialState === 'collect_more_sun' && sun >= 100) {
+                      advanceTutorial('select_peashooter');
+                 }
+             }
+        }
+
+        function updateSun(newAmount) {
+            sun = newAmount;
+            sunAmountEl.textContent = sun;
+            
+            // Re-check availability of all seed packets whenever sun changes
+             const plantTypesAvailable = levelData.selection ? chosenPlantsForLevel : levelData.plants;
+             plantTypesAvailable.forEach(plantType => {
+                const packet = seedPacketsContainer.querySelector(`.seed-packet[data-plant-type="${plantType}"]`);
+                if (packet) {
+                    checkSeedPacketAvailability(packet, plantType);
+                }
+            });
+        }
+
+        // --- Plant & Zombie Actions ---
+
+        function plantPlant(type, row, col) {
+            const id = plantIdCounter++;
+            const data = PLANT_DATA[type];
+            const element = document.createElement('div');
+            element.classList.add('plant');
+            element.dataset.id = id;
+            element.dataset.type = type;
+
+            // Adjust position slightly within the cell
+            const x = col * TILE_SIZE;
+            const y = getRowTop(row); // Top of the row
+             
+            element.style.left = `${x}px`; // Position based on grid column
+            element.style.top = `${y}px`; // Position based on grid row
+            
+             // Add span for emoji content AFTER setting position
+            const span = document.createElement('span');
+            element.appendChild(span); // Append span after element setup
+
+            const plant = {
+                id: id,
+                type: type,
+                row: row,
+                col: col,
+                hp: data.hp,
+                element: element,
+                plantedTime: Date.now(), // For timed events like explosions/arming
+                lastShot: 0, // For shooters
+                lastSun: Date.now() + Math.random() * 5000, // Stagger initial sun production
+                isArmed: false, // For potato mine
+                isArming: false, // For potato mine arming state
+                exploded: false, // For bombs/mines
+                isDigesting: false, // For chomper
+            };
+
+            plants.push(plant);
+            lawn.appendChild(element); // Append to lawn container, not gameContainer, to respect grid? No, needs absolute positioning.
+             gameContainer.appendChild(element); // Append to main container for absolute positioning
+
+            console.log(`Planted ${type} at [${row}, ${col}]`);
+            
+            // Special setup for certain plants
+            if (type === 'potatomine') {
+                // Start unarmed visual
+                 element.querySelector('span').textContent = data.emoji;
+            } else {
+                 element.querySelector('span').textContent = data.emoji; // Default emoji
+            }
+        }
+
+        function removePlant(plant) {
+             console.log(`Removing plant ${plant.type} at [${plant.row}, ${plant.col}]`);
+             plant.element.remove();
+             plants = plants.filter(p => p.id !== plant.id);
+             // Refund sun for shovel? (Original doesn't)
+        }
+
+        function dealDamage(zombie, amount) {
+            if (zombie.isDead) return;
+            
+            zombie.hp -= amount;
+            const hpPercent = Math.max(0, (zombie.hp / zombie.maxHp) * 100);
+            zombie.healthFillElement.style.width = `${hpPercent}%`;
+
+            // Visual feedback (flash?)
+            zombie.element.style.filter = 'brightness(1.5)';
+             setTimeout(() => {
+                  if (!zombie.isFrozen) zombie.element.style.filter = '';
+                  else zombie.element.style.filter = 'drop-shadow(0 0 5px cyan) brightness(0.9)'; // Reapply frozen effect
+              }, 100);
+
+            if (zombie.hp <= 0) {
+                removeZombie(zombie);
+            }
+        }
+
+        function applySlow(zombie, duration) {
+             if (zombie.isDead || zombie.isFrozen) return; // Don't re-freeze or freeze dead
+
+             zombie.isFrozen = true;
+             zombie.element.classList.add('frozen'); // Add class for potential CSS effects
+             console.log(`Zombie ${zombie.id} frozen`);
+             
+             // Clear existing timer if re-frozen
+             if (zombie.freezeTimer) {
+                 clearTimeout(zombie.freezeTimer);
+             }
+
+             zombie.freezeTimer = setTimeout(() => {
+                 zombie.isFrozen = false;
+                 zombie.element.classList.remove('frozen');
+                 zombie.element.style.filter = ''; // Ensure filter is cleared
+                 zombie.freezeTimer = null;
+                 console.log(`Zombie ${zombie.id} unfrozen`);
+             }, duration);
+        }
+
+        function removeZombie(zombie, countAsKill = true) {
+             if (zombie.isDead) return; // Already being removed
+             
+             zombie.isDead = true;
+             zombie.state = 'dying';
+             console.log(`Zombie ${zombie.type} died.`);
+             
+             // Stop timers (like freeze timer)
+             if (zombie.freezeTimer) {
+                 clearTimeout(zombie.freezeTimer);
+             }
+
+             // Optional: Play death animation
+             zombie.element.style.transition = 'opacity 0.5s, transform 0.5s';
+             zombie.element.style.opacity = '0';
+             zombie.element.style.transform = 'rotate(90deg) scale(0.8)'; // Simple death effect
+
+             setTimeout(() => {
+                 zombie.element.remove();
+                 zombies = zombies.filter(z => z.id !== zombie.id);
+
+                 if (countAsKill) {
+                     zombiesKilled++;
+                     updateProgressBar(zombiesKilled / zombiesInLevel);
+
+                     // Check for level win condition
+                     if (zombiesKilled >= zombiesInLevel && zombiesToSpawn.length === 0) {
+                         levelWin();
+                     }
+                 }
+             }, 500); // Remove after animation
+        }
+        
+        function explodeCherryBomb(bomb) {
+            if (bomb.exploded) return;
+            bomb.exploded = true;
+            bomb.element.style.opacity = '0.5'; // Indicate explosion start
+            console.log(`Cherry Bomb ${bomb.id} exploding!`);
+
+             // Find nearby zombies
+             const explosionRadius = PLANT_DATA.cherrybomb.radius * TILE_SIZE;
+             const bombCenterX = bomb.col * TILE_SIZE + TILE_SIZE / 2;
+             const bombCenterY = getRowTop(bomb.row) + TILE_SIZE / 2;
+
+             // Create visual explosion effect
+             const explosionEffect = document.createElement('div');
+             explosionEffect.style.position = 'absolute';
+             explosionEffect.style.left = `${bombCenterX - explosionRadius}px`;
+             explosionEffect.style.top = `${bombCenterY - explosionRadius}px`;
+             explosionEffect.style.width = `${explosionRadius * 2}px`;
+             explosionEffect.style.height = `${explosionRadius * 2}px`;
+             explosionEffect.style.background = 'rgba(255, 0, 0, 0.7)';
+             explosionEffect.style.borderRadius = '50%';
+             explosionEffect.style.zIndex = '40';
+             explosionEffect.style.transform = 'scale(0.1)';
+             explosionEffect.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
+             gameContainer.appendChild(explosionEffect);
+
+             setTimeout(() => {
+                 explosionEffect.style.transform = 'scale(1)';
+                 explosionEffect.style.opacity = '0';
+                 
+                  zombies.forEach(z => {
+                      if (!z.isDead) {
+                          const zombieCenterX = z.x + 40; // Approx center
+                          const zombieCenterY = getRowTop(z.row) + 50; // Approx center
+                          const distance = Math.sqrt(Math.pow(bombCenterX - zombieCenterX, 2) + Math.pow(bombCenterY - zombieCenterY, 2));
+
+                          if (distance <= explosionRadius) {
+                              dealDamage(z, PLANT_DATA.cherrybomb.damage);
+                          }
+                      }
+                  });
+
+                 removePlant(bomb); // Remove the bomb after explosion
+                 setTimeout(() => explosionEffect.remove(), 200); // Remove visual effect
+             }, 50); // Short delay before visual grows
+        }
+        
+        function explodePotatoMine(mine) {
+             if (mine.exploded) return;
+             mine.exploded = true;
+             console.log(`Potato Mine ${mine.id} exploding!`);
+             
+              // Create visual explosion effect (smaller than cherry bomb)
+             const explosionRadius = 0.8 * TILE_SIZE;
+             const mineCenterX = mine.col * TILE_SIZE + TILE_SIZE / 2;
+             const mineCenterY = getRowTop(mine.row) + TILE_SIZE / 2;
+
+             const explosionEffect = document.createElement('div');
+             explosionEffect.style.position = 'absolute';
+             explosionEffect.style.left = `${mineCenterX - explosionRadius / 2}px`; // Centered
+             explosionEffect.style.top = `${mineCenterY - explosionRadius / 2}px`;
+             explosionEffect.style.width = `${explosionRadius}px`;
+             explosionEffect.style.height = `${explosionRadius}px`;
+             explosionEffect.style.background = 'rgba(150, 75, 0, 0.8)'; // Brownish explosion
+             explosionEffect.style.borderRadius = '50%';
+             explosionEffect.style.zIndex = '40';
+             explosionEffect.style.transform = 'scale(0.1)';
+             explosionEffect.style.transition = 'transform 0.15s ease-out, opacity 0.15s ease-out';
+             gameContainer.appendChild(explosionEffect);
+             
+             setTimeout(() => {
+                  explosionEffect.style.transform = 'scale(1)';
+                  explosionEffect.style.opacity = '0';
+                 
+                  // Damage the triggering zombie (only one directly on top)
+                  zombies.forEach(z => {
+                      if (!z.isDead && z.row === mine.row) {
+                           const zombieCenter = z.x + 40;
+                           if (Math.abs(mineCenterX - zombieCenter) < 40) {
+                                dealDamage(z, PLANT_DATA.potatomine.damage);
+                                // Only hits the first zombie it touches
+                                return;
+                           }
+                      }
+                  });
+                  
+                  removePlant(mine);
+                  setTimeout(() => explosionEffect.remove(), 150);
+             }, 50);
+        }
+
+        // --- Game State ---
+
+        function levelWin() {
+            stopGameLoop("Level Complete");
+            console.log(`Level ${currentLevel} Passed! Unlocking: ${levelData.unlocks}`);
+            
+            let messageText = `Level ${levelData.name} Complete!`;
+            
+            // Handle Unlocks
+            if (levelData.unlocks) {
+                 if (levelData.unlocks === 'shovel') {
+                      unlockedPlants.push('shovel'); // Treat shovel as unlockable
+                      shovelButton.style.display = 'flex';
+                      messageText += `<br>You got the Shovel! Click it, then click a plant to remove it.`;
+                 } else if (levelData.unlocks === 'note') {
+                      messageText += `<br>A note flutters down... "We will be back..."`;
+                      // Display note visual? For now, just text.
+                 } else if (PLANT_DATA[levelData.unlocks]) {
+                      if (!unlockedPlants.includes(levelData.unlocks)) {
+                          unlockedPlants.push(levelData.unlocks);
+                          const plantName = levelData.unlocks.charAt(0).toUpperCase() + levelData.unlocks.slice(1);
+                          messageText += `<br>You got the ${plantName}! ${PLANT_DATA[levelData.unlocks].emoji}`;
+                      }
+                 } else if (levelData.unlocks === 'puffshroom') { // Special case for Night level unlock
+                      unlockedPlants.push('puffshroom');
+                      messageText += `<br>You got the Puff-shroom! 🍄<br>Night levels unlocked! (Not implemented yet)`;
+                 }
+            }
+
+            currentLevel++;
+            if (LEVELS[currentLevel]) {
+                 showMessage(messageText, true, () => loadLevel(currentLevel));
+            } else {
+                 showMessage(messageText + "<br>You've completed all available levels!", false);
+            }
+        }
+
+        function gameOver() {
+            stopGameLoop("Zombies ate your brains!");
+            messageArea.innerHTML = `GAME OVER<br>The zombies ate your brains!<br><button onclick="loadLevel(${currentLevel})">Try Again</button>`;
+            messageArea.style.display = 'block';
+        }
+
+        function showMessage(text, showButton = true, buttonAction = startGameLoop) {
+            messageArea.innerHTML = text;
+            if (showButton && typeof buttonAction === 'function') {
+                const buttonText = (gameActive || zombies.length > 0 || plants.length > 0) ? "Continue" : "Start Level"; // Adjust button text based on context
+                const buttonId = `message-button-${Date.now()}`; // Unique ID
+                 messageArea.innerHTML += `<br><button id="${buttonId}">${buttonText}</button>`;
+                 // Use setTimeout to ensure the button exists in the DOM before adding listener
+                 setTimeout(() => {
+                     const buttonElement = document.getElementById(buttonId);
+                     if (buttonElement) {
+                         // Remove previous listeners if any (simple approach)
+                         buttonElement.onclick = buttonAction;
+                     }
+                 }, 0);
+            }
+             messageArea.style.display = 'block';
+        }
+
+        // --- Utility Functions ---
+        
+        function getRowTop(rowIndex) {
+             // Calculate the visual top position of a given logical row index
+             const gridOffsetY = parseFloat(lawn.style.top || 0);
+             let visualRowIndex = -1;
+
+             // Find the visual row index corresponding to the logical row index
+             if (levelData.rows) {
+                 visualRowIndex = levelData.rows.indexOf(rowIndex);
+             } else {
+                 visualRowIndex = rowIndex; // Full grid assumption
+             }
+
+             if (visualRowIndex === -1) {
+                  console.warn(`Logical row ${rowIndex} not found in level's allowed rows: ${levelData.rows}. Defaulting to 0.`);
+                  visualRowIndex = 0; // Fallback if row isn't technically available but used somehow
+             }
+             
+             return gridOffsetY + visualRowIndex * TILE_SIZE;
+        }
+
+        function getCellElement(row, col) {
+            return gridCells.find(cell => parseInt(cell.dataset.row) === row && parseInt(cell.dataset.col) === col);
+        }
+        
+        // --- Drag and Drop for Conveyor ---
+        
+        function handleDragStart(event, id, type) {
+            console.log('Drag start:', type);
+            const item = conveyorItems.find(i => i.id === id);
+            if (!item) return;
+
+            draggingConveyorItem = {
+                 id: id,
+                 type: type,
+                 element: item.element,
+                 offsetX: event.offsetX, // Store offset within the dragged element
+                 offsetY: event.offsetY
+            };
+            
+            // Use a minimal drag image (prevents default browser preview)
+            const dragImage = new Image();
+            event.dataTransfer.setDragImage(dragImage, 0, 0);
+            
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', type); // Pass plant type
+            
+            // Style the original element while dragging
+            item.element.classList.add('dragging');
+            
+             // Add drop listeners to grid cells
+             gridCells.forEach(cell => {
+                 cell.addEventListener('dragover', handleDragOver);
+                 cell.addEventListener('dragenter', handleDragEnter);
+                 cell.addEventListener('dragleave', handleDragLeave);
+                 cell.addEventListener('drop', handleDrop);
+             });
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault(); // Necessary to allow drop
+            event.dataTransfer.dropEffect = 'move';
+        }
+
+        function handleDragEnter(event) {
+            event.preventDefault();
+             const cell = event.currentTarget;
+             const row = parseInt(cell.dataset.row);
+             const col = parseInt(cell.dataset.col);
+             const cellOccupied = plants.some(p => p.row === row && p.col === col);
+             
+             if (!cellOccupied) {
+                 cell.style.backgroundColor = 'rgba(0, 255, 0, 0.3)'; // Highlight valid drop target
+             } else {
+                  cell.style.backgroundColor = 'rgba(255, 0, 0, 0.3)'; // Indicate invalid
+             }
+        }
+
+        function handleDragLeave(event) {
+             const cell = event.currentTarget;
+             cell.style.backgroundColor = ''; // Remove highlight
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            const cell = event.currentTarget;
+            cell.style.backgroundColor = ''; // Remove highlight
+            
+            if (!draggingConveyorItem) return;
+
+            const row = parseInt(cell.dataset.row);
+            const col = parseInt(cell.dataset.col);
+            const plantType = event.dataTransfer.getData('text/plain');
+            const cellOccupied = plants.some(p => p.row === row && p.col === col);
+
+            console.log(`Drop attempt: ${plantType} at [${row}, ${col}]`);
+
+             if (!cellOccupied) {
+                  if (levelData.minigame === 'wallnut-bowling') {
+                      // Special handling for bowling - spawn a bowling nut, don't plant
+                      if (plantType === 'wallnut') {
+                           spawnBowlingNut(row, col); // Place the bowling nut
+                           // Remove item from conveyor immediately
+                           draggingConveyorItem.element.remove();
+                           conveyorItems = conveyorItems.filter(i => i.id !== draggingConveyorItem.id);
+                      }
+                  } else {
+                     // Plant the plant from the conveyor
+                     plantPlant(plantType, row, col);
+                      // Remove item from conveyor immediately
+                      draggingConveyorItem.element.remove();
+                      conveyorItems = conveyorItems.filter(i => i.id !== draggingConveyorItem.id);
+                  }
+            } else {
+                 console.log("Cell occupied, cannot plant.");
+                 // Return item to conveyor? Or just cancel drag? Let dragend handle it.
+            }
+            // Drag end will clean up listeners and styles
+        }
+
+        function handleDragEnd(event) {
+             console.log('Drag end');
+             if (draggingConveyorItem) {
+                 draggingConveyorItem.element.classList.remove('dragging');
+             }
+             draggingConveyorItem = null;
+             
+             // Remove drop listeners from grid cells
+             gridCells.forEach(cell => {
+                 cell.removeEventListener('dragover', handleDragOver);
+                 cell.removeEventListener('dragenter', handleDragEnter);
+                 cell.removeEventListener('dragleave', handleDragLeave);
+                 cell.removeEventListener('drop', handleDrop);
+                 cell.style.backgroundColor = ''; // Ensure all highlights are cleared
+             });
+        }
+        
+        // --- Tutorial Logic ---
+        let tutorialState = null; // e.g., 'start', 'collect_sun', 'select_peashooter', 'plant_peashooter', etc.
+        let levelStartTime = null;
+        
+        function startTutorial() {
+             if (currentLevel !== 1 || !levelData.tutorial) return;
+             console.log("Starting Tutorial for Level 1-1");
+             tutorialState = 'start';
+             // Initially disable seed packets except maybe peashooter? Or wait for sun?
+             // Let's wait for the first sun to drop.
+             
+             // Spawn first sun after a delay
+             setTimeout(() => {
+                  spawnFallingSun(3, 2); // Spawn sun in middle row, col 3
+                  advanceTutorial('collect_sun');
+             }, 2000);
+        }
+        
+        function advanceTutorial(nextState) {
+             console.log(`Tutorial: ${tutorialState} -> ${nextState}`);
+             tutorialState = nextState;
+             
+             // Remove previous highlights
+             document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
+             tutorialTextEl.style.display = 'none';
+             
+             switch (tutorialState) {
+                  case 'collect_sun':
+                      showTutorialText("Click the falling sun to collect it!");
+                      highlightElement('.sun'); // Highlight any sun element
+                      break;
+                 case 'collect_more_sun': // Added state for needing more sun for peashooter
+                      showTutorialText("Collect more sun! You need 100 for a Peashooter.");
+                      highlightElement('.sun');
+                      break;
+                 case 'select_peashooter':
+                      if (sun < 100) {
+                          advanceTutorial('collect_more_sun'); // Go back if sun collected was not enough
+                          return;
+                      }
+                      showTutorialText("You have enough sun! Click the Peashooter packet.");
+                      highlightElement('.seed-packet[data-plant-type="peashooter"]');
+                      break;
+                 case 'plant_peashooter':
+                      showTutorialText("Now click on a square in the lawn to plant it!");
+                      highlightElement('.grid-cell[data-row="2"]'); // Highlight cells in the middle row
+                      break;
+                 case 'select_sunflower':
+                     // Unlock sunflower packet visually if needed (should be handled by createSeedPackets)
+                      const sunflowerPacket = seedPacketsContainer.querySelector('.seed-packet[data-plant-type="sunflower"]');
+                      if (sunflowerPacket && sun >= PLANT_DATA.sunflower.cost) {
+                         showTutorialText("Plant Sunflowers to make more sun! Select the Sunflower packet.");
+                         highlightElement('.seed-packet[data-plant-type="sunflower"]');
+                      } else {
+                           showTutorialText("Keep collecting sun!");
+                           highlightElement('.sun'); // Keep highlighting sun
+                           // Need to re-trigger select_sunflower check when enough sun is collected
+                           // This simple state machine doesn't handle that well. Re-checking in updateGame or sun collection might be needed.
+                           // For now, assume player collects sun and we re-evaluate later. Let's add a check in collectSun.
+                      }
+                      break;
+                  case 'plant_sunflower':
+                      showTutorialText("Plant the Sunflower on your lawn.");
+                      highlightElement('.grid-cell[data-row="2"]');
+                      break;
+                 case 'wait_for_zombie':
+                      showTutorialText("Get ready, a zombie is coming!");
+                      // No highlight, just wait for game logic
+                      scheduleWaves(); // Start spawning zombies now
+                      break;
+                 case 'complete':
+                     console.log("Tutorial Complete!");
+                     tutorialState = null; // End tutorial
+                     break;
+                 // Add more states as needed for other levels/features
+             }
+        }
+        
+        function showTutorialText(text) {
+            tutorialTextEl.textContent = text;
+            tutorialTextEl.style.display = 'block';
+        }
+        
+        function highlightElement(selector) {
+             // Use querySelectorAll for potentially multiple elements (like grid cells)
+             const elements = document.querySelectorAll(selector);
+             if (elements.length > 0) {
+                 elements.forEach(el => el.classList.add('highlight'));
+             } else {
+                 console.warn("Tutorial highlight: Element not found for selector:", selector);
+                 // Maybe wait and try again?
+                 setTimeout(() => {
+                      const delayedElements = document.querySelectorAll(selector);
+                      delayedElements.forEach(el => el.classList.add('highlight'));
+                 }, 500); // Wait 500ms if element not immediately found
+             }
+        }
+        
+        function updateTutorial() {
+            if (!tutorialState) return;
+            
+            // Re-check conditions if stuck waiting for something
+             switch (tutorialState) {
+                  case 'collect_sun':
+                  case 'collect_more_sun':
+                      if (!document.querySelector('.sun')) {
+                           // If no sun exists, maybe spawn one? Or wait?
+                           // Let's assume natural sun fall will provide one eventually.
+                      } else {
+                          highlightElement('.sun'); // Ensure sun is highlighted if it appears
+                      }
+                      break;
+                 case 'select_peashooter':
+                     if (sun >= 100) {
+                         highlightElement('.seed-packet[data-plant-type="peashooter"]');
+                     } else {
+                         // If sun drops below 100 somehow, revert state?
+                         advanceTutorial('collect_more_sun');
+                     }
+                     break;
+                 case 'select_sunflower':
+                      if (sun >= PLANT_DATA.sunflower.cost) {
+                          const packet = seedPacketsContainer.querySelector('.seed-packet[data-plant-type="sunflower"]');
+                          if (packet && !packet.classList.contains('selected')) {
+                               highlightElement('.seed-packet[data-plant-type="sunflower"]');
+                               showTutorialText("Plant Sunflowers to make more sun! Select the Sunflower packet.");
+                          }
+                      } else {
+                           // Not enough sun, ensure sun is highlighted
+                           highlightElement('.sun');
+                           showTutorialText("Keep collecting sun!");
+                      }
+                      break;
+             }
+        }
+
+
+        // --- Level Loading ---
+
+        function loadLevel(levelNum) {
+            stopGameLoop("Loading new level"); // Ensure previous loop is stopped
+            if (LEVELS[levelNum]) {
+                console.log(`Loading level ${levelNum}`);
+                currentLevel = levelNum;
+                levelData = LEVELS[currentLevel];
+                
+                // Check unlocks required for this level's plants
+                const requiredPlants = levelData.plants || [];
+                const plantsToUse = requiredPlants.filter(p => unlockedPlants.includes(p));
+                
+                // Update levelData to only include available plants IF not a selection level
+                if (!levelData.selection) {
+                    levelData.plants = plantsToUse;
+                } // For selection levels, all unlocked plants are available to choose from.
+
+                initGame();
+                
+                // If not conveyor, minigame, selection, or tutorial level, schedule waves immediately
+                if (levelData.type !== 'conveyor' && levelData.type !== 'minigame' && !levelData.selection && !levelData.tutorial) {
+                     scheduleWaves();
+                 } else if (levelData.type === 'minigame' && levelData.minigame === 'wallnut-bowling') {
+                     // Setup initial bowling nuts? Original has them on conveyor.
+                     scheduleWaves(); // Schedule zombies for bowling
+                 }
+                 
+                 // Reset UI elements specific to level types
+                 deselectSeedPacket();
+                 deselectShovel();
+
+            } else {
+                console.error(`Level ${levelNum} data not found!`);
+                showMessage("Error: Level data missing.", false);
+            }
+        }
+
+        // --- Initial Load ---
+        loadLevel(1); // Start game at level 1-1
+
+    </script>
+
+</body>
+</html>

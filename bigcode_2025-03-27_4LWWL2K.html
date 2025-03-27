@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Night Shift</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #eee;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            height: 100%;
+            max-height: 800px;
+            background-color: #111;
+            border: 2px solid #333;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #office-view {
+            flex-grow: 1;
+            background-color: #0a0a0a;
+            position: relative;
+            overflow: hidden;
+            background-image: radial-gradient(circle, #222 10%, #0a0a0a 70%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3em; /* For office desk emoji */
+        }
+
+        .office-content {
+            text-align: center;
+            color: #444;
+        }
+
+        .office-content span {
+             font-size: 5rem; /* Desk emoji size */
+             display: block;
+             margin-bottom: 20px;
+        }
+
+        #left-door-peek, #right-door-peek {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 15%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 4rem;
+            color: red;
+            visibility: hidden; /* Initially hidden */
+            text-shadow: 0 0 10px red;
+        }
+
+        #left-door-peek { left: 0; }
+        #right-door-peek { right: 0; }
+        #left-door-peek.lit, #right-door-peek.lit { visibility: visible; }
+
+        .door {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 15%;
+            background-color: #4a4a4a;
+            border: 5px solid #222;
+            z-index: 20;
+            transition: transform 0.3s ease-in-out;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+             font-size: 5rem;
+             color: #222;
+        }
+
+        #left-door {
+            left: 0;
+            transform: translateX(-100%); /* Start open */
+        }
+        #right-door {
+            right: 0;
+            transform: translateX(100%); /* Start open */
+        }
+
+        #left-door.closed { transform: translateX(0%); }
+        #right-door.closed { transform: translateX(0%); }
+
+
+        #control-panel {
+            height: 100px;
+            background-color: #2a2a2a;
+            border-top: 2px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            position: relative;
+            z-index: 30;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 15px;
+        }
+
+        .control-button {
+            padding: 10px 15px;
+            font-size: 1rem;
+            font-family: 'Courier New', Courier, monospace;
+            border: 2px solid #555;
+            background-color: #444;
+            color: #eee;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.2s, box-shadow 0.2s;
+        }
+        .control-button:hover {
+            background-color: #555;
+        }
+        .control-button:active {
+            background-color: #666;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+        }
+        .control-button.active {
+             background-color: #777;
+             color: #fff;
+             border-color: #aaa;
+             box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        .light-button.active { background-color: #ffff99; color: #333; border-color: #fff; box-shadow: 0 0 15px yellow;}
+        .door-button.active { background-color: #ff6666; color: #fff; border-color: #ff0000; box-shadow: 0 0 15px red;}
+
+        #camera-button {
+             position: fixed;
+             bottom: 0;
+             left: 50%;
+             transform: translateX(-50%);
+             width: 150px;
+             height: 30px;
+             background-color: #500;
+             border: none;
+             border-top-left-radius: 10px;
+             border-top-right-radius: 10px;
+             cursor: pointer;
+             z-index: 50;
+             transition: background-color 0.2s;
+             display: flex;
+             justify-content: center;
+             align-items: center;
+             color: #fff;
+             font-weight: bold;
+        }
+        #camera-button:hover { background-color: #800; }
+         #camera-button.active { background-color: #a00;}
+
+        #monitor-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: calc(100% - 100px); /* Above control panel */
+            background-color: rgba(10, 10, 10, 0.95);
+            z-index: 40;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            animation: monitorFadeIn 0.3s ease-out;
+        }
+         @keyframes monitorFadeIn { from { opacity: 0; } to { opacity: 1; } }
+         @keyframes static {
+            0% { background-position: 0 0; }
+            10% { background-position: -5% -5%; }
+            20% { background-position: -10% 5%; }
+            30% { background-position: 5% -10%; }
+            40% { background-position: -5% 15%; }
+            50% { background-position: -10% 5%; }
+            60% { background-position: 15% 0; }
+            70% { background-position: 0 10%; }
+            80% { background-position: -15% 0; }
+            90% { background-position: 10% 5%; }
+            100% { background-position: 5% 0; }
+         }
+
+        #camera-view {
+            flex-grow: 1;
+            background-color: #333; /* Placeholder for camera feed */
+            margin: 20px;
+            border: 1px solid #555;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+             color: #ccc;
+             font-size: 1.5rem;
+             background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><filter id="noise" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#noise)" opacity="0.1"/></svg>');
+             animation: static 0.1s infinite linear;
+        }
+         .camera-content { padding: 20px; }
+         .camera-content .location { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; color: #fff; text-shadow: 0 0 5px #fff;}
+         .camera-content .occupants { font-size: 2em; } /* For emojis */
+
+        #camera-map {
+            width: 250px;
+            height: 150px;
+            background-color: #1a1a1a;
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            border: 1px solid #444;
+            padding: 5px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 5px;
+        }
+
+        .map-button {
+            background-color: #333;
+            color: #aaa;
+            border: 1px solid #555;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .map-button:hover { background-color: #444; color: #fff; }
+        .map-button.active { background-color: #666; color: #fff; border: 1px solid #888; }
+
+        #info-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #clock, #power-level {
+            background-color: #111;
+            padding: 5px 15px;
+            border-radius: 3px;
+            border: 1px solid #444;
+            min-width: 100px;
+            text-align: center;
+        }
+        #power-level span {
+             transition: color 0.5s;
+        }
+         #power-bar-container {
+             width: 100%;
+             height: 10px;
+             background-color: #333;
+             border-radius: 2px;
+             margin-top: 5px;
+             overflow: hidden;
+         }
+         #power-bar {
+             height: 100%;
+             width: 100%; /* Controlled by JS */
+             background-color: #4caf50; /* Green */
+             transition: width 0.5s linear, background-color 0.5s linear;
+         }
+
+        #jumpscare-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 100;
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            font-size: 15rem; /* Adjust as needed */
+            text-align: center;
+             animation: shake 0.1s linear infinite;
+        }
+         @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px) rotate(-2deg); }
+            50% { transform: translateX(10px) rotate(2deg); }
+            75% { transform: translateX(-5px) rotate(-1deg); }
+         }
+
+
+        #game-over-screen, #win-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 110;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 3rem;
+            color: #f00;
+        }
+         #win-screen { color: #0f0; }
+         .restart-button {
+             margin-top: 30px;
+             padding: 15px 30px;
+             font-size: 1.5rem;
+             cursor: pointer;
+             background-color: #333;
+             color: #fff;
+             border: 2px solid #555;
+             border-radius: 5px;
+         }
+         .restart-button:hover { background-color: #444;}
+
+         /* Noise/Static effect for low power or interference */
+         .static-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><filter id="noise" x="0" y="0"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#noise)" opacity="0.05"/></svg>');
+            animation: static 0.08s infinite linear;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0; /* Controlled by JS */
+            transition: opacity 0.5s;
+         }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Office View -->
+        <div id="office-view">
+            <div class="office-content">
+                <span>📁</span> <!-- Desk emoji -->
+                 Your Shift Starts Now...
+            </div>
+             <div id="left-door-peek"></div> <!-- Peek area for left animatronic -->
+             <div id="right-door-peek"></div> <!-- Peek area for right animatronic -->
+             <div id="left-door" class="door">🚪</div>
+             <div id="right-door" class="door">🚪</div>
+             <div class="static-overlay" id="office-static"></div>
+        </div>
+
+        <!-- Monitor Overlay -->
+        <div id="monitor-overlay">
+            <div id="camera-view">
+                 <div class="camera-content">
+                     <div class="location" id="camera-location-name">CAM XX</div>
+                     <div class="occupants" id="camera-occupants"></div>
+                 </div>
+            </div>
+            <div id="camera-map">
+                <button class="map-button" data-cam="CAM 1A">CAM 1A<br>Stage</button>
+                <button class="map-button" data-cam="CAM 1B">CAM 1B<br>Dining</button>
+                <button class="map-button" data-cam="CAM 1C">CAM 1C<br>Pirate C</button> <!-- Placeholder -->
+                <button class="map-button" data-cam="CAM 2A">CAM 2A<br>W. Hall</button>
+                <button class="map-button" data-cam="CAM 4A">CAM 4A<br>E. Hall</button>
+                <button class="map-button" data-cam="CAM 7">CAM 7<br>Kitchen</button> <!-- Audio Only -->
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div id="control-panel">
+            <div class="control-group">
+                <button id="left-light-button" class="control-button light-button">🔦 Left Light</button>
+                <button id="left-door-button" class="control-button door-button">⛔ Left Door</button>
+            </div>
+            <div id="info-display">
+                <div id="clock">12 AM</div>
+                <div id="power-level">
+                    Power Left: <span id="power-percent">100%</span>
+                     <div id="power-bar-container"><div id="power-bar"></div></div>
+                     Usage: <span id="power-usage">1</span> bar
+                </div>
+            </div>
+            <div class="control-group">
+                <button id="right-door-button" class="control-button door-button">⛔ Right Door</button>
+                <button id="right-light-button" class="control-button light-button">🔦 Right Light</button>
+            </div>
+        </div>
+
+         <!-- Camera Toggle Button -->
+         <button id="camera-button">▲ Monitor</button>
+
+         <!-- Jumpscare Overlay -->
+         <div id="jumpscare-overlay">
+             <span id="jumpscare-animatronic">👻</span>
+         </div>
+
+         <!-- Game Over/Win Screens -->
+         <div id="game-over-screen">
+             GAME OVER
+             <button class="restart-button" onclick="location.reload()">Retry</button>
+         </div>
+         <div id="win-screen">
+             6 AM<br>YOU SURVIVED!
+             <button class="restart-button" onclick="location.reload()">Play Again</button>
+         </div>
+    </div>
+
+     <!-- Audio Elements -->
+     <audio id="audio-ambiance" loop>
+         <!-- Simple synth ambiance data URI -->
+         <source src="data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==" type="audio/wav"> <!-- Low volume sine wave -->
+     </audio>
+     <audio id="audio-jumpscare">
+         <!-- Simple loud noise data URI -->
+         <source src="data:audio/wav;base64,UklGRmoAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YWYAAAAA//8CAP//AAD//wIA//8BAP//AQD//wAA//8CAP//AQD//wAA//8CAP//AgD//wEA//8BAP//AAD//wIA//8CAP//AQD//wAA//8CAP//AgD//wEA//8BAP//AAAA//8=" type="audio/wav"> <!-- Basic square wave noise -->
+     </audio>
+     <audio id="audio-door">
+          <source src="data:audio/wav;base64,UklGRkQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAAAgD5APIA+gDqAPIA+gDqAPIA+gDqAPIA+gDqAPIA+gDqAPIA+gA==" type="audio/wav"> <!-- Short descending tone -->
+     </audio>
+     <audio id="audio-light">
+          <source src="data:audio/wav;base64,UklGRjwAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YRIgAAAAYBhAGkAaQBpAGgAaQBpAGkAaQBpAGkAaQBpAAAA" type="audio/wav"> <!-- Short buzz/hum -->
+     </audio>
+     <audio id="audio-camera-toggle">
+         <source src="data:audio/wav;base64,UklGRkAAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQwgAAAAaBdoF2kXaBdoF2kXaBdoF2kXaBdoF2kXAAAA" type="audio/wav"> <!-- Simple click/static burst -->
+     </audio>
+      <audio id="audio-camera-static" loop>
+         <source src="data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAA+vr6+vr6+vr6" type="audio/wav"> <!-- Very quiet static loop -->
+     </audio>
+     <audio id="audio-power-down">
+          <source src="data:audio/wav;base64,UklGRmAAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVgAAAAAwMDAv7+/uLi4srKyqampn5+fi4uLgoKCeno6ZmZmbm5ubW1tZGRkXV1dX19fYGBgYmJigoKCjo6OkZGRl5eXmZmZmpqanZ2dnp6eoqKiqqqqrKysrq6usLCwsbGxtLS0t7e3uLi4ubm5urq6u7u7vLy8vb29vr6+v7+/wMDAwcHBw8PDxMTExcXFxsbGx8fHyMjIycnJysrKy8vLzMzMzc3Nzs7Oz8/P0NDQ0dHR0tLS09PT1NTU1dXV1tbW19fX2NjY2dnZ2tra29vb3Nzc3d3d3t7e39/f4ODg4eHh4uLi4+Pj5OTk5eXl5ubm5+fn6Ojo6enp6urq6+vr7Ozs7e3t7u7u7+/v8PDw8fHx8vLy8/Pz9PT09fX19vb29/f3+Pj4+fn5+vr6+/v7/Pz8/f39/v7+////AAAAAAAAAAAA" type="audio/wav"> <!-- Descending noise -->
+     </audio>
+      <audio id="audio-animatronic-move">
+          <source src="data:audio/wav;base64,UklGRjwAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YRIgAAAAAgACABAAIAAgACAAIAAgACAAIAAgACAAIAAAAA==" type="audio/wav"> <!-- Very faint, low 'thump' -->
+     </audio>
+     <audio id="audio-kitchen-noise" loop>
+         <source src="data:audio/wav;base64,UklGRlgAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YUAAAADo6Ojz8/Po6Ojz8/Po6Ojz8/Po6Ojz8/Po6Ojz8/Po6OiIAAAAAA==" type="audio/wav"> <!-- Repeating faint clatter/noise -->
+     </audio>
+
+
+    <script>
+        // Game State Variables
+        let power = 100;
+        let usage = 1; // Base usage
+        let gameTime = 0; // 0 = 12 AM, 6 = 6 AM
+        let gameHour = 12;
+        let nightDurationSeconds = 8 * 60; // 8 minutes for the night (90s per hour approx)
+        let gameRunning = true;
+
+        let leftDoorClosed = false;
+        let rightDoorClosed = false;
+        let leftLightOn = false;
+        let rightLightOn = false;
+        let monitorUp = false;
+        let currentCamera = 'CAM 1A';
+
+        // Animatronic States (Simplified)
+        // Locations: 'Stage', 'Dining', 'W. Hall', 'E. Hall', 'Kitchen', 'W. Corner', 'E. Corner', 'Office'
+        const animatronics = {
+            'bonnie': { name: 'Bonnie', emoji: '🐰', location: 'Stage', movementPattern: ['Stage', 'Dining', 'W. Hall', 'W. Corner', 'Office'], aggressive: 3 }, // Blue Square '🟦' alternative
+            'chica': { name: 'Chica', emoji: '🐔', location: 'Stage', movementPattern: ['Stage', 'Dining', 'Kitchen', 'E. Hall', 'E. Corner', 'Office'], aggressive: 3 }, // Yellow Square '🟨' alternative
+            'freddy': { name: 'Freddy', emoji: '🐻', location: 'Stage', movementPattern: ['Stage', 'Dining', 'E. Hall', 'E. Corner', 'Office'], aggressive: 1, stageCounter: 0 } // Red Square '🟥' alternative
+        };
+         const cameraLocations = {
+             'CAM 1A': { name: 'Show Stage', occupants: [], adjacent: ['CAM 1B'] },
+             'CAM 1B': { name: 'Dining Area', occupants: [], adjacent: ['CAM 1A', 'CAM 2A', 'CAM 4A', 'CAM 7'] },
+             'CAM 1C': { name: 'Pirate Cove', occupants: [], adjacent: ['CAM 2A'] }, // Placeholder, Foxy not implemented
+             'CAM 2A': { name: 'West Hall', occupants: [], adjacent: ['CAM 1B', 'CAM 1C', 'W. Corner'] },
+             'CAM 4A': { name: 'East Hall', occupants: [], adjacent: ['CAM 1B', 'E. Corner', 'CAM 7'] },
+             'CAM 7': { name: 'Kitchen', occupants: [], adjacent: ['CAM 1B', 'CAM 4A'], audioOnly: true },
+             // Non-camera locations
+             'W. Corner': { name: 'West Hall Corner', occupants: [], adjacent: ['CAM 2A', 'Office'] },
+             'E. Corner': { name: 'East Hall Corner', occupants: [], adjacent: ['CAM 4A', 'Office'] },
+             'Office': { name: 'Office', occupants: [], adjacent: ['W. Corner', 'E. Corner'] },
+             'Stage': { name: 'Stage', occupants: ['bonnie', 'chica', 'freddy'], adjacent: ['CAM 1A'] } // Initial state helper
+         };
+
+        // DOM Elements
+        const powerPercentEl = document.getElementById('power-percent');
+        const powerBarEl = document.getElementById('power-bar');
+        const powerUsageEl = document.getElementById('power-usage');
+        const clockEl = document.getElementById('clock');
+        const leftDoorButton = document.getElementById('left-door-button');
+        const rightDoorButton = document.getElementById('right-door-button');
+        const leftLightButton = document.getElementById('left-light-button');
+        const rightLightButton = document.getElementById('right-light-button');
+        const leftDoorEl = document.getElementById('left-door');
+        const rightDoorEl = document.getElementById('right-door');
+        const leftDoorPeekEl = document.getElementById('left-door-peek');
+        const rightDoorPeekEl = document.getElementById('right-door-peek');
+        const monitorOverlayEl = document.getElementById('monitor-overlay');
+        const cameraButton = document.getElementById('camera-button');
+        const cameraViewEl = document.getElementById('camera-view');
+        const cameraLocationNameEl = document.getElementById('camera-location-name');
+        const cameraOccupantsEl = document.getElementById('camera-occupants');
+        const mapButtons = document.querySelectorAll('.map-button');
+        const jumpscareOverlayEl = document.getElementById('jumpscare-overlay');
+        const jumpscareAnimatronicEl = document.getElementById('jumpscare-animatronic');
+        const gameOverScreenEl = document.getElementById('game-over-screen');
+        const winScreenEl = document.getElementById('win-screen');
+        const officeStaticEl = document.getElementById('office-static');
+
+        // Audio Elements
+        const audioAmbiance = document.getElementById('audio-ambiance');
+        const audioJumpscare = document.getElementById('audio-jumpscare');
+        const audioDoor = document.getElementById('audio-door');
+        const audioLight = document.getElementById('audio-light');
+        const audioCamToggle = document.getElementById('audio-camera-toggle');
+        const audioCamStatic = document.getElementById('audio-camera-static');
+        const audioPowerDown = document.getElementById('audio-power-down');
+        const audioMove = document.getElementById('audio-animatronic-move');
+        const audioKitchen = document.getElementById('audio-kitchen-noise');
+
+        // --- Utility Functions ---
+
+        function playSound(audioElement) {
+            if (audioElement) {
+                audioElement.currentTime = 0;
+                audioElement.play().catch(e => console.warn("Audio play failed:", e));
+            }
+        }
+        function stopSound(audioElement) {
+             if (audioElement) {
+                 audioElement.pause();
+                 audioElement.currentTime = 0;
+             }
+        }
+
+        function updatePowerUsage() {
+            usage = 1; // Base usage
+            if (leftDoorClosed) usage++;
+            if (rightDoorClosed) usage++;
+            if (leftLightOn) usage++;
+            if (rightLightOn) usage++;
+            if (monitorUp) usage++;
+            powerUsageEl.textContent = usage;
+        }
+
+        function updatePowerDisplay() {
+            powerPercentEl.textContent = `${Math.floor(power)}%`;
+            powerBarEl.style.width = `${power}%`;
+
+             // Change color based on power level
+            if (power < 50) powerBarEl.style.backgroundColor = '#ffeb3b'; // Yellow
+            if (power < 25) powerBarEl.style.backgroundColor = '#f44336'; // Red
+            if (power < 10) {
+                 powerPercentEl.style.color = '#f44336';
+                 officeStaticEl.style.opacity = (10 - power) / 20; // Increase static flicker
+            } else {
+                 powerPercentEl.style.color = '#eee';
+                 officeStaticEl.style.opacity = 0;
+            }
+        }
+
+        function formatTime(hour) {
+            return hour === 0 ? '12 AM' : (hour > 12 ? `${hour - 12} AM` : `${hour} AM`); // Simplified AM only
+        }
+
+        function updateClock() {
+            const currentHour = Math.floor(gameTime);
+            if (currentHour !== gameHour) {
+                 gameHour = currentHour;
+                 if (gameHour === 0) gameHour = 12; // Handle 12 AM correctly
+                 clockEl.textContent = formatTime(gameHour);
+
+                 // Increase difficulty slightly each hour
+                 animatronics.bonnie.aggressive = Math.min(10, 3 + currentHour);
+                 animatronics.chica.aggressive = Math.min(10, 3 + currentHour);
+                 animatronics.freddy.aggressive = Math.min(10, 1 + Math.floor(currentHour / 2));
+            }
+             if (gameTime >= 6) {
+                 winGame();
+             }
+        }
+
+        function drainPower(intervalSeconds) {
+            if (!gameRunning) return;
+            const drainAmount = usage * (intervalSeconds / 10); // Adjust drain rate factor (lower = harder)
+            power -= drainAmount;
+            if (power <= 0) {
+                power = 0;
+                powerOutage();
+            }
+            updatePowerDisplay();
+        }
+
+        function powerOutage() {
+             if (!gameRunning) return;
+             console.log("POWER OUTAGE!");
+             gameRunning = false; // Stop normal game functions
+             stopSound(audioAmbiance);
+             stopSound(audioCamStatic);
+             playSound(audioPowerDown);
+
+             // Turn everything off visually
+             leftDoorClosed = false; leftDoorEl.classList.remove('closed');
+             rightDoorClosed = false; rightDoorEl.classList.remove('closed');
+             leftLightOn = false; leftLightButton.classList.remove('active'); leftDoorPeekEl.classList.remove('lit');
+             rightLightOn = false; rightLightButton.classList.remove('active'); rightDoorPeekEl.classList.remove('lit');
+             monitorUp = false; monitorOverlayEl.style.display = 'none'; cameraButton.classList.remove('active'); cameraButton.textContent = '▲ Monitor';
+             leftDoorButton.disabled = true; rightDoorButton.disabled = true;
+             leftLightButton.disabled = true; rightLightButton.disabled = true;
+             cameraButton.disabled = true;
+
+             document.getElementById('office-view').style.backgroundColor = '#000';
+             document.querySelector('.office-content').style.display = 'none';
+             powerUsageEl.textContent = '0';
+             powerPercentEl.textContent = '0%';
+             powerBarEl.style.width = '0%';
+
+             // Freddy sequence (simplified)
+             setTimeout(() => {
+                // Maybe flicker Freddy's eyes in the dark briefly here if graphics allowed
+                 console.log("Freddy is coming...");
+                 // Delayed jumpscare
+                 setTimeout(() => {
+                    triggerJumpscare('freddy');
+                 }, Math.random() * 5000 + 5000); // 5-10 seconds delay
+             }, 3000); // Wait a bit after power down sound
+        }
+
+        function triggerJumpscare(animatronicId) {
+            if (!gameRunning && power > 0) return; // Don't jumpscare if already game over unless power outage
+             console.log(`${animatronics[animatronicId].name} JUMPSCARE!`);
+            gameRunning = false;
+            stopSound(audioAmbiance);
+            stopSound(audioCamStatic);
+            stopSound(audioKitchen);
+            playSound(audioJumpscare);
+
+            jumpscareAnimatronicEl.textContent = animatronics[animatronicId].emoji;
+            jumpscareOverlayEl.style.display = 'flex';
+            monitorOverlayEl.style.display = 'none'; // Ensure monitor is hidden
+
+            // Show game over screen after jumpscare animation
+            setTimeout(() => {
+                jumpscareOverlayEl.style.display = 'none';
+                gameOverScreenEl.style.display = 'flex';
+            }, 1500); // Duration of jumpscare visual
+        }
+
+        function winGame() {
+            if (!gameRunning) return;
+            console.log("YOU WIN!");
+            gameRunning = false;
+            stopSound(audioAmbiance);
+            stopSound(audioCamStatic);
+            stopSound(audioKitchen);
+            // Optional: Play a winning sound/chime
+            winScreenEl.style.display = 'flex';
+        }
+
+        // --- Control Handlers ---
+
+        function toggleDoor(isLeft) {
+            if (!gameRunning) return;
+            playSound(audioDoor);
+            if (isLeft) {
+                leftDoorClosed = !leftDoorClosed;
+                leftDoorEl.classList.toggle('closed', leftDoorClosed);
+                leftDoorButton.classList.toggle('active', leftDoorClosed);
+            } else {
+                rightDoorClosed = !rightDoorClosed;
+                rightDoorEl.classList.toggle('closed', rightDoorClosed);
+                rightDoorButton.classList.toggle('active', rightDoorClosed);
+            }
+            updatePowerUsage();
+        }
+
+        function toggleLight(isLeft) {
+            if (!gameRunning) return;
+            playSound(audioLight);
+            if (isLeft) {
+                leftLightOn = !leftLightOn;
+                leftLightButton.classList.toggle('active', leftLightOn);
+                leftDoorPeekEl.classList.toggle('lit', leftLightOn);
+                 if(leftLightOn) checkDoorPeek('bonnie', leftDoorPeekEl); // Check immediately when light turns on
+            } else {
+                rightLightOn = !rightLightOn;
+                rightLightButton.classList.toggle('active', rightLightOn);
+                rightDoorPeekEl.classList.toggle('lit', rightLightOn);
+                 if(rightLightOn) checkDoorPeek('chica', rightDoorPeekEl); // Check immediately
+                 if(rightLightOn) checkDoorPeek('freddy', rightDoorPeekEl); // Freddy might use right door too
+            }
+             // Light automatically turns off after a short duration if held? No, FNAF1 lights stay on.
+            updatePowerUsage();
+        }
+
+         function checkDoorPeek(animatronicId, peekElement) {
+             const anim = animatronics[animatronicId];
+             const targetLocation = peekElement === leftDoorPeekEl ? 'W. Corner' : 'E. Corner';
+             if (anim.location === targetLocation) {
+                 peekElement.textContent = anim.emoji;
+             } else {
+                 peekElement.textContent = ''; // Clear if not there
+             }
+         }
+
+
+        function toggleMonitor() {
+            if (!gameRunning) return;
+            playSound(audioCamToggle);
+            monitorUp = !monitorUp;
+            monitorOverlayEl.style.display = monitorUp ? 'flex' : 'none';
+            cameraButton.classList.toggle('active', monitorUp);
+            cameraButton.textContent = monitorUp ? '▼ Monitor' : '▲ Monitor';
+
+            if (monitorUp) {
+                updateCameraView();
+                stopSound(audioAmbiance); // Muffle ambiance when cams are up
+                 playSound(audioCamStatic);
+            } else {
+                stopSound(audioCamStatic);
+                stopSound(audioKitchen); // Stop kitchen noise if it was playing
+                playSound(audioAmbiance); // Resume ambiance
+                // Check if animatronics entered while monitor was up
+                 checkImmediateOfficeDanger();
+            }
+            updatePowerUsage();
+        }
+
+        function changeCamera(camId) {
+             if (!gameRunning || !monitorUp) return;
+             if (currentCamera === camId) return; // No change needed
+
+             // Play static/switch sound
+             // Short burst of louder static?
+             playSound(audioCamToggle);
+
+             currentCamera = camId;
+             updateMapButtons();
+             updateCameraView();
+
+             // Special handling for Kitchen (audio only)
+             if (camId === 'CAM 7') {
+                 if (isAnimatronicInLocation('chica', 'Kitchen') || isAnimatronicInLocation('freddy', 'Kitchen')) { // Freddy might go there?
+                      playSound(audioKitchen);
+                 } else {
+                     stopSound(audioKitchen);
+                 }
+             } else {
+                  stopSound(audioKitchen);
+             }
+        }
+
+        function updateMapButtons() {
+             mapButtons.forEach(button => {
+                 button.classList.toggle('active', button.dataset.cam === currentCamera);
+             });
+        }
+
+         function updateCameraView() {
+             if (!monitorUp) return;
+
+             const locData = cameraLocations[currentCamera];
+             cameraLocationNameEl.textContent = locData.name;
+
+             if (locData.audioOnly) {
+                 cameraOccupantsEl.textContent = '(Audio Only)';
+                 cameraOccupantsEl.style.fontSize = '1.5rem';
+             } else {
+                 let occupantsText = '';
+                 // Check all animatronics for this location
+                 for (const id in animatronics) {
+                     if (animatronics[id].location === currentCamera) {
+                          occupantsText += animatronics[id].emoji + ' ';
+                     }
+                 }
+                 cameraOccupantsEl.textContent = occupantsText || '□'; // Empty square if empty
+                 cameraOccupantsEl.style.fontSize = '2.5em'; // Emoji size
+             }
+
+             // Add more static effect based on animatronic presence/proximity? Maybe later.
+             // cameraViewEl.style.setProperty('--static-opacity', '0.1'); // Base static
+         }
+
+         function isAnimatronicInLocation(animatronicId, locationId) {
+             return animatronics[animatronicId]?.location === locationId;
+         }
+
+        // --- Animatronic AI ---
+
+        function moveAnimatronics() {
+            if (!gameRunning) return;
+
+            for (const id in animatronics) {
+                const anim = animatronics[id];
+                 // Movement chance based on aggression level (1-20 scale)
+                 const moveAttempt = Math.random() * 20;
+
+                if (moveAttempt < anim.aggressive) {
+                    // Attempt move
+                    const currentLocation = anim.location;
+                    const possibleMoves = anim.movementPattern.filter(loc => loc !== currentLocation);
+
+                     // Basic AI: Find the next location in the pattern that is adjacent or the current one if stuck
+                     let nextLocIndex = anim.movementPattern.indexOf(currentLocation) + 1;
+                     let nextLoc = anim.movementPattern[nextLocIndex] ?? currentLocation; // Stay if at end or error
+
+                     // Freddy's special condition: Only moves when cameras are down or focused elsewhere? Simplified: moves slower. Also, stage counter.
+                     if (id === 'freddy') {
+                         // Only moves if Bonnie and Chica have left the stage?
+                         if (animatronics.bonnie.location !== 'Stage' && animatronics.chica.location !== 'Stage') {
+                              // Proceed with Freddy's move logic
+                              if (currentLocation === 'Stage') anim.stageCounter++; // Increment counter while on stage after others left
+                              if (anim.stageCounter < 3) continue; // Needs more time on stage before first move
+
+                              // Freddy laughs when moving? Add sound later if possible
+                         } else {
+                              anim.stageCounter = 0; // Reset if others return or haven't left
+                              continue; // Don't move Freddy yet
+                         }
+                     }
+
+                     // Check if the camera is currently viewing the animatronic's location (discourages movement?)
+                     // Simplified: No camera discouragement implemented for now.
+
+                     // Check for Office arrival
+                    if (nextLoc === 'Office') {
+                        handleOfficeArrival(id, currentLocation); // Pass previous location
+                    } else {
+                         // Execute move
+                         anim.location = nextLoc;
+                         console.log(`${anim.name} moved to ${anim.location}`);
+                         playSound(audioMove); // Play generic move sound
+                         // Update camera view if it's the current one
+                         if (monitorUp && currentCamera === anim.location) {
+                             updateCameraView();
+                         }
+                         // Also update if they moved FROM the current camera view
+                         if (monitorUp && currentLocation === currentCamera) {
+                             updateCameraView();
+                         }
+                         // Update peek view if light is on and they moved to/from corner
+                         if (leftLightOn && (nextLoc === 'W. Corner' || currentLocation === 'W. Corner')) checkDoorPeek('bonnie', leftDoorPeekEl);
+                         if (rightLightOn && (nextLoc === 'E. Corner' || currentLocation === 'E. Corner')) checkDoorPeek('chica', rightDoorPeekEl);
+                         if (rightLightOn && (nextLoc === 'E. Corner' || currentLocation === 'E. Corner')) checkDoorPeek('freddy', rightDoorPeekEl); // Check freddy too
+                    }
+                }
+            }
+        }
+
+         function handleOfficeArrival(animatronicId, fromLocation) {
+             const anim = animatronics[animatronicId];
+             anim.location = 'Office'; // Mark as arrived
+
+             console.log(`${anim.name} trying to enter office from ${fromLocation}`);
+
+             // Determine which door based on where they came from
+             const isLeftDoorThreat = (fromLocation === 'W. Corner'); // Bonnie
+             const isRightDoorThreat = (fromLocation === 'E. Corner'); // Chica, Freddy
+
+             if (isLeftDoorThreat) {
+                 if (!leftDoorClosed) {
+                     triggerJumpscare(animatronicId);
+                 } else {
+                     console.log(`${anim.name} blocked by left door.`);
+                     // Animatronic should retreat after being blocked
+                     anim.location = 'Dining'; // Send back to dining area
+                 }
+             } else if (isRightDoorThreat) {
+                 if (!rightDoorClosed) {
+                     triggerJumpscare(animatronicId);
+                 } else {
+                     console.log(`${anim.name} blocked by right door.`);
+                     // Retreat
+                     anim.location = 'Dining';
+                 }
+             }
+         }
+
+         function checkImmediateOfficeDanger() {
+             // Called when closing monitor. Check if anyone reached office while player wasn't looking
+             if (isAnimatronicInLocation('bonnie', 'W. Corner') && !leftDoorClosed) {
+                 // Bonnie might jumpscare immediately if door isn't closed? Or wait a bit.
+                 // Let's assume they wait at the door corner until light checks or random chance.
+                 // However, if they fully moved to 'Office' state (which happens on move attempt)
+                 // handleOfficeArrival should have already triggered jumpscare if door was open.
+                 // This check is more for the peek state.
+             }
+             if ((isAnimatronicInLocation('chica', 'E. Corner') || isAnimatronicInLocation('freddy', 'E. Corner')) && !rightDoorClosed) {
+                 // Same logic for right side.
+             }
+         }
+
+        // --- Game Loop ---
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            const intervalSeconds = 1; // Update every second
+
+            // 1. Drain Power
+            drainPower(intervalSeconds);
+
+            // 2. Advance Time
+            const timeIncrement = intervalSeconds / nightDurationSeconds * 6; // Scale real seconds to game hours (12AM to 6AM)
+            gameTime += timeIncrement;
+            updateClock();
+
+            // 3. Move Animatronics (less frequently than every second)
+            // Stagger AI updates slightly
+             // Using modulo avoids nested timers or complex scheduling
+             // `gameTime * 60 * 60` roughly converts game hours to seconds for a finer check
+             const effectiveSecondsPassed = Math.floor(gameTime * 60 * 1.5); // Rough simulation of time passing
+            if (effectiveSecondsPassed % 5 === 0) { // AI check roughly every 5 'game seconds'
+                 moveAnimatronics();
+             }
+
+
+            // Schedule next loop
+            setTimeout(gameLoop, intervalSeconds * 1000);
+        }
+
+        // --- Initialization ---
+
+        function initGame() {
+             console.log("Initializing Night Shift...");
+             gameRunning = true;
+             power = 100;
+             gameTime = 0; // 12 AM
+             gameHour = 12;
+             leftDoorClosed = false;
+             rightDoorClosed = false;
+             leftLightOn = false;
+             rightLightOn = false;
+             monitorUp = false;
+             currentCamera = 'CAM 1A';
+
+             // Reset animatronics
+             animatronics.bonnie.location = 'Stage'; animatronics.bonnie.aggressive = 3;
+             animatronics.chica.location = 'Stage'; animatronics.chica.aggressive = 3;
+             animatronics.freddy.location = 'Stage'; animatronics.freddy.aggressive = 1; animatronics.freddy.stageCounter = 0;
+
+
+             // Reset UI
+             updatePowerUsage();
+             updatePowerDisplay();
+             updateClock();
+             leftDoorEl.classList.remove('closed'); leftDoorButton.classList.remove('active');
+             rightDoorEl.classList.remove('closed'); rightDoorButton.classList.remove('active');
+             leftLightButton.classList.remove('active'); rightLightButton.classList.remove('active');
+             leftDoorPeekEl.classList.remove('lit'); rightDoorPeekEl.classList.remove('lit');
+             leftDoorPeekEl.textContent = ''; rightDoorPeekEl.textContent = '';
+             monitorOverlayEl.style.display = 'none';
+             cameraButton.classList.remove('active'); cameraButton.textContent = '▲ Monitor';
+             jumpscareOverlayEl.style.display = 'none';
+             gameOverScreenEl.style.display = 'none';
+             winScreenEl.style.display = 'none';
+             officeStaticEl.style.opacity = 0;
+             leftDoorButton.disabled = false; rightDoorButton.disabled = false;
+             leftLightButton.disabled = false; rightLightButton.disabled = false;
+             cameraButton.disabled = false;
+             document.getElementById('office-view').style.backgroundColor = '#0a0a0a'; // Reset office background
+              document.querySelector('.office-content').style.display = 'block';
+
+
+             updateMapButtons(); // Set initial active camera button
+
+             // Attach Event Listeners
+            leftDoorButton.onclick = () => toggleDoor(true);
+            rightDoorButton.onclick = () => toggleDoor(false);
+            leftLightButton.onclick = () => toggleLight(true);
+            rightLightButton.onclick = () => toggleLight(false);
+            cameraButton.onclick = toggleMonitor;
+
+            mapButtons.forEach(button => {
+                button.onclick = () => changeCamera(button.dataset.cam);
+            });
+
+             // Start Ambient Sound (requires user interaction first, often)
+             // We rely on the first button click to enable audio context
+             document.body.addEventListener('click', () => {
+                  if (gameRunning && audioAmbiance.paused) {
+                     playSound(audioAmbiance);
+                     audioAmbiance.volume = 0.3; // Keep ambiance low
+                      audioCamStatic.volume = 0.2;
+                      audioKitchen.volume = 0.5;
+                  }
+             }, { once: true }); // Only need one interaction ever
+
+            console.log("Game Ready. Starting loop.");
+            // Start Game Loop
+            gameLoop();
+        }
+
+        // Start the game when the page loads
+        window.onload = initGame;
+
+    </script>
+
+</body>
+</html>

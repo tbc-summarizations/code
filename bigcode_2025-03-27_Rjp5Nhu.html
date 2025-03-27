@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAZ vs SMR - Mini Football</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a1a1a; /* Dark background like EAFC menus */
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #e0e0e0;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 2px solid #444;
+            background-color: #050a0f; /* Dark container background */
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 180, 255, 0.3); /* EAFC-like glow */
+        }
+
+        #scoreboard {
+            display: flex;
+            justify-content: space-between;
+            width: 95%;
+            max-width: 800px; /* Match canvas width */
+            margin-bottom: 10px;
+            padding: 10px 20px;
+            background: linear-gradient(to bottom, #152238, #0e1724); /* EAFC UI gradient */
+            border-radius: 5px;
+            border: 1px solid #305078;
+            font-size: 1.8em;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        .team-score {
+            display: flex;
+            align-items: center;
+        }
+
+        .team-name {
+            margin: 0 15px;
+        }
+
+         .team-flag {
+            font-size: 0.8em;
+            margin: 0 5px;
+        }
+
+        #timer {
+            font-size: 1.5em;
+        }
+
+        #score {
+            letter-spacing: 5px;
+        }
+
+        #kaz-score { color: #009bdb; } /* Kazakhstan Blue */
+        #smr-score { color: #ADD8E6; } /* San Marino Light Blue */
+
+        #game-canvas {
+            background-color: #34a853; /* Pitch green */
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 100px 100px; /* Subtle pitch lines */
+            border: 2px solid white; /* Pitch outline */
+            display: block; /* Remove extra space below canvas */
+        }
+
+        #controls-info {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+
+         #message-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 10px;
+            font-size: 2.5em;
+            font-weight: bold;
+            text-align: center;
+            display: none; /* Hidden by default */
+            z-index: 10;
+             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="scoreboard">
+            <div class="team-score">
+                <span class="team-flag">🇰🇿</span>
+                <span class="team-name">KAZ</span>
+                <span id="kaz-score">0</span>
+            </div>
+            <div id="timer">90:00</div>
+            <div class="team-score">
+                <span id="smr-score">0</span>
+                <span class="team-name">SMR</span>
+                 <span class="team-flag">🇸🇲</span>
+            </div>
+        </div>
+        <canvas id="game-canvas" width="800" height="500"></canvas>
+        <div id="controls-info">Use Arrow Keys to move the selected player (triangle indicator).</div>
+         <div id="message-overlay">GOAL!</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreboardKaz = document.getElementById('kaz-score');
+        const scoreboardSmr = document.getElementById('smr-score');
+        const timerDisplay = document.getElementById('timer');
+        const messageOverlay = document.getElementById('message-overlay');
+
+        const PITCH_WIDTH = canvas.width;
+        const PITCH_HEIGHT = canvas.height;
+        const PITCH_MARGIN = 30;
+        const CENTER_X = PITCH_WIDTH / 2;
+        const CENTER_Y = PITCH_HEIGHT / 2;
+
+        const PLAYER_RADIUS = 12;
+        const BALL_RADIUS = 8;
+        const GOAL_WIDTH = 80;
+        const GOAL_DEPTH = 15; // Visual depth into the pitch side
+
+        let kazScore = 0;
+        let smrScore = 0;
+        let gameTime = 90 * 60; // 90 minutes in seconds
+        let gameRunning = true;
+        let resetTimer = 0; // Timer to delay kickoff after goal
+
+        const KAZ_COLOR = '#009bdb'; // Blue
+        const KAZ_INDICATOR_COLOR = '#ffd700'; // Gold/Yellow
+        const SMR_COLOR = '#ADD8E6'; // Light Blue
+        const BALL_COLOR = '#FFFF00'; // Yellow ball
+        const GOAL_COLOR = '#FFFFFF'; // White goals
+
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false
+        };
+
+        class Player {
+            constructor(x, y, team, isUser = false) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.radius = PLAYER_RADIUS;
+                this.team = team; // 'kaz' or 'smr'
+                this.color = team === 'kaz' ? KAZ_COLOR : SMR_COLOR;
+                this.speed = 2.5;
+                this.friction = 0.90;
+                this.kickStrength = 6;
+                this.isUserControlled = false; // Only one user player at a time
+                this.aiCooldown = 0; // Prevent jerky AI movement
+            }
+
+            draw(ctx, isSelected) {
+                // Player circle
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.strokeStyle = '#000'; // Black outline
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.closePath();
+
+                // Selection indicator (triangle above the player)
+                if (isSelected) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x - 6, this.y - this.radius - 8);
+                    ctx.lineTo(this.x + 6, this.y - this.radius - 8);
+                    ctx.lineTo(this.x, this.y - this.radius - 2);
+                    ctx.closePath();
+                    ctx.fillStyle = KAZ_INDICATOR_COLOR;
+                    ctx.fill();
+                }
+            }
+
+            update(ball, players) {
+                 // Apply friction
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Boundary collision (pitch edges)
+                if (this.x - this.radius < 0) { this.x = this.radius; this.vx = 0; }
+                if (this.x + this.radius > PITCH_WIDTH) { this.x = PITCH_WIDTH - this.radius; this.vx = 0; }
+                if (this.y - this.radius < 0) { this.y = this.radius; this.vy = 0; }
+                if (this.y + this.radius > PITCH_HEIGHT) { this.y = PITCH_HEIGHT - this.radius; this.vy = 0; }
+
+                // Player-player collision
+                players.forEach(other => {
+                    if (this !== other) {
+                        const dx = other.x - this.x;
+                        const dy = other.y - this.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        const minDist = this.radius + other.radius;
+
+                        if (distance < minDist) {
+                            const angle = Math.atan2(dy, dx);
+                            const overlap = minDist - distance;
+                            const moveX = overlap * Math.cos(angle) / 2;
+                            const moveY = overlap * Math.sin(angle) / 2;
+
+                            this.x -= moveX;
+                            this.y -= moveY;
+                            other.x += moveX;
+                            other.y += moveY;
+
+                            // Basic momentum transfer (simplified)
+                            const tempVx = this.vx;
+                            const tempVy = this.vy;
+                            this.vx = (this.vx * 0.5 + other.vx * 0.5) * this.friction; // add friction on collision
+                            this.vy = (this.vy * 0.5 + other.vy * 0.5) * this.friction;
+                            other.vx = (other.vx * 0.5 + tempVx * 0.5) * other.friction;
+                            other.vy = (other.vy * 0.5 + tempVy * 0.5) * other.friction;
+                        }
+                    }
+                });
+
+                 // Ball collision / Kick
+                const dx_ball = ball.x - this.x;
+                const dy_ball = ball.y - this.y;
+                const dist_ball = Math.sqrt(dx_ball * dx_ball + dy_ball * dy_ball);
+                const touchDist = this.radius + ball.radius;
+
+                if (dist_ball < touchDist) {
+                    const angle = Math.atan2(dy_ball, dx_ball);
+                    const overlap = touchDist - dist_ball;
+
+                    // Move ball slightly out of player
+                    ball.x += overlap * Math.cos(angle);
+                    ball.y += overlap * Math.sin(angle);
+
+
+                    // Apply kick force - stronger if player is moving towards ball
+                    const relative_vx = this.vx - ball.vx;
+                    const relative_vy = this.vy - ball.vy;
+                    const speedMultiplier = 1 + Math.sqrt(relative_vx*relative_vx + relative_vy*relative_vy) * 0.1; // Add speed bonus
+                    const kickForce = this.kickStrength * speedMultiplier;
+
+
+                    ball.vx = kickForce * Math.cos(angle);
+                    ball.vy = kickForce * Math.sin(angle);
+
+                    // Apply slight counter force to player
+                    this.vx -= 0.5 * Math.cos(angle);
+                    this.vy -= 0.5 * Math.sin(angle);
+                }
+            }
+
+             aiMove(ball, players) {
+                if (this.isUserControlled || this.team === 'kaz') return; // Only control SMR AI
+
+                 this.aiCooldown -= 1 / 60; // Assuming 60fps
+
+                if (this.aiCooldown <= 0) {
+                    const targetX = ball.x;
+                    const targetY = ball.y;
+                    const dx = targetX - this.x;
+                    const dy = targetY - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    // Simple logic: move towards the ball
+                    if (distance > this.radius + ball.radius + 5) { // Don't crowd too much
+                         const angle = Math.atan2(dy, dx);
+                         this.vx += Math.cos(angle) * this.speed * 0.15; // Slower acceleration than user
+                         this.vy += Math.sin(angle) * this.speed * 0.15;
+
+                         // Limit AI speed
+                         const currentSpeed = Math.sqrt(this.vx*this.vx + this.vy*this.vy);
+                         const maxAiSpeed = this.speed * 0.7; // Slightly slower than user potential
+                          if (currentSpeed > maxAiSpeed) {
+                              this.vx = (this.vx / currentSpeed) * maxAiSpeed;
+                              this.vy = (this.vy / currentSpeed) * maxAiSpeed;
+                          }
+                    }
+                     this.aiCooldown = 0.1 + Math.random() * 0.2; // Random delay to make it less robotic
+                 }
+             }
+        }
+
+        class Ball {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = 0;
+                this.vy = 0;
+                this.radius = BALL_RADIUS;
+                this.friction = 0.985; // Ball rolls further
+                this.color = BALL_COLOR;
+            }
+
+            draw(ctx) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.strokeStyle = '#333'; // Dark outline for visibility
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.closePath();
+            }
+
+            update() {
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+
+                // Stop ball if moving very slowly
+                if (Math.abs(this.vx) < 0.1) this.vx = 0;
+                if (Math.abs(this.vy) < 0.1) this.vy = 0;
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                 // Wall collision
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx *= -0.7; // Bounce with energy loss
+                }
+                if (this.x + this.radius > PITCH_WIDTH) {
+                    this.x = PITCH_WIDTH - this.radius;
+                    this.vx *= -0.7;
+                }
+                 if (this.y - this.radius < 0) {
+                    this.y = this.radius;
+                    this.vy *= -0.7;
+                }
+                if (this.y + this.radius > PITCH_HEIGHT) {
+                    this.y = PITCH_HEIGHT - this.radius;
+                    this.vy *= -0.7;
+                }
+
+                 // Goal collision (simple check - just crossing the line)
+                const goalTopY = (PITCH_HEIGHT - GOAL_WIDTH) / 2;
+                const goalBottomY = (PITCH_HEIGHT + GOAL_WIDTH) / 2;
+
+                // SMR Goal (Left side)
+                if (this.x - this.radius < GOAL_DEPTH && this.y > goalTopY && this.y < goalBottomY) {
+                    goalScored('kaz');
+                }
+                 // KAZ Goal (Right side)
+                if (this.x + this.radius > PITCH_WIDTH - GOAL_DEPTH && this.y > goalTopY && this.y < goalBottomY) {
+                     goalScored('smr');
+                }
+            }
+        }
+
+        let players = [];
+        let ball = new Ball(CENTER_X, CENTER_Y);
+        let userControlledPlayer = null;
+
+        function setupTeam(team, side) {
+            const teamPlayers = [];
+            const xOffset = side === 'left' ? PITCH_WIDTH * 0.25 : PITCH_WIDTH * 0.75;
+            const numPlayers = 5; // Simplified 5-a-side
+
+            // Simple formation (adjust as needed)
+            // Goalie-ish
+            teamPlayers.push(new Player(side === 'left' ? PITCH_MARGIN + 30 : PITCH_WIDTH - PITCH_MARGIN - 30, CENTER_Y, team));
+            // Defenders
+            teamPlayers.push(new Player(xOffset, CENTER_Y - PITCH_HEIGHT * 0.2, team));
+            teamPlayers.push(new Player(xOffset, CENTER_Y + PITCH_HEIGHT * 0.2, team));
+            // Midfielder/Attacker
+            teamPlayers.push(new Player(xOffset + (side === 'left' ? 50 : -50), CENTER_Y, team));
+            // Attacker
+            teamPlayers.push(new Player(side === 'left' ? CENTER_X - 80 : CENTER_X + 80, CENTER_Y, team));
+
+
+             players.push(...teamPlayers);
+
+             // Assign initial user control for Kazakhstan
+            if (team === 'kaz') {
+                 // Let's make the center-mid the default controlled player
+                 userControlledPlayer = teamPlayers.find(p => Math.abs(p.x - (CENTER_X - 80)) < 10) || teamPlayers[0]; // Fallback
+                 if(userControlledPlayer) userControlledPlayer.isUserControlled = true;
+            }
+        }
+
+
+        function resetPositions() {
+            players = [];
+            setupTeam('kaz', 'left'); // Kazakhstan starts on the left
+            setupTeam('smr', 'right'); // San Marino starts on the right
+
+            ball.x = CENTER_X;
+            ball.y = CENTER_Y;
+            ball.vx = 0;
+            ball.vy = 0;
+
+            // Re-select the closest Kaz player to center after reset
+             selectClosestKazPlayerToBall();
+
+             resetTimer = 2; // 2 seconds delay before play resumes
+        }
+
+        function selectClosestKazPlayerToBall() {
+             let closestPlayer = null;
+             let minDistance = Infinity;
+
+             players.forEach(p => {
+                 if (p.team === 'kaz') {
+                     const dx = ball.x - p.x;
+                     const dy = ball.y - p.y;
+                     const distance = dx * dx + dy * dy; // Use squared distance for comparison
+                     if (distance < minDistance) {
+                         minDistance = distance;
+                         closestPlayer = p;
+                     }
+                 }
+             });
+
+             if (userControlledPlayer) {
+                 userControlledPlayer.isUserControlled = false;
+             }
+             if (closestPlayer) {
+                 userControlledPlayer = closestPlayer;
+                 userControlledPlayer.isUserControlled = true;
+             }
+         }
+
+         function goalScored(scoringTeam) {
+            if (!gameRunning) return; // Prevent multiple goals calls
+
+            gameRunning = false; // Pause game briefly
+            messageOverlay.textContent = "GOAL!";
+            messageOverlay.style.display = 'block';
+
+            if (scoringTeam === 'kaz') {
+                kazScore++;
+                scoreboardKaz.textContent = kazScore;
+            } else {
+                smrScore++;
+                scoreboardSmr.textContent = smrScore;
+            }
+
+            setTimeout(() => {
+                 messageOverlay.style.display = 'none';
+                resetPositions();
+                gameRunning = true; // Resume game after reset
+            }, 2000); // Show goal message for 2 seconds
+        }
+
+
+        function drawPitch() {
+            // Field color (already set on canvas background)
+
+            // Center circle
+            ctx.beginPath();
+            ctx.arc(CENTER_X, CENTER_Y, 70, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+
+            // Center spot
+            ctx.beginPath();
+            ctx.arc(CENTER_X, CENTER_Y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fill();
+            ctx.closePath();
+
+
+            // Halfway line
+            ctx.beginPath();
+            ctx.moveTo(CENTER_X, 0);
+            ctx.lineTo(CENTER_X, PITCH_HEIGHT);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+
+            // Penalty areas (simplified boxes)
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, PITCH_HEIGHT * 0.2, PITCH_WIDTH * 0.18, PITCH_HEIGHT * 0.6);
+            ctx.strokeRect(PITCH_WIDTH - PITCH_WIDTH * 0.18, PITCH_HEIGHT * 0.2, PITCH_WIDTH * 0.18, PITCH_HEIGHT * 0.6);
+
+
+             // Goals
+            const goalTopY = (PITCH_HEIGHT - GOAL_WIDTH) / 2;
+            const goalBottomY = (PITCH_HEIGHT + GOAL_WIDTH) / 2;
+
+            // Left Goal (San Marino's)
+             ctx.fillStyle = GOAL_COLOR;
+             ctx.fillRect(-GOAL_DEPTH, goalTopY, GOAL_DEPTH, GOAL_WIDTH); // Part outside canvas for visual cue
+             ctx.strokeStyle = '#000'; // Post outline
+             ctx.lineWidth = 2;
+             ctx.beginPath();
+             ctx.moveTo(0, goalTopY);
+             ctx.lineTo(0, goalBottomY);
+             ctx.stroke(); // Only draw the goal line/posts visible on pitch
+
+
+             // Right Goal (Kazakhstan's)
+             ctx.fillStyle = GOAL_COLOR;
+             ctx.fillRect(PITCH_WIDTH, goalTopY, GOAL_DEPTH, GOAL_WIDTH); // Part outside canvas
+             ctx.strokeStyle = '#000';
+             ctx.lineWidth = 2;
+              ctx.beginPath();
+             ctx.moveTo(PITCH_WIDTH, goalTopY);
+             ctx.lineTo(PITCH_WIDTH, goalBottomY);
+             ctx.stroke();
+        }
+
+        function updateTimer(deltaTime) {
+             if (!gameRunning || resetTimer > 0) return;
+
+            gameTime -= deltaTime;
+            if (gameTime < 0) {
+                gameTime = 0;
+                gameRunning = false; // End game
+                 messageOverlay.textContent = "Full Time!";
+                 messageOverlay.style.display = 'block';
+                 // Maybe show final score again here or disable controls
+            }
+
+            const minutes = Math.floor(gameTime / 60);
+            const seconds = Math.floor(gameTime % 60);
+            timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = (timestamp - lastTime) / 1000 || 0; // Time in seconds
+            lastTime = timestamp;
+
+             if (resetTimer > 0) {
+                resetTimer -= deltaTime;
+                 if (resetTimer < 0) resetTimer = 0;
+            }
+
+            // Update logic
+            if (gameRunning && resetTimer <= 0) {
+                 // Control user player
+                if (userControlledPlayer) {
+                    let moveX = 0;
+                    let moveY = 0;
+                    if (keys.ArrowUp) moveY -= 1;
+                    if (keys.ArrowDown) moveY += 1;
+                    if (keys.ArrowLeft) moveX -= 1;
+                    if (keys.ArrowRight) moveX += 1;
+
+                     // Normalize diagonal movement
+                    const mag = Math.sqrt(moveX * moveX + moveY * moveY);
+                    if (mag > 0) {
+                         moveX = (moveX / mag);
+                         moveY = (moveY / mag);
+                    }
+
+                     userControlledPlayer.vx += moveX * userControlledPlayer.speed * 0.2; // Acceleration
+                     userControlledPlayer.vy += moveY * userControlledPlayer.speed * 0.2;
+
+                     // Limit user speed slightly less than kick strength perhaps
+                     const currentSpeed = Math.sqrt(userControlledPlayer.vx*userControlledPlayer.vx + userControlledPlayer.vy*userControlledPlayer.vy);
+                     const maxUserSpeed = userControlledPlayer.speed * 1.1; // Allow slightly faster burst
+                     if (currentSpeed > maxUserSpeed) {
+                         userControlledPlayer.vx = (userControlledPlayer.vx / currentSpeed) * maxUserSpeed;
+                         userControlledPlayer.vy = (userControlledPlayer.vy / currentSpeed) * maxUserSpeed;
+                     }
+                }
+
+                 players.forEach(p => {
+                    p.aiMove(ball, players); // AI logic for opponents
+                    p.update(ball, players); // Update position, handle collisions
+                });
+                ball.update(); // Update ball position and check goals
+                updateTimer(deltaTime);
+            }
+
+
+            // Drawing logic
+            ctx.clearRect(0, 0, PITCH_WIDTH, PITCH_HEIGHT); // Clear canvas
+            drawPitch(); // Draw pitch markings and goals
+            players.forEach(p => p.draw(ctx, p === userControlledPlayer)); // Draw players
+            ball.draw(ctx); // Draw ball
+
+            requestAnimationFrame(gameLoop); // Loop
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = true;
+            }
+            // Simple player switching logic (e.g., pressing 'Shift' or 'Space') - could be added
+            // if (e.key === ' ' && gameRunning) {
+            //     selectClosestKazPlayerToBall();
+            // }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = false;
+            }
+        });
+
+        // Initial Setup
+        resetPositions();
+        requestAnimationFrame(gameLoop); // Start the game loop
+
+    </script>
+</body>
+</html>

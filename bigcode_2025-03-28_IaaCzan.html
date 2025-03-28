@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Meethexep Scooter Run</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111; /* Darker background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            color: white;
+        }
+        canvas {
+            border: 2px solid #eee;
+            background-color: #aed6f1; /* Will be covered by gradient */
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+        #ui {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            font-size: clamp(16px, 3vw, 24px); /* Responsive font size */
+            font-weight: bold;
+            text-shadow: 2px 2px 4px black;
+            z-index: 10;
+             background-color: rgba(0,0,0,0.3);
+             padding: 5px 10px;
+             border-radius: 5px;
+        }
+         #ui span {
+            color: #ffd700; /* Gold color for numbers */
+         }
+        #boostClickIndicator {
+             display: none;
+             margin-top: 5px;
+             font-size: clamp(14px, 2.5vw, 20px);
+             color: #ff4500; /* OrangeRed */
+        }
+        #controlsInfo {
+            position: absolute;
+            bottom: 10px;
+            width: 95%;
+            text-align: center;
+            font-size: clamp(10px, 2vw, 14px);
+            text-shadow: 1px 1px 2px black;
+            z-index: 10;
+            pointer-events: none; /* Allow clicks/touches to go through */
+        }
+        #gameOverScreen {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.85);
+            padding: 30px 40px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 20;
+            border: 2px solid #eee;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+        }
+         #gameOverScreen h2 {
+             margin-bottom: 15px;
+             font-size: clamp(24px, 5vw, 36px);
+             color: #ff4500; /* OrangeRed */
+         }
+         #gameOverScreen p {
+            font-size: clamp(18px, 3.5vw, 28px);
+            margin-bottom: 25px;
+         }
+        button#restartButton {
+            padding: 12px 25px;
+            font-size: clamp(16px, 3vw, 22px);
+            cursor: pointer;
+            background-color: #4CAF50; /* Green */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            transition: background-color 0.3s ease;
+            font-weight: bold;
+        }
+        button#restartButton:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        Aura Points: <span id="score">0</span><br>
+        Boost Charge: <span id="boostCharge">0</span>%
+        <div id="boostClickIndicator">CLICKS LEFT: <span id="clicksLeft">10</span></div>
+    </div>
+    <div id="controlsInfo"></div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameOverScreen">
+        <h2>Game Over!</h2>
+        <p>Final Aura Points: <span id="finalScore">0</span></p>
+        <button id="restartButton">Restart Ride</button>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('score');
+    const boostChargeDisplay = document.getElementById('boostCharge');
+    const boostClickIndicator = document.getElementById('boostClickIndicator');
+    const clicksLeftDisplay = document.getElementById('clicksLeft');
+    const controlsInfoDisplay = document.getElementById('controlsInfo');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const finalScoreDisplay = document.getElementById('finalScore');
+    const restartButton = document.getElementById('restartButton');
+
+    // Responsive Canvas Size
+    function resizeCanvas() {
+        const aspectRatio = 4 / 3; // Maintain a 4:3 aspect ratio
+        const maxWidth = 1000;
+        const maxHeight = 750;
+        let w = window.innerWidth * 0.95;
+        let h = window.innerHeight * 0.9;
+
+        if (w / h > aspectRatio) { // Too wide
+            w = h * aspectRatio;
+        } else { // Too tall
+            h = w / aspectRatio;
+        }
+
+        canvas.width = Math.min(w, maxWidth);
+        canvas.height = Math.min(h, maxHeight);
+
+        // Re-calculate some height-dependent constants if needed
+        BUILDING_HEIGHT_MAX = canvas.height - 150;
+        BUILDING_HEIGHT_MIN = canvas.height * 0.15; // Relative min height
+    }
+
+    // --- Game Constants ---
+    const GRAVITY = 0.55;
+    const JUMP_FORCE = -11.5;
+    const PLAYER_WIDTH = 55;
+    const PLAYER_HEIGHT = 65; // Includes scooter
+    const INITIAL_SPEED = 3.5;
+    const SPEED_INCREMENT = 0.0015;
+    const BUILDING_MIN_WIDTH = 90;
+    let BUILDING_MAX_WIDTH = 320; // Can be adjusted
+    let BUILDING_HEIGHT_MIN = 100; // Initial values, updated in resizeCanvas
+    let BUILDING_HEIGHT_MAX = 500;
+    const GAP_MIN_BASE = 90;
+    const GAP_MAX_BASE = 280;
+    const POWER_WHEELIE_CHARGE_RATE = 0.6; // % per frame
+    const POWER_WHEELIE_AURA_RATE = 0.25;
+    const POWER_WHEELIE_ROTATION = Math.PI / 16; // ~11 degrees
+    const WHEELIE_BOOST_THRESHOLD = 100; // % charge needed
+    const WHEELIE_BOOST_SPEED_MULTIPLIER = 2.8;
+    const WHEELIE_BOOST_DURATION_CLICKS = 10;
+    const WHEELIE_BOOST_CLICK_WINDOW = 450; // ms per click allowed (tighter window)
+    const WHEELIE_BOOST_AURA_PER_CLICK = 60;
+    const WHEELIE_BOOST_AURA_BONUS = 300; // Bonus for completing clicks
+    const WHEELIE_BOOST_ROTATION_AMP = Math.PI / 3.5; // ~51 degrees amplitude
+    const PARTICLE_LIFESPAN = 50; // frames
+    const MAX_PARTICLES = 200; // Limit total particles
+
+    // --- Game State ---
+    let player;
+    let buildings = [];
+    let particles = [];
+    let gameSpeed;
+    let auraPoints;
+    let isGameOver;
+    let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    let keys = {};
+    let lastTime = 0;
+    let powerWheelieInputActive = false; // Track if the input for power wheelie is active
+    let lastBoostClickTime = 0;
+    let frameCount = 0;
+    let difficultyMultiplier;
+    let adjustedGapMin;
+    let adjustedGapMax;
+    let adjustedSpeedIncrement;
+    let currentShakeIntensity = 0;
+    let currentShakeDuration = 0;
+    let shakeStartTime = 0;
+
+    // --- Player Class ---
+    class Player {
+        constructor() {
+            this.width = PLAYER_WIDTH;
+            this.height = PLAYER_HEIGHT;
+            this.x = 100;
+            this.y = canvas.height - this.height - BUILDING_HEIGHT_MIN; // Start on initial ground
+            this.velocityY = 0;
+            this.isOnGround = false;
+            this.rotation = 0;
+            this.powerWheelieCharge = 0;
+            this.isPowerWheeling = false;
+            this.isWheelieBoosting = false;
+            this.wheelieBoostClicksLeft = 0;
+            this.invincible = false;
+            this.auraPointsAccumulator = 0;
+        }
+
+        draw() {
+            ctx.save();
+            ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+            ctx.rotate(this.rotation);
+
+            // Scooter body
+            ctx.fillStyle = '#7f8c8d'; // Asbestos color
+            ctx.fillRect(-this.width / 2, this.height / 4, this.width * 0.9, this.height / 4.5);
+            ctx.fillStyle = '#95a5a6'; // Silver color details
+            ctx.fillRect(-this.width / 2 + 5, this.height / 4 + 5, this.width * 0.9 - 10, this.height / 4.5 - 10);
+
+            // Handlebars
+            ctx.strokeStyle = '#34495e'; // Wet asphalt
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(-this.width * 0.1, this.height * 0.25);
+            ctx.lineTo(-this.width * 0.15, this.height * 0.1);
+            ctx.lineTo(-this.width * 0.25, this.height * 0.1); // Left handle
+            ctx.moveTo(-this.width * 0.15, this.height * 0.1);
+            ctx.lineTo(this.width * 0.05, this.height * 0.1); // Right handle
+            ctx.stroke();
+
+            // Wheels
+            const wheelRadius = this.height / 6.5;
+            ctx.fillStyle = '#2c3e50'; // Midnight blue
+            ctx.strokeStyle = '#bdc3c7'; // Silver rim
+            ctx.lineWidth = 3;
+            // Back wheel
+            ctx.beginPath();
+            ctx.arc(-this.width / 3, this.height / 2, wheelRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            // Front wheel
+            ctx.beginPath();
+            ctx.arc(this.width / 3, this.height / 2, wheelRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Cat "Meethexep" - Simple representation
+            const catBodyWidth = this.width / 2.2;
+            const catBodyHeight = this.height / 1.8;
+            const catHeadRadius = this.width / 5.5;
+
+            // Body (Sitting pose)
+            ctx.fillStyle = '#e67e22'; // Carrot orange
+            ctx.beginPath();
+            ctx.ellipse(0, -catBodyHeight / 3.5, catBodyWidth / 2, catBodyHeight / 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Head
+            ctx.fillStyle = '#d35400'; // Pumpkin orange (slightly darker)
+            ctx.beginPath();
+            ctx.arc(0, -catBodyHeight / 1.5, catHeadRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ears (Triangles)
+            ctx.fillStyle = '#e67e22';
+            ctx.beginPath();
+            ctx.moveTo(-catHeadRadius * 0.6, -catBodyHeight / 1.5 - catHeadRadius * 0.8);
+            ctx.lineTo(-catHeadRadius * 1.1, -catBodyHeight / 1.5 - catHeadRadius * 0.2);
+            ctx.lineTo(-catHeadRadius * 0.1, -catBodyHeight / 1.5 - catHeadRadius * 0.4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(catHeadRadius * 0.6, -catBodyHeight / 1.5 - catHeadRadius * 0.8);
+            ctx.lineTo(catHeadRadius * 1.1, -catBodyHeight / 1.5 - catHeadRadius * 0.2);
+            ctx.lineTo(catHeadRadius * 0.1, -catBodyHeight / 1.5 - catHeadRadius * 0.4);
+            ctx.closePath();
+            ctx.fill();
+
+            // Eyes (simple dots)
+             ctx.fillStyle = '#2c3e50';
+             ctx.beginPath();
+             ctx.arc(-catHeadRadius * 0.4, -catBodyHeight / 1.5 - catHeadRadius * 0.1, 2.5, 0, Math.PI*2);
+             ctx.arc(catHeadRadius * 0.4, -catBodyHeight / 1.5 - catHeadRadius * 0.1, 2.5, 0, Math.PI*2);
+             ctx.fill();
+
+            // Boost Aura
+            if (this.isWheelieBoosting) {
+                const auraSize = this.width * (0.8 + Math.sin(frameCount * 0.3) * 0.1);
+                ctx.fillStyle = `rgba(255, 223, 0, ${0.4 + Math.random() * 0.3})`; // Pulsing gold/yellow
+                ctx.beginPath();
+                ctx.arc(0, 0, auraSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = `rgba(255, 165, 0, ${0.5 + Math.random() * 0.4})`; // Pulsing orange outline
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        applyGravity() {
+            this.velocityY += GRAVITY;
+            this.y += this.velocityY;
+        }
+
+        update(deltaTime) { // deltaTime is available but not heavily used in physics here
+            this.auraPointsAccumulator = 0;
+
+            // --- State Handling ---
+            if (this.isWheelieBoosting) {
+                this.invincible = true;
+                this.isOnGround = false; // Cannot be on ground during boost
+                // Keep player roughly centered vertically, with bobbing
+                const targetY = canvas.height / 2 - this.height / 2;
+                this.y += (targetY - this.y) * 0.05; // Smoothly move towards target Y
+                this.velocityY = Math.sin(frameCount * 0.15) * 1.5; // Bobbing motion
+                this.y += this.velocityY; // Apply bobbing
+                this.rotation = WHEELIE_BOOST_ROTATION_AMP * Math.sin(frameCount * 0.25); // Dynamic rotation
+
+                // Emit boost particles (Sparks!)
+                if (frameCount % 2 === 0 && particles.length < MAX_PARTICLES) {
+                    particles.push(new Particle(this.x, this.y + this.height, 'rgba(255,223,0,0.9)', 5, PARTICLE_LIFESPAN * 0.8, 6, -2)); // Gold sparks
+                    particles.push(new Particle(this.x + this.width, this.y + this.height, 'rgba(255,165,0,0.8)', 5, PARTICLE_LIFESPAN * 0.8, 6, -2)); // Orange sparks
+                }
+                // Check boost maintenance click window (timer starts from last successful click)
+                if (Date.now() - lastBoostClickTime > WHEELIE_BOOST_CLICK_WINDOW) {
+                   this.endWheelieBoost(); // Too slow, end boost
+                }
+
+            } else if (this.isPowerWheeling) {
+                this.invincible = false; // Not invincible during power wheelie
+                this.rotation = POWER_WHEELIE_ROTATION;
+                if (this.isOnGround) {
+                    this.velocityY = 0; // Ensure no sliding down while wheelieing on ground
+                    this.powerWheelieCharge = Math.min(WHEELIE_BOOST_THRESHOLD, this.powerWheelieCharge + POWER_WHEELIE_CHARGE_RATE);
+                    this.auraPointsAccumulator += POWER_WHEELIE_AURA_RATE;
+                    // Emit power wheelie particles (Dust/smoke)
+                    if (frameCount % 4 === 0 && particles.length < MAX_PARTICLES) {
+                         particles.push(new Particle(this.x + wheelieParticleOffsetX(), this.y + this.height * 0.95, 'rgba(180,180,180,0.6)', 3.5, PARTICLE_LIFESPAN * 0.6, 3, -1));
+                    }
+                    // Check if boost threshold reached
+                    if (this.powerWheelieCharge >= WHEELIE_BOOST_THRESHOLD) {
+                        this.startWheelieBoost();
+                    }
+                } else {
+                    // Apply gravity if attempting power wheelie in air (it won't charge)
+                    this.applyGravity();
+                    // Maybe slightly different rotation in air? Optional.
+                    // this.rotation = POWER_WHEELIE_ROTATION * 0.5;
+                }
+            } else {
+                // Normal state
+                this.invincible = false;
+                if (!this.isOnGround) {
+                    this.applyGravity();
+                }
+                 // Smoothly return rotation to 0
+                this.rotation *= 0.85;
+                if (Math.abs(this.rotation) < 0.01) this.rotation = 0;
+                // Decay charge slowly
+                this.powerWheelieCharge = Math.max(0, this.powerWheelieCharge - POWER_WHEELIE_CHARGE_RATE * 0.3);
+            }
+
+            // Ground collision check (only if not boosting)
+            this.isOnGround = false;
+            let groundY = canvas.height + 50; // Default to a point below screen (falling)
+
+            if (!this.isWheelieBoosting) {
+                let onAnyBuilding = false;
+                buildings.forEach(building => {
+                    // Check if player is horizontally overlapping the building
+                    if (this.x + this.width * 0.2 < building.x + building.width && // Check inner part of player
+                        this.x + this.width * 0.8 > building.x)
+                    {
+                        // Check if player is about to land on or is slightly intersecting the top
+                         if (this.y + this.height >= building.y && // Bottom is at or below building top
+                             this.y + this.height - this.velocityY <= building.y + 5) // Previous position was above or near top
+                         {
+                            if (this.velocityY >= 0) { // Only land if falling or horizontal
+                                onAnyBuilding = true;
+                                groundY = building.y; // Potential landing spot
+                            }
+                        }
+                    }
+                });
+
+                if (onAnyBuilding && this.y + this.height >= groundY) {
+                    const landingVelocity = this.velocityY; // Capture velocity before reset
+                    this.isOnGround = true;
+                    this.velocityY = 0;
+                    this.y = groundY - this.height; // Snap to ground
+
+                    // Landing particles/effect only if falling significantly
+                    if (landingVelocity > 3 && particles.length < MAX_PARTICLES) {
+                        for(let i = 0; i < 5; i++) {
+                             particles.push(new Particle(this.x + this.width/2, this.y + this.height, 'rgba(200,200,200,0.7)', 2.5, PARTICLE_LIFESPAN * 0.5, 3, -0.5 * landingVelocity));
+                        }
+                         // Small screen shake on hard landing
+                         if (landingVelocity > 8) {
+                             startScreenShake(landingVelocity * 0.3, 100);
+                         }
+                    }
+                }
+            }
+
+
+            // --- Boundary Checks ---
+            // Fall detection
+             if (this.y + this.height > canvas.height + 100) { // Allow falling a bit below screen before game over
+                 if (!this.invincible) {
+                    isGameOver = true;
+                 }
+                 // If invincible and somehow fell, maybe push back up? Or let game over handle it.
+            }
+             // Ceiling detection (prevent going off top)
+            if (this.y < -this.height) { // Allow going slightly off top before correcting
+                 this.y = -this.height;
+                 if (this.velocityY < 0) this.velocityY = 0;
+            }
+
+
+            auraPoints += this.auraPointsAccumulator; // Add points accumulated this frame
+        }
+
+        jump() {
+            // Allow jumping only when on the ground and not doing power wheelie/boost
+            if (this.isOnGround && !this.isPowerWheeling && !this.isWheelieBoosting) {
+                this.velocityY = JUMP_FORCE;
+                this.isOnGround = false;
+                 // Small jump particle effect
+                 if(particles.length < MAX_PARTICLES) {
+                    particles.push(new Particle(this.x + this.width/2, this.y + this.height, 'rgba(220,220,255,0.6)', 3, PARTICLE_LIFESPAN*0.4, 2, -2));
+                 }
+            }
+        }
+
+        startPowerWheelie() {
+             // Can only *initiate* power wheelie on ground, but can hold it if you jump? No, let's restrict.
+             if (!this.isWheelieBoosting && this.isOnGround) {
+                this.isPowerWheeling = true;
+            } else if (!this.isOnGround) {
+                 // If already power wheeling and become airborne, stop charging but maintain state?
+                 // For now, stop wheelie if input continues but player is airborne
+                 // This logic is handled more in the update loop (checking isOnGround)
+            }
+        }
+
+        stopPowerWheelie() {
+            if (this.isPowerWheeling) {
+                 this.isPowerWheeling = false;
+            }
+        }
+
+        startWheelieBoost() {
+            if (!this.isWheelieBoosting) {
+                this.isWheelieBoosting = true;
+                this.isPowerWheeling = false; // Ensure power wheelie stops
+                this.invincible = true;
+                this.wheelieBoostClicksLeft = WHEELIE_BOOST_DURATION_CLICKS;
+                this.powerWheelieCharge = 0; // Reset charge meter
+                lastBoostClickTime = Date.now(); // Start the timer for the first click
+                boostClickIndicator.style.display = 'block';
+                clicksLeftDisplay.textContent = this.wheelieBoostClicksLeft;
+                auraPoints += 150; // Initial boost points
+                startScreenShake(8, 350); // Bigger shake for boost start
+
+                 // Sound Effect Placeholder
+                 // playSound('boostStart');
+
+                 // Burst of particles on activation
+                 for(let i=0; i<25; i++) {
+                     if(particles.length >= MAX_PARTICLES) break;
+                     const angle = Math.random() * Math.PI * 2;
+                     const speed = Math.random() * 5 + 3;
+                     particles.push(new Particle(
+                         this.x + this.width/2,
+                         this.y + this.height/2,
+                         `rgba(255, ${Math.floor(Math.random()*100 + 155)}, 0, 0.9)`, // Orange/Yellow range
+                         Math.random() * 4 + 2,
+                         PARTICLE_LIFESPAN * 1.2,
+                         Math.cos(angle) * speed,
+                         Math.sin(angle) * speed - 1 // Add slight upward bias
+                     ));
+                 }
+            }
+        }
+
+        maintainWheelieBoost() {
+            if (this.isWheelieBoosting) {
+                const now = Date.now();
+                if (now - lastBoostClickTime <= WHEELIE_BOOST_CLICK_WINDOW) {
+                    this.wheelieBoostClicksLeft--;
+                    auraPoints += WHEELIE_BOOST_AURA_PER_CLICK;
+                    clicksLeftDisplay.textContent = this.wheelieBoostClicksLeft;
+                    lastBoostClickTime = now; // Reset timer for next click
+
+                    // Sound Effect Placeholder
+                    // playSound('boostClick');
+
+                    // Particle burst on successful click
+                    for(let i=0; i<10; i++) {
+                         if(particles.length >= MAX_PARTICLES) break;
+                        particles.push(new Particle(this.x + Math.random()*this.width, this.y + Math.random()*this.height, 'gold', 4.5, PARTICLE_LIFESPAN*0.7, 4, -1.5));
+                    }
+                     // Small screen nudge on click
+                     startScreenShake(2, 50);
+
+                    if (this.wheelieBoostClicksLeft <= 0) {
+                        auraPoints += WHEELIE_BOOST_AURA_BONUS; // Bonus for success
+                        // playSound('boostSuccess');
+                        this.endWheelieBoost();
+                    }
+                } else {
+                    // Click was too late
+                    // playSound('boostFail');
+                    this.endWheelieBoost();
+                }
+            }
+        }
+
+        endWheelieBoost() {
+            if (!this.isWheelieBoosting) return; // Prevent multiple ends
+
+            this.isWheelieBoosting = false;
+            this.invincible = false;
+            this.wheelieBoostClicksLeft = 0;
+            boostClickIndicator.style.display = 'none';
+            // Give a slight upward nudge when boost ends?
+            this.velocityY = -3;
+            // Reset rotation smoothly (handled in normal update)
+             startScreenShake(4, 150); // Shake on ending boost
+        }
+    }
+
+    // Helper for particle emission point during power wheelie
+    function wheelieParticleOffsetX() {
+        // Emit from near the back wheel area
+        return player.x + player.width * 0.1;
+    }
+
+    // --- Building Class ---
+    class Building {
+        constructor(x, width, height) {
+            this.x = x;
+            this.y = canvas.height - height;
+            this.width = width;
+            this.height = height;
+            // More varied city colors: greys, browns, blues, occasional accent
+            const hue = Math.random() < 0.6 ? (Math.random() * 30 + 200) : (Math.random() * 40 + 15); // Blues/Greys or Browns/Tans
+            const saturation = Math.random() * 30 + 20; // Low saturation
+            const lightness = Math.random() * 25 + 30; // Darker buildings
+            this.color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            this.windowColor = `hsla(${hue}, ${saturation + 10}%, ${lightness + 30}%, 0.6)`; // Lighter, slightly transparent windows
+        }
+
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+
+            // Simple pattern/texture (optional)
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = 1;
+            for(let lineY = this.y + 20; lineY < canvas.height; lineY += 20) {
+                ctx.beginPath();
+                ctx.moveTo(this.x, lineY);
+                ctx.lineTo(this.x + this.width, lineY);
+                ctx.stroke();
+            }
+
+            // Add simple window details
+            ctx.fillStyle = this.windowColor;
+            const windowSize = 10;
+            const gap = 15;
+            for (let wy = this.y + gap; wy < canvas.height - windowSize; wy += windowSize + gap) {
+                 for (let wx = this.x + gap; wx < this.x + this.width - windowSize; wx += windowSize + gap) {
+                    if (Math.random() > 0.1) { // Some windows are "off"
+                       ctx.fillRect(wx + Math.random()*2-1, wy + Math.random()*2-1, windowSize, windowSize); // Slight jitter
+                    }
+                 }
+            }
+        }
+
+        update() {
+            const speedMultiplier = player && player.isWheelieBoosting ? WHEELIE_BOOST_SPEED_MULTIPLIER : 1;
+            this.x -= gameSpeed * speedMultiplier;
+        }
+    }
+
+    // --- Particle Class ---
+     class Particle {
+        constructor(x, y, color, size, lifespan, vx = 0, vy = 0) {
+            this.x = x;
+            this.y = y;
+            this.size = Math.random() * size + 1;
+            this.color = color; // Expect rgba string preferably
+            this.lifespan = lifespan * (Math.random() * 0.5 + 0.75); // Add variability
+            this.initialLifespan = this.lifespan;
+             // Base velocity + random component + slight influence from game speed
+            this.velocityX = (Math.random() - 0.5) * vx - gameSpeed * 0.1 + vx;
+            this.velocityY = (Math.random() - 0.6) * Math.abs(vy) + vy; // Bias random part based on input vy
+            this.gravityEffect = GRAVITY * (Math.random() * 0.3 + 0.05); // Particles have less gravity
+        }
+
+        draw() {
+            const opacity = Math.max(0, (this.lifespan / this.initialLifespan)) ** 1.5; // Fade out faster at the end
+            ctx.globalAlpha = opacity;
+            ctx.fillStyle = this.color;
+
+            // Simple square particle for performance/style
+            // ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+            // Circle particle
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.globalAlpha = 1.0; // Reset global alpha
+        }
+
+        update() {
+            this.x += this.velocityX;
+            this.y += this.velocityY;
+            this.velocityY += this.gravityEffect;
+            this.lifespan--;
+            this.size *= 0.98; // Shrink slightly
+        }
+    }
+
+
+    // --- Game Functions ---
+    function spawnBuilding() {
+        if (!buildings.length) return; // Safety check
+
+        const lastBuilding = buildings[buildings.length - 1];
+        // Calculate gap based on current speed and difficulty
+        const dynamicGapMin = adjustedGapMin + gameSpeed * 2;
+        const dynamicGapMax = adjustedGapMax + gameSpeed * 4;
+        const gap = Math.random() * (dynamicGapMax - dynamicGapMin) + dynamicGapMin;
+
+        const newX = lastBuilding.x + lastBuilding.width + gap;
+        const newWidth = Math.random() * (BUILDING_MAX_WIDTH - BUILDING_MIN_WIDTH) + BUILDING_MIN_WIDTH;
+
+        // Make height relative to the previous building's height to avoid impossible jumps (mostly)
+        const heightVariation = canvas.height * 0.25; // Max height difference
+        const minH = Math.max(BUILDING_HEIGHT_MIN, lastBuilding.height - heightVariation);
+        const maxH = Math.min(BUILDING_HEIGHT_MAX, lastBuilding.height + heightVariation);
+        const newHeight = Math.random() * (maxH - minH) + minH;
+
+        buildings.push(new Building(newX, newWidth, newHeight));
+    }
+
+    function updateBuildings() {
+        let pointsToAdd = 0;
+        for (let i = buildings.length - 1; i >= 0; i--) {
+            buildings[i].update();
+            // Check for removal
+            if (buildings[i].x + buildings[i].width < 0) {
+                // Add points based on building width and speed multiplier
+                 pointsToAdd += Math.floor((buildings[i].width / 50) * (player.isWheelieBoosting ? 2 : 1));
+                buildings.splice(i, 1);
+            }
+        }
+         auraPoints += pointsToAdd;
+
+        // Spawn new buildings if the last one is getting close to the edge
+        if (buildings.length > 0) {
+             const lastBuilding = buildings[buildings.length - 1];
+             if (lastBuilding.x + lastBuilding.width < canvas.width + Math.max(canvas.width, 500)) { // Spawn further ahead
+                 spawnBuilding();
+             }
+        } else if (!isGameOver) {
+             // Should not happen in normal play, but if all buildings are gone, spawn one
+             buildings.push(new Building(50, 200, BUILDING_HEIGHT_MIN));
+             spawnBuilding();
+        }
+    }
+
+    function updateParticles() {
+         for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            if (particles[i].lifespan <= 0 || particles[i].size < 0.5) {
+                particles.splice(i, 1);
+            }
+        }
+         // Draw remaining particles
+         particles.forEach(p => p.draw());
+    }
+
+    function startScreenShake(intensity, duration) {
+        // Only apply new shake if it's stronger or the current one is finished
+        if (intensity > currentShakeIntensity || currentShakeDuration <= 0) {
+            currentShakeIntensity = intensity;
+            currentShakeDuration = duration;
+            shakeStartTime = Date.now();
+        }
+    }
+
+    function applyScreenShake() {
+        if (currentShakeIntensity > 0 && currentShakeDuration > 0) {
+            const elapsed = Date.now() - shakeStartTime;
+            if (elapsed < currentShakeDuration) {
+                const decay = 1 - (elapsed / currentShakeDuration);
+                const currentIntensity = currentShakeIntensity * decay * decay; // Faster decay
+                const xOffset = (Math.random() - 0.5) * 2 * currentIntensity;
+                const yOffset = (Math.random() - 0.5) * 2 * currentIntensity;
+                ctx.translate(xOffset, yOffset);
+            } else {
+                currentShakeIntensity = 0; // Stop shake
+                currentShakeDuration = 0;
+            }
+        }
+    }
+
+
+    function gameLoop(timestamp) {
+        if (isGameOver) {
+            showGameOver();
+            return; // Stop the loop
+        }
+
+        const deltaTime = Math.min(32, timestamp - lastTime); // Cap delta time to prevent large jumps (e.g., tab unfocus)
+        lastTime = timestamp;
+        frameCount++;
+
+        // --- Clear Canvas ---
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // --- Apply Screen Shake ---
+        ctx.save();
+        applyScreenShake();
+
+        // --- Draw Background (Dynamic Sky) ---
+        const skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.8);
+        const timeOfDayFactor = (Math.sin(frameCount * 0.001) + 1) / 2; // Slow cycle for day/night feel
+        const topColor = `hsl(210, 70%, ${30 + timeOfDayFactor * 40}%)`; // Blueish, lighter during "day"
+        const bottomColor = `hsl(210, 60%, ${50 + timeOfDayFactor * 25}%)`;
+        skyGradient.addColorStop(0, topColor);
+        skyGradient.addColorStop(1, bottomColor);
+        ctx.fillStyle = skyGradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // --- Draw simple background elements (distant buildings/stars) ---
+         ctx.fillStyle = `rgba(255, 255, 255, ${0.3 * (1-timeOfDayFactor)})`; // Stars visible at night
+         for(let i=0; i< 30; ++i) {
+             ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height*0.6, 2, 2);
+         }
+
+        // --- Update ---
+        gameSpeed += adjustedSpeedIncrement * (deltaTime / 16.67); // Adjust speed based on deltaTime relative to 60fps
+
+        handleInput(); // Process continuous input flags
+
+        player.update(deltaTime);
+        updateBuildings();
+        updateParticles(); // Update particles before drawing player/buildings
+
+        // --- Collision Checks ---
+        // Player falling off handled in player.update
+        // Side collision check
+        if (!player.invincible) {
+            buildings.forEach(building => {
+                 // Check if player's front side hits the building's front side
+                 if (player.x + player.width > building.x && // Player right edge past building left edge
+                     player.x < building.x + 20 && // Player left edge not too far past building left edge (overlap)
+                     player.y + player.height > building.y + 10) // Player bottom is below building top (hitting side, not landing)
+                 {
+                     // More precise check: was player mostly to the left in the previous frame?
+                     // This simple check is prone to false positives if jumping near edges.
+                     // For now, this basic check suffices.
+                     isGameOver = true;
+                     startScreenShake(10, 200); // Shake hard on crash
+                     // playSound('crash');
+                 }
+            });
+        }
+
+        // --- Draw Game Elements ---
+        buildings.forEach(building => building.draw());
+        // Draw particles *after* buildings but *before* player for better layering
+        particles.forEach(p => p.draw());
+        player.draw();
+
+
+        // --- Restore context after screen shake ---
+         ctx.restore();
+
+        // --- UI Update ---
+        scoreDisplay.textContent = Math.floor(auraPoints);
+        boostChargeDisplay.textContent = Math.floor(player.powerWheelieCharge);
+
+
+        requestAnimationFrame(gameLoop); // Continue the loop
+    }
+
+    function handleInput() {
+        // Apply state based on flags set by event listeners
+        if (powerWheelieInputActive) {
+             player.startPowerWheelie();
+        } else {
+             player.stopPowerWheelie();
+        }
+    }
+
+    function handleInteractionStart(event) {
+        event.preventDefault();
+        if (isGameOver) return;
+
+        const isTouchEvent = event.type.startsWith('touch');
+        const clickX = isTouchEvent ? event.touches[0].clientX : event.clientX;
+        const rect = canvas.getBoundingClientRect();
+        const relativeX = clickX - rect.left;
+
+        if (player.isWheelieBoosting) {
+            player.maintainWheelieBoost(); // Any click/tap during boost is for maintenance
+            return;
+        }
+
+        if (isMobile) {
+            if (relativeX < canvas.width / 3) { // Left third: Power Wheelie (Hold)
+                powerWheelieInputActive = true;
+            } else { // Right two-thirds: Jump (Tap)
+                 player.jump();
+            }
+        } else { // PC Controls
+            if (event.button === 0) { // Left Mouse Click
+               player.jump();
+            }
+        }
+    }
+
+    function handleInteractionEnd(event) {
+         event.preventDefault();
+         if (isGameOver) return;
+
+         if (isMobile) {
+             // Check if the ending touch was the one initiating power wheelie.
+             // Simple: Assume any touch end stops the power wheelie flag.
+             powerWheelieInputActive = false;
+         }
+         // No action needed for PC mouseup / keyup here, handled by specific listeners
+    }
+
+    function setupControls() {
+        keys = {};
+        powerWheelieInputActive = false; // Ensure reset
+
+        // --- Keyboard (PC) ---
+        window.addEventListener('keydown', (e) => {
+            if (isGameOver || isMobile) return;
+            if (e.repeat) return; // Ignore repeats for single actions
+
+            if (e.code === 'Space') {
+                powerWheelieInputActive = true;
+                 e.preventDefault();
+            }
+             if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+                 player.jump();
+                 e.preventDefault();
+             }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (isGameOver || isMobile) return;
+             if (e.code === 'Space') {
+                 powerWheelieInputActive = false;
+             }
+        });
+
+        // --- Mouse (PC) & Touch (Mobile) ---
+        canvas.addEventListener('mousedown', handleInteractionStart);
+        canvas.addEventListener('touchstart', handleInteractionStart, { passive: false }); // Use passive: false to allow preventDefault
+
+        // Release listeners (only really needed for mobile hold)
+        canvas.addEventListener('mouseup', handleInteractionEnd); // Could potentially stop power wheelie if mouse held? Less intuitive.
+        canvas.addEventListener('touchend', handleInteractionEnd);
+        canvas.addEventListener('touchcancel', handleInteractionEnd);
+
+
+        // Set controls info text based on detected platform
+         if (isMobile) {
+            controlsInfoDisplay.textContent = "Tap Left 1/3 & HOLD = Power Wheelie | Tap Right 2/3 = Jump | Tap Anywhere during BOOST!";
+         } else {
+            controlsInfoDisplay.textContent = "HOLD Space = Power Wheelie | ArrowUp / W / Click = Jump | Click during BOOST!";
+         }
+    }
+
+     function showGameOver() {
+        finalScoreDisplay.textContent = Math.floor(auraPoints);
+        gameOverScreen.style.display = 'block';
+        // Maybe add a slight delay before the restart button is fully active?
+    }
+
+    function resetGame() {
+        isGameOver = false;
+        auraPoints = 0;
+        gameSpeed = INITIAL_SPEED;
+        difficultyMultiplier = isMobile ? 0.85 : 1.0; // Mobile slightly easier base
+        adjustedGapMin = GAP_MIN_BASE / difficultyMultiplier;
+        adjustedGapMax = GAP_MAX_BASE / difficultyMultiplier;
+        adjustedSpeedIncrement = SPEED_INCREMENT * difficultyMultiplier;
+
+        player = new Player();
+        buildings = [];
+        particles = [];
+        powerWheelieInputActive = false;
+        keys = {};
+        frameCount = 0;
+        currentShakeIntensity = 0; // Reset screen shake
+        currentShakeDuration = 0;
+
+        // Create initial set of buildings
+        let currentX = -50; // Start slightly off-screen left
+        const initialBuildingHeight = canvas.height * 0.2; // Start low
+        for (let i = 0; i < 8; i++) {
+            const width = (i === 0 ? 300 : Math.random() * (BUILDING_MAX_WIDTH - BUILDING_MIN_WIDTH) + BUILDING_MIN_WIDTH);
+            const height = initialBuildingHeight + Math.random() * 50; // Gradually increase height potential
+            const gap = (i === 0 ? 0 : (Math.random() * (adjustedGapMin*0.5 - 50) + 50)); // Smaller initial gaps
+             buildings.push(new Building(currentX + gap, width, height));
+             currentX += width + gap;
+        }
+
+        // Ensure player starts safely on the first wide building
+         player.y = buildings[0].y - player.height;
+         player.x = buildings[0].x + buildings[0].width / 3 - player.width / 2;
+         player.isOnGround = true;
+         player.velocityY = 0;
+         player.powerWheelieCharge = 0;
+         player.rotation = 0;
+         player.isWheelieBoosting = false;
+         player.isPowerWheeling = false;
+         player.invincible = false;
+
+
+        gameOverScreen.style.display = 'none';
+        boostClickIndicator.style.display = 'none';
+
+        // Start the game loop
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // --- Initialization ---
+    window.addEventListener('resize', resizeCanvas); // Adjust canvas on resize
+    restartButton.addEventListener('click', resetGame);
+
+    resizeCanvas(); // Initial canvas sizing
+    setupControls();
+    resetGame(); // Start the game
+
+</script>
+
+</body>
+</html>

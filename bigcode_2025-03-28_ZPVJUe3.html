@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA Infiltration - The Nitro Quest</title>
+    <style>
+        :root {
+            --discord-dark: #2f3136;
+            --discord-darker: #202225;
+            --discord-darkest: #18191c;
+            --discord-light: #36393f;
+            --discord-text: #dcddde;
+            --discord-text-muted: #72767d;
+            --discord-mention: #7289da;
+            --discord-online: #43b581;
+            --discord-idle: #faa61a;
+            --discord-dnd: #f04747;
+            --discord-offline: #747f8d;
+            --accent-color: #f1c40f; /* Gold for Nitro/Aura */
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: var(--discord-darker);
+            color: var(--discord-text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden; /* Prevent scrollbars on body */
+        }
+
+        #game-container {
+            width: 95%;
+            max-width: 1000px;
+            height: 90vh;
+            max-height: 700px;
+            background-color: var(--discord-light);
+            border-radius: 8px;
+            display: flex;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            overflow: hidden; /* Ensure children don't overflow */
+        }
+
+        /* Sidebar (Members List) */
+        #sidebar {
+            width: 240px;
+            background-color: var(--discord-dark);
+            display: flex;
+            flex-direction: column;
+            padding: 10px 0;
+            overflow-y: auto;
+        }
+
+        #sidebar h2 {
+            color: var(--discord-text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            padding: 10px 15px;
+            margin: 0;
+        }
+
+        #member-list {
+            list-style: none;
+            padding: 0 10px;
+            margin: 0;
+        }
+
+        .member {
+            display: flex;
+            align-items: center;
+            padding: 8px 5px;
+            margin-bottom: 2px;
+            border-radius: 4px;
+            cursor: default; /* No direct interaction yet */
+            opacity: 0.7; /* Dimmed initially */
+            transition: background-color 0.2s, opacity 0.2s;
+        }
+        .member:hover {
+             background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .member.online {
+            opacity: 1;
+        }
+        .member.meeth {
+            opacity: 1; /* Meeth always visible */
+        }
+        .member.neshtek {
+            opacity: 1;
+            background-color: rgba(114, 137, 218, 0.1); /* Highlight Neshtek slightly */
+        }
+
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            position: relative;
+        }
+
+        .avatar::after { /* Status indicator */
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--discord-dark);
+        }
+        .member.online .avatar::after { background-color: var(--discord-online); }
+        .member.offline .avatar::after { background-color: var(--discord-offline); }
+        .member.idle .avatar::after { background-color: var(--discord-idle); }
+        .member.dnd .avatar::after { background-color: var(--discord-dnd); }
+
+
+        .member-name {
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .member-flag {
+            margin-left: 5px;
+        }
+
+        .member-tag {
+            font-size: 11px;
+            color: var(--discord-text-muted);
+            margin-left: auto; /* Push tag to the right */
+            padding-right: 5px;
+        }
+
+
+        /* Main Content Area */
+        #main-content {
+            flex-grow: 1;
+            background-color: var(--discord-light);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Chat Area */
+        #chat-area {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto; /* Enable scrolling for messages */
+            display: flex;
+            flex-direction: column-reverse; /* New messages appear at bottom */
+        }
+
+        #message-container {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+        }
+
+        .message-avatar {
+             width: 40px;
+             height: 40px;
+             min-width: 40px;
+             border-radius: 50%;
+             margin-right: 15px;
+             display: flex;
+             justify-content: center;
+             align-items: center;
+             font-size: 20px;
+             background-color: var(--discord-dark); /* Placeholder bg */
+        }
+
+        .message-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 4px;
+        }
+
+        .message-author {
+            font-weight: 500;
+            color: var(--discord-text);
+            margin-right: 8px;
+            font-size: 15px;
+        }
+        .message-author.meeth { color: var(--accent-color); font-weight: bold; } /* Highlight Meeth */
+        .message-author.neshtek { color: var(--discord-mention); } /* Highlight Player */
+
+
+        .message-timestamp {
+            color: var(--discord-text-muted);
+            font-size: 11px;
+        }
+
+        .message-text {
+            font-size: 15px;
+            line-height: 1.4;
+            white-space: pre-wrap; /* Preserve whitespace and newlines */
+            word-wrap: break-word;
+        }
+        .message-text code {
+            background-color: var(--discord-darker);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: Consolas, monospace;
+            font-size: 0.9em;
+        }
+        .message-text strong { color: var(--accent-color); }
+
+
+        .system-message .message-text {
+            color: var(--discord-text-muted);
+            font-style: italic;
+        }
+
+        /* Input Area */
+        #input-area {
+            padding: 20px;
+            background-color: var(--discord-light);
+            border-top: 1px solid var(--discord-dark);
+        }
+
+        #options-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .option-button {
+            background-color: var(--discord-mention);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+            text-align: left;
+        }
+
+        .option-button:hover {
+            background-color: #5f73bc;
+        }
+         .option-button:disabled {
+            background-color: var(--discord-text-muted);
+            cursor: not-allowed;
+        }
+
+         /* Specific styles */
+        .aura-glow {
+            box-shadow: 0 0 15px var(--accent-color);
+        }
+        .pigeon { font-size: 1.5em; } /* Make pigeon emoji bigger */
+
+        /* Loading/Thinking indicator */
+        .thinking-indicator {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-left: 55px; /* Align with message content */
+            color: var(--discord-text-muted);
+            font-style: italic;
+            font-size: 14px;
+        }
+        .thinking-dot {
+            width: 6px;
+            height: 6px;
+            background-color: var(--discord-text-muted);
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: thinking 1.4s infinite both;
+        }
+        .thinking-dot:nth-child(1) { animation-delay: -0.32s; }
+        .thinking-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes thinking {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="sidebar">
+            <h2>AURA Groupchat (10/10)</h2>
+            <ul id="member-list">
+                <!-- Members will be dynamically added here -->
+            </ul>
+            <h2 style="margin-top: auto; border-top: 1px solid var(--discord-darkest); padding-top: 10px;">You</h2>
+             <ul id="player-status">
+                 <li id="neshtek-status" class="member neshtek online">
+                     <div class="avatar">🐦</div>
+                     <span class="member-name">Neshtek</span>
+                     <span class="member-tag">[Outside]</span>
+                 </li>
+             </ul>
+        </div>
+        <div id="main-content">
+            <div id="chat-area">
+                 <div id="message-container">
+                    <!-- Messages appear here -->
+                 </div>
+            </div>
+            <div id="input-area">
+                <div id="options-container">
+                    <!-- Options appear here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const members = [
+            { id: 'mindset', name: 'Mindset', flag: '🇬🇷', status: 'online', avatar: '🧠', trust: 0 },
+            { id: 'adam', name: 'Adam', flag: '🇪🇬', status: 'online', avatar: '💡', trust: 0 },
+            { id: 'abdullah', name: 'Abdullah', flag: '🇵🇰', status: 'online', avatar: '💻', trust: 0 },
+            { id: 'andrej', name: 'Andrej', flag: '🇷🇸', status: 'idle', avatar: '🎧', trust: 0 },
+            { id: 'blocky', name: 'Blocky', flag: '🇲🇾', status: 'online', avatar: '🧱', trust: 0 },
+            { id: 'frank', name: 'Frank', flag: '🇵🇪', status: 'dnd', avatar: '🎨', trust: 0 },
+            { id: 'happyman', name: 'HappyMan', flag: '🇵🇱', status: 'online', avatar: '😊', trust: 0 },
+            { id: 'henry', name: 'Henry', flag: '🇰🇿', status: 'idle', avatar: '🚀', trust: 0 },
+            { id: 'meeth', name: 'Meeth', flag: '🇪🇪', status: 'online', avatar: '👑', trust: -10, isMeeth: true }, // King emoji, lower initial trust
+            { id: 'salle', name: 'Salle', flag: '🇷🇸', status: 'offline', avatar: '🔧', trust: 0 },
+        ];
+
+        const gameState = {
+            currentScene: 'start',
+            playerName: 'Neshtek',
+            playerAvatar: '🐦',
+            infiltrationLevel: 0, // 0: Outside, 1: Found Clue, 2: Got Invite, 3: Lurking, 4: Active, 5: Trusted
+            inventory: [],
+            clues: {},
+            memberTrust: members.reduce((acc, m) => { acc[m.id] = m.trust; return acc; }, {}),
+            meethAwareness: 0, // How much Meeth notices you
+            failedAttempts: 0,
+            nitroGoalAchieved: false,
+            gameEnded: false,
+            variables: {
+                knows_about_nitro: false,
+                has_invite_link: false,
+                bypassed_verification: false,
+                posted_intro: false,
+                helped_member_id: null,
+                offended_member_id: null,
+                meeth_interaction_count: 0,
+            }
+        };
+
+        const memberListElement = document.getElementById('member-list');
+        const playerStatusElement = document.getElementById('neshtek-status');
+        const messageContainer = document.getElementById('message-container');
+        const optionsContainer = document.getElementById('options-container');
+        const chatArea = document.getElementById('chat-area');
+
+        function updateMemberList() {
+            memberListElement.innerHTML = '';
+            members.forEach(member => {
+                const li = document.createElement('li');
+                li.className = `member ${member.status} ${member.isMeeth ? 'meeth' : ''}`;
+                li.dataset.memberId = member.id;
+
+                const avatarDiv = document.createElement('div');
+                avatarDiv.className = 'avatar';
+                avatarDiv.textContent = member.avatar;
+                if(member.isMeeth && gameState.infiltrationLevel >= 4) {
+                     avatarDiv.classList.add('aura-glow');
+                }
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'member-name';
+                nameSpan.textContent = member.name;
+
+                const flagSpan = document.createElement('span');
+                flagSpan.className = 'member-flag';
+                flagSpan.textContent = member.flag;
+
+                li.appendChild(avatarDiv);
+                li.appendChild(nameSpan);
+                li.appendChild(flagSpan);
+
+                // Maybe add trust level indicator later if needed
+                // const trustSpan = document.createElement('span');
+                // trustSpan.className = 'member-tag';
+                // trustSpan.textContent = `T:${gameState.memberTrust[member.id]}`;
+                // li.appendChild(trustSpan);
+
+
+                memberListElement.appendChild(li);
+            });
+        }
+
+        function updatePlayerStatus() {
+             const tagSpan = playerStatusElement.querySelector('.member-tag');
+             let statusText = '[Outside]';
+             switch(gameState.infiltrationLevel) {
+                 case 1: statusText = '[Observing]'; break;
+                 case 2: statusText = '[Found Invite]'; break;
+                 case 3: statusText = '[Lurking]'; break;
+                 case 4: statusText = '[Member]'; break;
+                 case 5: statusText = '[Trusted?]'; break;
+             }
+             tagSpan.textContent = statusText;
+
+             // Update player avatar if needed (e.g., gets a disguise?)
+              playerStatusElement.querySelector('.avatar').textContent = gameState.playerAvatar;
+        }
+
+        function addMessage(author, text, timestamp = null, isSystem = false, authorId = null) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            if (isSystem) {
+                messageDiv.classList.add('system-message');
+            }
+
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = 'message-avatar';
+            if(authorId === 'neshtek') {
+                 avatarDiv.textContent = gameState.playerAvatar;
+            } else if (authorId) {
+                const member = members.find(m => m.id === authorId);
+                avatarDiv.textContent = member ? member.avatar : '❓';
+                 if(authorId === 'meeth' && gameState.infiltrationLevel >= 4) {
+                     avatarDiv.classList.add('aura-glow');
+                 }
+            } else if (!isSystem) {
+                 avatarDiv.textContent = '❓'; // Unknown author
+            }
+             // System messages don't have avatars usually, but we'll leave a space
+             if (isSystem) {
+                  avatarDiv.style.backgroundColor = 'transparent';
+             }
+
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'message-header';
+
+            if (!isSystem) {
+                const authorSpan = document.createElement('span');
+                authorSpan.className = 'message-author';
+                authorSpan.textContent = author;
+                if (authorId === 'meeth') authorSpan.classList.add('meeth');
+                if (authorId === 'neshtek') authorSpan.classList.add('neshtek');
+                headerDiv.appendChild(authorSpan);
+
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'message-timestamp';
+                timeSpan.textContent = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                headerDiv.appendChild(timeSpan);
+            }
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            // Basic Markdown-like formatting
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
+            text = text.replace(/`(.*?)`/g, '<code>$1</code>');       // Code
+            textDiv.innerHTML = text; // Use innerHTML carefully, assuming storyData is safe
+
+
+            if (!isSystem) {
+                 contentDiv.appendChild(headerDiv);
+            }
+            contentDiv.appendChild(textDiv);
+
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
+
+            messageContainer.prepend(messageDiv); // Prepend to add to the top (due to flex-direction: column-reverse)
+
+             // Scroll to bottom (which is visually the top because of column-reverse)
+             chatArea.scrollTop = 0; // Scroll to the absolute top to see the latest message
+        }
+
+         function showThinkingIndicator() {
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.className = 'thinking-indicator';
+            thinkingDiv.id = 'thinking';
+            thinkingDiv.innerHTML = `
+                <div class="thinking-dot"></div>
+                <div class="thinking-dot"></div>
+                <div class="thinking-dot"></div>
+                <span>Thinking...</span>
+            `;
+            messageContainer.prepend(thinkingDiv);
+            chatArea.scrollTop = 0;
+         }
+
+         function removeThinkingIndicator() {
+            const thinkingDiv = document.getElementById('thinking');
+            if (thinkingDiv) {
+                thinkingDiv.remove();
+            }
+         }
+
+
+        function displayScene(sceneId) {
+            if (gameState.gameEnded) return;
+
+            const scene = storyData[sceneId];
+            if (!scene) {
+                addMessage('System', `Error: Scene "${sceneId}" not found. Ending game.`, null, true);
+                endGame(false); // Or handle error differently
+                return;
+            }
+
+            // Clear previous options
+            optionsContainer.innerHTML = '';
+             disableOptions(); // Disable buttons while processing
+
+            // Process scene effects before displaying text
+             if (scene.effects) {
+                 scene.effects(gameState);
+                 updateMemberList(); // Update member list if effects changed status/trust
+                 updatePlayerStatus(); // Update player status display
+             }
+
+             // Display scene text/messages
+             let delay = 0;
+             const baseDelay = 800; // Base delay between messages
+
+             function processNextMessage(index) {
+                 if (index >= scene.messages.length) {
+                     // All messages displayed, now show options
+                     enableOptions();
+                     displayOptions(scene.options);
+                     return;
+                 }
+
+                 const msg = scene.messages[index];
+                 const messageDelay = msg.delay || baseDelay;
+
+                 setTimeout(() => {
+                      removeThinkingIndicator();
+                      const author = msg.authorId === 'neshtek' ? gameState.playerName : (members.find(m => m.id === msg.authorId)?.name || msg.author || 'System');
+                      const isSystem = !msg.authorId && msg.author === 'System';
+                      addMessage(author, msg.text, null, isSystem, msg.authorId);
+
+                      // Show thinking indicator before the *next* message if it's not the last one
+                      if(index < scene.messages.length - 1) {
+                           const nextMsgDelay = scene.messages[index + 1].delay || baseDelay;
+                           if (nextMsgDelay > 300) { // Only show thinking if there's a noticeable pause
+                                setTimeout(showThinkingIndicator, 150);
+                           }
+                      }
+
+                      processNextMessage(index + 1); // Process the next message
+                 }, messageDelay);
+             }
+
+             // Start message processing chain
+             if (scene.messages && scene.messages.length > 0) {
+                  const firstMsgDelay = scene.messages[0].delay || baseDelay;
+                   if (firstMsgDelay > 300) { // Show thinking before the first message
+                       showThinkingIndicator();
+                   }
+                  processNextMessage(0);
+             } else {
+                  // No messages, just show options immediately
+                  enableOptions();
+                  displayOptions(scene.options);
+             }
+        }
+
+
+        function displayOptions(options) {
+            optionsContainer.innerHTML = ''; // Clear previous options first
+             if (!options || options.length === 0) {
+                 // If no options, might be an end state or requires different interaction
+                 if (!gameState.gameEnded) {
+                     addMessage('System', "The path forward is unclear...", null, true);
+                     // Potentially add a default 'wait' or 'observe' option if applicable
+                 }
+                 return;
+             }
+
+            options.forEach((option, index) => {
+                // Check conditional display
+                 if (option.condition && !option.condition(gameState)) {
+                     return; // Skip this option if condition not met
+                 }
+
+                const button = document.createElement('button');
+                button.className = 'option-button';
+                button.textContent = `${index + 1}. ${option.text}`;
+                button.onclick = () => chooseOption(option);
+                optionsContainer.appendChild(button);
+            });
+        }
+
+         function disableOptions() {
+             const buttons = optionsContainer.querySelectorAll('.option-button');
+             buttons.forEach(button => button.disabled = true);
+         }
+
+         function enableOptions() {
+             const buttons = optionsContainer.querySelectorAll('.option-button');
+             buttons.forEach(button => button.disabled = false);
+         }
+
+        function chooseOption(option) {
+             if (gameState.gameEnded) return;
+
+            // Display player's choice as a message (optional)
+            // addMessage(gameState.playerName, `*Chooses: ${option.text}*`, null, false, 'neshtek');
+
+             disableOptions(); // Disable options while processing the choice
+
+
+             // Execute consequence function if it exists
+             if (option.consequence) {
+                 option.consequence(gameState);
+                 updateMemberList(); // Update member list if consequences changed status/trust
+                 updatePlayerStatus(); // Update player status display
+             }
+
+             // Move to the next scene
+             displayScene(option.nextScene);
+        }
+
+        function endGame(success) {
+             if (gameState.gameEnded) return; // Prevent multiple ends
+             gameState.gameEnded = true;
+             disableOptions();
+             optionsContainer.innerHTML = ''; // Clear options
+
+             const endMessage = success
+                ? `**SUCCESS!** You managed to convince Meeth! He smiles, his AURA practically glowing. "Aight bro, I gotchu." A wild Discord Nitro appears! You did it, Neshtek. You infiltrated AURA and secured the prize. <span class="pigeon">🐦</span>💰`
+                : `**FAILURE!** Your cover is blown, or you simply failed to impress the AURA. Meeth shakes his head. "Nah bro, not feeling the vibe." You're kicked from the server (or maybe just ignored forever). The Nitro remains elusive. <span class="pigeon">🐦</span>💨`;
+
+             const finalSceneId = success ? 'end_success' : 'end_failure';
+             if (storyData[finalSceneId]) {
+                  displayScene(finalSceneId);
+             } else {
+                  // Fallback if specific end scenes aren't defined
+                  setTimeout(() => { // Add slight delay for effect
+                       addMessage('System', endMessage, null, true);
+                  }, 1000);
+             }
+        }
+
+
+        // --- STORY DATA ---
+        const storyData = {
+            'start': {
+                messages: [
+                    { author: 'System', text: `You are Neshtek <span class="pigeon">🐦</span>. You've heard whispers of the legendary AURA Groupchat. Ten members, maximum exclusivity. And at its heart... **Meeth** <span class="member-flag">🇪🇪</span>. They say his generosity knows no bounds, especially when it comes to Discord Nitro. "I GOTCHU BRO" are the fabled words.`, delay: 500 },
+                    { author: 'System', text: `Your mission, should you choose to accept it: Infiltrate AURA. Gain their trust. And secure the Nitro from Meeth himself.`, delay: 1200 },
+                    { author: 'System', text: `You find yourself metaphorically standing outside the locked digital door of the group chat. The member list glows faintly in the sidebar. You can almost feel the **AURA**... and the faint scent of Nitro.`, delay: 1500 },
+                    { author: gameState.playerName, authorId: 'neshtek', text: `(Alright... time to get that Nitro. Where do I even begin?)`, delay: 1000 }
+                ],
+                options: [
+                    { text: "Scan the digital alleys for clues about an invite.", nextScene: 'scan_alleys', consequence: (gs) => { gs.infiltrationLevel = 1; } },
+                    { text: "Try to guess common invite words.", nextScene: 'guess_invite' },
+                    { text: "Observe the members from afar for weaknesses.", nextScene: 'observe_members' }
+                ]
+            },
+            'scan_alleys': {
+                messages: [
+                    { author: 'System', text: `You spend hours scouring related servers, old forum posts, questionable Discord lookup sites... It's digital dumpster diving.`, delay: 800 },
+                    { author: 'System', text: `Most leads are dead ends. Fake invites, expired links, scams... Typical. But then, a glint of digital gold...`, delay: 1200 },
+                    { author: 'System', text: `In a forgotten corner of a server dedicated to obscure Estonian memes (Meeth's home turf?), you find a message from Blocky <span class="member-flag">🇲🇾</span>: "lol meeth keeps the aura invite link pretty simple, just gotta know where he chills"`, delay: 1500 },
+                    { author: gameState.playerName, authorId: 'neshtek', text: `(Blocky... Meeth... Estonian memes... Chills? Maybe it's related to his hobbies or something?)`, delay: 800 }
+                ],
+                 options: [
+                     { text: "Focus on 'Estonian memes'. Try invite codes like 'tervitused' or 'eesti'.", nextScene: 'try_invite_meme' },
+                     { text: "Focus on 'where he chills'. Search for Meeth's known hangouts.", nextScene: 'search_hangouts' },
+                     { text: "Give up on this clue for now. Go back to observing.", nextScene: 'observe_members', consequence: (gs) => { gs.infiltrationLevel = 0;} } // Reset level if giving up
+                 ]
+            },
+            'guess_invite': {
+                 messages: [
+                     { author: 'System', text: `You try your luck with common Discord invite slugs...`, delay: 500 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `discord.gg/aura ?`, delay: 800 },
+                     { author: 'System', text: `*Invalid Invite.*`, delay: 500 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `discord.gg/meeth ?`, delay: 800 },
+                     { author: 'System', text: `*Invalid Invite.*`, delay: 500 },
+                      { author: gameState.playerName, authorId: 'neshtek', text: `discord.gg/nitro ?`, delay: 800 },
+                     { author: 'System', text: `*Invalid Invite.* (Too obvious)`, delay: 500 },
+                     { author: 'System', text: `This feels like a waste of time. Guessing randomly won't work against the **AURA**.`, delay: 1000 }
+                 ],
+                 options: [
+                     { text: "Okay, guessing is futile. Scan for proper clues.", nextScene: 'scan_alleys', consequence: (gs) => { gs.infiltrationLevel = 1; } },
+                     { text: "Maybe observe the members first?", nextScene: 'observe_members' }
+                 ]
+            },
+             'observe_members': {
+                messages: [
+                    { author: 'System', text: `You find a vantage point, a muted lurker account in a server adjacent to where some AURA members occasionally chat. You watch their interactions...`, delay: 800 },
+                    { author: 'mindset', authorId: 'mindset', text: `Adam <span class="member-flag">🇪🇬</span>, did you finish debugging that script? The deployment is tomorrow.`, delay: 1000 },
+                    { author: 'adam', authorId: 'adam', text: `Nearly, Mindset <span class="member-flag">🇬🇷</span>. Just wrestling with this async logic. Python is weird sometimes.`, delay: 1200 },
+                    { author: 'happyman', authorId: 'happyman', text: `Anyone wanna play some GeoGuessr later? 😊🇵🇱`, delay: 900 },
+                    { author: 'andrej', authorId: 'andrej', text: `maybe after my nap 🇷🇸 😴`, delay: 700 },
+                    { author: 'meeth', authorId: 'meeth', text: `Yo @everyone who needs **Nitro** rn? Feeling generous today, got that **AURA** flowing. ✨🇪🇪`, delay: 1500 },
+                    { author: 'blocky', authorId: 'blocky', text: `MEETH! Hook me up bro! My sub runs out soon! 🇲🇾🙏`, delay: 600 },
+                    { author: 'abdullah', authorId: 'abdullah', text: `^ What Blocky said! Legend! 🇵🇰`, delay: 700 },
+                    { author: 'meeth', authorId: 'meeth', text: `Blocky, Abdullah - **I GOTCHU BRO**. Check DMs. 😉`, delay: 1000 },
+                    { author: gameState.playerName, authorId: 'neshtek', text: `(There it is... the legendary 'I GOTCHU BRO'. He just gives it away! But only to *insiders*... I need that invite.)`, delay: 1300 }
+                ],
+                 options: [
+                    { text: "Continue observing (Look for security details).", nextScene: 'observe_security' },
+                    { text: "Seems like Blocky or Abdullah might be easy targets for info.", nextScene: 'target_blocky_abdullah' },
+                    { text: "Try to find that Estonian meme clue Blocky mentioned.", nextScene: 'scan_alleys', consequence: (gs) => { gs.infiltrationLevel = 1; } },
+                 ]
+             },
+             'try_invite_meme': {
+                messages: [
+                     { author: 'System', text: `You try combinations related to Estonia and greetings...`, delay: 500 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `discord.gg/tervitused ?`, delay: 800 },
+                     { author: 'System', text: `*Invalid Invite.*`, delay: 500 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `discord.gg/eesti ?`, delay: 800 },
+                     { author: 'System', text: `*Invalid Invite.*`, delay: 500 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Maybe something simpler... like 'tere'?) discord.gg/tere ?`, delay: 1000 },
+                     { author: 'System', text: `... The link resolves. **AURA Groupchat**. Verification Required.`, delay: 1200 },
+                     { author: 'System', text: `**Success!** You found the invite link! But there's a catch... a verification gate.`, delay: 800 }
+                ],
+                 options: [
+                    { text: "Proceed to verification.", nextScene: 'verification_gate', consequence: (gs) => { gs.infiltrationLevel = 2; gs.variables.has_invite_link = true; } },
+                 ]
+             },
+             'search_hangouts': {
+                  messages: [
+                     { author: 'System', text: `You search for online places Meeth might frequent. Gaming forums? Specific Discord servers? Maybe Twitch?`, delay: 800 },
+                     { author: 'System', text: `You find an old Twitch VOD archive. Meeth playing... surprisingly... *Euro Truck Simulator 2*. He's meticulously parking a truck in Tallinn.`, delay: 1500 },
+                     { author: 'System', text: `In the chat replay, someone asks for the group chat invite. Meeth, without looking away from his virtual truck, mutters:`, delay: 1200 },
+                     { author: 'meeth', authorId: 'meeth', text: `(Muffled) ...yeah it's just discord slash tere... basic Estonian greeting ya know...`, delay: 1000 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Tere! The basic greeting! That must be it!) discord.gg/tere`, delay: 800 },
+                     { author: 'System', text: `... The link resolves. **AURA Groupchat**. Verification Required.`, delay: 1200 },
+                     { author: 'System', text: `**Success!** You found the invite link! But there's a catch... a verification gate.`, delay: 800 }
+                 ],
+                  options: [
+                     { text: "Proceed to verification.", nextScene: 'verification_gate', consequence: (gs) => { gs.infiltrationLevel = 2; gs.variables.has_invite_link = true; } },
+                  ]
+             },
+             'observe_security': {
+                  messages: [
+                     { author: 'System', text: `You keep watching, paying attention to how new members (if any) join or how they discuss security.`, delay: 800 },
+                     { author: 'frank', authorId: 'frank', text: `Hey Meeth <span class="member-flag">🇪🇪</span>, did that verification bot update go through? The one that asks the 'AURA Question'? 🇵🇪`, delay: 1200 },
+                     { author: 'meeth', authorId: 'meeth', text: `Yeah Frank <span class="member-flag">🇵🇪</span>, should be live. Keeps the riff-raff out. Gotta maintain the **AURA**. Only real ones know the answer.`, delay: 1400 },
+                     { author: 'henry', authorId: 'henry', text: `What *is* the AURA Question anyway? I kinda forgor 💀 🇰🇿`, delay: 900 },
+                     { author: 'meeth', authorId: 'meeth', text: `Lol Henry <span class="member-flag">🇰🇿</span>. It's easy bro. Think about **generosity**. That's the key.`, delay: 1300 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Verification bot... asks an 'AURA Question'... related to 'generosity'? This is the gatekeeper.)`, delay: 1000 }
+                  ],
+                  options: [
+                     { text: "I think I know enough. Try to find the invite link.", nextScene: 'scan_alleys', condition: (gs) => !gs.variables.has_invite_link, consequence: (gs) => { gs.infiltrationLevel = 1; } },
+                     { text: "I have the invite link. Time to face the verification.", nextScene: 'verification_gate', condition: (gs) => gs.variables.has_invite_link },
+                     { text: "Maybe I can trick someone into revealing the answer?", nextScene: 'trick_for_answer' }
+                  ]
+             },
+             'target_blocky_abdullah': {
+                 messages: [
+                     { author: 'System', text: `Blocky and Abdullah seemed eager for Nitro. Maybe they're loose-lipped? You decide to craft a careful DM...`, delay: 800 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Okay, act casual, act like an admirer...)`, delay: 600 },
+                     { author: 'System', text: `You send a DM to Blocky: "Hey! Saw you in that server, heard Meeth hooked you up! That AURA group sounds awesome, wish I knew how to get in..."`, delay: 1500 },
+                      { author: 'System', text: `A reply comes back almost instantly.`, delay: 800 },
+                     { author: 'blocky', authorId: 'blocky', text: `lol yeah Meeth is the GOAT 🐐🇲🇾. Uh, idk about invites man, Meeth handles that. Pretty strict verification too. Sorry!`, delay: 1300 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Dead end. He's loyal, or scared.)`, delay: 700 },
+                      { author: 'System', text: `Trying Abdullah yields a similar result: "Sorry, can't help with invites. Meeth's rules."`, delay: 1000 },
+                     { author: 'System', text: `Directly asking seems too risky or ineffective. They value their spot.`, delay: 900 }
+                 ],
+                 options: [
+                     { text: "Back to observing. Need a different angle.", nextScene: 'observe_members' },
+                     { text: "Scan the alleys for the invite link clue.", nextScene: 'scan_alleys', consequence: (gs) => { gs.infiltrationLevel = 1; } }
+                 ]
+             },
+             'trick_for_answer': {
+                  messages: [
+                      { author: 'System', text: `Tricking someone... Risky. Who seems most likely to slip up? Maybe Henry <span class="member-flag">🇰🇿</span>, who forgot the question? Or HappyMan <span class="member-flag">🇵🇱</span>, who seems friendly?`, delay: 1200 },
+                      { author: gameState.playerName, authorId: 'neshtek', text: `(Let's try Henry. Pretend I'm already in but forgot too.)`, delay: 800 },
+                      { author: 'System', text: `You find a moment when Henry is active in the adjacent server. You send a carefully worded DM: "Hey Henry! Quick question, I spaced on the verification answer lol. Was it something about 'giving' or 'sharing'? Refresh my memory?"`, delay: 1800 },
+                      { author: 'System', text: `You wait, heart pounding...`, delay: 1000 },
+                      { author: 'henry', authorId: 'henry', text: `Oh hey! Haha yeah it trips people up. Meeth said it's about **generosity**, right? So the answer is just "**I GOTCHU BRO**". Simple once you know it 😉 🇰🇿`, delay: 1500 },
+                      { author: gameState.playerName, authorId: 'neshtek', text: `(YES! He fell for it! The answer is "I GOTCHU BRO"!)`, delay: 800 },
+                      { author: 'System', text: `You quickly thank Henry and back away before raising suspicion. You have the key!`, delay: 1000 },
+                  ],
+                  options: [
+                      { text: "I need the invite link first.", nextScene: 'scan_alleys', condition: (gs) => !gs.variables.has_invite_link, consequence: (gs) => { gs.clues['verification_answer'] = 'I GOTCHU BRO'; gs.infiltrationLevel = 1; } },
+                      { text: "I have the link and the answer! Proceed to verification!", nextScene: 'verification_gate', condition: (gs) => gs.variables.has_invite_link, consequence: (gs) => { gs.clues['verification_answer'] = 'I GOTCHU BRO'; } }
+                  ]
+             },
+
+             // --- Verification Gate ---
+             'verification_gate': {
+                 messages: [
+                    { author: 'Verification Bot', authorId: 'system', text: `Welcome to **AURA Groupchat**. To ensure the quality and vibe of our community, please answer the following question:`, delay: 1000 },
+                    { author: 'Verification Bot', authorId: 'system', text: `**What is the essence of the AURA spirit, often expressed by Meeth?**`, delay: 1200 },
+                    { author: gameState.playerName, authorId: 'neshtek', text: `(Okay, this is it. Frank mentioned an 'AURA Question'. Meeth said it's about generosity. Henry might have given me the exact phrase...)`, delay: 1000 }
+                 ],
+                 options: [
+                    { text: "Enter: 'Generosity'", nextScene: 'verification_fail_generic' },
+                    { text: "Enter: 'Nitro'", nextScene: 'verification_fail_generic' },
+                    { text: "Enter: 'I GOTCHU BRO'", nextScene: 'verification_success', condition: (gs) => gs.clues['verification_answer'] === 'I GOTCHU BRO' },
+                    { text: "Enter: 'I GOTCHU BRO'", nextScene: 'verification_success_guess', condition: (gs) => !gs.clues['verification_answer'] }, // If guessing
+                    { text: "Panic and leave.", nextScene: 'verification_abort' },
+                 ]
+             },
+              'verification_fail_generic': {
+                 messages: [
+                     { author: 'Verification Bot', authorId: 'system', text: `*Incorrect.* Access denied. The AURA remains elusive.`, delay: 800 },
+                     { author: 'System', text: `You've been disconnected from the server. Failure.`, delay: 600 }
+                 ],
+                 options: [
+                     { text: "Try again from the start (Find invite/clues).", nextScene: 'start', consequence: (gs) => {
+                         // Reset relevant state, increase failure count
+                         gs.infiltrationLevel = 0;
+                         gs.variables.has_invite_link = false;
+                         gs.clues = {};
+                         gs.failedAttempts++;
+                         // Maybe add harsher consequences later, e.g., Meeth gets suspicious
+                         if(gs.failedAttempts > 1) gs.meethAwareness += 1;
+                       }
+                     },
+                     // Option to give up completely?
+                 ]
+             },
+             'verification_success_guess': {
+                messages: [
+                     { author: 'Verification Bot', authorId: 'system', text: `Processing...`, delay: 1000 },
+                     { author: 'Verification Bot', authorId: 'system', text: `...Correct. Welcome to **AURA**.`, delay: 1500 },
+                     { author: 'System', text: `Incredible! You guessed the exact phrase! You're in. But you came in cold, without fully understanding the context. Be careful.`, delay: 1200 },
+                     { author: 'System', text: `You now see the #general channel. Messages are flying. You're a lurker for now.`, delay: 1000 }
+                ],
+                options: [
+                     { text: "Observe the chat.", nextScene: 'lurking_observe', consequence: (gs) => { gs.infiltrationLevel = 3; gs.variables.bypassed_verification = true; } }
+                ]
+             },
+              'verification_success': {
+                 messages: [
+                     { author: 'Verification Bot', authorId: 'system', text: `Processing...`, delay: 1000 },
+                     { author: 'Verification Bot', authorId: 'system', text: `...Correct. Welcome to **AURA**.`, delay: 1500 },
+                     { author: 'System', text: `You used the information wisely. You're in! The gates have opened.`, delay: 1000 },
+                     { author: 'System', text: `You now see the #general channel. Messages are flying. You're a lurker for now. Don't blow your cover.`, delay: 1200 }
+                 ],
+                 options: [
+                     { text: "Observe the chat.", nextScene: 'lurking_observe', consequence: (gs) => { gs.infiltrationLevel = 3; gs.variables.bypassed_verification = true; } }
+                 ]
+             },
+             'verification_abort': {
+                 messages: [
+                      { author: 'System', text: `You hesitate, the pressure mounting. You close the verification window.`, delay: 800 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Maybe I wasn't ready... Need to be sure.)`, delay: 600 },
+                     { author: 'System', text: `You're back outside. The invite link is still valid, but you need confidence and the right answer.`, delay: 1000 }
+                 ],
+                 options: [
+                      { text: "Scan for more clues about the answer.", nextScene: 'observe_security' },
+                      { text: "Try to trick Henry again (risky?).", nextScene: 'trick_for_answer', condition: (gs) => !gs.clues['verification_answer'] }, // Only if answer not known
+                       { text: "Re-attempt verification (if you think you know).", nextScene: 'verification_gate' },
+                 ]
+             },
+
+             // --- Lurking Phase ---
+             'lurking_observe': {
+                 messages: [
+                     { author: 'System', text: `You're inside AURA. Status: Lurker. You can read messages, but haven't spoken yet. The chat is active.`, delay: 800 },
+                     { author: 'salle', authorId: 'salle', text: `Anyone seen the latest benchmarks for the new AMD chips? Thinking of upgrading my rig. 🇷🇸🔧`, delay: 1200 },
+                     { author: 'abdullah', authorId: 'abdullah', text: `Yeah Salle <span class="member-flag">🇷🇸</span>, saw them! Pretty impressive price-to-performance. Thinking about it too. 🇵🇰`, delay: 1000 },
+                     { author: 'meeth', authorId: 'meeth', text: `@Salle @Abdullah If you guys upgrade, need that **Nitro** to flex the new setup? 😉 **I GOTCHU BRO**.`, delay: 1600 },
+                     { author: 'salle', authorId: 'salle', text: `Legend! Thanks Meeth! <span class="member-flag">🇪🇪👑</span>`, delay: 600 },
+                     { author: 'mindset', authorId: 'mindset', text: `Focus, people. Let's keep the tech talk in #hardware maybe? 🇬🇷`, delay: 900 },
+                     { author: 'happyman', authorId: 'happyman', text: `Aww, Mindset, always serious! 😊🇵🇱 GeoGuessr anyone?`, delay: 800 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Okay... Meeth is actively offering Nitro. Mindset seems like the serious type. HappyMan is... happy. Salle and Abdullah are tech focused. Need to make a good first impression.)`, delay: 1400 }
+                 ],
+                 options: [
+                     { text: "Continue lurking and gathering info.", nextScene: 'lurking_observe_more' },
+                     { text: "Make your first post: A simple 'Hello'.", nextScene: 'post_hello' },
+                     { text: "Make your first post: Compliment Meeth's generosity.", nextScene: 'post_compliment_meeth' },
+                     { text: "Make your first post: Ask a tech question (risky?).", nextScene: 'post_tech_question' }
+                 ]
+             },
+             'lurking_observe_more': {
+                 // Add more chat examples, maybe involving other members like Frank, Andrej, Blocky
+                 messages: [
+                     { author: 'System', text: `You continue to watch the flow of conversation.`, delay: 500 },
+                     { author: 'frank', authorId: 'frank', text: `Just finished a new digital painting, check #creative! Took ages. 🇵🇪🎨`, delay: 1100 },
+                     { author: 'andrej', authorId: 'andrej', text: `Nice Frank! Looks dope. Gonna check it after this track renders. 🇷🇸🎧`, delay: 900 },
+                     { author: 'blocky', authorId: 'blocky', text: `Anyone else having issues with the Discord API rate limits today? My bot keeps getting 429s. 🇲🇾`, delay: 1300 },
+                     { author: 'adam', authorId: 'adam', text: `Yeah Blocky <span class="member-flag">🇲🇾</span>, seeing that too. Might be regional or something. 🇪🇬💡`, delay: 1000 },
+                      { author: 'meeth', authorId: 'meeth', text: `Damn rate limits... need **Nitro** for higher limits maybe? 🤔 JK... unless? 😉 **I GOTCHU BRO** if it helps the bot work.`, delay: 1700 },
+                     { author: 'blocky', authorId: 'blocky', text: `You're the best Meeth! <span class="member-flag">🇪🇪👑</span>`, delay: 600 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Meeth's generosity is almost a reflex. Frank is artistic, Andrej into music/rendering, Blocky and Adam are developers... Good intel.)`, delay: 1200 }
+                 ],
+                 options: [
+                     { text: "Okay, time to speak. Post 'Hello'.", nextScene: 'post_hello' },
+                     { text: "Compliment Meeth now.", nextScene: 'post_compliment_meeth' },
+                     { text: "Engage with Blocky/Adam about API limits.", nextScene: 'post_api_engage' }
+                 ]
+             },
+
+             // --- First Posts & Interactions ---
+              'post_hello': {
+                 messages: [
+                     { author: gameState.playerName, authorId: 'neshtek', text: `Hello everyone! 👋 Just joined.`, delay: 500 },
+                     { author: 'System', text: `You hit send. Your first message in AURA.`, delay: 800 },
+                     { author: 'happyman', authorId: 'happyman', text: `Hey Neshtek! Welcome! 😊🇵🇱`, delay: 1200 },
+                     { author: 'meeth', authorId: 'meeth', text: `Welcome Neshtek 🐦. Good **AURA** vibes only, yeah?`, delay: 1500 },
+                     { author: 'mindset', authorId: 'mindset', text: `Welcome. Read the rules.`, delay: 1000 },
+                     { author: 'System', text: `A mixed reception. HappyMan is friendly, Meeth acknowledges you (conditionally), Mindset is curt. Not bad, not great.`, delay: 1300 }
+                 ],
+                 options: [
+                     { text: "Reply: 'Thanks! Looking forward to it!'", nextScene: 'intro_reply_positive', consequence: (gs) => { gs.infiltrationLevel = 4; gs.variables.posted_intro = true; gs.memberTrust['happyman'] += 1; gs.memberTrust['meeth'] += 0; } }, // Neutral gain with Meeth for now
+                     { text: "Reply: 'Got it, Mindset. Will do.'", nextScene: 'intro_reply_mindset', consequence: (gs) => { gs.infiltrationLevel = 4; gs.variables.posted_intro = true; gs.memberTrust['mindset'] += 1; } }, // Gain slight trust with Mindset
+                     { text: "Say nothing more for now.", nextScene: 'post_intro_silent' }
+                 ]
+             },
+             'post_compliment_meeth': {
+                   messages: [
+                     { author: gameState.playerName, authorId: 'neshtek', text: `Hey everyone! Just joined. Have to say, @Meeth <span class="member-flag">🇪🇪</span>, heard about your generosity. That's some serious **AURA**!`, delay: 500 },
+                     { author: 'System', text: `Bold move, mentioning Meeth and AURA immediately.`, delay: 800 },
+                     { author: 'meeth', authorId: 'meeth', text: `Ayy, Neshtek 🐦! Welcome. You get it. 😉 Keep that energy. ✨`, delay: 1400 },
+                     { author: 'blocky', authorId: 'blocky', text: `^^^ This guy knows what's up! Welcome! 🇲🇾`, delay: 900 },
+                      { author: 'mindset', authorId: 'mindset', text: `...Welcome.`, delay: 1200 }, // Slightly suspicious?
+                     { author: 'System', text: `Meeth seems pleased, and Blocky backs you up. Mindset seems wary of the brown-nosing. You've made an impression, but polarized it slightly.`, delay: 1500 }
+                 ],
+                 options: [
+                     { text: "Reply: 'Thanks Meeth! Happy to be here.'", nextScene: 'intro_reply_positive', consequence: (gs) => { gs.infiltrationLevel = 4; gs.variables.posted_intro = true; gs.memberTrust['meeth'] += 2; gs.memberTrust['blocky'] += 1; gs.memberTrust['mindset'] -= 1; gs.meethAwareness += 1;} },
+                     { text: "Reply: 'Just speaking facts! Good vibes.'", nextScene: 'intro_reply_positive', consequence: (gs) => { gs.infiltrationLevel = 4; gs.variables.posted_intro = true; gs.memberTrust['meeth'] += 2; gs.memberTrust['blocky'] += 1; gs.memberTrust['mindset'] -= 1; gs.meethAwareness += 1;} },
+                     { text: "Say nothing more for now.", nextScene: 'post_intro_silent' }
+                 ]
+             },
+              'post_tech_question': {
+                    messages: [
+                     { author: gameState.playerName, authorId: 'neshtek', text: `Hey all, just joined. Quick q - anyone have experience with running multiple Node instances managed by PM2 on a low-resource VPS? Seeing some weird memory leaks.`, delay: 500 },
+                     { author: 'System', text: `You try to fit in by asking a relevant technical question.`, delay: 800 },
+                     { author: 'adam', authorId: 'adam', text: `Oh hey Neshtek, welcome! Yeah, PM2 can be tricky. Are you using cluster mode? What Node version? 🇪🇬💡`, delay: 1600 },
+                     { author: 'abdullah', authorId: 'abdullah', text: `^ Good questions. Also check your logging output, maybe a specific request is causing the leak? Welcome btw! 🇵🇰💻`, delay: 1100 },
+                     { author: 'meeth', authorId: 'meeth', text: `Welcome Neshtek 🐦. Tech talk! Love it. We got some smart ppl here.`, delay: 1400 },
+                     { author: 'System', text: `Success! Adam and Abdullah jumped right in, showing their helpful nature. Meeth seems to approve of the technical discussion. You've found common ground.`, delay: 1300 }
+                 ],
+                 options: [
+                     { text: "Engage with Adam & Abdullah (Provide fake details).", nextScene: 'tech_followup', consequence: (gs) => { gs.infiltrationLevel = 4; gs.variables.posted_intro = true; gs.memberTrust['adam'] += 2; gs.memberTrust['abdullah'] += 2; gs.memberTrust['meeth'] += 1;} },
+                     { text: "Thank them and say you'll check.", nextScene: 'intro_reply_positive', consequence: (gs) => { gs.infiltrationLevel = 4; gs.variables.posted_intro = true; gs.memberTrust['adam'] += 1; gs.memberTrust['abdullah'] += 1; gs.memberTrust['meeth'] += 1;} },
+                 ]
+              },
+               'post_api_engage': {
+                    messages: [
+                     { author: gameState.playerName, authorId: 'neshtek', text: `Hey @Blocky <span class="member-flag">🇲🇾</span> @Adam <span class="member-flag">🇪🇬</span>, seeing those 429s too over here. Wonder if Discord pushed an unannounced change? Welcome btw, just joined!`, delay: 500 },
+                     { author: 'System', text: `You jump into the ongoing conversation, adding your own (potentially fabricated) experience.`, delay: 800 },
+                      { author: 'blocky', authorId: 'blocky', text: `Hey Neshtek, welcome! Right? Super annoying. Glad it's not just my code lol. 🇲🇾`, delay: 1200 },
+                     { author: 'adam', authorId: 'adam', text: `Welcome! Yeah, could be. Or maybe just peak traffic hours. Hard to tell without official word. 🇪🇬💡`, delay: 1000 },
+                     { author: 'meeth', authorId: 'meeth', text: `Welcome Neshtek 🐦. Good to have another dev mind in here maybe? If those limits get too bad, maybe that **Nitro** boost could help... just sayin' 😉`, delay: 1600 },
+                     { author: 'System', text: `Good engagement! You related to Blocky and Adam, and Meeth subtly dangled the Nitro carrot again. You're participating naturally.`, delay: 1300 }
+                 ],
+                 options: [
+                     { text: "Reply: 'Haha yeah, hopefully it clears up. Thanks Meeth!'", nextScene: 'intro_reply_positive', consequence: (gs) => { gs.infiltrationLevel = 4; gs.variables.posted_intro = true; gs.memberTrust['blocky'] += 1; gs.memberTrust['adam'] += 1; gs.memberTrust['meeth'] += 1; gs.meethAwareness += 1;} },
+                      { text: "Reply: 'Definitely something to keep an eye on. Thanks for the welcome!'", nextScene: 'intro_reply_positive', consequence: (gs) => { gs.infiltrationLevel = 4; gs.variables.posted_intro = true; gs.memberTrust['blocky'] += 1; gs.memberTrust['adam'] += 1; gs.memberTrust['meeth'] += 1;} },
+                 ]
+               },
+               'post_intro_silent': {
+                   messages: [
+                      { author: 'System', text: `You decide to stay quiet for now after the initial welcome. The conversation moves on without you.`, delay: 900 },
+                      { author: gameState.playerName, authorId: 'neshtek', text: `(Maybe that was too passive... Need to participate to gain trust.)`, delay: 700 },
+                      { author: 'System', text: `Your infiltration level is temporarily stalled. You remain a known member, but haven't integrated yet.`, delay: 1100 }
+                   ],
+                   options: [
+                      // Options to re-engage later
+                      { text: "Wait for another opportunity to talk.", nextScene: 'lurking_observe_more' }, // Go back to observing for a new chance
+                      { text: "Look for someone to help.", nextScene: 'find_help_opportunity' }
+                   ]
+               },
+                'intro_reply_positive': {
+                     messages: [
+                         { author: 'System', text: `You give a polite, positive reply. It's safe and generally well-received.`, delay: 800 },
+                         { author: gameState.playerName, authorId: 'neshtek', text: `(Okay, step one complete. I'm officially 'in'. Now, how to get closer to Meeth and that Nitro...)`, delay: 900 },
+                         { author: 'System', text: `You're now considered an active member (Level 4 Infiltration). The real game begins: building trust.`, delay: 1200 }
+                     ],
+                     options: [
+                          { text: "Actively participate in conversations.", nextScene: 'active_participation' },
+                          { text: "Look for opportunities to help members.", nextScene: 'find_help_opportunity' },
+                          { text: "Try talking to Meeth directly (Risky?).", nextScene: 'direct_approach_meeth' }
+                     ]
+                },
+                'intro_reply_mindset': {
+                     messages: [
+                         { author: 'System', text: `You acknowledge Mindset's comment directly. He seems to appreciate the deference, if only slightly.`, delay: 900 },
+                          { author: 'mindset', authorId: 'mindset', text: `👍`, delay: 1000 }, // Simple acknowledgement
+                          { author: gameState.playerName, authorId: 'neshtek', text: `(Gained a tiny bit of ground with the serious one. Good.)`, delay: 700 },
+                         { author: 'System', text: `You're now considered an active member (Level 4 Infiltration). The real game begins: building trust.`, delay: 1200 }
+                     ],
+                     options: [
+                          { text: "Actively participate in conversations.", nextScene: 'active_participation' },
+                          { text: "Look for opportunities to help members.", nextScene: 'find_help_opportunity' },
+                          { text: "Try talking to Meeth directly (Risky?).", nextScene: 'direct_approach_meeth' }
+                     ]
+                },
+                 'tech_followup': {
+                     // Player needs to bullshit convincingly here
+                      messages: [
+                         { author: gameState.playerName, authorId: 'neshtek', text: `Thanks @Adam @Abdullah! Yeah, using cluster mode on Node v18. I suspect it's a rogue middleware function in my Express app, gonna profile it later. Appreciate the pointers!`, delay: 500 },
+                          { author: 'adam', authorId: 'adam', text: `No problem! Yeah, middleware is a common culprit. Good luck! 🇪🇬`, delay: 1000 },
+                         { author: 'abdullah', authorId: 'abdullah', text: `Anytime! Let us know what you find. 🇵🇰`, delay: 900 },
+                          { author: 'System', text: `You bluffed successfully. Adam and Abdullah seem satisfied, and your reputation as someone technically competent (or at least knowledgeable) grows slightly.`, delay: 1300 },
+                           { author: 'System', text: `You're now considered an active member (Level 4 Infiltration). The real game begins: building trust.`, delay: 1000 }
+                     ],
+                     options: [
+                          { text: "Actively participate in conversations.", nextScene: 'active_participation' },
+                          { text: "Look for opportunities to help members.", nextScene: 'find_help_opportunity' },
+                          { text: "Try talking to Meeth directly (Risky?).", nextScene: 'direct_approach_meeth' }
+                     ]
+                 },
+
+             // --- Active Participation & Trust Building ---
+             'active_participation': {
+                  messages: [
+                       { author: 'System', text: `You decide to actively engage in the chat's flow, trying to build rapport.`, delay: 800 },
+                       // Example Scenario: GeoGuessr
+                       { author: 'happyman', authorId: 'happyman', text: `GeoGuessr time? Anyone? Last round was fun! 😊🇵🇱`, delay: 1000 },
+                       { author: 'andrej', authorId: 'andrej', text: `Sure, I'm free now. Send link. 🇷🇸`, delay: 700 },
+                       { author: 'meeth', authorId: 'meeth', text: `Maybe later, gotta deal with some stuff. Have fun tho!`, delay: 900 },
+                  ],
+                  options: [
+                       { text: "Join the GeoGuessr game.", nextScene: 'play_geoguessr' },
+                       { text: "Comment on a different topic (e.g., tech).", nextScene: 'comment_tech' },
+                       { text: "Wait and observe more.", nextScene: 'lurking_observe_more' } // Can always go back to observing
+                  ]
+             },
+             'play_geoguessr': {
+                  messages: [
+                     { author: gameState.playerName, authorId: 'neshtek', text: `I'm down for some GeoGuessr @HappyMan @Andrej! 👋`, delay: 500 },
+                     { author: 'happyman', authorId: 'happyman', text: `Awesome Neshtek! More the merrier! Link incoming... 😊🇵🇱`, delay: 900 },
+                     { author: 'System', text: `You join the game. You play a few rounds. You make some decent guesses, some terrible ones. You chat casually with HappyMan and Andrej during the game.`, delay: 1500 },
+                     { author: 'andrej', authorId: 'andrej', text: `GG Neshtek, not bad for a first timer with us. 🇷🇸`, delay: 800 },
+                     { author: 'happyman', authorId: 'happyman', text: `Yeah GG! Was fun! Play again soon! 😊`, delay: 700 },
+                     { author: 'System', text: `You successfully integrated into a social activity. Trust increased with HappyMan and Andrej.`, delay: 1100 },
+                  ],
+                   options: [
+                      { text: "Continue participating.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['happyman'] += 2; gs.memberTrust['andrej'] += 2; } },
+                      { text: "Focus on helping others now.", nextScene: 'find_help_opportunity', consequence: (gs) => { gs.memberTrust['happyman'] += 2; gs.memberTrust['andrej'] += 2; } },
+                   ]
+             },
+              'comment_tech': {
+                   messages: [
+                       // Assume Salle/Abdullah are talking tech again
+                       { author: 'salle', authorId: 'salle', text: `This new M.2 drive is insanely fast. Boot times are nonexistent. 🇷🇸🔧`, delay: 600 },
+                       { author: gameState.playerName, authorId: 'neshtek', text: `Nice @Salle! Which model did you get? NVMe speeds are crazy these days.`, delay: 500 },
+                       { author: 'salle', authorId: 'salle', text: `Hey Neshtek! Got the Samsung 980 Pro. Worth every penny. You into hardware too?`, delay: 1000 },
+                      { author: 'System', text: `You engage Salle on a topic he's interested in. He responds positively.`, delay: 900 },
+                   ],
+                   options: [
+                        { text: "Continue the tech chat (Bluff if needed).", nextScene: 'tech_chat_salle', consequence: (gs) => { gs.memberTrust['salle'] += 1; } },
+                       { text: "Shift focus.", nextScene: 'active_participation' },
+                   ]
+              },
+               'tech_chat_salle': {
+                    messages: [
+                        { author: gameState.playerName, authorId: 'neshtek', text: `Yeah, definitely! Built my own rig a while back. The 980 Pro is solid, great choice. Considered the Sabrent Rocket but heard mixed things about long-term reliability.`, delay: 500 }, // Example bluff
+                        { author: 'salle', authorId: 'salle', text: `Exactly! You get it. Reliability was key for me. Good chat Neshtek. 👍🇷🇸`, delay: 1100 },
+                       { author: 'System', text: `You navigated the conversation well. Salle seems to respect your (apparent) knowledge. Trust increased.`, delay: 1000 },
+                    ],
+                    options: [
+                         { text: "Continue participating.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['salle'] += 1; } }, // Add the trust gain here
+                         { text: "Look for helping opportunities.", nextScene: 'find_help_opportunity', consequence: (gs) => { gs.memberTrust['salle'] += 1; } },
+                    ]
+               },
+
+             'find_help_opportunity': {
+                  messages: [
+                     { author: 'System', text: `You scan the chat, looking for someone who needs assistance. Helping others is a good way to build trust.`, delay: 800 },
+                     // Example Scenario: Frank needs feedback
+                     { author: 'frank', authorId: 'frank', text: `Ugh, trying a new brush technique for clouds... not sure if it looks right. Any artists (@Andrej?) or anyone with an eye wanna give quick feedback in #creative? 🇵🇪🎨`, delay: 1300 },
+                     { author: 'andrej', authorId: 'andrej', text: `Busy rendering Frank, maybe later! 🇷🇸`, delay: 700 },
+                      { author: 'System', text: `Frank needs help, and Andrej is busy. This is your chance.`, delay: 900 },
+                  ],
+                  options: [
+                      { text: "Offer to look at Frank's art.", nextScene: 'help_frank_art' },
+                      { text: "Ignore it, wait for a different opportunity.", nextScene: 'active_participation' },
+                      { text: "Offer help but admit you're not an artist.", nextScene: 'help_frank_art_honest' }
+                  ]
+             },
+             'help_frank_art': {
+                   messages: [
+                      { author: gameState.playerName, authorId: 'neshtek', text: `Hey @Frank <span class="member-flag">🇵🇪</span>, I can take a look! Heading over to #creative now.`, delay: 500 },
+                      { author: 'frank', authorId: 'frank', text: `Oh awesome, thanks Neshtek! Appreciate it. 🙏`, delay: 800 },
+                      { author: 'System', text: `You go to the #creative channel (conceptually). Frank shows you his work. It's a decent landscape, but the clouds look a bit flat.`, delay: 1400 },
+                       { author: gameState.playerName, authorId: 'neshtek', text: `(Okay, gotta give *some* kind of useful feedback, even if I'm faking it...)`, delay: 700 },
+                      { author: 'System', text: `You offer some vague but positive-sounding advice: "Looks great overall! Maybe add a bit more soft blending on the cloud edges to give them depth? And perhaps a hint of warmer light hitting the tops?"`, delay: 1800 },
+                      { author: 'frank', authorId: 'frank', text: `Oh! Good points! Yeah, I see what you mean about the edges and light. Thanks Neshtek, that actually helps! 👍🇵🇪`, delay: 1200 },
+                       { author: 'System', text: `Your generic advice landed well! Frank seems genuinely appreciative. Trust significantly increased.`, delay: 1000 },
+                   ],
+                   options: [
+                       { text: "Continue participating.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['frank'] += 3; gs.variables.helped_member_id = 'frank'; } },
+                       { text: "Specifically try to leverage this favor with Frank.", nextScene: 'leverage_frank', condition: (gs) => gs.memberTrust['frank'] >= 3, consequence: (gs) => { gs.memberTrust['frank'] += 3; gs.variables.helped_member_id = 'frank'; } }
+                   ]
+             },
+             'help_frank_art_honest': {
+                   messages: [
+                      { author: gameState.playerName, authorId: 'neshtek', text: `Hey @Frank <span class="member-flag">🇵🇪</span>, I'm no artist, but happy to give a fresh pair of eyes if that helps!`, delay: 500 },
+                      { author: 'frank', authorId: 'frank', text: `Sure Neshtek, thanks! Sometimes just having someone look is useful. Check #creative.`, delay: 900 },
+                      { author: 'System', text: `You look at the art. You offer simple, honest feedback: "Wow, the colors are amazing! The clouds look nice, but maybe a bit less defined than the mountains?"`, delay: 1600 },
+                      { author: 'frank', authorId: 'frank', text: `Thanks Neshtek! Yeah, maybe that's it, the sharpness difference. Good point! Appreciate you looking. 👍🇵🇪`, delay: 1100 },
+                       { author: 'System', text: `Honesty worked too! Frank appreciated the input. Trust increased moderately.`, delay: 1000 },
+                   ],
+                   options: [
+                       { text: "Continue participating.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['frank'] += 2; gs.variables.helped_member_id = 'frank'; } },
+                   ]
+             },
+             'leverage_frank': {
+                 messages: [
+                     { author: 'System', text: `Frank seems quite thankful for your help. Maybe you can subtly probe him about Meeth or Nitro?`, delay: 900 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `No problem, @Frank! Happy to help. By the way, speaking of helping... Meeth seems super generous around here. Is he always like that with the Nitro?`, delay: 500 },
+                     { author: 'frank', authorId: 'frank', text: `Oh yeah, Meeth's <span class="member-flag">🇪🇪</span> the heart of AURA, man. If he thinks you vibe with the group and contribute, he's got your back. He likes people who are active and positive, you know? Not just lurkers or beggars. He gave me Nitro once after I designed a new server banner. 🇵🇪`, delay: 1800 },
+                     { author: gameState.playerName, authorId: 'neshtek', text: `(Okay, key info: Be active, be positive, contribute something. Don't just ask.)`, delay: 800 },
+                     { author: 'System', text: `Frank provided valuable insight into Meeth's mindset. Your directness didn't seem to hurt, thanks to the prior help.`, delay: 1200 },
+                 ],
+                 options: [
+                      { text: "Thank Frank and return to general chat.", nextScene: 'active_participation', consequence: (gs) => { gs.clues['meeth_motivation'] = 'active_positive_contribute'; gs.meethAwareness += 1; } }, // Meeth might notice you asking about him
+                      { text: "Ask Frank if he thinks you have 'the vibe'.", nextScene: 'ask_frank_vibe' }
+                 ]
+             },
+             'ask_frank_vibe': {
+                  messages: [
+                     { author: gameState.playerName, authorId: 'neshtek', text: `Makes sense. Do you think... uh... I have the right 'vibe' so far? Still new here.`, delay: 500 },
+                      { author: 'frank', authorId: 'frank', text: `Hmm? Oh, yeah Neshtek, you seem cool! You jumped in to help me, participated in chat. That's good! Just keep being genuine, yeah? Don't try too hard, Meeth can spot fakes. 🇵🇪`, delay: 1600 },
+                     { author: 'System', text: `Frank gives encouraging, if slightly cautionary, advice. He seems to trust you.`, delay: 1000 },
+                  ],
+                   options: [
+                      { text: "Thanks Frank! Appreciate it.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['frank'] += 1; gs.clues['meeth_motivation'] = 'active_positive_contribute'; } },
+                   ]
+             },
+
+             // --- Direct Meeth Interaction ---
+             'direct_approach_meeth': {
+                   messages: [
+                      { author: 'System', text: `You decide to take the plunge and talk to Meeth directly. This is high risk, high reward.`, delay: 900 },
+                       { author: gameState.playerName, authorId: 'neshtek', text: `(What do I even say? Can't just ask for Nitro...)`, delay: 700 },
+                      { author: 'System', text: `Meeth is currently active, posting about a game he's playing.`, delay: 1000 },
+                      { author: 'meeth', authorId: 'meeth', text: `Man, this new patch really balanced the shotgun meta. Feels good. 🔥🇪🇪`, delay: 1200 },
+                   ],
+                   options: [
+                       { text: "DM Meeth: 'Hey, saw you're online. Cool server!'", nextScene: 'dm_meeth_generic' },
+                       { text: "Reply in chat: 'Oh nice! Which game is that?'", nextScene: 'reply_meeth_game' },
+                       { text: "Reply in chat: Compliment his 'AURA' again.", nextScene: 'reply_meeth_aura_again' },
+                       { text: "Abort. Too risky right now.", nextScene: 'active_participation' }
+                   ]
+             },
+             'dm_meeth_generic': {
+                  messages: [
+                      { author: gameState.playerName, authorId: 'neshtek', text: `(Okay, sending DM...) "Hey Meeth, saw you're online. Just wanted to say this server is really cool, great community you've got here."`, delay: 500 },
+                     { author: 'System', text: `You send the direct message. You wait...`, delay: 1000 },
+                      { author: 'meeth', authorId: 'meeth', text: `(DM Reply) Hey Neshtek 🐦. Appreciate it bro. Yeah we try to keep the **AURA** strong. Glad you're liking it. 👍`, delay: 1800 },
+                      { author: 'System', text: `A polite, if slightly distant, reply. He acknowledged you, but didn't open the door much further.`, delay: 1100 },
+                  ],
+                  options: [
+                       { text: "Leave it there for now.", nextScene: 'active_participation', consequence: (gs) => { gs.variables.meeth_interaction_count += 1; gs.meethAwareness += 1; } },
+                      { text: "DM again: Ask about the game he mentioned.", nextScene: 'dm_meeth_ask_game', consequence: (gs) => { gs.variables.meeth_interaction_count += 1; gs.meethAwareness += 1; } }
+                  ]
+             },
+             'reply_meeth_game': {
+                  messages: [
+                      { author: gameState.playerName, authorId: 'neshtek', text: `Oh nice @Meeth! Which game is that? Always looking for good shooters.`, delay: 500 },
+                      { author: 'meeth', authorId: 'meeth', text: `Neshtek! It's [Insert Popular FPS Name Here]. Patch just dropped. You play?`, delay: 1300 }, // Needs a placeholder game
+                      { author: 'System', text: `He engaged! Asking about the game worked.`, delay: 800 },
+                  ],
+                   options: [
+                       { text: "Lie: 'Yeah, I play! Patch looks good.'", nextScene: 'lie_about_game', consequence: (gs) => { gs.variables.meeth_interaction_count += 1; gs.meethAwareness += 1; } },
+                       { text: "Honest: 'Nah, haven't played that one. Heard good things though.'", nextScene: 'honest_about_game', consequence: (gs) => { gs.variables.meeth_interaction_count += 1; gs.meethAwareness += 1; } }
+                   ]
+             },
+             'lie_about_game': {
+                   messages: [
+                      { author: gameState.playerName, authorId: 'neshtek', text: `Yeah, I play! Haven't checked the patch notes yet, but glad shotguns feel better. They were kinda busted before.`, delay: 500 }, // Generic bluff
+                      { author: 'meeth', authorId: 'meeth', text: `Word! Exactly. We should squad up sometime if you're down. Always need good teammates. 👍🇪🇪`, delay: 1400 },
+                      { author: 'System', text: `Your bluff worked! Meeth seems to accept you as a fellow gamer and even suggests playing together. Big step!`, delay: 1100 },
+                      { author: gameState.playerName, authorId: 'neshtek', text: `(Squad up? Oh boy... hope he doesn't actually ask me to play...)`, delay: 700 },
+                   ],
+                   options: [
+                       { text: "Reply: 'For sure! Add me: Neshtek#1234'", nextScene: 'accept_squad_up', consequence: (gs) => { gs.memberTrust['meeth'] += 2; } },
+                       { text: "Reply: 'Definitely! Maybe later this week.' (Stall)", nextScene: 'stall_squad_up', consequence: (gs) => { gs.memberTrust['meeth'] += 1; } }
+                   ]
+             },
+             'honest_about_game': {
+                   messages: [
+                      { author: gameState.playerName, authorId: 'neshtek', text: `Nah, haven't played that one unfortunately. Heard good things though! More into [Another Genre/Game] myself.`, delay: 500 },
+                      { author: 'meeth', authorId: 'meeth', text: `Ah gotcha. Fair enough. Still, patch is good for the game's health yknow.`, delay: 1200 },
+                      { author: 'System', text: `Honesty didn't hurt. You didn't connect over that specific game, but Meeth's response was neutral.`, delay: 1000 },
+                   ],
+                   options: [
+                       { text: "Continue general participation.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['meeth'] += 0; } }, // No gain, no loss
+                   ]
+             },
+             'accept_squad_up': {
+                  messages: [
+                       { author: gameState.playerName, authorId: 'neshtek', text: `For sure! Add me: Neshtek#1234 (Fake Tag). Lemme know when you're playing!`, delay: 500 },
+                       { author: 'meeth', authorId: 'meeth', text: `Cool cool, added. Will hit you up. 🔥`, delay: 900 },
+                       { author: 'System', text: `You've solidified a potential gaming connection with Meeth. This significantly boosts trust, but also carries the risk of being exposed if you actually have to play.`, delay: 1300 },
+                  ],
+                  options: [
+                       { text: "Excellent. Back to general chat.", nextScene: 'active_participation', consequence: (gs) => { gs.clues['gaming_connection'] = true; } },
+                  ]
+             },
+             'stall_squad_up': {
+                  messages: [
+                       { author: gameState.playerName, authorId: 'neshtek', text: `Definitely! Maybe later this week? Bit busy right now.`, delay: 500 },
+                       { author: 'meeth', authorId: 'meeth', text: `Aight bet. No worries. 👍`, delay: 800 },
+                       { author: 'System', text: `You successfully delayed, avoiding immediate commitment. Trust increased slightly, but less than accepting directly.`, delay: 1100 },
+                  ],
+                   options: [
+                       { text: "Good. Back to general chat.", nextScene: 'active_participation' },
+                   ]
+             },
+              'reply_meeth_aura_again': {
+                  messages: [
+                       { author: gameState.playerName, authorId: 'neshtek', text: `Speaking of good feelings, @Meeth, that **AURA** is strong today! 😄`, delay: 500 },
+                       { author: 'meeth', authorId: 'meeth', text: `Neshtek! Haha you know it bro! Gotta keep the vibes high. ✨🇪🇪`, delay: 1100 },
+                       { author: 'mindset', authorId: 'mindset', text: `...`, delay: 900 }, // Mindset silently judges
+                       { author: 'System', text: `Repeating the compliment... Meeth still seems to like it, but it might be wearing thin or sounding less genuine. Mindset definitely notices.`, delay: 1300 },
+                  ],
+                  options: [
+                       { text: "Okay, maybe ease off the AURA comments.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['meeth'] += 1; gs.memberTrust['mindset'] -= 1; gs.meethAwareness += 1; } },
+                       { text: "Double down: 'Seriously, it's inspiring!'", nextScene: 'aura_overkill' }
+                  ]
+              },
+              'aura_overkill': {
+                  messages: [
+                       { author: gameState.playerName, authorId: 'neshtek', text: `Seriously, @Meeth, it's inspiring! Makes the whole server better.`, delay: 500 },
+                      { author: 'meeth', authorId: 'meeth', text: `... Appreciate the energy Neshtek. 👍`, delay: 1400 }, // Response is shorter, less enthusiastic
+                       { author: 'System', text: `Meeth's reply feels a bit forced. You might have overdone it. Trying too hard can be counterproductive. Trust with Meeth stagnates or slightly drops. Mindset's suspicion increases.`, delay: 1500 },
+                  ],
+                  options: [
+                       { text: "Yikes. Definitely stop mentioning AURA.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['meeth'] -= 1; gs.memberTrust['mindset'] -= 2; gs.meethAwareness += 2; } },
+                  ]
+              },
+
+             // --- Climax / Asking for Nitro ---
+             // This should depend on reaching a certain trust level with Meeth and maybe overall standing.
+             'check_nitro_readiness': { // Intermediate scene to gate the final ask
+                  messages: [
+                      { author: 'System', text: `You've spent time in AURA, participated, helped others, maybe even talked to Meeth directly. You check your standing...`, delay: 900 },
+                       { author: 'System', text: `Trust with Meeth: ${gameState.memberTrust['meeth']}. Overall Vibes: ${ (Object.values(gameState.memberTrust).reduce((a, b) => a + b, 0) / members.length).toFixed(1) }. Meeth Awareness: ${gameState.meethAwareness}.`, delay: 1500 },
+                       { author: gameState.playerName, authorId: 'neshtek', text: `(Is it time? Is the AURA aligned? Can I finally ask for the Nitro?)`, delay: 800 },
+                  ],
+                  options: [
+                      { text: "Yes, I feel ready. Make the ask.", nextScene: 'ask_for_nitro', condition: (gs) => gs.memberTrust['meeth'] >= 5 && gs.infiltrationLevel >= 4 }, // Example threshold
+                       { text: "No, need to build more trust/wait for opportunity.", nextScene: 'active_participation', condition: (gs) => gs.memberTrust['meeth'] < 5 || gs.infiltrationLevel < 4 },
+                       { text: "Attempt the ask anyway (Low Trust - Risky).", nextScene: 'ask_for_nitro_low_trust', condition: (gs) => gs.memberTrust['meeth'] < 5 && gs.infiltrationLevel >= 4 }
+                  ]
+             },
+             'ask_for_nitro': {
+                   messages: [
+                       { author: 'System', text: `The moment has come. Meeth is online. You've built rapport. You take a deep breath and type...`, delay: 1000 },
+                       // How to ask? Direct? Subtle? Reference prior interaction?
+                       // Option 1: Casual Ask (if gaming connection exists)
+                       { author: gameState.playerName, authorId: 'neshtek', text: `Hey @Meeth <span class="member-flag">🇪🇪</span>, enjoying the vibes here! Quick thing - my current Nitro sub is running out soon, was wondering if that legendary AURA generosity might extend this way? 😉 Totally understand if not!`, condition: (gs) => !gs.clues['gaming_connection'], delay: 500 },
+                       // Option 2: Reference Gaming Connection
+                       { author: gameState.playerName, authorId: 'neshtek', text: `Yo @Meeth <span class="member-flag">🇪🇪</span>! Still down to squad up sometime soon? Btw, my Nitro is expiring, would be awesome to have the perks for gaming & streaming uploads if you're feeling that **AURA**? 🙏`, condition: (gs) => gs.clues['gaming_connection'], delay: 500 },
+                       { author: 'System', text: `You send the message. The chat seems to pause for a second...`, delay: 1500 },
+                       { author: 'meeth', authorId: 'meeth', text: `Neshtek <span class="pigeon">🐦</span>...`, delay: 2000 },
+                       { author: 'meeth', authorId: 'meeth', text: `You've been cool. Active, good vibes, helped out Frank / contributed in chat [Adjust based on player actions]. You get the **AURA**.`, condition: (gs) => gs.memberTrust['meeth'] >= 7 && gs.variables.helped_member_id !== null, delay: 2500 },
+                       { author: 'meeth', authorId: 'meeth', text: `Yeah bro... **I GOTCHU BRO**. Check DMs. ✨👑`, condition: (gs) => gs.memberTrust['meeth'] >= 5, delay: 1500 }, // Success condition
+                   ],
+                   options: [
+                       { text: "SUCCESS!", nextScene: 'end_success', condition: (gs) => gs.memberTrust['meeth'] >= 5, consequence: (gs) => { gs.nitroGoalAchieved = true; } },
+                       { text: "FAILURE!", nextScene: 'ask_fail_generic', condition: (gs) => gs.memberTrust['meeth'] < 5 } // Should ideally not be reachable if gated by check_nitro_readiness
+                   ]
+             },
+              'ask_for_nitro_low_trust': {
+                   messages: [
+                       { author: 'System', text: `You decide to ask for Nitro despite not having built significant trust with Meeth. A high-risk gamble...`, delay: 900 },
+                       { author: gameState.playerName, authorId: 'neshtek', text: `Hey @Meeth <span class="member-flag">🇪🇪</span>, loving the server! Heard you sometimes help people out with Nitro... any chance? 🙏`, delay: 500 },
+                       { author: 'System', text: `The message hangs in the air.`, delay: 1200 },
+                        { author: 'meeth', authorId: 'meeth', text: `Neshtek 🐦... You just got here, man.`, delay: 1800 },
+                        { author: 'meeth', authorId: 'meeth', text: `**AURA** isn't about handouts. It's about the community, the vibe. Seen you around, but... nah. Not feelin' it.`, delay: 2200 },
+                        { author: 'mindset', authorId: 'mindset', text: `Told you all.`, condition: (gs) => gs.memberTrust['mindset'] <= 0, delay: 1000 }, // Mindset knew
+                   ],
+                   options: [
+                       { text: "FAILURE!", nextScene: 'ask_fail_low_trust' }
+                   ]
+              },
+             'ask_fail_generic': { // Failure even with decent trust (maybe bad luck or wrong approach)
+                 messages: [
+                     { author: 'meeth', authorId: 'meeth', text: `Hmm, Neshtek... Appreciate you asking, but timing's not right / funds are low / gotta spread the love elsewhere rn. Sorry bro. Keep vibing tho.`, delay: 1500 }, // Softer rejection
+                     { author: 'System', text: `Rejection. It wasn't a harsh 'no', but it was a 'no'. The Nitro remains out of reach... for now.`, delay: 1200 },
+                 ],
+                 options: [
+                     { text: "Acknowledge and keep trying to build trust.", nextScene: 'active_participation', consequence: (gs) => { gs.memberTrust['meeth'] -= 1; gs.meethAwareness += 2;} }, // Minor trust hit, increased awareness
+                     { text: "Rage quit (End Game).", nextScene: 'end_failure_ragequit' }
+                 ]
+             },
+              'ask_fail_low_trust': { // Harsher failure due to low trust
+                 messages: [
+                      { author: 'System', text: `Asking too soon, without building rapport, was a critical mistake. Meeth saw you as just another user trying to get free stuff.`, delay: 1100 },
+                     { author: 'System', text: `You might be ignored from now on, or worse...`, delay: 800 },
+                      { author: 'meeth', authorId: 'meeth', text: `(A few minutes later, a system message appears)`, delay: 1500 },
+                      { author: 'System', text: `*You have been kicked from AURA Groupchat.* Reason: "Bad Vibes / Nitro Beggar".`, delay: 1000 }
+                 ],
+                 options: [
+                      { text: "GAME OVER", nextScene: 'end_failure_kick' }
+                 ]
+             },
+
+
+             // --- End States ---
+             'end_success': {
+                 messages: [
+                     { author: 'System', text: `**SUCCESS!** A notification pops up. A gift from Meeth!`, delay: 800 },
+                      { author: 'System', text: `<div style="border: 2px dashed var(--accent-color); padding: 15px; border-radius: 8px; text-align: center; background-color: var(--discord-darker); margin: 10px 0;">🎁 You received a gift of **Discord Nitro** from Meeth! 👑</div>`, delay: 1500 },
+                      { author: gameState.playerName, authorId: 'neshtek', text: `YES! <span class="pigeon">🐦</span>💰 I actually did it!`, delay: 1000 },
+                      { author: 'System', text: `You navigated the complex social dynamics of the AURA groupchat, gained trust, and achieved your goal. You are the ultimate infiltrator.`, delay: 1500 },
+                      { author: 'System', text: `GAME OVER - YOU WIN!`, delay: 1000 },
+                 ],
+                 options: [
+                       // No options, game ends here. Maybe a "Play Again?" later.
+                 ],
+                 effects: (gs) => { gs.gameEnded = true; }
+             },
+              'end_failure': { // Generic failure catch-all if specific failure scenes aren't hit
+                  messages: [
+                      { author: 'System', text: `**FAILURE!** Your attempts were unsuccessful. Whether through suspicion, a wrong move, or just bad luck, you failed to secure the Nitro.`, delay: 1000 },
+                      { author: gameState.playerName, authorId: 'neshtek', text: `(Dang it... so close, yet so far...) <span class="pigeon">🐦</span>💨`, delay: 800 },
+                      { author: 'System', text: `The AURA remains closed to you, the Nitro a distant dream.`, delay: 1200 },
+                      { author: 'System', text: `GAME OVER - YOU LOSE!`, delay: 1000 },
+                  ],
+                 options: [],
+                 effects: (gs) => { gs.gameEnded = true; }
+             },
+              'end_failure_kick': {
+                  messages: [
+                       { author: 'System', text: `**FAILURE!** Kicked. Exposed. Your infiltration attempt ended abruptly and decisively.`, delay: 1000 },
+                       { author: gameState.playerName, authorId: 'neshtek', text: `(Well... that escalated quickly.) <span class="pigeon">🐦</span>💥`, delay: 800 },
+                       { author: 'System', text: `No Nitro for you. Maybe try being less obvious next time?`, delay: 1200 },
+                      { author: 'System', text: `GAME OVER - YOU LOSE!`, delay: 1000 },
+                  ],
+                  options: [],
+                 effects: (gs) => { gs.gameEnded = true; }
+             },
+              'end_failure_ragequit': {
+                   messages: [
+                       { author: 'System', text: `**FAILURE!** Frustrated by the rejection, you slam your metaphorical keyboard.`, delay: 800 },
+                       { author: gameState.playerName, authorId: 'neshtek', text: `FINE! Keep your stupid Nitro! This group is overrated anyway!`, delay: 500 },
+                       { author: 'System', text: `*You have left AURA Groupchat.*`, delay: 1000 },
+                        { author: 'System', text: `Your quest ends in salty defeat.`, delay: 1200 },
+                       { author: 'System', text: `GAME OVER - YOU LOSE!`, delay: 1000 },
+                   ],
+                   options: [],
+                  effects: (gs) => { gs.gameEnded = true; }
+              },
+
+        };
+
+
+        // --- Initialise Game ---
+        function initGame() {
+            console.log("Initialising game state:", gameState);
+            updateMemberList();
+            updatePlayerStatus();
+            displayScene(gameState.currentScene);
+        }
+
+        // Start the game when the DOM is ready
+        document.addEventListener('DOMContentLoaded', initGame);
+
+    </script>
+</body>
+</html>

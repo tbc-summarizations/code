@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Henry's Big Plan</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #36393f;
+            color: #dcddde;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #game-container {
+            background-color: #2f3136;
+            border-radius: 8px;
+            padding: 30px;
+            width: 90%;
+            max-width: 800px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            border: 1px solid #202225;
+        }
+
+        #story-display {
+            background-color: #40444b;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            min-height: 150px;
+            border: 1px solid #202225;
+            overflow-y: auto;
+            max-height: 400px; /* Limit height for very long text */
+        }
+
+        .message {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: 7px;
+            line-height: 1.4;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 12px;
+            font-size: 24px; /* Emoji size */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #7289da; /* Default Discord blue */
+            flex-shrink: 0;
+        }
+
+        .message .content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message .username {
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+        }
+
+        .message .username .flag {
+            margin-left: 8px;
+            font-size: 0.9em;
+        }
+
+        .message .text {
+            color: #dcddde;
+            word-wrap: break-word;
+        }
+
+        .narrative {
+            font-style: italic;
+            color: #b9bbbe;
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 10px;
+        }
+
+        #choices {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        button.choice {
+            background-color: #7289da;
+            color: white;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s ease;
+            text-align: left;
+        }
+
+        button.choice:hover {
+            background-color: #5f73bc;
+        }
+
+        button.choice:active {
+            background-color: #4e5d94;
+        }
+
+        /* Character specific colors/shapes maybe */
+        .avatar-Henry { background-color: #f9a825; } /* Yellowish */
+        .avatar-Mindset { background-color: #1e88e5; } /* Blue */
+        .avatar-Adam { background-color: #c62828; } /* Red */
+        .avatar-Abdullah { background-color: #2e7d32; } /* Green */
+        .avatar-Andrej { background-color: #0033a0; } /* Dark Blue */
+        .avatar-Blocky { background-color: #ffca28; } /* Amber */
+        .avatar-Frank { background-color: #ef5350; } /* Light Red */
+        .avatar-HappyMan { background-color: #d81b60; } /* Pink */
+        .avatar-Meeth { background-color: #00acc1; } /* Cyan */
+        .avatar-Salle { background-color: #0033a0; } /* Dark Blue (same as Andrej) */
+
+        /* Simple shape fallback if emojis fail */
+        .shape-square { width: 25px; height: 25px; background-color: #ccc; margin-right: 10px; }
+        .shape-triangle { width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 20px solid #ccc; margin-right: 10px; }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="story-display">
+            <!-- Story content will be loaded here -->
+        </div>
+        <div id="choices">
+            <!-- Choices buttons will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        const storyDisplay = document.getElementById('story-display');
+        const choicesDiv = document.getElementById('choices');
+
+        const characters = {
+            'Henry': { flag: '🇰🇿', avatarClass: 'avatar-Henry' },
+            'Mindset': { flag: '🇬🇷', avatarClass: 'avatar-Mindset' },
+            'Adam': { flag: '🇪🇬', avatarClass: 'avatar-Adam' },
+            'Abdullah': { flag: '🇵🇰', avatarClass: 'avatar-Abdullah' },
+            'Andrej': { flag: '🇷🇸', avatarClass: 'avatar-Andrej' },
+            'Blocky': { flag: '🇲🇾', avatarClass: 'avatar-Blocky' },
+            'Frank': { flag: '🇵🇪', avatarClass: 'avatar-Frank' },
+            'HappyMan': { flag: '🇵🇱', avatarClass: 'avatar-HappyMan' },
+            'Meeth': { flag: '🇪🇪', avatarClass: 'avatar-Meeth' },
+            'Salle': { flag: '🇷🇸', avatarClass: 'avatar-Salle' },
+            'Narrator': { flag: '', avatarClass: '' } // For narrative text
+        };
+
+        let gameState = {
+            currentScene: 'start',
+            henryAnnoyance: 0,
+            tbcAnnoyance: {
+                Mindset: 0, Adam: 0, Abdullah: 0, Andrej: 0, Blocky: 0, Frank: 0, HappyMan: 0, Meeth: 0, Salle: 0
+            },
+            membersContacted: [],
+            membersWilling: 0
+        };
+
+        function renderScene(sceneId) {
+            const scene = story[sceneId];
+            if (!scene) {
+                console.error(`Scene not found: ${sceneId}`);
+                storyDisplay.innerHTML = `<div class="narrative">Error: Scene not found. Game over?</div>`;
+                choicesDiv.innerHTML = '';
+                return;
+            }
+
+            // Clear previous content
+            storyDisplay.innerHTML = '';
+            choicesDiv.innerHTML = '';
+
+            // Display narrative if present
+            if (scene.narrative) {
+                const narrativeP = document.createElement('p');
+                narrativeP.classList.add('narrative');
+                narrativeP.textContent = scene.narrative;
+                storyDisplay.appendChild(narrativeP);
+            }
+
+            // Display messages/dialogue
+            if (scene.messages && scene.messages.length > 0) {
+                scene.messages.forEach(msg => {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.classList.add('message');
+
+                    const avatarDiv = document.createElement('div');
+                    avatarDiv.classList.add('avatar');
+                    const charInfo = characters[msg.speaker];
+                    if (charInfo) {
+                        if (charInfo.avatarClass) {
+                            avatarDiv.classList.add(charInfo.avatarClass);
+                        }
+                        // Use flag as pseudo-avatar content, or a simple shape/initial
+                        avatarDiv.textContent = charInfo.flag || msg.speaker.charAt(0);
+                    } else {
+                        // Default/Narrator avatar
+                         avatarDiv.textContent = '⚙️'; // System/Narrator icon
+                    }
+
+                    const contentDiv = document.createElement('div');
+                    contentDiv.classList.add('content');
+
+                    const usernameSpan = document.createElement('span');
+                    usernameSpan.classList.add('username');
+                    usernameSpan.textContent = msg.speaker;
+                    if (charInfo && charInfo.flag) {
+                        const flagSpan = document.createElement('span');
+                        flagSpan.classList.add('flag');
+                        flagSpan.textContent = charInfo.flag;
+                        usernameSpan.appendChild(flagSpan);
+                    }
+
+                    const textP = document.createElement('p');
+                    textP.classList.add('text');
+                    textP.textContent = msg.text;
+
+                    contentDiv.appendChild(usernameSpan);
+                    contentDiv.appendChild(textP);
+
+                    messageDiv.appendChild(avatarDiv);
+                    messageDiv.appendChild(contentDiv);
+                    storyDisplay.appendChild(messageDiv);
+                });
+            }
+
+             // Update game state based on scene actions
+            if (scene.action) {
+                scene.action(gameState);
+            }
+
+            // Display choices
+            if (scene.choices && scene.choices.length > 0) {
+                scene.choices.forEach((choice, index) => {
+                    // Check if choice has a condition
+                    if (choice.condition && !choice.condition(gameState)) {
+                        return; // Skip rendering this choice if condition not met
+                    }
+
+                    const button = document.createElement('button');
+                    button.classList.add('choice');
+                    button.textContent = choice.text;
+                    button.onclick = () => {
+                        gameState.currentScene = choice.nextScene;
+                        // Optional: update state based on choice
+                        if (choice.action) {
+                            choice.action(gameState);
+                        }
+                        renderScene(gameState.currentScene);
+                    };
+                    choicesDiv.appendChild(button);
+                });
+            } else if (scene.nextScene) {
+                // Auto-advance if no choices but nextScene is defined
+                 const button = document.createElement('button');
+                 button.classList.add('choice');
+                 button.textContent = "Continue...";
+                 button.onclick = () => {
+                     gameState.currentScene = scene.nextScene;
+                     renderScene(gameState.currentScene);
+                 };
+                 choicesDiv.appendChild(button);
+            } else {
+                // End of this path
+                const endText = document.createElement('p');
+                endText.classList.add('narrative');
+                endText.textContent = scene.endText || "The conversation fades...";
+                choicesDiv.appendChild(endText);
+                // Optional: Add a restart button
+                const restartButton = document.createElement('button');
+                restartButton.classList.add('choice');
+                restartButton.textContent = "Start Over?";
+                restartButton.onclick = () => {
+                    gameState = { // Reset state
+                        currentScene: 'start',
+                        henryAnnoyance: 0,
+                        tbcAnnoyance: { Mindset: 0, Adam: 0, Abdullah: 0, Andrej: 0, Blocky: 0, Frank: 0, HappyMan: 0, Meeth: 0, Salle: 0 },
+                        membersContacted: [],
+                        membersWilling: 0
+                    };
+                    renderScene('start');
+                };
+                choicesDiv.appendChild(restartButton);
+            }
+
+            // Scroll to the bottom of the story display
+            storyDisplay.scrollTop = storyDisplay.scrollHeight;
+        }
+
+        // THE STORY (Long and Complicated)
+        const story = {
+            'start': {
+                narrative: "Late evening. The glow of the monitor reflects in Henry's eyes. He opens the TBC group chat.",
+                messages: [
+                    { speaker: 'Henry', text: '@everyone yo guys guess what' },
+                    { speaker: 'Henry', text: 'Found the PERFECT server for some classic trolling operations tonight.' },
+                    { speaker: 'Henry', text: 'It\'s ripe. Full of easy targets. Who\'s in?' }
+                ],
+                choices: [
+                    { text: 'Wait for replies.', nextScene: 'wait_initial' },
+                    { text: 'Ping specific members who might be online.', nextScene: 'ping_specific_start' }
+                ]
+            },
+            'wait_initial': {
+                narrative: 'Silence. The @everyone notification hangs in the air, unanswered. Maybe they are busy... or ignoring him.',
+                messages: [
+                     { speaker: 'Henry', text: 'Guys? Hello?? 🎤 Anyone there?' }
+                ],
+                action: (gs) => { gs.henryAnnoyance += 1; },
+                choices: [
+                    { text: 'Ping again, louder.', nextScene: 'ping_again' },
+                    { text: 'Try DMing someone directly.', nextScene: 'dm_start' },
+                    { text: 'Give up for now.', nextScene: 'give_up_early' }
+                ]
+            },
+             'ping_specific_start': {
+                narrative: 'Who seems most likely to join this kind of venture?',
+                choices: [
+                    { text: 'Ping Mindset.', nextScene: 'ping_mindset' },
+                    { text: 'Ping Adam.', nextScene: 'ping_adam' },
+                    { text: 'Ping Andrej and Salle together (the Serbian duo).', nextScene: 'ping_serbs' }
+                ]
+            },
+            'ping_again': {
+                messages: [
+                    { speaker: 'Henry', text: '🚨 @everyone SERIOUSLY GUYS GET ON. THIS IS PRIME TIME. 🚨' },
+                    { speaker: 'HappyMan', text: 'dude chill... im trying to watch something' },
+                    { speaker: 'Henry', text: 'HappyMan! Perfect! You in? Cmon!' }
+                ],
+                 action: (gs) => {
+                    gs.henryAnnoyance += 2;
+                    gs.tbcAnnoyance.HappyMan += 1;
+                    if (!gs.membersContacted.includes('HappyMan')) gs.membersContacted.push('HappyMan');
+                },
+                choices: [
+                    { text: '"Watching what? This is way better!"', nextScene: 'push_happyman' },
+                    { text: '"Okay okay, sorry. But check it out when you\'re done?"', nextScene: 'apologize_happyman' }
+                ]
+            },
+            'push_happyman': {
+                 messages: [
+                    { speaker: 'HappyMan', text: 'its better than getting banned again lol. nah im good tonight.' },
+                    { speaker: 'Henry', text: 'We won\'t get banned! I have a plan! VPNs, alts, the works!' }
+                ],
+                 action: (gs) => { gs.tbcAnnoyance.HappyMan += 2; },
+                choices: [
+                    { text: 'Keep pushing HappyMan.', nextScene: 'push_happyman_harder' },
+                    { text: 'Try someone else.', nextScene: 'dm_start' }
+                ]
+            },
+            'push_happyman_harder': {
+                 messages: [
+                    { speaker: 'Henry', text: 'Cmooon HappyMan, don\'t be boring. For old times sake?'},
+                    { speaker: 'HappyMan', text: '...' },
+                    { speaker: 'HappyMan', text: 'im turning off notifications for this chat. good night.' },
+                    { speaker: 'Henry', text: 'No wait!' }
+                ],
+                narrative: 'HappyMan seems to have muted the chat. That approach didn\'t work.',
+                 action: (gs) => { gs.tbcAnnoyance.HappyMan += 5; gs.henryAnnoyance += 1;},
+                choices: [
+                    { text: 'Okay, try DMing someone else.', nextScene: 'dm_start' },
+                    { text: 'Try pinging the whole group again, maybe someone else saw.', nextScene: 'ping_again_desperate'}
+                ]
+            },
+            'apologize_happyman': {
+                messages: [
+                    { speaker: 'HappyMan', text: 'maybe. depends how long this movie is. dont hold ur breath tho.' },
+                    { speaker: 'Henry', text: 'Okay! Progress! I\'ll DM you the server link just in case.' }
+                ],
+                narrative: 'A glimmer of hope? Or just politeness? Hard to tell.',
+                 action: (gs) => { gs.tbcAnnoyance.HappyMan += 0; }, // Less annoying
+                choices: [
+                    { text: 'Try DMing someone else while waiting.', nextScene: 'dm_start' },
+                    { text: 'Wait a bit, maybe HappyMan will actually join.', nextScene: 'wait_happyman' }
+                ]
+            },
+             'wait_happyman': {
+                narrative: 'You wait 30 minutes. No sign of HappyMan.',
+                 messages: [
+                    { speaker: 'Henry', text: 'uhh @HappyMan you done yet?' }
+                 ],
+                 action: (gs) => { gs.henryAnnoyance += 1; },
+                 choices: [
+                     { text: 'Ping him again.', nextScene: 'ping_happyman_again'},
+                     { text: 'Assume he\'s not coming and try others.', nextScene: 'dm_start'}
+                 ]
+            },
+             'ping_happyman_again': {
+                 messages: [
+                    { speaker: 'Henry', text: '@HappyMan ??? Movie over?? Troll time???' },
+                    { speaker: 'HappyMan', text: 'zzzzzz' },
+                    { speaker: 'Henry', text: 'Bruh.' }
+                 ],
+                 narrative: 'Definitely not coming.',
+                 action: (gs) => { gs.tbcAnnoyance.HappyMan += 2; },
+                 choices: [
+                     { text: 'Fine. Try someone else.', nextScene: 'dm_start' }
+                 ]
+            },
+            'dm_start': {
+                narrative: 'Time for a more direct approach. Who should Henry DM first?',
+                choices: [
+                    // Filter choices based on who hasn't been annoyed too much or contacted yet
+                    { text: 'DM Mindset 🇬🇷', nextScene: 'dm_mindset', condition: (gs) => gs.tbcAnnoyance.Mindset < 5 },
+                    { text: 'DM Adam 🇪🇬', nextScene: 'dm_adam', condition: (gs) => gs.tbcAnnoyance.Adam < 5 },
+                    { text: 'DM Abdullah 🇵🇰', nextScene: 'dm_abdullah', condition: (gs) => gs.tbcAnnoyance.Abdullah < 5 },
+                    { text: 'DM Andrej 🇷🇸', nextScene: 'dm_andrej', condition: (gs) => gs.tbcAnnoyance.Andrej < 5 },
+                    { text: 'DM Blocky 🇲🇾', nextScene: 'dm_blocky', condition: (gs) => gs.tbcAnnoyance.Blocky < 5 },
+                    { text: 'DM Frank 🇵🇪', nextScene: 'dm_frank', condition: (gs) => gs.tbcAnnoyance.Frank < 5 },
+                    { text: 'DM Meeth 🇪🇪', nextScene: 'dm_meeth', condition: (gs) => gs.tbcAnnoyance.Meeth < 5 },
+                    { text: 'DM Salle 🇷🇸', nextScene: 'dm_salle', condition: (gs) => gs.tbcAnnoyance.Salle < 5 },
+                    { text: 'Maybe just give up for tonight.', nextScene: 'give_up_later' }
+                ]
+            },
+
+            // DM Sequences - Example for Mindset
+            'dm_mindset': {
+                narrative: 'You open a DM with Mindset.',
+                messages: [
+                    { speaker: 'Henry', text: 'Yo Mindset, you saw my message in TBC?' },
+                    { speaker: 'Henry', text: 'Got a server, prime for trolling. You in?' }
+                ],
+                 action: (gs) => { if (!gs.membersContacted.includes('Mindset')) gs.membersContacted.push('Mindset'); },
+                nextScene: 'dm_mindset_wait'
+            },
+            'dm_mindset_wait': {
+                 narrative: 'Waiting for Mindset to reply...',
+                 // Simulate a wait or immediate reply
+                 nextScene: 'dm_mindset_reply'
+            },
+            'dm_mindset_reply': {
+                 messages: [
+                    { speaker: 'Mindset', text: 'Henry.' },
+                    { speaker: 'Mindset', text: 'No.' },
+                    { speaker: 'Mindset', text: 'I\'m trying to code something.' }
+                 ],
+                 action: (gs) => { gs.tbcAnnoyance.Mindset += 1; },
+                 choices: [
+                     { text: '"Code? Boring! Trolling is where the real skill is!"', nextScene: 'dm_mindset_push_skill' },
+                     { text: '"Ah okay. What are you coding?"', nextScene: 'dm_mindset_ask_code' },
+                     { text: '"Alright, maybe later then?"', nextScene: 'dm_mindset_later' },
+                     { text: 'Leave Mindset alone and try someone else.', nextScene: 'dm_start' }
+                 ]
+            },
+             'dm_mindset_push_skill': {
+                 messages: [
+                    { speaker: 'Henry', text: 'Code? Boring! Trolling is where the real skill is! Requires psychology, timing... art!'},
+                    { speaker: 'Mindset', text: 'The art of getting banned and annoying people? No thanks.'},
+                    { speaker: 'Mindset', text: 'Find a new hobby, Henry.'}
+                 ],
+                 action: (gs) => { gs.tbcAnnoyance.Mindset += 3; gs.henryAnnoyance += 1; },
+                 choices: [
+                     { text: 'Argue that trolling IS a good hobby.', nextScene: 'dm_mindset_argue_hobby'},
+                     { text: 'Okay, fine. Try someone else.', nextScene: 'dm_start'}
+                 ]
+            },
+             'dm_mindset_argue_hobby': {
+                 messages: [
+                    { speaker: 'Henry', text: 'It IS a good hobby! It teaches you about people!'},
+                    { speaker: 'Mindset', text: 'It teaches people that you\'re annoying. I\'m busy. Bye.'}
+                 ],
+                 narrative: 'Mindset seems unreceptive to philosophical debates about trolling.',
+                 action: (gs) => { gs.tbcAnnoyance.Mindset += 5; gs.henryAnnoyance += 2; },
+                 choices: [
+                     { text: 'Sigh. Try someone else.', nextScene: 'dm_start'}
+                 ]
+             },
+             'dm_mindset_ask_code': {
+                 messages: [
+                     { speaker: 'Henry', text: 'Ah okay. What are you coding? Maybe I can help after we troll?'},
+                     { speaker: 'Mindset', text: 'Just a personal project. And no, not interested in the "after we troll" part.'},
+                     { speaker: 'Mindset', text: 'Good luck finding others I guess.'}
+                 ],
+                 action: (gs) => { gs.tbcAnnoyance.Mindset += 1; }, // Less annoying approach
+                 choices: [
+                     { text: '"Come on, just for a little bit?"', nextScene: 'dm_mindset_push_skill'}, // Redirect to push
+                     { text: 'Accept defeat with Mindset. Try someone else.', nextScene: 'dm_start'}
+                 ]
+            },
+             'dm_mindset_later': {
+                  messages: [
+                     { speaker: 'Henry', text: 'Alright, maybe later then? Ping me if you change your mind?'},
+                     { speaker: 'Mindset', text: 'Don\'t count on it.'}
+                 ],
+                 action: (gs) => { gs.tbcAnnoyance.Mindset += 1; },
+                 choices: [
+                     { text: 'Okay. Try someone else.', nextScene: 'dm_start'}
+                 ]
+             },
+
+            // DM Sequences - Adam
+            'dm_adam': {
+                narrative: 'You open a DM with Adam.',
+                messages: [ { speaker: 'Henry', text: 'Adam my man! Troll night tonight, you know the drill. Found a perfect spot. In?' } ],
+                action: (gs) => { if (!gs.membersContacted.includes('Adam')) gs.membersContacted.push('Adam'); },
+                nextScene: 'dm_adam_wait'
+            },
+            'dm_adam_wait': { narrative: 'Waiting for Adam...', nextScene: 'dm_adam_reply' },
+            'dm_adam_reply': {
+                messages: [ { speaker: 'Adam', text: 'lol henry again?' }, { speaker: 'Adam', text: 'nah man cant, got study/work stuff' } ],
+                action: (gs) => { gs.tbcAnnoyance.Adam += 1; },
+                choices: [
+                    { text: '"Study/work? Laaame. Live a little!"', nextScene: 'dm_adam_lame' },
+                    { text: '"Ah okay, respect the grind. Hit me up if you finish early?"', nextScene: 'dm_adam_respect' },
+                    { text: 'Try someone else.', nextScene: 'dm_start' }
+                ]
+            },
+            'dm_adam_lame': {
+                 messages: [ { speaker: 'Henry', text: '"Study/work? Laaame. Live a little!"' }, { speaker: 'Adam', text: 'Living a little means not failing my exams lol.' }, { speaker: 'Adam', text: 'Maybe next time.'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Adam += 2; },
+                 choices: [
+                     { text: '"Exams can wait, trolling calls!"', nextScene: 'dm_adam_push_harder'},
+                     { text: '"Okay okay. Good luck." Try someone else.', nextScene: 'dm_start'}
+                 ]
+            },
+             'dm_adam_push_harder': {
+                 messages: [ { speaker: 'Henry', text: '"Exams can wait, trolling calls!"' }, { speaker: 'Adam', text: 'Bruh. No. Seriously.' } ],
+                 action: (gs) => { gs.tbcAnnoyance.Adam += 3; gs.henryAnnoyance += 1; },
+                 choices: [
+                     { text: 'Fine, leave Adam to his books. Try someone else.', nextScene: 'dm_start'}
+                 ]
+            },
+            'dm_adam_respect': {
+                 messages: [ { speaker: 'Henry', text: '"Ah okay, respect the grind. Hit me up if you finish early?"' }, { speaker: 'Adam', text: 'will do but probably wont finish early haha' } ],
+                 action: (gs) => { gs.tbcAnnoyance.Adam += 0; },
+                 choices: [
+                     { text: 'Hopeful, but probably not happening. Try someone else.', nextScene: 'dm_start'}
+                 ]
+            },
+
+             // DM Sequences - Abdullah
+            'dm_abdullah': {
+                narrative: 'You open a DM with Abdullah.',
+                messages: [ { speaker: 'Henry', text: 'Abdullah! Trolling time is upon us! Join the crusade?' } ],
+                 action: (gs) => { if (!gs.membersContacted.includes('Abdullah')) gs.membersContacted.push('Abdullah'); },
+                nextScene: 'dm_abdullah_wait'
+            },
+            'dm_abdullah_wait': { narrative: 'Waiting for Abdullah...', nextScene: 'dm_abdullah_reply' },
+            'dm_abdullah_reply': {
+                messages: [ { speaker: 'Abdullah', text: 'Henry bro, salaam.' }, { speaker: 'Abdullah', text: 'Trolling? Ah... I don\'t know man. Sounds tiring.' }, { speaker: 'Abdullah', text: 'Was gonna play some single player game.' } ],
+                action: (gs) => { gs.tbcAnnoyance.Abdullah += 1; },
+                choices: [
+                    { text: '"Tiring? It\'s exhilarating! Better than solo games!"', nextScene: 'dm_abdullah_push' },
+                    { text: '"Ah okay, enjoy your game then."', nextScene: 'dm_abdullah_respect' },
+                    { text: 'Try someone else.', nextScene: 'dm_start' }
+                ]
+            },
+             'dm_abdullah_push': {
+                 messages: [ { speaker: 'Henry', text: '"Tiring? It\'s exhilarating! Better than solo games!"' }, { speaker: 'Abdullah', text: 'Maybe for you haha. I prefer chill vibes tonight.' }, { speaker: 'Abdullah', text: 'Sorry bro.'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Abdullah += 2; },
+                 choices: [
+                     { text: '"Chill vibes? We can do chill trolling?" (Does that even exist?)', nextScene: 'dm_abdullah_chill_troll'},
+                     { text: 'Accept Abdullah\'s chillness. Try someone else.', nextScene: 'dm_start'}
+                 ]
+            },
+            'dm_abdullah_chill_troll': {
+                 messages: [ { speaker: 'Henry', text: '"Chill vibes? We can do chill trolling?" (Does that even exist?)' }, { speaker: 'Abdullah', text: '...Chill trolling? Is that like, politely disagreeing with someone?' }, { speaker: 'Abdullah', text: 'Think I\'ll stick to my game Henry :D'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Abdullah += 1; gs.henryAnnoyance += 1; },
+                 choices: [
+                     { text: 'Yeah, that was a reach. Try someone else.', nextScene: 'dm_start'}
+                 ]
+             },
+             'dm_abdullah_respect': {
+                 messages: [ { speaker: 'Henry', text: '"Ah okay, enjoy your game then."' }, { speaker: 'Abdullah', text: 'Thanks man, you too... whatever you end up doing.' } ],
+                 action: (gs) => { gs.tbcAnnoyance.Abdullah += 0; },
+                 choices: [
+                     { text: 'Try someone else.', nextScene: 'dm_start'}
+                 ]
+            },
+
+            // Initial Ping Responses - if pinged specifically
+             'ping_mindset': {
+                 narrative: 'You ping Mindset specifically in the main chat.',
+                 messages: [ { speaker: 'Henry', text: '@Mindset You see this? Perfect server.' }, { speaker: 'Mindset', text: 'Saw it. Still coding. Still no.'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Mindset += 1; if (!gs.membersContacted.includes('Mindset')) gs.membersContacted.push('Mindset'); },
+                 choices: [
+                     { text: 'Try to convince him in main chat.', nextScene: 'convince_mindset_main' },
+                     { text: 'DM him instead.', nextScene: 'dm_mindset' },
+                     { text: 'Okay, try pinging someone else.', nextScene: 'ping_specific_start' }
+                 ]
+            },
+            'convince_mindset_main': {
+                messages: [ { speaker: 'Henry', text: '@Mindset coding can wait! this opportunity cant!' }, { speaker: 'Mindset', text: 'My project > annoying randoms.' }, { speaker: 'Blocky', text: 'lol henry at it again'}],
+                action: (gs) => { gs.tbcAnnoyance.Mindset += 2; if (!gs.membersContacted.includes('Blocky')) gs.membersContacted.push('Blocky'); },
+                choices: [
+                    { text: '"Blocky! You in then?"', nextScene: 'ask_blocky' },
+                    { text: 'Keep trying with Mindset.', nextScene: 'dm_mindset_push_skill' }, // Re-use DM logic slightly adapted
+                    { text: 'Give up on Mindset for now. Try someone else.', nextScene: 'ping_specific_start'}
+                ]
+            },
+            'ask_blocky': {
+                messages: [ { speaker: 'Henry', text: '"Blocky! You in then?"' }, { speaker: 'Blocky', text: 'hmm idk henry, last time was kinda messy'}, { speaker: 'Blocky', text: 'what server is it?'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Blocky += 0; }, // He's considering!
+                 choices: [
+                     { text: 'Describe the server (Exaggerate how easy it is).', nextScene: 'describe_server_blocky' },
+                     { text: 'Just say "It\'s perfect, trust me!"', nextScene: 'blocky_trust_me' }
+                 ]
+            },
+            'describe_server_blocky': {
+                 messages: [ { speaker: 'Henry', text: 'Its this small community server, barely any mods active at night. Full of people just asking to be messed with. Easy pickings!' }, { speaker: 'Blocky', text: 'hmmmmm tempting... but im kinda lazy rn'}, { speaker: 'Blocky', text: 'maybe if others join'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Blocky += 1; },
+                 choices: [
+                     { text: '"Okay, I\'ll try to rally more troops!"', nextScene: 'rally_troops' },
+                     { text: '"Don\'t be lazy! Seize the night!"', nextScene: 'blocky_push_lazy'}
+                 ]
+            },
+             'blocky_trust_me': {
+                 messages: [ { speaker: 'Henry', text: '"It\'s perfect, trust me!"' }, { speaker: 'Blocky', text: 'uhuh. "trust me" he says. i remember "trust me" last time.'}, { speaker: 'Blocky', text: 'im gonna pass for now.'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Blocky += 2; gs.henryAnnoyance += 1; },
+                 choices: [
+                     { text: 'Damn. Try to rally others anyway.', nextScene: 'rally_troops' },
+                     { text: 'Try someone else specifically.', nextScene: 'ping_specific_start'}
+                 ]
+            },
+            'blocky_push_lazy': {
+                 messages: [ { speaker: 'Henry', text: '"Don\'t be lazy! Seize the night!"' }, { speaker: 'Blocky', text: 'nah im seizing my bed soon. good luck tho lmao'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Blocky += 2; },
+                 choices: [
+                     { text: 'Blocky out. Rally others.', nextScene: 'rally_troops' },
+                     { text: 'Try someone else specifically.', nextScene: 'ping_specific_start'}
+                 ]
+            },
+
+             'ping_adam': {
+                 narrative: 'You ping Adam specifically in the main chat.',
+                 messages: [ { speaker: 'Henry', text: '@Adam troll o clock?' }, { speaker: 'Adam', text: 'henry i told u i got stuff 2 do'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Adam += 1; if (!gs.membersContacted.includes('Adam')) gs.membersContacted.push('Adam'); },
+                 choices: [
+                     { text: 'Acknowledge and back off.', nextScene: 'ping_specific_start' },
+                     { text: 'Try DMing him to persuade.', nextScene: 'dm_adam' }
+                 ]
+             },
+             'ping_serbs': {
+                 narrative: 'You ping Andrej and Salle.',
+                 messages: [ { speaker: 'Henry', text: '@Andrej @Salle Serbian power hour? Got a job for us.' }, { speaker: 'Andrej', text: '?' }, { speaker: 'Salle', text: 'What job Henry?' } ],
+                  action: (gs) => {
+                      if (!gs.membersContacted.includes('Andrej')) gs.membersContacted.push('Andrej');
+                      if (!gs.membersContacted.includes('Salle')) gs.membersContacted.push('Salle');
+                      gs.tbcAnnoyance.Andrej += 0; // Curious
+                      gs.tbcAnnoyance.Salle += 0; // Curious
+                  },
+                 choices: [
+                     { text: 'Explain the trolling plan.', nextScene: 'explain_serbs' },
+                     { text: 'Be vague and mysterious.', nextScene: 'vague_serbs' }
+                 ]
+            },
+             'explain_serbs': {
+                  messages: [ { speaker: 'Henry', text: 'Found a weak server. Easy targets. We go in, stir stuff up, laugh, leave. Classic.' }, { speaker: 'Andrej', text: 'Hmm.' }, { speaker: 'Salle', text: 'Sounds like standard Henry plan.' }, { speaker: 'Salle', text: 'Which usually means it goes wrong.' }, { speaker: 'Andrej', text: 'True.' }],
+                  action: (gs) => { gs.tbcAnnoyance.Andrej += 1; gs.tbcAnnoyance.Salle += 1; },
+                  choices: [
+                      { text: '"This time is different! I have countermeasures!"', nextScene: 'serbs_countermeasures' },
+                      { text: '"Okay yeah maybe, but it\'ll be funny!"', nextScene: 'serbs_funny' },
+                      { text: 'They seem skeptical. Try others.', nextScene: 'rally_troops' }
+                  ]
+             },
+             'vague_serbs': {
+                  messages: [ { speaker: 'Henry', text: 'A delicate operation. Requires precision. And chaos. You in?' }, { speaker: 'Salle', text: 'Stop talking like movie trailer Henry.' }, { speaker: 'Andrej', text: 'Is it trolling?' }, { speaker: 'Henry', text: '...Maybe a little bit.' }, { speaker: 'Andrej', text: 'Pass.' }, { speaker: 'Salle', text: 'Yeah, probably pass.' } ],
+                  action: (gs) => { gs.tbcAnnoyance.Andrej += 2; gs.tbcAnnoyance.Salle += 2; gs.henryAnnoyance += 1; },
+                  choices: [
+                      { text: 'Reveal the full trolling plan anyway.', nextScene: 'explain_serbs' },
+                      { text: 'They\'re out. Try others.', nextScene: 'rally_troops' }
+                  ]
+             },
+             'serbs_countermeasures': {
+                  messages: [ { speaker: 'Henry', text: '"This time is different! I have countermeasures! VPNs, alt accounts ready to go!"' }, { speaker: 'Andrej', text: 'Effort.' }, { speaker: 'Salle', text: 'So much effort just to annoy people.' }, { speaker: 'Salle', text: 'Why not just play game?' }, { speaker: 'Henry', text: 'This IS the game!'} ],
+                  action: (gs) => { gs.tbcAnnoyance.Andrej += 1; gs.tbcAnnoyance.Salle += 1; },
+                  choices: [
+                      { text: 'Try to convince them it\'s low effort.', nextScene: 'serbs_low_effort' },
+                      { text: 'Appeal to the potential fun factor.', nextScene: 'serbs_funny' },
+                      { text: 'Give up on the Serbs.', nextScene: 'rally_troops' }
+                  ]
+            },
+             'serbs_funny': {
+                 messages: [ { speaker: 'Henry', text: '"Okay yeah maybe it goes wrong sometimes, but it\'ll be funny!"' }, { speaker: 'Salle', text: 'Funny for you maybe.' }, { speaker: 'Andrej', text: 'I prefer winning.' }, { speaker: 'Henry', text: 'We ARE winning! Against boredom!'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Andrej += 1; gs.tbcAnnoyance.Salle += 1; },
+                 choices: [
+                      { text: 'Double down on the "winning against boredom" angle.', nextScene: 'serbs_boredom'},
+                      { text: 'Mention countermeasures again.', nextScene: 'serbs_countermeasures'},
+                      { text: 'Give up on the Serbs.', nextScene: 'rally_troops' }
+                 ]
+            },
+            'serbs_boredom': {
+                messages: [ { speaker: 'Henry', text: '"Exactly! We fight the ultimate enemy: Boredom! Join the resistance!"' }, { speaker: 'Andrej', text: '...' }, { speaker: 'Salle', text: 'Henry go to sleep.' } ],
+                action: (gs) => { gs.tbcAnnoyance.Andrej += 2; gs.tbcAnnoyance.Salle += 2; gs.henryAnnoyance += 1; },
+                 choices: [
+                      { text: 'They\'re definitely out. Try others.', nextScene: 'rally_troops' }
+                 ]
+            },
+             'serbs_low_effort': {
+                  messages: [ { speaker: 'Henry', text: '"It\'s super low effort! I did all the setup! You just join and type!"' }, { speaker: 'Andrej', text: 'Typing is effort.' }, { speaker: 'Salle', text: 'I agree with Andrej.' }, { speaker: 'Henry', text: '...'} ],
+                  action: (gs) => { gs.tbcAnnoyance.Andrej += 1; gs.tbcAnnoyance.Salle += 1; gs.henryAnnoyance += 2; },
+                  choices: [
+                      { text: 'Wow. Okay. Give up on the Serbs.', nextScene: 'rally_troops' }
+                  ]
+             },
+
+
+             // Rallying / More DMs
+            'rally_troops': {
+                 narrative: 'Okay, need to convince more people. Blocky might join if others do. Who else?',
+                 action: (gs) => {
+                     // Reset choices based on who is left and not too annoyed
+                    const availableMembers = ['Mindset', 'Adam', 'Abdullah', 'Andrej', 'Blocky', 'Frank', 'HappyMan', 'Meeth', 'Salle']
+                        .filter(m => !gs.membersContacted.includes(m) || gs.tbcAnnoyance[m] < 5);
+                    if (availableMembers.length === 0) {
+                        gameState.currentScene = 'no_one_left'; // Skip choice rendering if no one is left
+                    }
+                 },
+                 choices: [
+                    // Dynamically generate choices based on who is left
+                    { text: 'DM Frank 🇵🇪', nextScene: 'dm_frank', condition: (gs) => (!gs.membersContacted.includes('Frank') || gs.tbcAnnoyance.Frank < 5) },
+                    { text: 'DM Meeth 🇪🇪', nextScene: 'dm_meeth', condition: (gs) => (!gs.membersContacted.includes('Meeth') || gs.tbcAnnoyance.Meeth < 5) },
+                    { text: 'Try HappyMan again? 🇵🇱', nextScene: 'dm_happyman_again', condition: (gs) => gs.tbcAnnoyance.HappyMan < 8 && gs.membersContacted.includes('HappyMan') }, // Can try again if not super annoyed
+                    { text: 'Re-ping the whole group chat.', nextScene: 'ping_again_desperate' },
+                    { text: 'Give up.', nextScene: 'give_up_later'}
+                 ]
+            },
+
+            'dm_frank': {
+                narrative: 'You DM Frank.',
+                messages: [ { speaker: 'Henry', text: 'Frankie! Operation Chaos tonight. Need your wildcard energy. You free?' } ],
+                 action: (gs) => { if (!gs.membersContacted.includes('Frank')) gs.membersContacted.push('Frank'); },
+                nextScene: 'dm_frank_wait'
+            },
+            'dm_frank_wait': { narrative: 'Waiting for Frank...', nextScene: 'dm_frank_reply' },
+            'dm_frank_reply': {
+                 messages: [ { speaker: 'Frank', text: 'Henry my friend! Chaos? Intriguing!' }, { speaker: 'Frank', text: 'But alas, connection here is terrible tonight. High ping.' }, { speaker: 'Frank', text: 'Would just be frustrating.'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Frank += 1; },
+                 choices: [
+                     { text: '"No worries about ping! The targets are slow!"', nextScene: 'dm_frank_ping_ok' },
+                     { text: '"Ah damn, bad luck. Next time then?"', nextScene: 'dm_frank_next_time' },
+                     { text: 'Try someone else.', nextScene: 'rally_troops' }
+                 ]
+            },
+            'dm_frank_ping_ok': {
+                 messages: [ { speaker: 'Henry', text: '"No worries about ping! The targets are slow!"' }, { speaker: 'Frank', text: 'Hahaha maybe. But also family is watching movie in living room. Cannot be shouting into mic.' }, { speaker: 'Frank', text: 'Maybe quietly type?' } ],
+                 action: (gs) => { gs.tbcAnnoyance.Frank += 1; }, // He's considering!
+                 choices: [
+                     { text: '"Yes! Silent trolling! The best kind!"', nextScene: 'dm_frank_silent' },
+                     { text: '"Ah okay, family time is important. Understood."', nextScene: 'dm_frank_respect_family' }
+                 ]
+            },
+            'dm_frank_silent': {
+                 messages: [ { speaker: 'Henry', text: '"Yes! Silent trolling! The best kind!"' }, { speaker: 'Frank', text: 'Okay okay. Send me the link. I will lurk. Maybe type something funny if chance comes.' }, { speaker: 'Henry', text: 'YES! Frank the Tank joins the fray!'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Frank += 0; gs.membersWilling += 1; },
+                 narrative: 'Frank seems cautiously willing!',
+                 choices: [
+                     { text: 'Excellent! Try to get more people.', nextScene: 'rally_troops' }
+                 ]
+            },
+            'dm_frank_next_time': {
+                 messages: [ { speaker: 'Henry', text: '"Ah damn, bad luck. Next time then?"' }, { speaker: 'Frank', text: 'For sure Henry! Keep me posted on future chaos.' } ],
+                 action: (gs) => { gs.tbcAnnoyance.Frank += 0; },
+                 choices: [
+                     { text: 'Okay. Try someone else.', nextScene: 'rally_troops' }
+                 ]
+            },
+            'dm_frank_respect_family': {
+                messages: [ { speaker: 'Henry', text: '"Ah okay, family time is important. Understood."' }, { speaker: 'Frank', text: 'Thanks man. Good luck with the operation!' } ],
+                 action: (gs) => { gs.tbcAnnoyance.Frank += 0; },
+                 choices: [
+                     { text: 'Try someone else.', nextScene: 'rally_troops' }
+                 ]
+            },
+
+             'dm_meeth': {
+                narrative: 'You DM Meeth.',
+                messages: [ { speaker: 'Henry', text: 'Meeth! You online? Got a fun little project for tonight.' } ],
+                 action: (gs) => { if (!gs.membersContacted.includes('Meeth')) gs.membersContacted.push('Meeth'); },
+                nextScene: 'dm_meeth_wait'
+            },
+            'dm_meeth_wait': { narrative: 'Waiting for Meeth...', nextScene: 'dm_meeth_reply' },
+            'dm_meeth_reply': {
+                 messages: [ { speaker: 'Meeth', text: 'Define "fun little project"' }, { speaker: 'Meeth', text: 'Is it your usual definition?' } ],
+                 action: (gs) => { gs.tbcAnnoyance.Meeth += 0; }, // Cautious but listening
+                 choices: [
+                     { text: 'Be honest: "Okay it\'s trolling, but a good server!"', nextScene: 'dm_meeth_honest' },
+                     { text: 'Be evasive: "Just some server exploration..."', nextScene: 'dm_meeth_evasive' }
+                 ]
+            },
+             'dm_meeth_honest': {
+                 messages: [ { speaker: 'Henry', text: '"Okay it\'s trolling, but a good server!"' }, { speaker: 'Meeth', text: '...' }, { speaker: 'Meeth', text: 'Hard pass.' }, { speaker: 'Meeth', text: 'Have fun.'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Meeth += 2; },
+                 choices: [
+                     { text: 'Try to argue?', nextScene: 'dm_meeth_argue'},
+                     { text: 'Accept defeat.', nextScene: 'rally_troops' }
+                 ]
+            },
+            'dm_meeth_argue': {
+                 messages: [ { speaker: 'Henry', text: '"Whyyyy? It\'ll be quick and easy!"' }, { speaker: 'Meeth', text: 'Because I have better things to do than get digital rocks thrown at me.' }, { speaker: 'Meeth', text: 'Seriously Henry find better hobby.'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Meeth += 3; gs.henryAnnoyance += 1; },
+                 narrative: 'Meeth echoes Mindset\'s sentiment.',
+                 choices: [
+                     { text: 'Okay, okay. Try someone else.', nextScene: 'rally_troops' }
+                 ]
+            },
+             'dm_meeth_evasive': {
+                 messages: [ { speaker: 'Henry', text: '"Just some server exploration..."' }, { speaker: 'Meeth', text: 'Server exploration that involves @everyone pings and mentions of easy targets?' }, { speaker: 'Meeth', text: 'I can read the main chat Henry.' }, { speaker: 'Meeth', text: 'Still pass.'} ],
+                 action: (gs) => { gs.tbcAnnoyance.Meeth += 3; gs.henryAnnoyance += 1; }, // Evasiveness backfired
+                 choices: [
+                     { text: 'Busted. Try someone else.', nextScene: 'rally_troops' }
+                 ]
+            },
+
+             // Desperation pings
+             'ping_again_desperate': {
+                 narrative: 'Getting desperate. Time for another group ping.',
+                 messages: [ { speaker: 'Henry', text: '@everyone PLEASE somebody join me im bored and this server is perfect :((((' }],
+                 action: (gs) => {
+                     gs.henryAnnoyance += 3;
+                     // Annoy everyone slightly more
+                     Object.keys(gs.tbcAnnoyance).forEach(member => {
+                         if (gs.membersContacted.includes(member)) gs.tbcAnnoyance[member] += 1;
+                     });
+                 },
+                 nextScene: 'desperate_wait'
+            },
+            'desperate_wait': {
+                narrative: 'The plea hangs in the chat. Will pity work?',
+                // Add logic here: maybe someone takes pity, maybe more people get annoyed
+                nextScene: 'desperate_reply' // Example transition
+            },
+             'desperate_reply': {
+                 // Example: Maybe Blocky considers it again if Frank joined?
+                 messages: [
+                     { speaker: 'Blocky', text: 'ugh fine henry if frank is really in maybe i join for like 30 mins', condition: (gs) => gs.membersWilling > 0 && gs.tbcAnnoyance.Blocky < 6 },
+                     { speaker: 'Abdullah', text: 'Henry go play single player game challenge: impossible', condition: (gs) => gs.tbcAnnoyance.Abdullah < 5 },
+                     { speaker: 'Mindset', text: '*mutes channel*', condition: (gs) => gs.tbcAnnoyance.Mindset >= 5 }
+                 ],
+                  action: (gs) => {
+                     if (gs.membersWilling > 0 && gs.tbcAnnoyance.Blocky < 6 && !gs.membersContacted.includes('Blocky_Joined')) { // Ensure Blocky joins only once this way
+                         gs.membersWilling += 1;
+                         gs.membersContacted.push('Blocky_Joined'); // Mark as joined
+                         gs.tbcAnnoyance.Blocky += 1;
+                     }
+                      if (gs.tbcAnnoyance.Abdullah < 5) gs.tbcAnnoyance.Abdullah += 1;
+                      if (gs.tbcAnnoyance.Mindset >= 5) gs.tbcAnnoyance.Mindset += 2; // Gets more annoyed by mute action
+                 },
+                 choices: [
+                     { text: 'Check how many are willing now.', nextScene: 'check_willing' }
+                 ]
+            },
+
+
+            // Endings & Checks
+            'check_willing': {
+                narrative: () => `Checking the status... Henry has ${gameState.membersWilling} potential accomplice(s).`,
+                 choices: [
+                     { text: 'Try one last push for more members.', nextScene: 'rally_troops', condition: (gs) => gs.henryAnnoyance < 10 },
+                     { text: 'Proceed with the current group (or alone).', nextScene: 'proceed_plan' },
+                     { text: 'Give up, it\'s not happening tonight.', nextScene: 'give_up_final' }
+                 ]
+            },
+             'proceed_plan': {
+                 narrative: (gs) => {
+                     if (gs.membersWilling > 1) return `With ${gs.membersWilling} members cautiously agreeing, Henry sends the server link. The night might hold some chaos after all...`;
+                     if (gs.membersWilling === 1) return `Only one member (${['Frank', 'Blocky'].find(m => gs.membersContacted.includes(m+'_Joined') || (m === 'Frank' && gs.tbcAnnoyance.Frank < 2) ) || 'someone'}) hesitantly agreed. It's not the grand operation Henry envisioned, but maybe it's enough for some fun... or disaster.`;
+                     return `No one really wanted to join. Henry stares at the server link alone. Should he go in solo? Or just call it a night?`;
+                 },
+                 messages: (gs) => {
+                     let msg = [{ speaker: 'Henry', text: 'Alright losers, sending the link now! Let\'s do this!' }];
+                     if (gs.membersWilling === 0) {
+                        msg = [{ speaker: 'Henry', text: '...guess it\'s just me then? Or maybe I\'ll just watch youtube.' }];
+                     }
+                     return msg;
+                 },
+                 endText: (gs) => {
+                     if (gs.membersWilling > 0) return "The trolling operation begins, for better or worse. [END]";
+                     else return "Henry sighs. Maybe trolling isn't what it used to be. Or maybe he just needs new friends. [END]";
+                 }
+             },
+
+             'give_up_early': {
+                 narrative: 'Henry sighs. Maybe tonight wasn\'t the night. He closes Discord.',
+                 messages: [ { speaker: 'Henry', text: 'eh whatever. maybe later.' } ],
+                 endText: "The server remains untrolled... for now. [END]"
+             },
+             'give_up_later': {
+                 narrative: `Henry looks at the list of contacted members: ${gameState.membersContacted.join(', ')}. The enthusiasm just isn't there tonight.`,
+                 messages: [ { speaker: 'Henry', text: 'wow okay nobody wants to have fun anymore i guess' } ],
+                  action: (gs) => { gs.henryAnnoyance += 5; },
+                 endText: "Defeated, Henry decides to play Minesweeper instead. The TBC remains peaceful. [END]"
+             },
+              'give_up_final': {
+                 narrative: `It's late, Henry is annoyed, and the TBC members are clearly not interested or actively avoiding him. It's just not worth the effort anymore.`,
+                 messages: [ { speaker: 'Henry', text: 'FINE. BE BORING. SEE IF I CARE.' }, { speaker: 'Henry', text: '(He cares)' } ],
+                 action: (gs) => { gs.henryAnnoyance += 5; },
+                 endText: "Henry rage-quits Discord for the night. The trolling plan fizzles out completely. [END]"
+             },
+             'no_one_left': {
+                 narrative: 'Henry has tried contacting everyone, or they are too annoyed to try again. There\'s no one left to convince.',
+                 messages: [ { speaker: 'Henry', text: '...seriously? No one?' } ],
+                  action: (gs) => { gs.henryAnnoyance += 4; },
+                 choices: [
+                    { text: 'Go troll alone.', nextScene: 'proceed_plan' }, // Will lead to the solo ending text
+                    { text: 'Accept defeat.', nextScene: 'give_up_final' }
+                 ]
+             }
+
+            // Add more DM paths for other members: Blocky, Andrej, Salle, Meeth following similar patterns
+            // Add more branching based on annoyance levels or previous choices
+            // Consider adding state variables like 'server_link_sent' etc.
+        };
+
+
+        // --- Helper function to handle dynamic text/narrative ---
+        function processDynamicText(textOrFunc, gs) {
+            if (typeof textOrFunc === 'function') {
+                return textOrFunc(gs);
+            }
+            return textOrFunc;
+        }
+
+        // --- Modify renderScene to use the helper ---
+        function renderScene(sceneId) {
+            const scene = story[sceneId];
+            if (!scene) {
+                console.error(`Scene not found: ${sceneId}`);
+                storyDisplay.innerHTML = `<div class="narrative">Error: Scene ${sceneId} not found. Game over?</div>`;
+                choicesDiv.innerHTML = '';
+                return;
+            }
+
+            // Clear previous content
+            storyDisplay.innerHTML = '';
+            choicesDiv.innerHTML = '';
+
+             // Update game state based on scene actions FIRST
+            if (scene.action) {
+                 if (typeof scene.action === 'function') {
+                    scene.action(gameState);
+                 } else {
+                     console.warn(`Action for scene ${sceneId} is not a function.`);
+                 }
+            }
+
+            // Display narrative if present (and process if it's a function)
+            if (scene.narrative) {
+                const narrativeP = document.createElement('p');
+                narrativeP.classList.add('narrative');
+                narrativeP.textContent = processDynamicText(scene.narrative, gameState);
+                storyDisplay.appendChild(narrativeP);
+            }
+
+            // Display messages/dialogue (and process if it's a function)
+            const messagesToDisplay = processDynamicText(scene.messages || [], gameState);
+            if (messagesToDisplay.length > 0) {
+                messagesToDisplay.forEach(msg => {
+                     // Conditional message display
+                    if (msg.condition && !msg.condition(gameState)) {
+                        return; // Skip this message
+                    }
+
+                    const messageDiv = document.createElement('div');
+                    messageDiv.classList.add('message');
+
+                    const avatarDiv = document.createElement('div');
+                    avatarDiv.classList.add('avatar');
+                    const charInfo = characters[msg.speaker];
+                    if (charInfo) {
+                        if (charInfo.avatarClass) {
+                            avatarDiv.classList.add(charInfo.avatarClass);
+                        }
+                        avatarDiv.textContent = charInfo.flag || msg.speaker.charAt(0);
+                    } else {
+                         avatarDiv.textContent = '⚙️';
+                    }
+
+                    const contentDiv = document.createElement('div');
+                    contentDiv.classList.add('content');
+
+                    const usernameSpan = document.createElement('span');
+                    usernameSpan.classList.add('username');
+                    usernameSpan.textContent = msg.speaker;
+                    if (charInfo && charInfo.flag) {
+                        const flagSpan = document.createElement('span');
+                        flagSpan.classList.add('flag');
+                        flagSpan.textContent = charInfo.flag;
+                        usernameSpan.appendChild(flagSpan);
+                    }
+
+                    const textP = document.createElement('p');
+                    textP.classList.add('text');
+                    textP.textContent = msg.text; // Assuming message text itself isn't dynamic per render, defined in story obj
+
+                    contentDiv.appendChild(usernameSpan);
+                    contentDiv.appendChild(textP);
+
+                    messageDiv.appendChild(avatarDiv);
+                    messageDiv.appendChild(contentDiv);
+                    storyDisplay.appendChild(messageDiv);
+                });
+            }
+
+
+            // Display choices
+            const choicesToDisplay = processDynamicText(scene.choices || [], gameState);
+            if (choicesToDisplay.length > 0) {
+                choicesToDisplay.forEach((choice, index) => {
+                    // Check if choice has a condition
+                    if (choice.condition && !choice.condition(gameState)) {
+                        return; // Skip rendering this choice if condition not met
+                    }
+
+                    const button = document.createElement('button');
+                    button.classList.add('choice');
+                    button.textContent = processDynamicText(choice.text, gameState); // Process dynamic choice text
+                    button.onclick = () => {
+                        let nextSceneId = choice.nextScene;
+                         // Optional: update state based on choice action
+                        if (choice.action) {
+                            if(typeof choice.action === 'function'){
+                                choice.action(gameState);
+                            } else {
+                                console.warn(`Choice action for scene ${sceneId} is not a function.`);
+                            }
+                        }
+                        // Handle dynamic nextScene if needed (optional, can be complex)
+                        if (typeof nextSceneId === 'function') {
+                            nextSceneId = nextSceneId(gameState);
+                        }
+
+                        gameState.currentScene = nextSceneId;
+                        renderScene(gameState.currentScene);
+                    };
+                    choicesDiv.appendChild(button);
+                });
+            // Check if ANY choices were actually rendered after conditions
+            if (choicesDiv.children.length === 0 && scene.nextScene) {
+                 // If all conditional choices failed, but there's a default nextScene
+                 const button = document.createElement('button');
+                 button.classList.add('choice');
+                 button.textContent = "Continue...";
+                 button.onclick = () => {
+                     gameState.currentScene = scene.nextScene; // Use the default nextScene
+                     renderScene(gameState.currentScene);
+                 };
+                 choicesDiv.appendChild(button);
+            } else if (choicesDiv.children.length === 0 && !scene.nextScene) {
+                 // Truly the end of this path, no choices rendered and no auto-advance
+                 const endText = document.createElement('p');
+                 endText.classList.add('narrative');
+                 endText.textContent = processDynamicText(scene.endText || "The conversation fades...", gameState);
+                 choicesDiv.appendChild(endText);
+                 addRestartButton();
+                }
+
+            } else if (scene.nextScene) {
+                // Auto-advance if no choices defined but nextScene is defined
+                 const button = document.createElement('button');
+                 button.classList.add('choice');
+                 button.textContent = "Continue...";
+                 button.onclick = () => {
+                     let nextSceneId = scene.nextScene;
+                     if (typeof nextSceneId === 'function') {
+                         nextSceneId = nextSceneId(gameState);
+                     }
+                     gameState.currentScene = nextSceneId;
+                     renderScene(gameState.currentScene);
+                 };
+                 choicesDiv.appendChild(button);
+            } else {
+                // End of this path - no choices, no nextScene
+                const endText = document.createElement('p');
+                endText.classList.add('narrative');
+                endText.textContent = processDynamicText(scene.endText || "The story concludes here.", gameState);
+                choicesDiv.appendChild(endText);
+                addRestartButton();
+            }
+
+            // Scroll to the bottom of the story display
+            storyDisplay.scrollTop = storyDisplay.scrollHeight;
+        }
+
+         function addRestartButton() {
+             const restartButton = document.createElement('button');
+             restartButton.classList.add('choice');
+             restartButton.style.marginTop = '15px'; // Add some space
+             restartButton.style.backgroundColor = '#f04747'; // Reddish color for restart
+             restartButton.textContent = "Start Over?";
+             restartButton.onclick = () => {
+                 // Deep copy reset state if complex objects are involved, otherwise simple assignment is fine
+                 gameState = JSON.parse(JSON.stringify({ // Simple deep copy via JSON
+                     currentScene: 'start',
+                     henryAnnoyance: 0,
+                     tbcAnnoyance: { Mindset: 0, Adam: 0, Abdullah: 0, Andrej: 0, Blocky: 0, Frank: 0, HappyMan: 0, Meeth: 0, Salle: 0 },
+                     membersContacted: [],
+                     membersWilling: 0
+                 }));
+                 renderScene('start');
+             };
+             choicesDiv.appendChild(restartButton);
+         }
+
+
+        // Initial game start
+        renderScene(gameState.currentScene);
+
+    </script>
+</body>
+</html>

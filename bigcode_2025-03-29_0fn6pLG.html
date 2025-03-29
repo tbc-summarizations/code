@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geometry Dash Clone</title>
+<style>
+    body {
+        margin: 0;
+        background-color: #111;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        font-family: 'Arial', sans-serif;
+        color: white;
+        overflow: hidden; /* Prevent scrollbars on body */
+    }
+    #game-container {
+        width: 800px;
+        max-width: 100%; /* Responsive width */
+        height: 400px;
+        background-color: #2c3e50; /* Default background */
+        overflow: hidden;
+        position: relative;
+        border: 3px solid white;
+        cursor: pointer;
+        user-select: none; /* Prevent text selection */
+        -webkit-user-select: none; /* Safari */
+        -ms-user-select: none; /* IE 10+ */
+    }
+    #game-world {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 10000px; /* Very wide world, adjusted by JS */
+        height: 100%;
+        transform: translateX(0px); /* Controlled by JS for scrolling */
+    }
+    .game-object {
+        position: absolute;
+        /* bottom/left positioning handled by JS via top/left */
+    }
+    .player {
+        width: 30px;
+        height: 30px;
+        background-color: #f1c40f; /* Yellow cube */
+        position: absolute;
+        /* Position controlled by JS transform */
+        z-index: 10;
+        transform-origin: center center;
+        box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+    }
+    .player.ship {
+        background-color: transparent; /* Use triangle shape */
+        border-left: 15px solid transparent;
+        border-right: 15px solid transparent;
+        border-bottom: 30px solid #e74c3c; /* Red ship */
+        width: 0;
+        height: 0;
+        box-shadow: none; /* Remove square shadow */
+        filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.7));
+    }
+    .platform {
+        background-color: #95a5a6; /* Default platform color */
+        position: absolute;
+        /* Size and position set by JS */
+        border: 1px solid rgba(0,0,0,0.2); /* Subtle border */
+    }
+    .spike, .spike-up {
+        position: absolute;
+        width: 0;
+        height: 0;
+        /* Triangle created using borders */
+        transform-origin: center bottom;
+    }
+    .spike { /* Pointing up */
+        border-left: 15px solid transparent;
+        border-right: 15px solid transparent;
+        border-bottom: 30px solid #ecf0f1; /* White spikes */
+    }
+    .spike-up { /* Pointing down */
+         border-left: 15px solid transparent;
+         border-right: 15px solid transparent;
+         border-top: 30px solid #ecf0f1;
+         transform-origin: center top;
+    }
+    .sawblade { /* Represented by spinning square */
+        width: 40px;
+        height: 40px;
+        background-color: #c0392b; /* Red sawblade color */
+        position: absolute;
+        border-radius: 5px;
+        /* Basic rotation added in JS */
+    }
+    .portal {
+        width: 20px; /* Thin vertical portal */
+        height: 80px; /* Tall portal */
+        position: absolute;
+        opacity: 0.9;
+        display: flex; /* For centering text if needed */
+        justify-content: center;
+        align-items: center;
+        font-size: 10px;
+        font-weight: bold;
+        color: white;
+        text-shadow: 1px 1px 2px black;
+        border-radius: 3px;
+        box-shadow: inset 0 0 10px rgba(255,255,255,0.5);
+    }
+    .portal-ship { background: linear-gradient(to bottom, #e74c3c, #c0392b); } /* Red for ship */
+    .portal-cube { background: linear-gradient(to bottom, #f1c40f, #f39c12); } /* Yellow for cube */
+    .portal-gravity-up { background: linear-gradient(to bottom, #3498db, #2980b9); } /* Blue for gravity up */
+    .portal-gravity-down { background: linear-gradient(to bottom, #f39c12, #e67e22); } /* Orange for gravity down */
+
+    .jump-pad {
+        width: 30px;
+        height: 15px;
+        background: linear-gradient(to bottom, #f1c40f, #e1b000); /* Yellow */
+        position: absolute;
+        border-radius: 3px 3px 0 0; /* Rounded top */
+        box-shadow: 0 -2px 5px rgba(241, 196, 15, 0.5);
+    }
+    .jump-pad.upside-down {
+         border-radius: 0 0 3px 3px; /* Rounded bottom */
+         box-shadow: 0 2px 5px rgba(241, 196, 15, 0.5);
+    }
+    .jump-ring {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 5px solid;
+        box-sizing: border-box;
+        position: absolute;
+        background-color: rgba(0, 0, 0, 0.3); /* Inner transparent look */
+        box-shadow: 0 0 8px;
+    }
+    .jump-ring-yellow { border-color: #f1c40f; box-shadow: 0 0 8px #f1c40f; }
+    .jump-ring-red { border-color: #e74c3c; box-shadow: 0 0 8px #e74c3c;}
+    .jump-ring.activated { opacity: 0.4; }
+
+    .coin {
+        width: 20px;
+        height: 20px;
+        background: radial-gradient(circle, gold 50%, darkgoldenrod 100%);
+        border-radius: 50%;
+        position: absolute;
+        display: flex; justify-content: center; align-items: center;
+        font-weight: bold; color: #4a3000; font-size: 12px;
+        box-shadow: 0 0 5px gold;
+    }
+
+    #ui-layer {
+        position: absolute;
+        top: 0; left: 0; right: 0; /* Full width */
+        padding: 5px 10px;
+        box-sizing: border-box;
+        z-index: 20;
+        background: linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0));
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.9em;
+    }
+    #progress-bar-container {
+        width: 150px; /* Fixed width for progress */
+        background-color: #555;
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 0 10px;
+    }
+    #progress-bar {
+        width: 0%;
+        height: 100%;
+        background-color: #2ecc71;
+        transition: width 0.1s linear;
+        border-radius: 4px;
+    }
+    #level-info { display: flex; align-items: center; }
+    #coin-info { font-weight: bold; }
+
+    #level-select {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0,0,0,0.85);
+        z-index: 30;
+        text-align: center;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+     #level-select h2 { margin-top: 0; }
+    #level-select button {
+        padding: 12px 25px;
+        margin: 8px;
+        font-size: 1.1em;
+        cursor: pointer;
+        background-color: #3498db;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        transition: background-color 0.2s ease;
+        min-width: 200px; /* Ensure buttons have decent width */
+    }
+    #level-select button:hover { background-color: #2980b9; }
+
+    #death-message {
+        display: none;
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2.5em;
+        font-weight: bold;
+        color: #e74c3c; /* Red */
+        z-index: 40;
+        background: rgba(0,0,0,0.8);
+        padding: 25px 40px;
+        border-radius: 15px;
+        text-shadow: 2px 2px 5px black;
+        text-align: center;
+        border: 2px solid #c0392b;
+    }
+     #death-message small { font-size: 0.5em; display: block; margin-top: 10px; color: #bdc3c7; }
+
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui-layer">
+        <div id="level-info">
+            <span>Lv: <span id="level-name">N/A</span></span>
+            <div id="progress-bar-container">
+                <div id="progress-bar"></div>
+            </div>
+            <span>Att: <span id="attempt-count">1</span></span>
+        </div>
+        <div id="coin-info">🪙 0 / 3</div>
+    </div>
+
+    <div id="game-world">
+        <!-- Player element will be added by JS -->
+        <!-- Level elements will be added by JS -->
+    </div>
+
+     <div id="death-message">💥 CRASHED! <small>(Tap/Click to retry)</small></div>
+
+     <div id="level-select">
+         <h2>Geometry Dash Clone</h2>
+         <p style="margin-bottom: 20px; color: #bdc3c7;">Select a Level</p>
+         <button data-level="0">1. Stereo Madness</button>
+         <button data-level="1">2. Back on Track</button>
+         <button data-level="2">3. Polargeist</button>
+         <button data-level="3">4. Dry Out</button>
+         <button data-level="4">5. Base After Base</button>
+         <button data-level="5">6. Can't Let Go</button>
+         <button data-level="6">7. Jumper</button>
+     </div>
+</div>
+
+
+<script>
+// Strict mode helps catch common coding errors
+"use strict";
+
+// --- Game Constants ---
+const GAME_WIDTH = 800; // Logical game width
+const GAME_HEIGHT = 400; // Logical game height
+const PLAYER_START_X = 100; // Initial horizontal player position
+const PLAYER_WIDTH = 30;
+const PLAYER_HEIGHT = 30;
+const GRAVITY = 0.7; // Adjusted gravity force
+const JUMP_FORCE = -11.5; // Initial velocity on jump
+const SHIP_LIFT = -0.4; // Upward force when holding for ship
+const SHIP_MAX_FALL_SPEED = 7; // Max downward speed for ship
+const SHIP_MAX_LIFT_SPEED = -6; // Max upward speed for ship
+const GROUND_Y = GAME_HEIGHT - 50; // Y-coordinate of the ground's top surface
+const CEILING_Y = 50; // Y-coordinate of the ceiling's bottom surface (for upside down)
+const OBJECT_SIZE = 30; // Default size for spikes etc.
+const COIN_SIZE = 20;
+const JUMP_PAD_FORCE = -18; // Jump force from yellow pad
+const JUMP_RING_YELLOW_FORCE = -12;
+const JUMP_RING_RED_FORCE = -16;
+
+// --- Game State Variables ---
+let playerElement = null;
+let gameWorld = document.getElementById('game-world');
+let gameContainer = document.getElementById('game-container');
+let uiLayer = document.getElementById('ui-layer');
+let levelSelect = document.getElementById('level-select');
+let deathMessage = document.getElementById('death-message');
+let progressBar = document.getElementById('progress-bar');
+let levelNameEl = document.getElementById('level-name');
+let attemptCountEl = document.getElementById('attempt-count');
+let collectedCoinsEl = document.getElementById('coin-info');
+
+let currentLevelIndex = -1;
+let levels = []; // Populated by generateLevels()
+let levelObjects = []; // Stores active objects with properties
+let activePortals = new Set(); // Tracks portals player is currently inside
+let collectedCoinIds = new Set();
+let totalCoinsInLevel = 0;
+
+let gameRunning = false;
+let playerX = PLAYER_START_X; // Logical X position (world scrolls relative to this)
+let playerY = GROUND_Y - PLAYER_HEIGHT; // Player top Y coordinate
+let playerVelY = 0; // Vertical velocity
+let playerRotation = 0; // Visual rotation angle
+let playerMode = 'cube'; // 'cube', 'ship'
+let gravityDirection = 1; // 1 for normal (down), -1 for reversed (up)
+let worldScrollX = 0; // How much the game-world div is shifted left
+let levelLength = 0; // Total length of the current level in pixels
+let attemptCount = 1;
+let isHolding = false; // Is the mouse/touch currently held down?
+let canJump = true; // Can the cube initiate a jump?
+let animationFrameId = null; // ID for canceling game loop
+
+// --- Level Data Generation ---
+// Simplified representations of levels. Positions are approximate.
+function generateLevels() {
+    // Helper to define ground/ceiling Y based on gravity
+    const groundY = (gd = 1) => gd === 1 ? GROUND_Y : CEILING_Y;
+    const objHeight = OBJECT_SIZE;
+
+    levels = [
+        // 1. Stereo Madness
+        {
+            name: "Stereo Madness",
+            theme: { groundColor: '#3498db', bgColor: '#2980b9', objectColor: '#ecf0f1', spikeColor: '#ecf0f1' },
+            speed: 5, length: 4000, coins: 3,
+            data: [
+                { type: 'platform', x: 0, y: groundY(), width: 600, isGround: true },
+                { type: 'spike', x: 400, y: groundY() },
+                { type: 'platform', x: 650, y: groundY(), width: 300, isGround: true },
+                { type: 'spike_group', x: 700, y: groundY(), count: 3 },
+                { type: 'coin', x: 800, y: groundY() - 80, id: 1 }, // Coin 1
+                { type: 'platform', x: 1000, y: groundY(), width: 400, isGround: true },
+                { type: 'platform', x: 1100, y: groundY() - 80, width: 100 },
+                { type: 'platform', x: 1300, y: groundY() - 120, width: 100 },
+                { type: 'coin', x: 1250, y: groundY() - 50, id: 2 }, // Coin 2 (low)
+                { type: 'platform', x: 1500, y: groundY(), width: 1300, isGround: true },
+                { type: 'portal', x: 2800, y: groundY() - 100, portalType: 'ship' }, // ~70%
+                { type: 'block', x: 3000, y: groundY(), height: 100 },
+                { type: 'block', x: 3100, y: 0, height: 100 }, // Ceiling block
+                { type: 'block', x: 3250, y: groundY(), height: 150 },
+                { type: 'block', x: 3400, y: 0, height: 150 },
+                { type: 'coin', x: 3350, y: GAME_HEIGHT / 2 - COIN_SIZE / 2, id: 3 }, // Coin 3 (ship)
+                { type: 'portal', x: 3600, y: groundY() - 100, portalType: 'cube' }, // ~90%
+                { type: 'platform', x: 3600, y: groundY(), width: 400, isGround: true },
+                { type: 'spike', x: 3800, y: groundY() },
+                { type: 'spike', x: 3800 + objHeight, y: groundY() },
+                { type: 'end', x: 4000 }
+            ]
+        },
+        // 2. Back on Track
+        {
+            name: "Back on Track",
+            theme: { groundColor: '#f39c12', bgColor: '#e67e22', objectColor: '#ecf0f1', spikeColor: '#ecf0f1' },
+            speed: 5.5, length: 4500, coins: 3,
+            data: [
+                { type: 'platform', x: 0, y: groundY(), width: 500, isGround: true },
+                { type: 'jump-pad', x: 300, y: groundY() },
+                { type: 'platform', x: 550, y: groundY(), width: 600, isGround: true },
+                { type: 'platform', x: 900, y: groundY() - 100, width: 100 },
+                { type: 'coin', x: 950, y: groundY() - 150, id: 1 }, // Coin 1
+                { type: 'jump-pad', x: 1180, y: groundY() },
+                { type: 'platform', x: 1200, y: groundY(), width: 800, isGround: true },
+                { type: 'spike_group', x: 1400, y: groundY(), count: 3 },
+                { type: 'jump-pad', x: 1600, y: groundY() },
+                { type: 'spike', x: 1600, y: groundY() - 100 }, // Spike over pad
+                { type: 'platform', x: 2050, y: groundY(), width: 1000, isGround: true },
+                { type: 'jump-pad', x: 2200, y: groundY() },
+                { type: 'jump-pad', x: 2400, y: groundY() },
+                { type: 'coin', x: 2500, y: groundY() - 150, id: 2 }, // Coin 2
+                { type: 'jump-pad', x: 2600, y: groundY() },
+                { type: 'platform', x: 3100, y: groundY() - 80, width: 500 },
+                { type: 'spike_group', x: 3200, y: groundY() - 80, count: 4},
+                { type: 'coin', x: 3350, y: groundY() - 30, id: 3 }, // Coin 3 (low)
+                { type: 'platform', x: 3650, y: groundY(), width: 850, isGround: true },
+                { type: 'spike_group', x: 3800, y: groundY(), count: 5 },
+                { type: 'jump-pad', x: 4200, y: groundY() },
+                { type: 'end', x: 4500 }
+            ]
+        },
+         // 3. Polargeist
+        {
+            name: "Polargeist",
+            theme: { groundColor: '#8e44ad', bgColor: '#9b59b6', objectColor: '#bdc3c7', spikeColor: '#ecf0f1' },
+            speed: 6, length: 5000, coins: 3,
+            data: [
+                { type: 'platform', x: 0, y: groundY(), width: 600, isGround: true },
+                { type: 'jump-ring-yellow', x: 400, y: groundY() - 100 },
+                { type: 'platform', x: 650, y: groundY(), width: 500, isGround: true },
+                { type: 'spike', x: 800, y: groundY() },
+                { type: 'platform', x: 900, y: groundY() - 80, width: 100 },
+                { type: 'coin', x: 1000, y: groundY() - 30, id: 1 }, // Coin 1
+                { type: 'jump-ring-yellow', x: 1050, y: groundY() - 120 },
+                { type: 'platform', x: 1200, y: groundY(), width: 600, isGround: true },
+                { type: 'jump-ring-red', x: 1500, y: groundY() - 150 },
+                { type: 'spike', x: 1500, y: groundY() },
+                { type: 'platform', x: 1850, y: groundY(), width: 800, isGround: true },
+                { type: 'jump-ring-yellow', x: 2000, y: groundY() - 80 },
+                { type: 'jump-ring-yellow', x: 2200, y: groundY() - 120 },
+                { type: 'coin', x: 2300, y: groundY() - 220, id: 2 }, // Coin 2 (high)
+                { type: 'jump-ring-yellow', x: 2400, y: groundY() - 160 },
+                { type: 'platform', x: 2700, y: groundY(), width: 1000, isGround: true },
+                { type: 'spike_group', x: 2800, y: groundY(), count: 3 },
+                { type: 'jump-ring-red', x: 3100, y: groundY() - 100 },
+                { type: 'spike', x: 3100, y: groundY() - 30 }, // Raised spike
+                { type: 'platform', x: 3300, y: groundY() - 100, width: 300 },
+                { type: 'spike-up', x: 3400, y: groundY() - 100 - objHeight }, // Spike on platform underside
+                { type: 'platform', x: 3750, y: groundY(), width: 1250, isGround: true },
+                { type: 'jump-ring-yellow', x: 4000, y: groundY() - 100 },
+                { type: 'coin', x: 4100, y: groundY() - 50, id: 3 }, // Coin 3
+                { type: 'jump-ring-red', x: 4200, y: groundY() - 150 },
+                { type: 'spike_group', x: 4500, y: groundY(), count: 4 },
+                { type: 'end', x: 5000 }
+            ]
+        },
+        // 4. Dry Out
+        {
+            name: "Dry Out",
+            theme: { groundColor: '#c0392b', bgColor: '#a03024', objectColor: '#bdc3c7', spikeColor: '#ecf0f1' },
+            speed: 6.5, length: 5500, coins: 3,
+            data: [
+                { type: 'platform', x: 0, y: groundY(), width: 800, isGround: true },
+                { type: 'spike', x: 500, y: groundY() }, { type: 'spike', x: 600, y: groundY() },
+                { type: 'platform', x: 850, y: groundY(), width: 1350, isGround: true },
+                { type: 'portal', x: 2200, y: groundY() - 150, portalType: 'gravity-down' }, // ~40%
+                { type: 'platform', x: 2200, y: groundY(-1), width: 1200, isCeiling: true }, // Ceiling platform
+                { type: 'spike-up', x: 2500, y: groundY(-1) }, { type: 'spike-up', x: 2650, y: groundY(-1) },
+                { type: 'coin', x: 2800, y: groundY(-1) + 80, id: 1 }, // Coin 1 (UD)
+                { type: 'platform', x: 3000, y: groundY(-1) + 80, width: 200 }, // Floating ceiling platform
+                { type: 'spike-up', x: 3100, y: groundY(-1) + 80 },
+                { type: 'platform', x: 3400, y: groundY(-1), width: 725, isCeiling: true }, // Continue ceiling
+                { type: 'portal', x: 4125, y: groundY() - 150, portalType: 'gravity-up' }, // ~75%
+                { type: 'platform', x: 4125, y: groundY(), width: 1375, isGround: true },
+                { type: 'spike_group', x: 4300, y: groundY(), count: 3 },
+                { type: 'jump-pad', x: 4600, y: groundY() },
+                { type: 'coin', x: 4600, y: groundY() - 150, id: 2 }, // Coin 2
+                { type: 'platform', x: 4800, y: groundY() - 100, width: 200 },
+                { type: 'spike', x: 4850, y: groundY() - 100 },
+                { type: 'coin', x: 5100, y: groundY() - 50, id: 3 }, // Coin 3
+                { type: 'spike', x: 5200, y: groundY() }, { type: 'spike', x: 5300, y: groundY() },
+                { type: 'end', x: 5500 }
+            ]
+        },
+         // 5. Base After Base
+        {
+            name: "Base After Base",
+            theme: { groundColor: '#27ae60', bgColor: '#2ecc71', objectColor: '#ecf0f1', spikeColor: '#16a085' },
+            speed: 7, length: 6000, coins: 3,
+            data: [
+                { type: 'platform', x: 0, y: groundY(), width: 700, isGround: true },
+                { type: 'spike_group', x: 400, y: groundY(), count: 2 },
+                { type: 'platform', x: 750, y: groundY(), width: 800, isGround: true },
+                { type: 'jump-pad', x: 900, y: groundY() },
+                { type: 'platform', x: 1100, y: groundY() - 120, width: 100 },
+                { type: 'spike', x: 1135, y: groundY() - 120 },
+                { type: 'coin', x: 1400, y: groundY() - 50, id: 1 }, // Coin 1
+                { type: 'platform', x: 1600, y: groundY(), width: 2000, isGround: true },
+                { type: 'portal', x: 3600, y: groundY() - 150, portalType: 'gravity-down' }, // ~60%
+                { type: 'platform', x: 3600, y: groundY(-1), width: 1200, isCeiling: true },
+                { type: 'spike-up', x: 3800, y: groundY(-1) },
+                { type: 'jump-pad', x: 4000, y: groundY(-1), upsideDown: true },
+                { type: 'platform', x: 4200, y: groundY(-1) + 100, width: 200 }, // Ceiling platform drop
+                { type: 'spike-up', x: 4250, y: groundY(-1) + 100},
+                { type: 'coin', x: 4300, y: groundY(-1) + 150, id: 2 }, // Coin 2 (UD)
+                { type: 'platform', x: 4800, y: groundY(-1), width: 300, isCeiling: true }, // Back to main ceiling
+                { type: 'portal', x: 5100, y: groundY() - 150, portalType: 'gravity-up' }, // ~85%
+                 { type: 'platform', x: 5100, y: groundY(), width: 900, isGround: true },
+                 { type: 'spike_group', x: 5300, y: groundY(), count: 4 },
+                 { type: 'jump-ring-yellow', x: 5600, y: groundY() - 100 },
+                 { type: 'coin', x: 5750, y: groundY() - 50, id: 3 }, // Coin 3
+                 { type: 'spike', x: 5850, y: groundY() },
+                { type: 'end', x: 6000 }
+            ]
+        },
+         // 6. Can't Let Go
+        {
+            name: "Can't Let Go",
+            theme: { groundColor: '#34495e', bgColor: '#2c3e50', objectColor: '#ecf0f1', spikeColor: '#f39c12' },
+            speed: 7.5, length: 6500, coins: 3,
+            data: [
+                 { type: 'platform', x: 0, y: groundY(), width: 500, isGround: true }, { type: 'spike', x: 300, y: groundY() },
+                 { type: 'platform', x: 550, y: groundY(), width: 1595, isGround: true }, // Extended first platform
+                 { type: 'portal', x: 2145, y: groundY() - 150, portalType: 'gravity-down' }, // ~33%
+                 { type: 'platform', x: 2145, y: groundY(-1), width: 1100, isCeiling: true },
+                 { type: 'spike-up', x: 2400, y: groundY(-1) },
+                 { type: 'jump-pad', x: 2600, y: groundY(-1), upsideDown: true },
+                 { type: 'coin', x: 2750, y: groundY(-1) + 100, id: 1}, // Coin 1 (UD)
+                 { type: 'portal', x: 3250, y: groundY() - 150, portalType: 'gravity-up' }, // ~50%
+                 { type: 'platform', x: 3250, y: groundY(), width: 1105, isGround: true },
+                 { type: 'jump-pad', x: 3500, y: groundY() },
+                 { type: 'platform', x: 3800, y: groundY() - 120, width: 150 },
+                 { type: 'portal', x: 4355, y: groundY() - 150, portalType: 'gravity-down' }, // ~67%
+                 { type: 'platform', x: 4355, y: groundY(-1), width: 1365, isCeiling: true },
+                 { type: 'spike-up', x: 4600, y: groundY(-1) },
+                 { type: 'jump-ring-yellow', x: 4800, y: groundY(-1) + 150 },
+                 { type: 'coin', x: 4950, y: groundY(-1) + 50, id: 2}, // Coin 2 (UD low)
+                 { type: 'portal', x: 5720, y: groundY() - 150, portalType: 'gravity-up' }, // ~88%
+                 { type: 'platform', x: 5720, y: groundY(), width: 780, isGround: true },
+                 { type: 'spike_group', x: 6000, y: groundY(), count: 3 },
+                 { type: 'coin', x: 6200, y: groundY() - 50, id: 3}, // Coin 3
+                 { type: 'end', x: 6500 }
+            ]
+        },
+         // 7. Jumper
+        {
+            name: "Jumper",
+            theme: { groundColor: '#1abc9c', bgColor: '#16a085', objectColor: '#ecf0f1', spikeColor: '#e74c3c' },
+            speed: 8, length: 7000, coins: 3,
+            data: [
+                { type: 'platform', x: 0, y: groundY(), width: 600, isGround: true },
+                { type: 'jump-pad', x: 300, y: groundY() }, { type: 'jump-pad', x: 400, y: groundY() },
+                { type: 'platform', x: 650, y: groundY(), width: 800, isGround: true },
+                { type: 'jump-ring-yellow', x: 800, y: groundY() - 100 },
+                { type: 'spike', x: 800, y: groundY() },
+                { type: 'platform', x: 1000, y: groundY() - 100, width: 100 },
+                { type: 'jump-ring-red', x: 1200, y: groundY() - 150 },
+                { type: 'coin', x: 1350, y: groundY() - 50, id: 1 }, // Coin 1
+                { type: 'platform', x: 1500, y: groundY(), width: 2000, isGround: true },
+                { type: 'portal', x: 3500, y: groundY() - 150, portalType: 'gravity-down' }, // ~50%
+                { type: 'platform', x: 3500, y: groundY(-1), width: 1500, isCeiling: true },
+                { type: 'jump-pad', x: 3700, y: groundY(-1), upsideDown: true },
+                { type: 'spike-up', x: 3700, y: groundY(-1) + 100 }, // Spike below pad level
+                { type: 'jump-ring-yellow', x: 4000, y: groundY(-1) + 150 },
+                { type: 'platform', x: 4200, y: groundY(-1) + 100, width: 200 }, // Drop
+                { type: 'coin', x: 4400, y: groundY(-1) + 150, id: 2}, // Coin 2 (UD)
+                 { type: 'spike-up', x: 4500, y: groundY(-1) }, { type: 'spike-up', x: 4650, y: groundY(-1) }, // Back on main ceiling
+                 { type: 'platform', x: 5000, y: groundY(-1), width: 250, isCeiling: true }, // Continue ceiling
+                 { type: 'portal', x: 5250, y: groundY() - 150, portalType: 'gravity-up' }, // ~75%
+                { type: 'platform', x: 5250, y: groundY(), width: 1750, isGround: true },
+                { type: 'jump-pad', x: 5500, y: groundY() },
+                { type: 'jump-ring-red', x: 5800, y: groundY() - 120 },
+                { type: 'spike_group', x: 6100, y: groundY(), count: 3 },
+                { type: 'coin', x: 6400, y: groundY() - 50, id: 3 }, // Coin 3
+                { type: 'jump-pad', x: 6600, y: groundY() },
+                { type: 'end', x: 7000 }
+            ]
+        },
+    ];
+}
+
+
+// --- Game Setup ---
+
+function createPlayer() {
+    if (playerElement) { // Reuse if exists
+        playerElement.style.display = 'block';
+    } else {
+        playerElement = document.createElement('div');
+        gameWorld.appendChild(playerElement);
+    }
+    playerElement.className = 'player cube'; // Start as cube
+    resetPlayerState();
+}
+
+function resetPlayerState() {
+    playerX = PLAYER_START_X;
+    playerY = GROUND_Y - PLAYER_HEIGHT; // Top Y coordinate
+    playerVelY = 0;
+    playerRotation = 0;
+    playerMode = 'cube';
+    gravityDirection = 1;
+    isHolding = false;
+    canJump = true;
+    activePortals.clear();
+    updatePlayerStyle();
+    // Initial position set in render() using transform
+}
+
+function updatePlayerStyle() {
+    playerElement.className = `player ${playerMode}`;
+    // No special class needed for upside-down cube, handled by rotation/transform
+}
+
+function setupLevel(levelIndex) {
+    if (levelIndex < 0 || levelIndex >= levels.length) return;
+    currentLevelIndex = levelIndex;
+    const level = levels[currentLevelIndex];
+
+    // Clear previous level elements and state
+    gameWorld.innerHTML = ''; // Clear children (safer than setting innerHTML = '')
+    levelObjects = [];
+    collectedCoinIds.clear();
+    totalCoinsInLevel = level.coins || 0;
+
+    // Apply theme
+    gameContainer.style.backgroundColor = level.theme.bgColor;
+
+    // Create player (or ensure it's ready)
+    createPlayer();
+
+    // Set level length and world width
+    levelLength = level.length;
+    gameWorld.style.width = `${levelLength + GAME_WIDTH}px`; // Buffer zone
+
+    // Generate level objects from data
+    level.data.forEach(objData => {
+        createObjectElement(objData, level.theme);
+    });
+
+    // Append player element again (since gameWorld was cleared)
+    gameWorld.appendChild(playerElement);
+
+    // Reset scroll, state, and UI
+    worldScrollX = 0;
+    resetPlayerState(); // Ensure player state is fresh
+    updateUI();
+    gameRunning = true;
+    levelSelect.style.display = 'none';
+    deathMessage.style.display = 'none';
+    playerElement.style.backgroundColor = ''; // Reset death color
+
+    // Start game loop
+    if (animationFrameId) cancelAnimationFrame(animationFrameId); // Stop previous loop if any
+    lastTime = performance.now(); // Reset time for deltaTime calculation
+    animationFrameId = requestAnimationFrame(gameLoop);
+}
+
+function createObjectElement(objData, theme) {
+    const element = document.createElement('div');
+    element.classList.add('game-object');
+    element.style.position = 'absolute'; // Ensure absolute positioning within gameWorld
+
+    let objX = objData.x;
+    let objY = objData.y; // This Y is typically the top edge for platforms/blocks, base for spikes/pads/rings
+    let objWidth = objData.width || OBJECT_SIZE;
+    let objHeight = objData.height || OBJECT_SIZE;
+    let isSolid = false; // Does this object provide ground/ceiling support?
+    let isLethal = false; // Does this object kill on touch?
+    let upsideDown = objData.upsideDown || false; // Is the object inverted (e.g., upside down jump pad)?
+
+    element.dataset.type = objData.type;
+
+    // Adjust Y based on type for consistent top-left positioning in CSS
+    // This simplifies obj.y access later.
+    let cssTop;
+    let cssLeft = objX;
+
+    switch (objData.type) {
+        case 'platform':
+        case 'block':
+            isSolid = true;
+            element.classList.add('platform');
+            element.style.backgroundColor = objData.color || (objData.isGround || objData.isCeiling ? theme.groundColor : theme.objectColor);
+            element.style.width = `${objWidth}px`;
+            element.style.height = `${objHeight}px`;
+            // objY is the top edge of the platform/block
+            cssTop = objY;
+            break;
+
+        case 'spike': // Pointing up
+            isLethal = true;
+            element.classList.add('spike');
+            // objY is the Y coordinate of the base of the spike triangle
+            cssTop = objY - OBJECT_SIZE; // Calculate top based on base and height
+            objHeight = OBJECT_SIZE; // Use standard spike height
+            objWidth = OBJECT_SIZE; // Use standard spike base width
+            element.style.borderBottomColor = theme.spikeColor;
+             // Position based on top-left, but visually aligned by bottom center
+             cssLeft = objX - objWidth / 2; // Adjust left for centering base
+             element.style.left = `${cssLeft}px`; // Need to set left here due to border trick
+             element.style.top = `${cssTop}px`;
+            break; // Skip default positioning
+
+        case 'spike-up': // Pointing down
+            isLethal = true;
+            element.classList.add('spike-up');
+             // objY is the Y coordinate of the base (top edge) of the spike triangle
+            cssTop = objY;
+            objHeight = OBJECT_SIZE;
+            objWidth = OBJECT_SIZE;
+            element.style.borderTopColor = theme.spikeColor;
+            cssLeft = objX - objWidth / 2;
+            element.style.left = `${cssLeft}px`;
+            element.style.top = `${cssTop}px`;
+            break; // Skip default positioning
+
+        case 'spike_group':
+            // Create multiple spikes based on count
+            for (let i = 0; i < objData.count; i++) {
+                const singleSpikeData = {
+                    ...objData, // Inherit properties like y, upsideDown
+                    type: objData.upsideDown ? 'spike-up' : 'spike',
+                    x: objData.x + i * OBJECT_SIZE, // Position each spike
+                    width: OBJECT_SIZE,
+                    height: OBJECT_SIZE
+                };
+                // Need to adjust Y based on whether it's ground or ceiling group
+                 if (!objData.upsideDown) singleSpikeData.y = objData.y; // Base Y for normal spikes
+                 else singleSpikeData.y = objData.y; // Top Y for upside-down spikes
+
+                createObjectElement(singleSpikeData, theme); // Recursively create individual spike
+            }
+            return; // Don't add the group container itself
+
+        case 'sawblade':
+            isLethal = true;
+            element.classList.add('sawblade');
+            objWidth = 40; objHeight = 40; // Fixed size
+             // Center sawblade visually around objY
+            cssTop = objY - objHeight / 2;
+            element.style.width = `${objWidth}px`;
+            element.style.height = `${objHeight}px`;
+            break;
+
+        case 'portal':
+            element.classList.add('portal', `portal-${objData.portalType.replace('_','-')}`);
+            objWidth = 20; objHeight = 80;
+            // Center portal vertically around objY
+            cssTop = objY - objHeight / 2;
+            element.style.width = `${objWidth}px`;
+            element.style.height = `${objHeight}px`;
+            element.dataset.portalType = objData.portalType;
+            break;
+
+        case 'jump-pad':
+            element.classList.add('jump-pad');
+            objWidth = 30; objHeight = 15;
+            if (upsideDown) {
+                 element.classList.add('upside-down');
+                 cssTop = objY; // objY is top edge of upside-down pad
+            } else {
+                 cssTop = objY - objHeight; // objY is bottom edge of normal pad
+            }
+            element.style.width = `${objWidth}px`;
+            element.style.height = `${objHeight}px`;
+             cssLeft = objX - objWidth / 2; // Center pad visually
+             element.style.left = `${cssLeft}px`;
+             element.style.top = `${cssTop}px`;
+             break; // Skip default positioning
+
+        case 'jump-ring-yellow':
+        case 'jump-ring-red':
+            element.classList.add('jump-ring');
+            element.classList.add(objData.type === 'jump-ring-yellow' ? 'jump-ring-yellow' : 'jump-ring-red');
+            objWidth = 30; objHeight = 30;
+             // Center ring visually around objY
+            cssTop = objY - objHeight / 2;
+            element.style.width = `${objWidth}px`;
+            element.style.height = `${objHeight}px`;
+            cssLeft = objX - objWidth / 2; // Center ring visually
+            element.style.left = `${cssLeft}px`;
+             element.style.top = `${cssTop}px`;
+            break; // Skip default positioning
+
+        case 'coin':
+            element.classList.add('coin');
+            objWidth = COIN_SIZE; objHeight = COIN_SIZE;
+             // Center coin visually around objY
+            cssTop = objY - objHeight / 2;
+            element.style.width = `${objWidth}px`;
+            element.style.height = `${objHeight}px`;
+            element.dataset.coinId = objData.id;
+            element.innerText = '★'; // Use star emoji or ★ symbol
+            break;
+
+        case 'end': // Invisible marker
+            element.style.width = '10px';
+            element.style.height = `${GAME_HEIGHT}px`;
+            cssTop = 0;
+            break;
+
+        default:
+            console.warn("Unknown object type:", objData.type);
+            return; // Don't add unknown types
+    }
+
+    // Set common styles unless handled specifically above
+    if (!element.style.left) element.style.left = `${cssLeft}px`;
+    if (!element.style.top) element.style.top = `${cssTop}px`;
+
+    gameWorld.appendChild(element);
+
+    // Store object data for physics/collision checks
+    levelObjects.push({
+        element: element,
+        x: objX, // Keep original logic X if needed
+        y: cssTop, // Top Y coordinate for AABB
+        width: objWidth,
+        height: objHeight,
+        type: objData.type,
+        portalType: objData.portalType,
+        isSolid: isSolid,
+        isLethal: isLethal,
+        upsideDown: upsideDown,
+        coinId: objData.coinId,
+        isGround: !!objData.isGround, // Mark default ground platforms
+        isCeiling: !!objData.isCeiling, // Mark default ceiling platforms
+        // Pre-calculate forces based on gravity direction? No, check during collision.
+    });
+}
+
+
+function updateUI() {
+    const level = levels[currentLevelIndex];
+    if (!level) return; // Exit if level not loaded
+
+    levelNameEl.textContent = level.name;
+    attemptCountEl.textContent = attemptCount;
+
+    // Progress Calculation
+    const progress = Math.min(100, Math.max(0, (playerX / levelLength) * 100));
+    progressBar.style.width = `${progress}%`;
+
+    // Coin Counter
+    collectedCoinsEl.textContent = `🪙 ${collectedCoinIds.size} / ${totalCoinsInLevel}`;
+}
+
+
+// --- Game Loop ---
+let lastTime = 0;
+function gameLoop(timestamp) {
+    if (!gameRunning) {
+        animationFrameId = null; // Ensure loop doesn't restart itself
+        return;
+    }
+
+    const deltaTime = Math.min(0.05, (timestamp - lastTime) / 1000); // Time in seconds, capped to prevent huge jumps
+    lastTime = timestamp;
+
+    update(deltaTime);
+    render();
+
+    animationFrameId = requestAnimationFrame(gameLoop);
+}
+
+// --- Update Logic ---
+function update(deltaTime) {
+    const level = levels[currentLevelIndex];
+    const moveSpeed = level.speed * 60 * deltaTime; // Scale speed by deltaTime for smoother movement
+
+    // Move player forward (conceptually) by scrolling the world left
+    playerX += moveSpeed;
+    worldScrollX = -playerX + PLAYER_START_X;
+
+    // --- Physics ---
+    // Apply Gravity
+    playerVelY += GRAVITY * gravityDirection * (60 * deltaTime); // Scale gravity by deltaTime
+
+    // Apply Player Controls & Physics Mode
+    if (playerMode === 'cube') {
+        // Rotation (visual only)
+        if (!canJump) { // If in air
+            playerRotation += 8 * gravityDirection * (60 * deltaTime);
+        } else { // On ground, snap rotation
+             playerRotation = Math.round(playerRotation / 90) * 90;
+        }
+        // Apply vertical velocity
+        playerY += playerVelY * gravityDirection * (60 * deltaTime);
+
+    } else if (playerMode === 'ship') {
+        // Apply lift if holding
+        if (isHolding) {
+            playerVelY += SHIP_LIFT * gravityDirection * (60 * deltaTime);
+        }
+        // Clamp vertical velocity for ship
+        if (gravityDirection === 1) { // Normal gravity
+            playerVelY = Math.max(SHIP_MAX_LIFT_SPEED, Math.min(SHIP_MAX_FALL_SPEED, playerVelY));
+        } else { // Reversed gravity
+             playerVelY = Math.max(-SHIP_MAX_FALL_SPEED, Math.min(-SHIP_MAX_LIFT_SPEED, playerVelY)); // Inverted clamps
+        }
+
+        // Apply vertical velocity (note: ship Y movement is direct, not multiplied by gravityDirection)
+        playerY += playerVelY * (60 * deltaTime);
+
+        // Ship rotation based on velocity
+        playerRotation = playerVelY * 2 * gravityDirection;
+    }
+
+    // --- Collision Detection & Resolution ---
+    const collisionResult = checkCollisions();
+
+    // --- Ground/Ceiling Handling ---
+    // Use collision result instead of separate check
+    canJump = collisionResult.onGround; // Update jump status based on collision check
+
+    if (collisionResult.onGround) {
+        // Landed on a surface
+        playerVelY = 0;
+        playerY = collisionResult.groundY; // Snap to ground/ceiling surface
+        if (playerMode === 'cube') isHolding = false; // Prevent accidental ring activation on landing
+    } else if (collisionResult.hitCeiling) {
+         // Hit a ceiling surface
+         playerVelY = 0;
+         playerY = collisionResult.ceilingY; // Snap below ceiling surface
+         if (playerMode === 'ship') die(); // Ship dies hitting solid ceiling
+    }
+
+    // Default boundaries (kill if completely off screen)
+     if (playerY > GAME_HEIGHT || playerY + PLAYER_HEIGHT < 0) {
+         die();
+         return; // Stop update if dead
+     }
+
+
+    // --- Portal Exit Check ---
+    // Check if player has moved out of any active portals
+    const playerRect = getPlayerRect();
+    activePortals.forEach(portal => {
+        if (playerRect.x > portal.x + portal.width) { // Player has fully passed the portal
+            activePortals.delete(portal);
+            // Optionally revert visual style if needed
+        }
+    });
+
+
+    // --- Update UI ---
+    updateUI();
+}
+
+
+// --- Collision Detection ---
+function getPlayerRect() {
+    // Player's top-left is (playerX, playerY)
+    return {
+        x: playerX,
+        y: playerY,
+        width: PLAYER_WIDTH,
+        height: PLAYER_HEIGHT
+    };
+}
+
+function checkCollisions() {
+    const playerRect = getPlayerRect();
+    let collisionResult = {
+        onGround: false,
+        hitCeiling: false,
+        groundY: playerY, // Default to current Y if no collision
+        ceilingY: playerY
+    };
+    let collidedWithLethal = false;
+    let activatedRing = false; // Track if a ring was used this frame
+
+    // Check against relevant objects (broad phase - objects near player horizontally)
+    const checkMargin = 100; // Check objects slightly ahead/behind player
+    const relevantObjects = levelObjects.filter(obj =>
+        obj.x + obj.width > playerX - checkMargin && obj.x < playerX + PLAYER_WIDTH + checkMargin
+    );
+
+    for (const obj of relevantObjects) {
+        const objRect = { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
+
+        // Precise Collision Check (AABB)
+        if (playerRect.x < objRect.x + objRect.width &&
+            playerRect.x + playerRect.width > objRect.x &&
+            playerRect.y < objRect.y + objRect.height &&
+            playerRect.y + playerRect.height > objRect.y)
+        {
+            // --- COLLISION OCCURRED ---
+
+            // Handle based on type
+            switch (obj.type) {
+                case 'spike':
+                case 'spike-up':
+                case 'sawblade':
+                    collidedWithLethal = true;
+                    break;
+
+                case 'platform':
+                case 'block':
+                    if (obj.isLethal) { // Some blocks might be lethal
+                        collidedWithLethal = true;
+                    } else {
+                        // Solid object collision: Determine side of impact
+                        const overlapX = Math.min(playerRect.x + playerRect.width, objRect.x + objRect.width) - Math.max(playerRect.x, objRect.x);
+                        const overlapY = Math.min(playerRect.y + playerRect.height, objRect.y + objRect.height) - Math.max(playerRect.y, objRect.y);
+
+                        if (gravityDirection === 1) { // Normal Gravity
+                            // Check ground collision (player moving down or landed)
+                            if (playerVelY >= 0 && playerRect.y + playerRect.height > objRect.y && playerRect.y < objRect.y + overlapY) {
+                                collisionResult.onGround = true;
+                                collisionResult.groundY = objRect.y - playerRect.height; // Snap top of player to ground
+                            }
+                            // Check ceiling collision (player moving up)
+                            else if (playerVelY < 0 && playerRect.y < objRect.y + objRect.height && playerRect.y + playerRect.height > objRect.y + objRect.height - overlapY) {
+                                collisionResult.hitCeiling = true;
+                                collisionResult.ceilingY = objRect.y + objRect.height; // Snap bottom of player below ceiling
+                            }
+                            // Check side collision
+                            else if (overlapX < overlapY) {
+                                collidedWithLethal = true; // Hit side of block
+                            }
+                        } else { // Reversed Gravity
+                            // Check "ground" collision (ceiling surface, player moving up or landed)
+                            if (playerVelY <= 0 && playerRect.y < objRect.y + objRect.height && playerRect.y + playerRect.height > objRect.y + objRect.height - overlapY) {
+                                collisionResult.onGround = true; // On ceiling surface
+                                collisionResult.groundY = objRect.y + objRect.height; // Snap bottom of player to ceiling
+                            }
+                            // Check "ceiling" collision (floor surface, player moving down)
+                            else if (playerVelY > 0 && playerRect.y + playerRect.height > objRect.y && playerRect.y < objRect.y + overlapY) {
+                                collisionResult.hitCeiling = true; // Hit floor surface
+                                collisionResult.ceilingY = objRect.y - playerRect.height; // Snap top of player above floor
+                            }
+                             // Check side collision
+                            else if (overlapX < overlapY) {
+                                collidedWithLethal = true; // Hit side of block
+                            }
+                        }
+                    }
+                    break;
+
+                case 'portal':
+                    if (!activePortals.has(obj)) { // Only trigger once per entry
+                        activePortals.add(obj); // Mark as active
+                        handlePortalEntry(obj.portalType);
+                    }
+                    break;
+
+                case 'jump-pad':
+                    // Pad activates on touch, regardless of velocity direction? Usually only from top/bottom.
+                    // Check if player bottom touches normal pad, or player top touches UD pad
+                     if ((gravityDirection === 1 && playerRect.y + playerRect.height > objRect.y) ||
+                         (gravityDirection === -1 && playerRect.y < objRect.y + objRect.height))
+                     {
+                         playerVelY = JUMP_PAD_FORCE * gravityDirection * (obj.upsideDown ? -1 : 1);
+                         canJump = false; // Cannot jump immediately after pad
+                         playerRotation += 360 * gravityDirection; // Spin effect
+                     }
+                    break;
+
+                case 'jump-ring-yellow':
+                case 'jump-ring-red':
+                    if (isHolding && !activatedRing) { // Only activate if holding and haven't used a ring this frame
+                        const force = obj.type === 'jump-ring-yellow' ? JUMP_RING_YELLOW_FORCE : JUMP_RING_RED_FORCE;
+                        playerVelY = force * gravityDirection * (obj.upsideDown ? -1 : 1);
+                        canJump = false; // Cannot jump immediately after ring
+                        isHolding = false; // Consume the hold action for the ring
+                        activatedRing = true; // Mark ring used
+                        playerRotation += 360 * gravityDirection; // Spin effect
+                        obj.element.classList.add('activated'); // Visual feedback
+                         // Remove activated state after a short delay?
+                         setTimeout(() => {
+                              if(obj.element) obj.element.classList.remove('activated');
+                         }, 200);
+                    }
+                    break;
+
+                case 'coin':
+                    if (!collectedCoinIds.has(obj.coinId)) {
+                        collectedCoinIds.add(obj.coinId);
+                        obj.element.style.display = 'none'; // Hide collected coin
+                        // Store that it's collected to prevent re-adding if level restarts without full reload
+                        obj.collected = true;
+                        updateUI(); // Update coin counter immediately
+                    }
+                    break;
+
+                case 'end':
+                    winLevel();
+                    break;
+            }
+
+             // If lethal collision detected, stop checking further
+            if (collidedWithLethal) {
+                 die();
+                 return collisionResult; // Return immediately
+            }
+        }
+         // --- END OF COLLISION OCCURRED ---
+    }
+    // --- END OF OBJECT LOOP ---
+
+    // Check default ground/ceiling boundaries if not already on a platform
+    if (!collisionResult.onGround) {
+        if (gravityDirection === 1 && playerRect.y + playerRect.height >= GROUND_Y) {
+            collisionResult.onGround = true;
+            collisionResult.groundY = GROUND_Y - playerRect.height;
+        } else if (gravityDirection === -1 && playerRect.y <= CEILING_Y) {
+            collisionResult.onGround = true; // On default ceiling
+            collisionResult.groundY = CEILING_Y;
+        }
+    }
+     if (!collisionResult.hitCeiling) {
+         if (gravityDirection === 1 && playerRect.y <= 0) { // Hit absolute top
+             collisionResult.hitCeiling = true;
+             collisionResult.ceilingY = 0;
+              if (playerMode === 'ship') die(); // Ship dies hitting absolute top
+         } else if (gravityDirection === -1 && playerRect.y + playerRect.height >= GAME_HEIGHT) { // Hit absolute bottom
+              collisionResult.hitCeiling = true;
+              collisionResult.ceilingY = GAME_HEIGHT - playerRect.height;
+               if (playerMode === 'ship') die(); // Ship dies hitting absolute bottom
+         }
+     }
+
+    return collisionResult;
+}
+
+function handlePortalEntry(portalType) {
+    console.log("Entering portal:", portalType);
+    switch (portalType) {
+        case 'ship':
+            if (playerMode !== 'ship') {
+                 playerMode = 'ship';
+                 // playerVelY = 0; // Reset velocity? GD often preserves some momentum.
+                 updatePlayerStyle();
+            }
+            break;
+        case 'cube':
+             if (playerMode !== 'cube') {
+                 playerMode = 'cube';
+                 updatePlayerStyle();
+             }
+            break;
+        case 'gravity-down':
+            if (gravityDirection !== -1) {
+                gravityDirection = -1;
+                playerVelY *= -0.5; // Dampen and flip velocity slightly on gravity change
+            }
+            break;
+        case 'gravity-up':
+             if (gravityDirection !== 1) {
+                 gravityDirection = 1;
+                 playerVelY *= -0.5;
+             }
+            break;
+    }
+}
+
+
+function die() {
+    if (!gameRunning) return; // Don't die multiple times
+    console.log("Player Died! Attempt:", attemptCount + 1);
+    gameRunning = false; // Stop the game loop updates
+    deathMessage.style.display = 'block';
+    attemptCount++;
+    playerElement.style.backgroundColor = '#e74c3c'; // Indicate death visually
+    // Cancel next animation frame to fully stop movement
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
+    }
+}
+
+function winLevel() {
+    if (!gameRunning) return; // Prevent multiple wins
+    console.log("Level Complete!");
+    gameRunning = false;
+    // Cancel next animation frame
+     if (animationFrameId) {
+         cancelAnimationFrame(animationFrameId);
+         animationFrameId = null;
+     }
+    // Use a timeout to allow final render frame before alert
+    setTimeout(() => {
+        alert(`Level Complete!\n"${levels[currentLevelIndex].name}"\n\nAttempts: ${attemptCount}\nCoins: ${collectedCoinIds.size} / ${totalCoinsInLevel}\n\n(Click OK for Level Select)`);
+        showLevelSelect();
+    }, 100); // Short delay
+}
+
+function showLevelSelect() {
+    levelSelect.style.display = 'flex';
+    gameRunning = false;
+    if (playerElement) playerElement.style.display = 'none'; // Hide player
+     // Reset world scroll in case player died far into the level
+     gameWorld.style.transform = `translateX(0px)`;
+     worldScrollX = 0;
+}
+
+
+// --- Rendering ---
+function render() {
+    // Scroll the world
+    gameWorld.style.transform = `translateX(${worldScrollX}px)`;
+
+    // Update player position and rotation via transform
+    let playerTransform = `translate(${playerX - worldScrollX}px, ${playerY}px) rotate(${playerRotation}deg)`;
+    // Flip vertically when upside down (visual only, physics uses gravityDirection)
+    if (gravityDirection === -1 && playerMode === 'cube') {
+        playerTransform += ' scaleY(-1)';
+    }
+    playerElement.style.transform = playerTransform;
+
+    // Animate sawblades (simple rotation)
+    const now = performance.now();
+    document.querySelectorAll('.sawblade').forEach(saw => {
+        saw.style.transform = `rotate(${now / 5 % 360}deg)`;
+    });
+}
+
+
+// --- Input Handling ---
+function handleInteractionStart(event) {
+     event.preventDefault(); // Prevent default actions like text selection or zoom
+
+     if (!gameRunning) {
+          // If dead message is shown, restart level on click/tap
+          if (deathMessage.style.display === 'block') {
+               // Re-enable player, hide message, restart level
+               playerElement.style.display = 'block';
+               deathMessage.style.display = 'none';
+               setupLevel(currentLevelIndex); // Restart current level
+          }
+          return; // Don't process input if not running or on level select
+     }
+
+     isHolding = true;
+
+     if (playerMode === 'cube' && canJump) {
+         playerVelY = JUMP_FORCE; // Apply upward force (gravityDirection handles direction)
+         canJump = false; // Prevent double jump
+         // Note: Actual jump happens in physics update based on velocity
+     }
+     // Ship lift and jump rings are handled in the update loop while isHolding is true
+}
+
+function handleInteractionEnd(event) {
+     event.preventDefault();
+     if (!gameRunning) return;
+     isHolding = false;
+}
+
+// --- Initialization ---
+function init() {
+    console.log("Initializing Geometry Dash Clone...");
+    generateLevels(); // Create level data structures
+
+    // Add event listeners for input (Touch and Mouse)
+    gameContainer.addEventListener('mousedown', handleInteractionStart);
+    gameContainer.addEventListener('mouseup', handleInteractionEnd);
+    gameContainer.addEventListener('mouseleave', handleInteractionEnd); // Stop holding if mouse leaves container
+    gameContainer.addEventListener('touchstart', handleInteractionStart, { passive: false });
+    gameContainer.addEventListener('touchend', handleInteractionEnd, { passive: false });
+
+    // Add level select listeners
+    levelSelect.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', () => {
+            const levelIdx = parseInt(button.dataset.level);
+            attemptCount = 1; // Reset attempts when selecting a new level
+            setupLevel(levelIdx);
+        });
+    });
+
+    // Show level select initially
+    showLevelSelect();
+    console.log("Initialization Complete. Select a level.");
+}
+
+// Start the game initialization when the DOM is ready
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+
+</body>
+</html>

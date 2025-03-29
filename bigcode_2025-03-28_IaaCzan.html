@@ -335,15 +335,19 @@
                     if (frameCount % 4 === 0 && particles.length < MAX_PARTICLES) {
                          particles.push(new Particle(this.x + wheelieParticleOffsetX(), this.y + this.height * 0.95, 'rgba(180,180,180,0.6)', 3.5, PARTICLE_LIFESPAN * 0.6, 3, -1));
                     }
-                    // Check if boost threshold reached
-                    if (this.powerWheelieCharge >= WHEELIE_BOOST_THRESHOLD) {
-                        this.startWheelieBoost();
-                    }
+                    // REMOVED: Automatic boost activation
+                    // if (this.powerWheelieCharge >= WHEELIE_BOOST_THRESHOLD) {
+                    //     this.startWheelieBoost(); // <<<--- REMOVED
+                    // }
+                     // Visual indicator when boost is ready (optional, can enhance later)
+                     if (this.powerWheelieCharge >= WHEELIE_BOOST_THRESHOLD) {
+                        // Example: Could add a flashing effect to the boost bar here
+                     }
                 } else {
                     // Apply gravity if attempting power wheelie in air (it won't charge)
                     this.applyGravity();
-                    // Maybe slightly different rotation in air? Optional.
-                    // this.rotation = POWER_WHEELIE_ROTATION * 0.5;
+                    // Maintain rotation slightly?
+                    this.rotation = POWER_WHEELIE_ROTATION * 0.8;
                 }
             } else {
                 // Normal state
@@ -354,8 +358,10 @@
                  // Smoothly return rotation to 0
                 this.rotation *= 0.85;
                 if (Math.abs(this.rotation) < 0.01) this.rotation = 0;
-                // Decay charge slowly
-                this.powerWheelieCharge = Math.max(0, this.powerWheelieCharge - POWER_WHEELIE_CHARGE_RATE * 0.3);
+                // Decay charge slowly if not actively charging or boosting
+                if (!this.isPowerWheeling) { // Only decay if not holding the wheelie button
+                    this.powerWheelieCharge = Math.max(0, this.powerWheelieCharge - POWER_WHEELIE_CHARGE_RATE * 0.3);
+                }
             }
 
             // Ground collision check (only if not boosting)
@@ -420,6 +426,12 @@
         }
 
         jump() {
+            // Check for boost activation FIRST
+             if (this.isPowerWheeling && this.isOnGround && this.powerWheelieCharge >= WHEELIE_BOOST_THRESHOLD) {
+                this.startWheelieBoost();
+                return; // Don't perform the regular jump
+            }
+
             // Allow jumping only when on the ground and not doing power wheelie/boost
             if (this.isOnGround && !this.isPowerWheeling && !this.isWheelieBoosting) {
                 this.velocityY = JUMP_FORCE;
@@ -631,16 +643,41 @@
         // Calculate gap based on current speed and difficulty
         const dynamicGapMin = adjustedGapMin + gameSpeed * 2;
         const dynamicGapMax = adjustedGapMax + gameSpeed * 4;
-        const gap = Math.random() * (dynamicGapMax - dynamicGapMin) + dynamicGapMin;
+        let gap = Math.random() * (dynamicGapMax - dynamicGapMin) + dynamicGapMin;
+        // Add a maximum gap limit, especially at higher speeds, perhaps based loosely on jump ability
+        const maxReasonableGap = 300 + gameSpeed * 10; // Adjust multiplier as needed
+        gap = Math.min(gap, maxReasonableGap);
+
 
         const newX = lastBuilding.x + lastBuilding.width + gap;
         const newWidth = Math.random() * (BUILDING_MAX_WIDTH - BUILDING_MIN_WIDTH) + BUILDING_MIN_WIDTH;
 
         // Make height relative to the previous building's height to avoid impossible jumps (mostly)
-        const heightVariation = canvas.height * 0.25; // Max height difference
-        const minH = Math.max(BUILDING_HEIGHT_MIN, lastBuilding.height - heightVariation);
-        const maxH = Math.min(BUILDING_HEIGHT_MAX, lastBuilding.height + heightVariation);
-        const newHeight = Math.random() * (maxH - minH) + minH;
+        // Limit how much HIGHER the next building can be. Max increase based on canvas height.
+        const maxUpwardVariation = canvas.height * 0.15; // Smaller max increase allowed
+        const maxDownwardVariation = canvas.height * 0.35; // Allow larger drops
+
+        const minH = Math.max(BUILDING_HEIGHT_MIN, lastBuilding.height - maxDownwardVariation);
+        const maxH = Math.min(BUILDING_HEIGHT_MAX, lastBuilding.height + maxUpwardVariation); // Apply stricter upward limit
+
+        let newHeight = Math.random() * (maxH - minH) + minH;
+        // Ensure height stays within the absolute min/max bounds
+        newHeight = Math.max(BUILDING_HEIGHT_MIN, Math.min(newHeight, BUILDING_HEIGHT_MAX));
+
+        // --- Additional check: Prevent near-impossible jump scenarios ---
+        // Calculate approximate max jump height from the last building's edge
+        // This is simplified - doesn't account for horizontal distance perfectly.
+        const approxMaxJumpHeight = (JUMP_FORCE ** 2) / (2 * GRAVITY);
+        const heightDifference = newHeight - lastBuilding.height;
+
+        // If the gap is large AND the next building is significantly higher, potentially lower the next building
+        if (gap > dynamicGapMin * 1.5 && heightDifference > approxMaxJumpHeight * 0.5) {
+            // Reduce the height of the new building to make it more achievable
+            newHeight = Math.min(newHeight, lastBuilding.height + approxMaxJumpHeight * 0.4); // Clamp height increase based on jump physics
+             newHeight = Math.max(BUILDING_HEIGHT_MIN, newHeight); // Re-ensure min height
+             // console.log(`Adjusted height due to potential impossible jump. Gap: ${gap.toFixed(0)}, HeightDiff: ${heightDifference.toFixed(0)}, NewHeight: ${newHeight.toFixed(0)}`);
+        }
+
 
         buildings.push(new Building(newX, newWidth, newHeight));
     }
@@ -874,9 +911,9 @@
 
         // Set controls info text based on detected platform
          if (isMobile) {
-            controlsInfoDisplay.textContent = "Tap Left 1/3 & HOLD = Power Wheelie | Tap Right 2/3 = Jump | Tap Anywhere during BOOST!";
+            controlsInfoDisplay.textContent = "Tap Left 1/3 & HOLD = Charge Power Wheelie | Tap Right 2/3 = Jump (or Activate BOOST if charged) | Tap Anywhere during BOOST!";
          } else {
-            controlsInfoDisplay.textContent = "HOLD Space = Power Wheelie | ArrowUp / W / Click = Jump | Click during BOOST!";
+            controlsInfoDisplay.textContent = "HOLD Space = Charge Power Wheelie | ArrowUp / W / Click = Jump (or Activate BOOST if charged) | Click during BOOST!";
          }
     }
 

@@ -289,6 +289,9 @@
 
         function startTrainingSimulation() {
             console.log(`Starting training for: ${selectedSlang}`);
+            const seedInputText = userInput.value.trim(); // Get seed input
+            console.log(`Using seed input: "${seedInputText}" (length: ${seedInputText.length})`);
+
             startTrainingBtn.disabled = true;
             startTrainingBtn.textContent = 'Training...';
             loadingEmoji.classList.remove('hidden');
@@ -298,23 +301,30 @@
 
             const targetWord = selectedSlang;
             const targetLength = targetWord.length;
-            let currentAttempt = generateRandomString(targetLength);
+            // Simple way to incorporate seed input: slightly adjust max iterations based on input length
+            const seedInfluence = Math.min(seedInputText.length, 10); // Limit influence
+            let currentAttempt = generateRandomString(targetLength); // Start with random string
             let iterations = 0;
-            const maxIterations = targetLength * 5 + 10; // More iterations for longer words
+            // Adjust max iterations based on target length and seed input length
+            const maxIterations = targetLength * 5 + 10 + seedInfluence;
             const simulationSpeed = 150; // ms between steps
 
-            addAttemptToLog(`Initial state: ${currentAttempt}`);
+            addAttemptToLog(`Seed Context: "${seedInputText || 'None'}"`);
+            addAttemptToLog(`Target Slang: ${targetWord}`);
+            addAttemptToLog(`Initial AI guess: ${currentAttempt}`);
 
             trainingInterval = setInterval(() => {
                 if (currentAttempt === targetWord || iterations >= maxIterations) {
                     clearInterval(trainingInterval);
                     trainingInterval = null;
-                    finalizeTraining(targetWord); // Ensure final word is correct
+                    // Ensure the final word displayed is the target word, even if maxIterations hit
+                    finalizeTraining(targetWord);
                     return;
                 }
 
-                currentAttempt = improveAttempt(currentAttempt, targetWord);
-                addAttemptToLog(`Iteration ${iterations + 1}: ${currentAttempt}`);
+                // Pass seed text to potentially influence improvement (though current improveAttempt doesn't use it)
+                currentAttempt = improveAttempt(currentAttempt, targetWord, seedInputText);
+                addAttemptToLog(`Learning Iteration ${iterations + 1}: ${currentAttempt}`);
                 iterations++;
 
             }, simulationSpeed);
@@ -329,18 +339,26 @@
             return result;
         }
 
-        function improveAttempt(current, target) {
+        function improveAttempt(current, target, seedInput = '') { // Added seedInput parameter (optional)
             let currentChars = current.split('');
             const targetChars = target.split('');
             const length = target.length;
 
-            // Randomly pick an index to potentially correct
-            const indexToChange = Math.floor(Math.random() * length);
+            // Basic hash function from seedInput to slightly bias the random choices (very simple example)
+            let seedHash = 0;
+            for (let i = 0; i < seedInput.length; i++) {
+                seedHash = (seedHash << 5) - seedHash + seedInput.charCodeAt(i);
+                seedHash |= 0; // Convert to 32bit integer
+            }
+            const pseudoRandom = () => Math.abs(Math.sin(seedHash++)); // Simple seeded PRNG
+
+            // Randomly pick an index to potentially correct, slightly influenced by seed
+            const indexToChange = Math.floor(pseudoRandom() * length);
 
             // Introduce a bias towards correcting wrong characters
             if (currentChars[indexToChange] !== targetChars[indexToChange]) {
                  // Higher chance (e.g., 80%) to correct a wrong character
-                if (Math.random() < 0.8) {
+                if (pseudoRandom() < 0.8) { // Use pseudoRandom
                      currentChars[indexToChange] = targetChars[indexToChange];
                 } else {
                     // Small chance to randomize it again
@@ -348,7 +366,7 @@
                 }
             } else {
                  // Small chance (e.g., 10%) to accidentally change a correct character
-                 if (Math.random() < 0.1) {
+                 if (pseudoRandom() < 0.1) { // Use pseudoRandom
                      currentChars[indexToChange] = generateRandomString(1);
                  }
             }
@@ -361,11 +379,11 @@
                      wrongIndices.push(i);
                  }
              }
-             if (wrongIndices.length > 0 && Math.random() < 0.5) { // 50% chance to force a correction
-                let randomIndex = wrongIndices[Math.floor(Math.random() * wrongIndices.length)];
-                currentChars[randomIndex] = targetChars[randomIndex];
+             // Force a correction with some probability, using pseudoRandom
+             if (wrongIndices.length > 0 && pseudoRandom() < 0.5) {
+                let randomWrongIndex = wrongIndices[Math.floor(pseudoRandom() * wrongIndices.length)];
+                currentChars[randomWrongIndex] = targetChars[randomWrongIndex];
              }
-
 
             return currentChars.join('');
         }

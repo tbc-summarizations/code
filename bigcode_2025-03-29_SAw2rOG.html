@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geometry Dash Clone</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: sans-serif;
+            color: white;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            background-color: #222;
+            border: 2px solid #fff;
+            overflow: hidden;
+        }
+        .player {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: #0f0; /* Green square for cube */
+            bottom: 30px; /* Start on the ground */
+            left: 100px;
+            transition: transform 0.1s linear; /* For rotation */
+        }
+        .player.ship {
+             background-color: transparent; /* Clear square */
+             border-left: 15px solid transparent;
+             border-right: 15px solid transparent;
+             border-bottom: 30px solid #0ff; /* Cyan triangle for ship */
+             width: 0;
+             height: 0;
+        }
+        .player.upside-down {
+            transform: scaleY(-1);
+        }
+        .obstacle {
+            position: absolute;
+            background-color: #f00; /* Red for generic obstacles */
+            bottom: 30px; /* Align with ground */
+        }
+        .spike {
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-bottom: 30px solid #f00; /* Red triangle for spike */
+            background-color: transparent !important;
+        }
+        .block {
+            width: 30px;
+            height: 30px;
+            background-color: #888; /* Grey square for block */
+        }
+        .platform {
+            position: absolute;
+            height: 30px;
+            background-color: #555; /* Dark grey for platforms */
+            bottom: 0;
+        }
+         .portal {
+            position: absolute;
+            width: 20px;
+            height: 80px;
+            bottom: 30px;
+            opacity: 0.7;
+         }
+        .ship-portal { background-color: #0ff; } /* Cyan */
+        .cube-portal { background-color: #0f0; } /* Green */
+        .gravity-portal-up { background-color: #ff0; border-top: 5px solid #fff; } /* Yellow */
+        .gravity-portal-down { background-color: #80f; border-bottom: 5px solid #fff; } /* Purple */
+
+        .jump-pad {
+            position: absolute;
+            width: 30px;
+            height: 10px;
+            background-color: #ff0; /* Yellow */
+            bottom: 30px;
+        }
+        .jump-ring {
+             position: absolute;
+             width: 30px;
+             height: 30px;
+             border: 5px solid #ff0; /* Yellow ring */
+             border-radius: 50%;
+             bottom: 60px;
+             background-color: transparent;
+        }
+        .red-jump-ring {
+             border-color: #f00; /* Red ring */
+        }
+
+        #level-select, #game-over, #win-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        #level-select button, #game-over button, #win-screen button {
+            padding: 15px 30px;
+            font-size: 1.5em;
+            margin: 10px;
+            cursor: pointer;
+            background-color: #555;
+            border: 2px solid #fff;
+            color: white;
+        }
+         #level-select button:hover, #game-over button:hover, #win-screen button:hover {
+             background-color: #777;
+         }
+         .hidden {
+            display: none !important;
+         }
+
+         /* Basic Level Themes */
+        .level-1 { background: linear-gradient(to bottom, #4a90e2, #00408b); } /* Blueish */
+        .level-2 { background: linear-gradient(to bottom, #f8e71c, #f5a623); } /* Yellowish */
+        .level-3 { background: linear-gradient(to bottom, #2c3e50, #1a2531); } /* Dark Blue/Grey */
+        .level-4 { background: linear-gradient(to bottom, #7b241c, #4a140c); } /* Dark Red/Brown */
+        .level-5 { background: linear-gradient(to bottom, #2ecc71, #1a8f49); } /* Greenish */
+        .level-6 { background: linear-gradient(to bottom, #9b59b6, #5e3370); } /* Purpleish */
+        .level-7 { background: linear-gradient(to bottom, #3498db, #f39c12); } /* Blue/Orange */
+
+        #progress-bar-container {
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70%;
+            height: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid white;
+            z-index: 5;
+        }
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: #0f0;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="player" class="player"></div>
+        <div id="level-objects">
+            <!-- Level objects will be dynamically added here -->
+        </div>
+        <div id="ground" class="platform" style="width: 100%; height: 30px; bottom: 0; left: 0; background-color: #444;"></div>
+         <div id="progress-bar-container">
+            <div id="progress-bar"></div>
+        </div>
+    </div>
+
+    <div id="level-select">
+        <h1>Select Level</h1>
+        <button onclick="startGame(1)">1. Stereo Madness</button>
+        <button onclick="startGame(2)">2. Back on Track</button>
+        <button onclick="startGame(3)">3. Polargeist</button>
+        <button onclick="startGame(4)">4. Dry Out</button>
+        <button onclick="startGame(5)">5. Base After Base</button>
+        <button onclick="startGame(6)">6. Cant Let Go</button>
+        <button onclick="startGame(7)">7. Jumper</button>
+    </div>
+
+    <div id="game-over" class="hidden">
+        <h1>Game Over!</h1>
+        <p id="final-percent">Progress: 0%</p>
+        <button onclick="restartLevel()">Retry</button>
+        <button onclick="showLevelSelect()">Level Select</button>
+    </div>
+
+     <div id="win-screen" class="hidden">
+        <h1>Level Complete!</h1>
+        <button onclick="showLevelSelect()">Level Select</button>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const levelObjectsContainer = document.getElementById('level-objects');
+        const ground = document.getElementById('ground');
+        const levelSelectScreen = document.getElementById('level-select');
+        const gameOverScreen = document.getElementById('game-over');
+        const winScreen = document.getElementById('win-screen');
+        const finalPercentText = document.getElementById('final-percent');
+        const progressBar = document.getElementById('progress-bar');
+
+
+        const gameWidth = 800;
+        const gameHeight = 400;
+        const playerSize = 30;
+        const groundHeight = 30;
+
+        let playerX = 100;
+        let playerY = groundHeight;
+        let playerVelY = 0;
+        let gravity = 0.6;
+        let jumpPower = -11;
+        let shipLift = -0.4; // Constant lift force for ship
+        let shipMaxVelY = 6;
+        let isJumping = false;
+        let isShip = false;
+        let isUpsideDown = false;
+        let canJump = true; // Prevents double jump unless intended (e.g., rings)
+        let canRingJump = false; // Allows jump via ring
+
+        let gameSpeed = 5; // Pixels per frame the level moves left
+        let levelScrollX = 0;
+        let currentLevel = 1;
+        let levelData = {}; // Will hold objects for the current level
+        let levelLength = 5000; // Default length, override per level
+
+        let gameLoopInterval = null;
+        let isGameOver = false;
+        let inputActive = false; // For ship controls
+
+        // --- Level Definitions (Simplified) ---
+        // Structure: { length: px, theme: 'level-N', objects: [ { type: 'spike'/'block'/'portal'/'pad'/'ring', x: px, y: px, (portalType, ringType) }, ... ] }
+        const levels = {
+            1: { // Stereo Madness
+                length: 8000, theme: 'level-1', objects: [
+                    { type: 'spike', x: 600, y: groundHeight },
+                    { type: 'block', x: 800, y: groundHeight },
+                    { type: 'block', x: 830, y: groundHeight },
+                    { type: 'block', x: 860, y: groundHeight + 30 },
+                    { type: 'spike', x: 1100, y: groundHeight }, { type: 'spike', x: 1130, y: groundHeight },
+                    { type: 'block', x: 1400, y: groundHeight }, { type: 'block', x: 1430, y: groundHeight + 30 }, { type: 'block', x: 1460, y: groundHeight + 60 },
+                    { type: 'spike', x: 1700, y: groundHeight }, { type: 'spike', x: 1730, y: groundHeight }, { type: 'spike', x: 1760, y: groundHeight },
+                    { type: 'block', x: 2000, y: groundHeight }, { type: 'block', x: 2000, y: groundHeight + 30 },
+                    { type: 'block', x: 2030, y: groundHeight }, { type: 'block', x: 2030, y: groundHeight + 30 },
+                    { type: 'spike', x: 2200, y: groundHeight },
+                    { type: 'block', x: 2500, y: groundHeight + 60 }, { type: 'block', x: 2530, y: groundHeight + 60 }, { type: 'block', x: 2560, y: groundHeight + 60 },
+                    { type: 'spike', x: 2800, y: groundHeight }, { type: 'spike', x: 2830, y: groundHeight },
+
+                    // Simplified ship portal at 70% (0.7 * 8000 = 5600)
+                    { type: 'portal', portalType: 'ship', x: 5600, y: groundHeight },
+                    // Ship obstacles (simplified)
+                    { type: 'block', x: 5900, y: 150 }, { type: 'block', x: 5930, y: 150 },
+                    { type: 'block', x: 6200, y: 50 }, { type: 'block', x: 6230, y: 50 },
+                    { type: 'block', x: 6500, y: 200 }, { type: 'block', x: 6530, y: 200 }, { type: 'block', x: 6560, y: 200 },
+
+                    // Simplified cube portal at 90% (0.9 * 8000 = 7200)
+                    { type: 'portal', portalType: 'cube', x: 7200, y: groundHeight },
+                    { type: 'spike', x: 7500, y: groundHeight },
+                    { type: 'spike', x: 7800, y: groundHeight },
+                ]
+            },
+            2: { // Back on Track
+                length: 9000, theme: 'level-2', objects: [
+                    { type: 'spike', x: 500, y: groundHeight },
+                    { type: 'pad', x: 700, y: groundHeight }, // Jump Pad
+                    { type: 'spike', x: 900, y: groundHeight }, { type: 'spike', x: 930, y: groundHeight },
+                    { type: 'block', x: 1200, y: groundHeight + 60 }, { type: 'block', x: 1230, y: groundHeight + 60 },
+                    { type: 'pad', x: 1500, y: groundHeight },
+                    { type: 'spike', x: 1700, y: groundHeight },
+                    // ... more complex arrangement needed
+                    { type: 'spike', x: 8800, y: groundHeight },
+                ]
+            },
+            3: { // Polargeist
+                length: 9500, theme: 'level-3', objects: [
+                    { type: 'ring', ringType: 'yellow', x: 600, y: groundHeight + 60 }, // Jump Ring
+                    { type: 'spike', x: 800, y: groundHeight },
+                    { type: 'block', x: 1100, y: groundHeight + 30 }, { type: 'block', x: 1130, y: groundHeight + 60 },
+                    { type: 'ring', ringType: 'red', x: 1500, y: groundHeight + 90 }, // Red Jump Ring
+                    { type: 'spike', x: 1700, y: groundHeight }, { type: 'spike', x: 1730, y: groundHeight },
+                    // ... more complex arrangement needed
+                    { type: 'spike', x: 9300, y: groundHeight },
+                ]
+            },
+             4: { // Dry Out
+                length: 10000, theme: 'level-4', objects: [
+                    { type: 'spike', x: 500, y: groundHeight },
+                    { type: 'block', x: 700, y: groundHeight + 30 },
+                    { type: 'spike', x: 900, y: groundHeight },
+                     // Gravity portal up ~40% (4000px)
+                    { type: 'portal', portalType: 'gravity-up', x: 4000, y: groundHeight },
+                    // Upside down section obstacles (relative to top)
+                    { type: 'spike', x: 4300, y: gameHeight - groundHeight - 30, upsideDown: true },
+                    { type: 'block', x: 4600, y: gameHeight - groundHeight - 60, upsideDown: true },
+                    { type: 'spike', x: 4900, y: gameHeight - groundHeight - 30, upsideDown: true },
+                     // Gravity portal down ~75% (7500px)
+                    { type: 'portal', portalType: 'gravity-down', x: 7500, y: groundHeight },
+                    { type: 'spike', x: 7800, y: groundHeight },
+                    { type: 'spike', x: 9800, y: groundHeight },
+                ]
+            },
+             5: { // Base After Base
+                 length: 10500, theme: 'level-5', objects: [ /* Simplified - needs gravity */
+                    { type: 'spike', x: 600, y: groundHeight },
+                    { type: 'portal', portalType: 'gravity-up', x: 6300, y: groundHeight }, // ~60%
+                    { type: 'spike', x: 6600, y: gameHeight - groundHeight - 30, upsideDown: true },
+                    { type: 'portal', portalType: 'gravity-down', x: 8925, y: groundHeight }, // ~85%
+                    { type: 'spike', x: 9200, y: groundHeight },
+                    { type: 'spike', x: 10300, y: groundHeight },
+                 ]
+             },
+             6: { // Cant Let Go
+                 length: 11000, theme: 'level-6', objects: [ /* Simplified - needs gravity */
+                    { type: 'spike', x: 700, y: groundHeight },
+                    { type: 'portal', portalType: 'gravity-up', x: 3300, y: groundHeight }, // ~30%
+                    { type: 'spike', x: 3600, y: gameHeight - groundHeight - 30, upsideDown: true },
+                    { type: 'portal', portalType: 'gravity-down', x: 7700, y: groundHeight }, // ~70%
+                    { type: 'spike', x: 8000, y: groundHeight },
+                    { type: 'spike', x: 10800, y: groundHeight },
+                 ]
+             },
+             7: { // Jumper
+                 length: 12000, theme: 'level-7', objects: [ /* Simplified - needs ship & gravity */
+                    { type: 'spike', x: 500, y: groundHeight },
+                    { type: 'portal', portalType: 'ship', x: 4800, y: groundHeight },      // ~40%
+                    { type: 'block', x: 5200, y: 100 }, { type: 'block', x: 5500, y: 200 },
+                    { type: 'portal', portalType: 'cube', x: 7200, y: groundHeight },      // ~60%
+                    { type: 'spike', x: 7500, y: groundHeight },
+                    { type: 'portal', portalType: 'gravity-up', x: 10200, y: groundHeight }, // ~85%
+                    { type: 'spike', x: 10500, y: gameHeight - groundHeight - 30, upsideDown: true },
+                    { type: 'spike', x: 11800, y: gameHeight - groundHeight - 30, upsideDown: true }, // Near end
+                 ]
+             },
+        };
+
+        function getObjectBoundingBox(objElement, objData) {
+            const x = parseInt(objElement.style.left || '0');
+            let y, width, height;
+
+            if (objData.type === 'spike') {
+                 width = playerSize; // Hitbox approx size of base
+                 height = playerSize;
+                 y = parseInt(objElement.style.bottom || '0');
+                 if(objData.upsideDown) {
+                     y = gameHeight - y - height; // Adjust y for upside down spikes
+                 }
+            } else if (objData.type === 'ring') {
+                width = playerSize + 10; // Ring size + border
+                height = playerSize + 10;
+                y = parseInt(objElement.style.bottom || '0');
+            } else if (objData.type === 'pad') {
+                width = playerSize;
+                height = 10;
+                y = parseInt(objElement.style.bottom || '0');
+            } else if (objData.type === 'portal') {
+                width = 20;
+                height = 80;
+                y = parseInt(objElement.style.bottom || '0');
+            }
+            else { // block
+                width = playerSize;
+                height = playerSize;
+                y = parseInt(objElement.style.bottom || '0');
+            }
+
+            // Adjust y from bottom-based to top-based for collision check
+             if (!objData.upsideDown) { // Normal objects: y is bottom edge
+                 y = gameHeight - y - height;
+             } else { // Upside down objects: y was already calculated relative to top
+                 // No change needed here if y is already top-relative for upside down
+             }
+
+
+            return { x, y, width, height };
+        }
+
+        function checkCollision() {
+            const playerTop = gameHeight - playerY - playerSize;
+            const playerBottom = gameHeight - playerY;
+            const playerLeft = playerX;
+            const playerRight = playerX + playerSize;
+
+            // Ground/Ceiling Collision
+            if (playerY < groundHeight) { // Hit ground
+                playerY = groundHeight;
+                playerVelY = 0;
+                isJumping = false;
+                canJump = true; // Can jump again from ground
+                 if (isShip) { // Ship crash on ground
+                     triggerGameOver();
+                     return;
+                 }
+                 player.style.transform = `translateY(0px) rotate(0deg) ${isUpsideDown ? 'scaleY(-1)' : ''}`; // Reset rotation on ground
+            }
+            if (playerY > gameHeight - groundHeight && isUpsideDown) { // Hit ceiling when upside down
+                playerY = gameHeight - groundHeight;
+                playerVelY = 0;
+                isJumping = false;
+                canJump = true;
+                 if (isShip) { // Ship crash on ceiling
+                     triggerGameOver();
+                     return;
+                 }
+                player.style.transform = `translateY(0px) rotate(0deg) ${isUpsideDown ? 'scaleY(-1)' : ''}`;
+            }
+             if (playerY + playerSize > gameHeight && !isUpsideDown && !isShip) { // Hit ceiling when normal (shouldn't happen often with cube)
+                playerY = gameHeight - playerSize;
+                playerVelY = 0;
+            }
+             if (playerY < 0 && isUpsideDown && !isShip) { // Hit floor when upside down
+                playerY = 0;
+                playerVelY = 0;
+             }
+
+
+             // Object Collision
+            const objects = levelObjectsContainer.children;
+            canRingJump = false; // Reset ring jump check each frame
+
+            for (let i = 0; i < objects.length; i++) {
+                const objElement = objects[i];
+                const objData = objElement.levelData; // Retrieve stored data
+                if (!objData) continue;
+
+                const objBox = getObjectBoundingBox(objElement, objData);
+
+                // Simple AABB collision check
+                 const collideX = playerRight > objBox.x && playerLeft < objBox.x + objBox.width;
+                 // Adjust player Y check based on gravity
+                 let collideY;
+                 const playerTopRelative = isUpsideDown ? (playerY - playerSize) : playerY; // Top edge relative to gravity direction
+                 const playerBottomRelative = isUpsideDown ? playerY : (playerY - playerSize); // Bottom edge relative to gravity direction
+
+                 const objTopRelative = objData.upsideDown ? (gameHeight - objBox.y - objBox.height) : objBox.y;
+                 const objBottomRelative = objData.upsideDown ? (gameHeight - objBox.y) : (objBox.y + objBox.height);
+
+                 // Use top/bottom based on player perspective
+                 const pTop = gameHeight - playerY;
+                 const pBottom = gameHeight - playerY + playerSize;
+                 const oTop = objBox.y; // Note: objBox.y is already CSS top value
+                 const oBottom = objBox.y + objBox.height;
+
+
+                 collideY = pBottom > oTop && pTop < oBottom;
+
+
+                if (collideX && collideY) {
+                    // Collision detected! Handle based on type
+                    switch (objData.type) {
+                        case 'spike':
+                        case 'block':
+                             triggerGameOver();
+                             return; // Stop checking after death
+                        case 'pad': // Yellow jump pad
+                             if (!isShip) {
+                                 playerVelY = jumpPower * (isUpsideDown ? -1.6 : 1.6); // Extra boost
+                                 isJumping = true;
+                                 canJump = false; // Prevent ground jump immediately after pad
+                             }
+                            break;
+                        case 'ring': // Yellow/Red jump ring
+                             if (!isShip) {
+                                 canRingJump = true; // Allow a jump if input is active
+                                 // Visual feedback (optional)
+                                 objElement.style.borderColor = '#fff';
+                                 setTimeout(() => { objElement.style.borderColor = objData.ringType === 'red' ? '#f00' : '#ff0'; }, 100);
+
+                                 if (inputActive) { // Jump if holding jump while hitting ring
+                                     handleJumpInput();
+                                 }
+                             }
+                            break;
+                        case 'portal':
+                            handlePortal(objData.portalType);
+                            // Maybe make portals disappear after use? Or handle re-entry logic.
+                             // For simplicity, let's allow re-entry.
+                            break;
+                    }
+                }
+            }
+        }
+
+         function handlePortal(type) {
+            player.classList.remove('ship', 'upside-down'); // Reset visual state first
+            player.style.transform = ''; // Clear transforms before applying new ones
+
+            // Reset mechanics to default cube before applying changes
+            isShip = false;
+            isUpsideDown = false;
+            gravity = 0.6;
+            jumpPower = -11;
+
+
+            switch(type) {
+                case 'ship':
+                    isShip = true;
+                    player.classList.add('ship');
+                    // Ship starts with neutral vertical velocity unless already moving significantly
+                    if (Math.abs(playerVelY) < 2) playerVelY = 0;
+                    // Reset jump state, ship uses continuous input
+                    isJumping = false;
+                    canJump = false;
+                    break;
+                case 'cube':
+                     // Handled by the reset above
+                    break;
+                case 'gravity-up':
+                    isUpsideDown = true;
+                    gravity = -0.6; // Reverse gravity
+                    jumpPower = 11; // Reverse jump power
+                    player.classList.add('upside-down');
+                     // Give a slight vertical bump to avoid sticking to the portal ceiling/floor
+                     // playerVelY = isUpsideDown ? 1 : -1;
+                    break;
+                case 'gravity-down':
+                     // Handled by the reset above
+                    break;
+            }
+             // Ensure player doesn't instantly collide with floor/ceiling after portal
+             if (isUpsideDown && playerY < groundHeight + 5) {
+                 playerY = groundHeight + 5; // Move slightly off floor
+             } else if (!isUpsideDown && playerY > gameHeight - groundHeight - playerSize - 5) {
+                  playerY = gameHeight - groundHeight - playerSize - 5; // Move slightly off ceiling
+             }
+
+
+         }
+
+        function triggerGameOver() {
+             if (isGameOver) return; // Prevent multiple triggers
+            isGameOver = true;
+            clearInterval(gameLoopInterval);
+            gameOverScreen.classList.remove('hidden');
+            const percent = Math.min(100, Math.floor((levelScrollX / levelLength) * 100));
+            finalPercentText.textContent = `Progress: ${percent}%`;
+             console.log("Game Over!");
+        }
+
+        function triggerWin() {
+            clearInterval(gameLoopInterval);
+            winScreen.classList.remove('hidden');
+            progressBar.style.width = '100%';
+            console.log("Level Complete!");
+        }
+
+
+        function gameLoop() {
+             if (isGameOver) return;
+
+            // --- Update Player ---
+            // Apply Gravity / Ship Movement
+             if (isShip) {
+                 if (inputActive) { // Holding jump/click makes ship go up
+                     playerVelY += shipLift;
+                 } else { // Otherwise ship falls
+                     playerVelY += -gravity; // Use negative gravity for falling
+                 }
+                 // Clamp ship velocity
+                 playerVelY = Math.max(Math.min(playerVelY, shipMaxVelY), -shipMaxVelY);
+             } else {
+                 // Cube physics
+                 playerVelY += gravity;
+             }
+
+
+            playerY += playerVelY;
+
+             // Apply updates and check collisions BEFORE drawing
+            checkCollision();
+             if (isGameOver) return; // Check again in case collision caused game over
+
+             // Update Player Visuals
+             player.style.bottom = `${playerY}px`;
+             // Simple rotation based on vertical velocity for cube when airborne
+             if (!isShip && (isJumping || playerY > groundHeight)) {
+                 const rotation = isUpsideDown ? Math.max(-90, Math.min(90, playerVelY * 5)) : Math.max(-90, Math.min(90, -playerVelY * 5));
+                 player.style.transform = `translateY(0px) rotate(${rotation}deg) ${isUpsideDown ? 'scaleY(-1)' : ''}`;
+             } else if (!isShip) {
+                 player.style.transform = `translateY(0px) rotate(0deg) ${isUpsideDown ? 'scaleY(-1)' : ''}`; // Reset rotation on ground
+             } else {
+                 // Optional: Ship tilt based on velocity
+                  const shipRotation = Math.max(-30, Math.min(30, playerVelY * -3)); // Tilt opposite to vertical movement
+                 player.style.transform = `translateY(0px) rotate(${shipRotation}deg)`;
+             }
+
+
+            // --- Scroll Level ---
+            levelScrollX += gameSpeed;
+            levelObjectsContainer.style.transform = `translateX(${-levelScrollX}px)`;
+            // Move ground texture (if it had one) - simple version: move ground element itself slightly
+            // ground.style.backgroundPositionX = `${-levelScrollX % 100}px`; // Example if using background image
+
+
+             // --- Update Progress Bar ---
+            const percent = Math.min(100, Math.floor((levelScrollX / levelLength) * 100));
+            progressBar.style.width = `${percent}%`;
+
+             // --- Check for Win ---
+             if (levelScrollX >= levelLength) {
+                 triggerWin();
+                 return;
+             }
+        }
+
+        function handleJumpInput() {
+             if (isGameOver) return;
+
+            if (isShip) {
+                // Ship lift is handled by holding inputActive flag
+                 // playerVelY += shipLift; // Moved to gameLoop based on inputActive
+            } else { // Cube/Wave etc.
+                 const onGround = isUpsideDown ? (playerY >= gameHeight - groundHeight - 1) : (playerY <= groundHeight + 1); // Check if on surface (+/-1 for buffer)
+                if (canJump || onGround) {
+                     playerVelY = jumpPower;
+                     isJumping = true;
+                     canJump = false; // Prevent multi-jump unless hitting ring/pad
+                 } else if (canRingJump) { // Allow jump if colliding with a ring
+                     playerVelY = jumpPower * 1.1; // Rings often give slightly more boost
+                     isJumping = true;
+                     canRingJump = false; // Consume ring jump
+                     canJump = false;
+                 }
+            }
+        }
+
+        function setupLevel(levelNum) {
+            levelData = levels[levelNum];
+            if (!levelData) {
+                console.error("Level data not found for level:", levelNum);
+                return;
+            }
+            levelLength = levelData.length;
+            currentLevel = levelNum;
+            levelObjectsContainer.innerHTML = ''; // Clear previous objects
+             levelScrollX = 0; // Reset scroll
+             levelObjectsContainer.style.transform = `translateX(0px)`;
+             isGameOver = false;
+             inputActive = false;
+
+            // Reset player state
+            playerY = groundHeight;
+            playerVelY = 0;
+            isShip = false;
+            isUpsideDown = false;
+            gravity = 0.6;
+            jumpPower = -11;
+            player.className = 'player'; // Reset classes
+             player.style.transform = '';
+
+
+             // Set background theme
+            gameContainer.className = ''; // Clear old theme classes
+            gameContainer.classList.add(levelData.theme);
+
+
+            // Create level objects
+            levelData.objects.forEach(obj => {
+                const objElement = document.createElement('div');
+                objElement.classList.add('obstacle'); // Base class for positioning
+                objElement.style.left = `${obj.x}px`;
+                objElement.levelData = obj; // Store data reference on the element
+
+                 let effectiveY = obj.y;
+                 if (obj.upsideDown) {
+                    objElement.style.top = `${effectiveY}px`; // Position from top for upside down
+                    objElement.style.transform = 'scaleY(-1)'; // Flip spike/block visually
+                 } else {
+                    objElement.style.bottom = `${effectiveY}px`; // Position from bottom normally
+                 }
+
+
+                // Add specific classes and styles
+                switch(obj.type) {
+                    case 'spike': objElement.classList.add('spike'); break;
+                    case 'block': objElement.classList.add('block'); break;
+                    case 'pad': objElement.classList.add('jump-pad'); break;
+                    case 'ring':
+                        objElement.classList.add('jump-ring');
+                        if (obj.ringType === 'red') {
+                            objElement.classList.add('red-jump-ring');
+                        }
+                        break;
+                    case 'portal':
+                        objElement.classList.add('portal');
+                        if (obj.portalType === 'ship') objElement.classList.add('ship-portal');
+                        else if (obj.portalType === 'cube') objElement.classList.add('cube-portal');
+                        else if (obj.portalType === 'gravity-up') objElement.classList.add('gravity-portal-up');
+                        else if (obj.portalType === 'gravity-down') objElement.classList.add('gravity-portal-down');
+                        break;
+                }
+                levelObjectsContainer.appendChild(objElement);
+            });
+        }
+
+        function startGame(levelNum) {
+            levelSelectScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            winScreen.classList.add('hidden');
+
+            setupLevel(levelNum);
+
+            // Start game loop
+             if (gameLoopInterval) clearInterval(gameLoopInterval); // Clear any existing loop
+            gameLoopInterval = setInterval(gameLoop, 1000 / 60); // ~60 FPS
+        }
+
+        function restartLevel() {
+            startGame(currentLevel); // Restart the current level
+        }
+
+        function showLevelSelect() {
+            if (gameLoopInterval) clearInterval(gameLoopInterval);
+            levelSelectScreen.classList.remove('hidden');
+            gameOverScreen.classList.add('hidden');
+            winScreen.classList.add('hidden');
+            gameContainer.className = ''; // Reset background
+            levelObjectsContainer.innerHTML = ''; // Clear objects
+            progressBar.style.width = '0%'; // Reset progress bar
+        }
+
+        // --- Input Handling ---
+        function handleInputStart() {
+             inputActive = true;
+            // Trigger jump immediately for cube, activate lift for ship
+            handleJumpInput();
+        }
+
+        function handleInputEnd() {
+             inputActive = false;
+             // No action needed on release for cube jump, ship stops lifting
+        }
+
+        // Mouse controls
+        gameContainer.addEventListener('mousedown', handleInputStart);
+        gameContainer.addEventListener('mouseup', handleInputEnd);
+
+        // Touch controls
+        gameContainer.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent scrolling/zooming
+            handleInputStart();
+        });
+        gameContainer.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleInputEnd();
+        });
+
+         // Keyboard controls (Spacebar) - Added for convenience
+         document.addEventListener('keydown', (e) => {
+             if (e.code === 'Space' && !inputActive && !levelSelectScreen.classList.contains('hidden')) return; // Don't jump if menu active
+             if (e.code === 'Space' && !inputActive && !isGameOver) { // Prevent triggering multiple times if held
+                 handleInputStart();
+             }
+         });
+         document.addEventListener('keyup', (e) => {
+             if (e.code === 'Space') {
+                 handleInputEnd();
+             }
+         });
+
+
+        // Initial state: Show level select
+        showLevelSelect();
+
+    </script>
+</body>
+</html>

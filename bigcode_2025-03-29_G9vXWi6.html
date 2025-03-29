@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA Groupchat: Operation Nitro</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #111;
+            color: #0f0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #game-container {
+            background-color: #222;
+            border: 2px solid #0f0;
+            padding: 20px;
+            width: 80%;
+            max-width: 800px;
+            box-shadow: 0 0 15px #0f0;
+            margin-bottom: 20px;
+            min-height: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+        #story {
+            flex-grow: 1;
+            margin-bottom: 20px;
+            white-space: pre-wrap; /* Preserve line breaks */
+            overflow-y: auto;
+            max-height: 400px; /* Limit height for scrolling */
+            border-bottom: 1px dashed #0f0;
+            padding-bottom: 10px;
+        }
+        #choices {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            background-color: #333;
+            border: 1px solid #0f0;
+            color: #0f0;
+            padding: 10px 15px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background-color 0.3s, color 0.3s;
+            text-align: left;
+        }
+        button:hover {
+            background-color: #0f0;
+            color: #111;
+        }
+        h1 {
+            color: #0f0;
+            text-align: center;
+            text-shadow: 0 0 5px #0f0;
+        }
+        .character {
+            font-weight: bold;
+        }
+        .neshtek { color: #aaa; } /* Pigeon Gray */
+        .meeth { color: #00ffff; } /* Cyan for Aura */
+        .aura-member { color: #ff0; } /* Yellow for other members */
+        .system { color: #f0f; } /* Magenta for system/narration */
+        .emoji { display: inline-block; width: 1em; text-align: center; }
+        #stats {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px dashed #0f0;
+            font-size: 0.9em;
+            color: #ccc;
+        }
+        #stats span {
+            margin-right: 15px;
+            color: #0f0;
+        }
+    </style>
+</head>
+<body>
+    <h1>AURA Groupchat: Operation Nitro</h1>
+    <div id="game-container">
+        <div id="story">Loading game...</div>
+        <div id="choices"></div>
+        <div id="stats"></div>
+    </div>
+
+    <script>
+        const storyElement = document.getElementById('story');
+        const choicesElement = document.getElementById('choices');
+        const statsElement = document.getElementById('stats');
+
+        let gameState = {
+            currentScene: 'start',
+            playerName: 'Neshtek 🐦',
+            trust: {
+                Mindset: 0, Adam: 0, Abdullah: 0, Andrej: 0, Blocky: 0,
+                Frank: 0, HappyMan: 0, Henry: 0, Meeth: 0, Salle: 0
+            },
+            suspicion: 0,
+            auraPoints: 0,
+            hasInvite: false,
+            nitroAcquired: false,
+            day: 1,
+            contactedMember: null, // Track who was first contacted
+            failedAttempts: 0,
+            knownInfo: [], // Info gathered
+            meethImpressions: 0 // How much Meeth is impressed
+        };
+
+        const members = {
+            Mindset: '🇬🇷 Mindset', Adam: '🇪🇬 Adam', Abdullah: '🇵🇰 Abdullah', Andrej: '🇷🇸 Andrej', Blocky: '🇲🇾 Blocky',
+            Frank: '🇵🇪 Frank', HappyMan: '🇵🇱 HappyMan', Henry: '🇰🇿 Henry', Meeth: '🇪🇪 Meeth', Salle: '🇷🇸 Salle'
+        };
+
+        function updateStatsDisplay() {
+            let statsHTML = `<span>Day: ${gameState.day}</span> | <span>Suspicion: ${gameState.suspicion}%</span> | <span>Aura: ${gameState.auraPoints}</span>`;
+            if (gameState.hasInvite) {
+                statsHTML += ` | <span>Status: Inside AURA GC</span>`;
+            } else {
+                 statsHTML += ` | <span>Status: Outsider</span>`;
+            }
+             statsHTML += ` | <span class="meeth">Meeth Impressed: ${gameState.meethImpressions}</span>`;
+            statsElement.innerHTML = statsHTML;
+        }
+
+        function addStory(text) {
+            // Simple text coloring based on keywords
+            text = text.replace(/Neshtek 🐦/g, `<span class="neshtek">Neshtek 🐦</span>`);
+            text = text.replace(/Meeth 🇪🇪/g, `<span class="meeth">Meeth 🇪🇪</span>`);
+            for (const key in members) {
+                 if (key !== 'Meeth') {
+                     const regex = new RegExp(members[key].replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&"), "g");
+                     text = text.replace(regex, `<span class="aura-member">${members[key]}</span>`);
+                 }
+            }
+            text = text.replace(/\[SYSTEM\]/g, `<span class="system">[SYSTEM]</span>`);
+            text = text.replace(/AURA Groupchat/g, `<span class="system">AURA Groupchat</span>`);
+            text = text.replace(/Nitro/g, `<span style="color: #ff69b4; font-weight: bold;">Nitro</span>`); // Pink Nitro
+
+            storyElement.innerHTML += `\n${text}`;
+            // Auto-scroll to bottom
+            storyElement.scrollTop = storyElement.scrollHeight;
+        }
+
+        function renderScene(scene) {
+            const currentScene = scenes[scene];
+            if (!currentScene) {
+                addStory(`[SYSTEM] Error: Scene "${scene}" not found. Game over?`);
+                choicesElement.innerHTML = '';
+                return;
+            }
+
+            addStory(`\n--- Day ${gameState.day} ---`);
+            addStory(currentScene.text);
+            choicesElement.innerHTML = ''; // Clear old choices
+
+            if (currentScene.choices) {
+                currentScene.choices.forEach(choice => {
+                    const button = document.createElement('button');
+                    button.textContent = choice.text;
+                    button.onclick = () => {
+                        gameState.day += choice.dayIncrement || 0; // Increment day
+                        if (choice.action) {
+                            choice.action();
+                        }
+                        if (choice.nextScene) {
+                            gameState.currentScene = choice.nextScene;
+                            renderScene(gameState.currentScene);
+                        } else if (!choice.action) {
+                            // If a choice has no action and no next scene, log error or stay
+                             addStory("[SYSTEM] Choice leads nowhere.");
+                        }
+                         updateStatsDisplay(); // Update stats after action
+                    };
+                    choicesElement.appendChild(button);
+                });
+            } else {
+                 // If no choices, usually end of a branch or game over
+                 addStory("\n[SYSTEM] The path forward is unclear for now...");
+            }
+
+            // Check for game over conditions implicitly through scene transitions
+            if (gameState.suspicion >= 100) {
+                renderScene('gameOverSuspicion');
+            }
+
+            updateStatsDisplay();
+        }
+
+        // Define Game Scenes
+        const scenes = {
+            start: {
+                text: `You are <span class="neshtek">Neshtek 🐦</span>, a lone pigeon in the vast digital landscape. You've heard whispers, legends really, of the <span class="system">AURA Groupchat</span>. Ten members, maximum vibes, maximum exclusivity. And at its heart? <span class="meeth">Meeth 🇪🇪</span>. They say his Aura is unmatched. They say he's generous. They say... "I GOTCHU BRO" when it comes to <span style="color: #ff69b4; font-weight: bold;">Nitro</span>.\n\nYour objective is clear, yet daunting: Infiltrate the <span class="system">AURA Groupchat</span>. Befriend the legends. Gain the trust of <span class="meeth">Meeth 🇪🇪</span>. And secure the coveted <span style="color: #ff69b4; font-weight: bold;">Nitro</span>.\n\nIt won't be easy. You're an outsider. A pigeon among eagles (or whatever cool animals they consider themselves). Your journey begins now. What's your first move?`,
+                choices: [
+                    { text: "Try to find where they hang out online.", nextScene: 'recon_servers', dayIncrement: 1 },
+                    { text: "Scour social media for mentions of AURA or its members.", nextScene: 'recon_social', dayIncrement: 1 },
+                    { text: "Just wing it and try DMing a random member.", nextScene: 'recon_risky_dm', dayIncrement: 1 }
+                ]
+            },
+            recon_servers: {
+                text: `You spend hours searching through related communities, forums, and Discord servers. It's like looking for a specific breadcrumb in a bakery. After much effort, you find a server where <span class="aura-member">🇵🇱 HappyMan</span> occasionally posts memes. It seems low-key. This could be an entry point.`,
+                choices: [
+                    { text: "Observe HappyMan's posts for a while.", nextScene: 'observe_happyman', dayIncrement: 2 },
+                    { text: "Try to casually interact with HappyMan in the server.", nextScene: 'interact_happyman_server', dayIncrement: 1 }
+                ]
+            },
+            recon_social: {
+                text: `You dive into the chaotic world of social media. Hashtags, fleeting mentions... it's mostly noise. However, you find a public profile linked to <span class="aura-member">🇰🇿 Henry</span>. He posts tech stuff and occasionally retweets things related to online communities. Seems cautious but maybe reachable.`,
+                choices: [
+                    { text: "Follow Henry and see what he posts.", nextScene: 'observe_henry', dayIncrement: 2 },
+                    { text: "Try sending Henry a carefully worded DM.", nextScene: 'dm_henry_attempt', dayIncrement: 1 }
+                ]
+            },
+            recon_risky_dm: {
+                text: `Feeling bold (or foolish?), you decide to DM a member directly. Who do you pick? This is risky. A wrong move could get you blocked instantly.`,
+                choices: [
+                    { text: "DM 🇵🇱 HappyMan (Seems friendly?).", action: () => { gameState.contactedMember = 'HappyMan'; }, nextScene: 'dm_happyman_attempt', dayIncrement: 1 },
+                    { text: "DM 🇰🇿 Henry (Tech guy, might be logical?).", action: () => { gameState.contactedMember = 'Henry'; }, nextScene: 'dm_henry_attempt', dayIncrement: 1 },
+                    { text: "DM 🇪🇪 Meeth directly (Go big or go home?).", action: () => { gameState.contactedMember = 'Meeth'; gameState.suspicion += 30; }, nextScene: 'dm_meeth_attempt', dayIncrement: 1 }
+                ]
+            },
+            observe_happyman: {
+                text: `You watch <span class="aura-member">🇵🇱 HappyMan</span>'s posts. He shares relatable slice-of-life memes and occasionally engages in light banter. He seems generally positive. You feel you have a decent read on his online persona now.`,
+                choices: [
+                    { text: "Interact with him in the server now.", nextScene: 'interact_happyman_server', dayIncrement: 1 },
+                    { text: "Try sending him a DM based on his interests.", nextScene: 'dm_happyman_attempt', dayIncrement: 1 }
+                ]
+            },
+            interact_happyman_server: {
+                text: `You see <span class="aura-member">🇵🇱 HappyMan</span> post a meme about Monday mornings. How do you reply?`,
+                choices: [
+                    { text: "Reply with a witty, related meme description.", action: () => { gameState.trust.HappyMan += 5; gameState.auraPoints += 2; addStory("[SYSTEM] HappyMan reacted with a laughing emoji. Good start!"); }, nextScene: 'rapport_happyman_1', dayIncrement: 1 },
+                    { text: "Just react with a 👍 emoji.", action: () => { addStory("[SYSTEM] He didn't seem to notice much."); }, nextScene: 'recon_servers', dayIncrement: 1 }, // Loop back slightly
+                    { text: "Ask him directly about the AURA group.", action: () => { gameState.suspicion += 20; addStory("[SYSTEM] HappyMan ignores your message. Maybe too direct?"); gameState.failedAttempts++; }, nextScene: 'check_failed_attempts', dayIncrement: 1 }
+                ]
+            },
+             observe_henry: {
+                text: `You monitor <span class="aura-member">🇰🇿 Henry</span>'s tech posts. He shares insightful comments on new gadgets and software development trends. He rarely engages in small talk, preferring factual discussions.`,
+                 choices: [
+                    { text: "Send him a DM asking a relevant tech question.", nextScene: 'dm_henry_attempt', dayIncrement: 1 },
+                    { text: "Wait longer, maybe he'll mention something useful.", action: () => { addStory("[SYSTEM] You wait, but nothing specific about AURA comes up.");}, nextScene: 'observe_henry', dayIncrement: 3 } // Longer wait
+                ]
+            },
+            dm_happyman_attempt: {
+                 text: `You decide to slide into <span class="aura-member">🇵🇱 HappyMan</span>'s DMs. What's your opening line?`,
+                 choices: [
+                    { text: `"Hey, saw your memes in [Server Name], they're great!"`, action: () => { gameState.trust.HappyMan += 10; gameState.auraPoints += 3; addStory("[SYSTEM] He replied! 'Haha thanks man! Appreciate it.'"); }, nextScene: 'rapport_happyman_1', dayIncrement: 1 },
+                    { text: `"Are you in the AURA groupchat?"`, action: () => { gameState.suspicion += 25; addStory("[SYSTEM] Read receipt, but no reply. Blocked?"); gameState.failedAttempts++; }, nextScene: 'check_failed_attempts', dayIncrement: 1 },
+                    { text: `"Yo, need an invite to AURA. Hook me up?"`, action: () => { gameState.suspicion += 40; addStory("[SYSTEM] Instantly blocked. Ouch."); gameState.failedAttempts++; }, nextScene: 'check_failed_attempts', dayIncrement: 1 }
+                 ]
+            },
+             dm_henry_attempt: {
+                 text: `You prepare a DM for <span class="aura-member">🇰🇿 Henry</span>. What do you send?`,
+                 choices: [
+                    { text: `Ask a specific, insightful question about his recent tech post.`, action: () => { gameState.trust.Henry += 10; gameState.auraPoints += 3; addStory("[SYSTEM] He responded with a detailed answer! Seems he appreciates genuine interest."); }, nextScene: 'rapport_henry_1', dayIncrement: 1 },
+                    { text: `"Hi Henry, I'm trying to network. Are you part of any cool online groups?"`, action: () => { gameState.suspicion += 15; addStory("[SYSTEM] He replied: 'I'm in a few. Why?' Cautious."); }, nextScene: 'rapport_henry_cautious', dayIncrement: 1 },
+                    { text: `"Heard you're in AURA. Can I join?"`, action: () => { gameState.suspicion += 35; addStory("[SYSTEM] No reply. Probably flagged as suspicious."); gameState.failedAttempts++; }, nextScene: 'check_failed_attempts', dayIncrement: 1 }
+                 ]
+            },
+             dm_meeth_attempt: {
+                 text: `You actually did it. You DMed the legend, <span class="meeth">🇪🇪 Meeth</span>. Your message notification pops up almost instantly. It's a single emoji: 🤔. What do you do?!`,
+                 choices: [
+                    { text: `Apologize profusely and back off quickly.`, action: () => { gameState.suspicion -= 10; addStory("[SYSTEM] You retreat. Meeth leaves you on read. The suspicion lingers, but maybe you dodged a bullet."); gameState.failedAttempts++; }, nextScene: 'check_failed_attempts', dayIncrement: 1 },
+                    { text: `Try to play it cool: "Just admiring the Aura from afar. Heard good things."`, action: () => { gameState.suspicion += 10; gameState.auraPoints += 5; addStory("[SYSTEM] He replies: '👍'. Cryptic. But not a block!"); }, nextScene: 'rapport_meeth_cryptic', dayIncrement: 1 },
+                    { text: `Double down: "Yeah, AURA! Heard you're the guy for Nitro?"`, action: () => { gameState.suspicion += 50; addStory("[SYSTEM] Blocked. Immediately. And maybe reported. High risk, zero reward."); }, nextScene: 'gameOverSuspicion', dayIncrement: 1 } // Instant Game Over
+                 ]
+            },
+             check_failed_attempts: {
+                 text: `[SYSTEM] Another setback. Your infiltration attempt failed this time. (${gameState.failedAttempts} failed attempts so far).`,
+                 action: () => { gameState.failedAttempts++; }, // Ensure it increments if not done by choice
+                 choices: [
+                    { text: "Try a different approach.", nextScene: 'start', dayIncrement: 2 }, // Go back to start, but lose time
+                    { text: "Give up. This is too hard.", nextScene: 'gameOverGiveUp', dayIncrement: 0 }
+                 ]
+            },
+            // --- HappyMan Rapport Branch ---
+            rapport_happyman_1: {
+                text: `You've made initial contact with <span class="aura-member">🇵🇱 HappyMan</span>! He seems receptive. You chat occasionally over the next few days, sharing memes and light conversation. He mentions the AURA GC sometimes, calling it "the main hub".`,
+                choices: [
+                    { text: "Keep building rapport, share a really good meme.", action: () => { gameState.trust.HappyMan += 10; gameState.auraPoints += 5; addStory("[SYSTEM] He loved the meme! 'LMAO where'd you find this?'"); }, nextScene: 'rapport_happyman_2', dayIncrement: 3 },
+                    { text: "Ask about the other members.", action: () => { gameState.trust.HappyMan += 5; addStory("[SYSTEM] He briefly describes a couple of members, including Meeth's generosity."); gameState.knownInfo.push('Meeth is generous'); }, nextScene: 'rapport_happyman_2', dayIncrement: 2 },
+                    { text: "Hint about wanting to join AURA.", action: () => { gameState.suspicion += 10; gameState.trust.HappyMan -= 5; addStory("[SYSTEM] He got a bit quiet after that. 'Ah, it's kinda exclusive y'know.'"); }, nextScene: 'rapport_happyman_2', dayIncrement: 1 }
+                ]
+            },
+             rapport_happyman_2: {
+                 text: `You're becoming a regular contact for <span class="aura-member">🇵🇱 HappyMan</span>. He seems to trust you more. (<span class="aura-member">Trust: ${gameState.trust.HappyMan}</span>) One day, he mentions the group is discussing adding someone new, as <span class="aura-member">🇷🇸 Andrej</span> has been busy lately. This could be your chance!`,
+                 choices: [
+                    { text: `"Oh really? What kind of person are they looking for?"`, action: () => { addStory("[SYSTEM] 'Just someone cool, fits the vibe y'know. Good Aura.'"); gameState.auraPoints += 2;}, nextScene: 'ask_invite_happyman', dayIncrement: 1 },
+                    { text: `"Maybe I could join? I bring good vibes!"`, action: () => { gameState.trust.HappyMan += 5; }, nextScene: 'ask_invite_happyman', dayIncrement: 1 },
+                    { text: `Wait for him to suggest it.`, action: () => { addStory("[SYSTEM] You wait, but he changes the subject."); }, nextScene: 'rapport_happyman_3', dayIncrement: 2 } // Need another scene
+                 ]
+             },
+             rapport_happyman_3: { // Added scene if player waits
+                text: `You continue chatting with <span class="aura-member">🇵🇱 HappyMan</span>. The topic of a new member doesn't come up again immediately. Maybe you missed the window?`,
+                choices: [
+                     { text: "Subtly bring up the 'new member' topic again.", nextScene: 'ask_invite_happyman', dayIncrement: 1 },
+                     { text: "Focus on impressing him more first.", action: () => { gameState.trust.HappyMan += 8; gameState.auraPoints += 4; addStory("[SYSTEM] You share some top-tier content. He seems impressed."); }, nextScene: 'rapport_happyman_3', dayIncrement: 3 }, // Loop back to build more trust
+                     { text: "Try contacting another member.", nextScene: 'recon_risky_dm', dayIncrement: 1 } // Risky option again
+                 ]
+             },
+             ask_invite_happyman: {
+                 text: `<span class="aura-member">🇵🇱 HappyMan</span> considers your interest. "Hmm, you seem pretty chill <span class="neshtek">Neshtek 🐦</span>... I could mention you to the guys, especially <span class="meeth">Meeth 🇪🇪</span>. He kinda has the final say on invites." What do you say?`,
+                 choices: [
+                    { text: `"That would be awesome! Thanks man!"`, action: () => {
+                        if (gameState.trust.HappyMan >= 25 && gameState.auraPoints >= 10) {
+                             addStory("[SYSTEM] 'Alright, I'll put in a good word. No promises though!' Hopeful!");
+                             gameState.trust.Meeth += 5; // Indirect trust via vouch
+                             nextScene = 'waiting_invite';
+                        } else {
+                             addStory("[SYSTEM] 'I dunno man, maybe get to know us a bit more first?' He seems hesitant.");
+                             gameState.suspicion += 5;
+                             nextScene = 'rapport_happyman_3'; // Need more work
+                        }
+                    }, nextScene: 'determined_by_action', dayIncrement: 1 }, // Scene determined within action
+                    { text: `"Tell Meeth I'm a big fan of his Aura (and generosity)!"`, action: () => {
+                         addStory("[SYSTEM] 'Haha, trying to butter him up already? Okay, I'll pass it on.'");
+                         gameState.suspicion += 5; // A bit too eager?
+                         if (gameState.trust.HappyMan >= 20) {
+                            gameState.trust.Meeth += 3;
+                            nextScene = 'waiting_invite';
+                         } else {
+                             addStory("[SYSTEM] He seems unsure about vouching for you yet.");
+                             nextScene = 'rapport_happyman_3';
+                         }
+                    }, nextScene: 'determined_by_action', dayIncrement: 1 },
+                    { text: `"Just mention I'm active and know my stuff."`, action: () => {
+                         addStory("[SYSTEM] 'Okay, will do. Keep cool.'");
+                          if (gameState.trust.HappyMan >= 20 && gameState.auraPoints >= 8) {
+                             gameState.trust.Meeth += 4;
+                             nextScene = 'waiting_invite';
+                          } else {
+                              addStory("[SYSTEM] He doesn't seem fully convinced.");
+                              nextScene = 'rapport_happyman_3';
+                          }
+                    }, nextScene: 'determined_by_action', dayIncrement: 1 }
+                 ]
+             },
+
+            // --- Henry Rapport Branch ---
+            rapport_henry_1: {
+                text: `You've engaged <span class="aura-member">🇰🇿 Henry</span> on his favorite topic: tech. He seems to appreciate your non-superficial approach. You exchange a few more messages over the next days, discussing technical details. (<span class="aura-member">Trust: ${gameState.trust.Henry}</span>)`,
+                 choices: [
+                    { text: "Share an interesting tech article or discovery.", action: () => { gameState.trust.Henry += 10; gameState.auraPoints += 5; addStory("[SYSTEM] 'Interesting find. Thanks for sharing.' High praise from Henry!"); }, nextScene: 'rapport_henry_2', dayIncrement: 3 },
+                    { text: "Ask if he uses tech to collaborate with friends.", action: () => { gameState.trust.Henry += 5; addStory("[SYSTEM] 'Yes, mainly in a private group for projects and discussion.' He must mean AURA!"); gameState.knownInfo.push('AURA used for projects'); }, nextScene: 'rapport_henry_2', dayIncrement: 2 },
+                    { text: "Gently probe about the 'private group'.", action: () => { gameState.suspicion += 10; gameState.trust.Henry -= 5; addStory("[SYSTEM] 'It's private for a reason.' He deflects, sounding slightly annoyed."); }, nextScene: 'rapport_henry_2', dayIncrement: 1 }
+                 ]
+            },
+            rapport_henry_cautious: { // Branch from DMing Henry about groups
+                text: `<span class="aura-member">🇰🇿 Henry</span> is cautious after your question about groups. 'Why?' he asked. How do you respond?`,
+                choices: [
+                    { text: `"Just curious about how tech people connect online."`, action: () => { gameState.suspicion -= 5; gameState.trust.Henry += 5; addStory("[SYSTEM] 'Fair enough. Mostly Discord and specialized forums.' He seems satisfied for now."); }, nextScene: 'rapport_henry_1', dayIncrement: 1 },
+                    { text: `"Looking for a cool community like the AURA group I heard about."`, action: () => { gameState.suspicion += 20; addStory("[SYSTEM] 'AURA? Never heard of it.' He's lying or genuinely doesn't handle invites. Dead end here."); gameState.failedAttempts++; }, nextScene: 'check_failed_attempts', dayIncrement: 1 },
+                    { text: `Drop it and ask a tech question instead.`, action: () => { gameState.trust.Henry += 8; gameState.auraPoints += 2; addStory("[SYSTEM] You pivot back to tech. He answers in detail, forgetting the awkward question."); }, nextScene: 'rapport_henry_1', dayIncrement: 1 }
+                ]
+            },
+             rapport_henry_2: {
+                 text: `You've maintained a technical rapport with <span class="aura-member">🇰🇿 Henry</span>. He respects your input. He mentions offhand needing help testing a small script he wrote for the 'group'.`,
+                 choices: [
+                     { text: `"I'd be happy to help test it!"`, action: () => {
+                        if (gameState.trust.Henry >= 25 && gameState.auraPoints >= 12) {
+                            addStory("[SYSTEM] 'Excellent. I appreciate the offer. I might need to add you to the group temporarily for access.' Jackpot!");
+                            nextScene = 'henry_invite_offer';
+                        } else {
+                            addStory("[SYSTEM] 'Thanks, but it's probably fine. I'll manage.' He doesn't trust you enough yet.");
+                            nextScene = 'rapport_henry_3'; // Need more work
+                        }
+                     }, nextScene: 'determined_by_action', dayIncrement: 1 },
+                     { text: `"What kind of group is it?"`, action: () => { gameState.suspicion += 10; addStory("[SYSTEM] 'Just a private group.' He shuts down that line of questioning again."); }, nextScene: 'rapport_henry_3', dayIncrement: 1 },
+                     { text: `"Sounds cool. Let me know if you need testers."`, action: () => { addStory("[SYSTEM] 'Will do.' Non-committal."); }, nextScene: 'rapport_henry_3', dayIncrement: 2 }
+                 ]
+             },
+              rapport_henry_3: { // Added scene if player fails check or waits
+                text: `You continue your tech talks with <span class="aura-member">🇰🇿 Henry</span>. The topic of the group or needing help doesn't resurface immediately. (<span class="aura-member">Trust: ${gameState.trust.Henry}</span>)`,
+                 choices: [
+                     { text: "Offer help with any tech tasks again.", nextScene: 'rapport_henry_2', dayIncrement: 1 }, // Try again
+                     { text: "Impress him with a complex technical insight.", action: () => { gameState.trust.Henry += 12; gameState.auraPoints += 8; gameState.meethImpressions += 1; addStory("[SYSTEM] 'That's... actually brilliant. I'll mention this to Meeth.'"); }, nextScene: 'rapport_henry_3', dayIncrement: 3 }, // Impress more, potentially Meeth
+                     { text: "Try contacting another member.", nextScene: 'recon_risky_dm', dayIncrement: 1 }
+                 ]
+             },
+             henry_invite_offer: {
+                 text: `<span class="aura-member">🇰🇿 Henry</span> messages you: "Okay, talked to <span class="meeth">🇪🇪 Meeth</span>. He said if I vouch for you, you can get temporary access to help with the script. Need your Discord tag."`,
+                 choices: [
+                     { text: `Provide your Discord tag immediately.`, action: () => {
+                         addStory("[SYSTEM] You send your tag. A moment later, an invite link appears! You're in... temporarily?");
+                         gameState.hasInvite = true; // Mark as invited, even if temp
+                         gameState.trust.Henry += 15;
+                         gameState.trust.Meeth += 10; // Meeth approved the temp access
+                         nextScene = 'inside_intro';
+                         }, nextScene: 'determined_by_action', dayIncrement: 1 },
+                     { text: `"Temporary? Will I get to stay if I do well?"`, action: () => {
+                         addStory("[SYSTEM] 'One step at a time. Just focus on the task.' Henry values efficiency over ambition.");
+                         gameState.suspicion += 5;
+                          gameState.hasInvite = true;
+                          gameState.trust.Henry += 10;
+                          gameState.trust.Meeth += 8;
+                         nextScene = 'inside_intro';
+                         }, nextScene: 'determined_by_action', dayIncrement: 1 },
+                     { text: `"Is Meeth gonna give me Nitro if I help?"`, action: () => {
+                         addStory("[SYSTEM] '...Let's just forget I asked.' Henry retracts the offer. Too greedy!");
+                         gameState.suspicion += 30;
+                         gameState.failedAttempts++;
+                         nextScene = 'check_failed_attempts';
+                         }, nextScene: 'determined_by_action', dayIncrement: 1 }
+                 ]
+             },
+
+            // --- Meeth Cryptic Branch ---
+            rapport_meeth_cryptic: {
+                text: `Okay, you DMed <span class="meeth">🇪🇪 Meeth</span> and survived. He replied '👍' to your "admiring the Aura" message. This is uncharted territory. What now?`,
+                choices: [
+                    { text: "Say nothing. Let him hold the silence.", action: () => { gameState.auraPoints += 3; addStory("[SYSTEM] Silence hangs in the DM. Days pass. Maybe indifference is the highest Aura?"); }, nextScene: 'rapport_meeth_silent', dayIncrement: 3 },
+                    { text: "Send him a single, carefully chosen, high-Aura meme.", action: () => {
+                        let memeSuccess = Math.random() < 0.4; // 40% chance Meeth likes the meme
+                        if (memeSuccess) {
+                            addStory("[SYSTEM] He replies with 'kek'. The highest honor? Trust +5, Aura +10");
+                            gameState.trust.Meeth += 5;
+                            gameState.auraPoints += 10;
+                            gameState.meethImpressions += 2;
+                             nextScene = 'rapport_meeth_meme_success';
+                        } else {
+                            addStory("[SYSTEM] He leaves you on read. Maybe the meme wasn't Aura enough? Suspicion +5");
+                             gameState.suspicion += 5;
+                             nextScene = 'rapport_meeth_cryptic'; // Still cryptic
+                        }
+                    }, nextScene: 'determined_by_action', dayIncrement: 1 },
+                    { text: "Ask if he needs help with anything.", action: () => { gameState.suspicion += 15; addStory("[SYSTEM] He replies: 'Are you offering servitude, pigeon?' Uh oh."); }, nextScene: 'rapport_meeth_servitude', dayIncrement: 1 }
+                ]
+            },
+            rapport_meeth_silent: {
+                 text: `Days later, a notification. It's <span class="meeth">🇪🇪 Meeth</span>. He simply sent you an invite link to the <span class="system">AURA Groupchat</span> without a single word.`,
+                 choices: [
+                    { text: "Join immediately without comment.", action: () => { gameState.hasInvite = true; gameState.auraPoints += 15; gameState.meethImpressions += 5; addStory("[SYSTEM] The ultimate Aura move? You click the link. You're in."); }, nextScene: 'inside_intro', dayIncrement: 1 },
+                    { text: `Reply with "Thanks."`, action: () => { gameState.hasInvite = true; gameState.auraPoints += 10; gameState.meethImpressions += 3; addStory("[SYSTEM] You join. Maybe the silence was better?"); }, nextScene: 'inside_intro', dayIncrement: 1 },
+                    { text: `Reply with "Finally! Time for Nitro?"`, action: () => { addStory("[SYSTEM] The invite link is instantly revoked. He sends one last message: 'Blocked.'"); gameState.suspicion += 50; }, nextScene: 'gameOverSuspicion', dayIncrement: 1 }
+                 ]
+            },
+             rapport_meeth_meme_success: {
+                 text: `Your meme earned a 'kek' from <span class="meeth">🇪🇪 Meeth</span>. A rare sign of approval. He seems to appreciate your understanding of Aura. (<span class="meeth">Trust: ${gameState.trust.Meeth}, Impressed: ${gameState.meethImpressions}</span>)`,
+                 choices: [
+                     { text: "Keep the channel open, occasionally send top-tier memes.", action: () => { gameState.trust.Meeth += 8; gameState.auraPoints += 12; gameState.meethImpressions += 3; addStory("[SYSTEM] You maintain a sporadic, high-Aura meme exchange."); }, nextScene: 'rapport_meeth_meme_success', dayIncrement: 4 }, // Loop to build more
+                     { text: "Ask if the AURA group shares memes like this.", action: () => { addStory("[SYSTEM] He replies: 'Sometimes. If they're good.' He then sends an invite link."); gameState.hasInvite = true; gameState.meethImpressions += 5; }, nextScene: 'inside_intro', dayIncrement: 1 },
+                     { text: "Wait for him to make the next move.", nextScene: 'rapport_meeth_silent', dayIncrement: 3 } // Transition to silent path
+                 ]
+             },
+              rapport_meeth_servitude: {
+                 text: `<span class="meeth">🇪🇪 Meeth</span> called your offer of help 'servitude'. This feels like a test.`,
+                 choices: [
+                    { text: `"Only offering help if it's needed by someone with high Aura."`, action: () => { gameState.auraPoints += 8; gameState.meethImpressions += 2; addStory("[SYSTEM] He replies: 'Hmm. Perhaps.' The danger seems to have passed."); }, nextScene: 'rapport_meeth_cryptic', dayIncrement: 1 },
+                    { text: `"Yes master."`, action: () => { gameState.auraPoints -= 10; gameState.suspicion += 10; addStory("[SYSTEM] 'Pathetic.' He seems disgusted."); }, nextScene: 'rapport_meeth_cryptic', dayIncrement: 1 },
+                    { text: `Ignore the question, send a meme instead.`, action: () => {
+                         let memeSuccess = Math.random() < 0.3; // Harder now
+                         if (memeSuccess) {
+                             addStory("[SYSTEM] He sends back 'kek'. You deflected successfully?");
+                             gameState.trust.Meeth += 3; gameState.auraPoints += 5; gameState.meethImpressions += 1;
+                             nextScene = 'rapport_meeth_meme_success';
+                         } else {
+                             addStory("[SYSTEM] Read receipt. Silence. Awkward.");
+                             gameState.suspicion += 8;
+                             nextScene = 'rapport_meeth_cryptic';
+                         }
+                    }, nextScene: 'determined_by_action', dayIncrement: 1 }
+                 ]
+             },
+
+            // --- Waiting & Invitation ---
+            waiting_invite: {
+                text: `Days turn into a week. You keep checking your notifications, hoping for the invite. Your contact (<span class="aura-member">${gameState.contactedMember ? members[gameState.contactedMember] : 'Someone'}</span>) occasionally gives small updates like "They're thinking about it" or "Meeth is busy". The anticipation is killing you.`,
+                choices: [
+                    { text: "Wait patiently.", action: () => { gameState.auraPoints += 2; }, nextScene: 'check_invite_result', dayIncrement: 5 },
+                    { text: "Ping your contact for an update.", action: () => { gameState.suspicion += 5; gameState.trust[gameState.contactedMember] -= 2; addStory(`[SYSTEM] ${members[gameState.contactedMember]} replies: 'Chill bro, I said I'd let you know.'`); }, nextScene: 'waiting_invite', dayIncrement: 1 },
+                    { text: "Try to contact another member to speed things up.", action: () => { gameState.suspicion += 15; }, nextScene: 'recon_risky_dm', dayIncrement: 1 }
+                ]
+            },
+            check_invite_result: {
+                text: "[SYSTEM] Checking if the invite came through...",
+                action: () => {
+                    // Calculate invite chance based on trust, aura, suspicion, Meeth impressions
+                    let inviteChance = 0;
+                    if (gameState.contactedMember) {
+                       inviteChance += gameState.trust[gameState.contactedMember] * 0.5; // Vouch strength
+                    }
+                    inviteChance += gameState.auraPoints * 1.5;
+                    inviteChance += gameState.trust.Meeth * 2; // Meeth's opinion matters most
+                    inviteChance += gameState.meethImpressions * 5;
+                    inviteChance -= gameState.suspicion * 2;
+                    inviteChance = Math.max(0, Math.min(100, inviteChance)); // Clamp between 0-100
+
+                    addStory(`[SYSTEM] Calculated Invite Score: ${inviteChance.toFixed(0)}`);
+
+                    if (Math.random() * 100 < inviteChance) {
+                        addStory(`[SYSTEM] Success! An invite link appears from your contact! <span class="meeth">Meeth 🇪🇪</span> approved.`);
+                        gameState.hasInvite = true;
+                        nextScene = 'inside_intro';
+                    } else {
+                        addStory(`[SYSTEM] Failure. Your contact messages: 'Sorry man, Meeth said not this time. Maybe later.'`);
+                        gameState.failedAttempts++;
+                        gameState.suspicion += 5; // Suspicion might rise slightly from rejection
+                        nextScene = 'check_failed_attempts';
+                    }
+                },
+                nextScene: 'determined_by_action', // Scene determined by action's logic
+                dayIncrement: 1
+            },
+
+            // --- Inside the Group Chat ---
+            inside_intro: {
+                text: `You clicked the link. A new chat window opens: <span class="system">#general - AURA Groupchat</span>. The member list glows with legends:\n<span class="aura-member">🇬🇷 Mindset</span>\n<span class="aura-member">🇪🇬 Adam</span>\n<span class="aura-member">🇵🇰 Abdullah</span>\n<span class="aura-member">🇷🇸 Andrej</span>\n<span class="aura-member">🇲🇾 Blocky</span>\n<span class="aura-member">🇵🇪 Frank</span>\n<span class="aura-member">🇵🇱 HappyMan</span>\n<span class="aura-member">🇰🇿 Henry</span>\n<span class="meeth">🇪🇪 Meeth</span>\n<span class="aura-member">🇷🇸 Salle</span>\n\nAnd now... you, <span class="neshtek">Neshtek 🐦</span>. The chat is buzzing with inside jokes and rapid-fire messages. <span class="meeth">Meeth 🇪🇪</span> posts: "Welcome the pigeon. Try not to shed feathers everywhere."`,
+                choices: [
+                    { text: `Reply with: "Thanks for the invite! Happy to be here."`, action: () => { gameState.auraPoints += 2; addStory("[SYSTEM] Safe and polite. A few members react with 👍."); }, nextScene: 'inside_observe_1', dayIncrement: 0 },
+                    { text: `Reply with: "Coo. Ready to vibe."`, action: () => { gameState.auraPoints += 5; gameState.suspicion += 2; addStory("[SYSTEM] Short and slightly memey. <span class=\"aura-member\">🇲🇾 Blocky</span> replies 'lol coo'."); }, nextScene: 'inside_observe_1', dayIncrement: 0 },
+                    { text: `Reply with: "Alright, who's got the Nitro hookup? 😉"`, action: () => { gameState.suspicion += 40; addStory("[SYSTEM] The chat goes silent. <span class=\"meeth\">Meeth 🇪🇪</span> types: 'Bruh.'"); }, nextScene: 'inside_nitro_fail_early', dayIncrement: 0 },
+                    { text: `Say nothing, just observe first.`, action: () => { gameState.auraPoints += 3; gameState.suspicion += 1; addStory("[SYSTEM] You lurk, absorbing the flow. A wise, if slightly suspicious, move."); }, nextScene: 'inside_observe_1', dayIncrement: 1 }
+                ]
+            },
+            inside_observe_1: {
+                text: `You spend your first day mostly observing. The chat moves fast. <span class="aura-member">🇬🇷 Mindset</span> seems philosophical. <span class="aura-member">🇪🇬 Adam</span> posts workout pics. <span class="aura-member">🇵🇰 Abdullah</span> shares coding challenges. <span class="aura-member">🇷🇸 Andrej</span> and <span class="aura-member">🇷🇸 Salle</span> have intense gaming discussions. <span class="aura-member">🇲🇾 Blocky</span> drops random funny videos. <span class="aura-member">🇵🇪 Frank</span> talks about cooking. <span class="aura-member">🇵🇱 HappyMan</span> is the meme supplier. <span class="aura-member">🇰🇿 Henry</span> provides tech support. <span class="meeth">🇪🇪 Meeth</span> oversees all, dropping cryptic wisdom or dank memes. How do you make your mark?`,
+                choices: [
+                    { text: "Engage with HappyMan's memes.", action: () => { gameState.trust.HappyMan += 5; gameState.auraPoints += 3; addStory("[SYSTEM] You share a good related meme. <span class=\"aura-member\">🇵🇱 HappyMan</span> appreciates it."); }, nextScene: 'inside_activity_loop', dayIncrement: 1 },
+                    { text: "Ask Abdullah about a coding challenge.", action: () => { gameState.trust.Abdullah += 5; gameState.auraPoints += 4; addStory("[SYSTEM] <span class=\"aura-member\">🇵🇰 Abdullah</span> seems pleased by your interest."); }, nextScene: 'inside_activity_loop', dayIncrement: 1 },
+                    { text: "Comment on Andrej/Salle's game discussion.", action: () => { gameState.trust.Andrej += 3; gameState.trust.Salle += 3; gameState.auraPoints += 3; addStory("[SYSTEM] You offer a decent take. They acknowledge you briefly."); }, nextScene: 'inside_activity_loop', dayIncrement: 1 },
+                    { text: "Compliment Meeth's latest meme.", action: () => { gameState.trust.Meeth += 2; gameState.meethImpressions += 1; gameState.auraPoints += 5; addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> reacts with '👍'."); }, nextScene: 'inside_activity_loop', dayIncrement: 1 },
+                    { text: "Continue lurking and observing.", action: () => { gameState.suspicion += 2; addStory("[SYSTEM] Lurking too long can seem suspicious..."); }, nextScene: 'inside_activity_loop', dayIncrement: 2 }
+                ]
+            },
+            inside_activity_loop: {
+                text: `Another day in the <span class="system">AURA Groupchat</span>. The vibes are flowing. What's your focus today? (<span class="system">Aura: ${gameState.auraPoints}, Suspicion: ${gameState.suspicion}%</span>)`,
+                choices: [
+                    { text: "Participate in general chat, build Aura.", action: () => { gameState.auraPoints += 5; gameState.suspicion -= 1; addStory("[SYSTEM] You contribute positively to conversations."); }, nextScene: 'check_nitro_event', dayIncrement: 1 },
+                    { text: "Help someone (e.g., Henry with tech, Frank with recipe idea).", action: () => {
+                        // Randomly pick someone to help potentially
+                        let helped = false;
+                        if (Math.random() > 0.5 && gameState.trust.Henry < 50) {
+                             gameState.trust.Henry += 8; helped = true; addStory("[SYSTEM] You helped <span class=\"aura-member\">🇰🇿 Henry</span> solve a small tech issue. He nods digitally.");
+                         } else if (gameState.trust.Frank < 50) {
+                             gameState.trust.Frank += 8; helped = true; addStory("[SYSTEM] You gave <span class=\"aura-member\">🇵🇪 Frank</span> a good cooking suggestion. 'Gracias!'");
+                         }
+                         if (!helped) { addStory("[SYSTEM] No specific opportunities to help arose today."); }
+                         gameState.auraPoints += 6; gameState.suspicion -= 2;
+                    }, nextScene: 'check_nitro_event', dayIncrement: 1 },
+                    { text: "Try to impress Meeth subtly.", action: () => {
+                         if (Math.random() > 0.6) {
+                             gameState.meethImpressions += 3; gameState.trust.Meeth += 5; gameState.auraPoints += 7; addStory("[SYSTEM] You posted something genuinely high-Aura. <span class=\"meeth\">Meeth 🇪🇪</span> commented: 'Based.'");
+                         } else {
+                             addStory("[SYSTEM] Your attempt to impress <span class=\"meeth\">Meeth 🇪🇪</span> falls flat."); gameState.auraPoints += 1;
+                         }
+                    }, nextScene: 'check_nitro_event', dayIncrement: 1 },
+                     { text: "Focus on building trust with a specific member.", action: () => {
+                          // Simple choice for now, could be expanded
+                          let target = 'Blocky'; // Example
+                          gameState.trust[target] += 7;
+                          addStory(`[SYSTEM] You spent time chatting with <span class="aura-member">${members[target]}</span>.`);
+                     }, nextScene: 'check_nitro_event', dayIncrement: 1 },
+                    { text: "Just chill and observe today.", action: () => { gameState.suspicion += 1; addStory("[SYSTEM] Another day observing the masters."); }, nextScene: 'check_nitro_event', dayIncrement: 1 }
+                ]
+            },
+             check_nitro_event: {
+                 text: "[SYSTEM] Checking for special events or Nitro opportunities...",
+                 action: () => {
+                     // Random chance for Meeth to offer Nitro based on vibes?
+                     let nitroOfferChance = (gameState.auraPoints / 20) + (gameState.meethImpressions / 2) - (gameState.suspicion / 10); // Example formula
+                     nitroOfferChance = Math.max(0, nitroOfferChance); // Clamp at 0+
+
+                     if (gameState.day > 20 && Math.random() * 100 < nitroOfferChance) {
+                         // Nitro Event Triggered!
+                         nextScene = 'nitro_event_meeth_offer';
+                     } else if (gameState.day > 15 && gameState.suspicion > 60 && Math.random() > 0.7) {
+                         // Suspicion event
+                         nextScene = 'suspicion_event';
+                     }
+                     else if (gameState.day > 30 && !gameState.nitroAcquired) {
+                        // Getting late, maybe force the issue?
+                        nextScene = 'inside_late_game';
+                     }
+                      else {
+                         // Continue loop
+                         nextScene = 'inside_activity_loop';
+                     }
+                      // Add a general trust decay or increase based on activity?
+                      for (const member in gameState.trust) {
+                         if (Math.random() > 0.8) gameState.trust[member] -= 1; // Slight decay if not interacted with
+                         gameState.trust[member] = Math.max(0, gameState.trust[member]); // Ensure trust doesn't go below 0
+                      }
+                       gameState.suspicion = Math.max(0, gameState.suspicion); // Ensure suspicion doesn't go below 0
+
+                 },
+                 nextScene: 'determined_by_action',
+                 dayIncrement: 0 // No extra day for check
+             },
+            inside_late_game: {
+                text: `Weeks have passed. You're a fixture in the chat, but the main goal, <span style="color: #ff69b4; font-weight: bold;">Nitro</span> from <span class="meeth">🇪🇪 Meeth</span>, remains elusive. Your Aura is decent (<span class="system">${gameState.auraPoints}</span>), and suspicion is managed (<span class="system">${gameState.suspicion}%</span>). <span class="meeth">Meeth Impressed: ${gameState.meethImpressions}</span>. Time might be running out to make a move.`,
+                 choices: [
+                    { text: "Drop a subtle hint about needing Nitro.", nextScene: 'nitro_hint_subtle', dayIncrement: 1 },
+                    { text: "Ask Meeth directly for Nitro.", nextScene: 'nitro_ask_direct', dayIncrement: 1 },
+                    { text: "Wait longer, hope Meeth offers.", action: () => { addStory("[SYSTEM] You decide to wait, banking on patience and accumulated Aura."); }, nextScene: 'inside_activity_loop', dayIncrement: 3 },
+                    { text: "Try to orchestrate a situation where Nitro seems 'needed'.", nextScene: 'nitro_orchestrate', dayIncrement: 2 }
+                 ]
+            },
+            suspicion_event: {
+                text: `Suddenly, <span class="aura-member">🇷🇸 Salle</span> posts: "Yo <span class="neshtek">Neshtek 🐦</span>, you're kinda quiet sometimes... always lurking. What's your deal?" <span class="meeth">🇪🇪 Meeth</span> reacts with 🤔. The chat waits for your response. High suspicion! (${gameState.suspicion}%)`,
+                 choices: [
+                    { text: `"Just absorbing the high Aura vibes, learning from the masters."`, action: () => {
+                        if (gameState.auraPoints > 50) {
+                            addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> adds: 'Let the pigeon learn.' Salle backs off. You deflected successfully!"); gameState.suspicion -= 15; gameState.auraPoints += 5;
+                            nextScene = 'inside_activity_loop';
+                        } else {
+                            addStory("[SYSTEM] Salle replies: 'Sounds sus.' Your deflection wasn't convincing enough."); gameState.suspicion += 10;
+                             nextScene = 'inside_activity_loop'; // Still in, but more sus
+                        }
+                    }, nextScene: 'determined_by_action', dayIncrement: 1 },
+                    { text: `"My deal? Just chilling. Why, you got a problem?"`, action: () => { gameState.suspicion += 25; gameState.auraPoints -= 10; addStory("[SYSTEM] Hostility! Bad move. Salle argues back, Meeth seems displeased."); }, nextScene: 'inside_activity_loop', dayIncrement: 1 },
+                    { text: `Ignore the message.`, action: () => { gameState.suspicion += 20; addStory("[SYSTEM] Ignoring it makes you look even more suspicious. Several members react negatively."); }, nextScene: 'inside_activity_loop', dayIncrement: 1 }
+                 ]
+            },
+            nitro_event_meeth_offer: {
+                text: `In the middle of a conversation, <span class="meeth">🇪🇪 Meeth 🇪🇪</span> suddenly pings you: "<span class="neshtek">@Neshtek 🐦</span>, you been contributing good vibes lately. Need that <span style="color: #ff69b4; font-weight: bold;">Nitro</span> boost?" THE MOMENT HAS ARRIVED!`,
+                 choices: [
+                     { text: `"Whoa, seriously? Yeah man, that would be amazing! Thanks Meeth!"`, action: () => { addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> replies: 'I GOTCHU BRO'. A notification pops up. You've been gifted Nitro!"); gameState.nitroAcquired = true; }, nextScene: 'gameOverWin', dayIncrement: 1 },
+                     { text: `"Took you long enough. Yeah, gift it."`, action: () => { gameState.auraPoints -= 20; gameState.meethImpressions -= 5; addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> replies: 'Aura check failed. Nvm.' The offer is retracted. Oof."); }, nextScene: 'inside_activity_loop', dayIncrement: 1 },
+                     { text: `"Nah, I'm good actually."`, action: () => { gameState.auraPoints += 15; gameState.meethImpressions += 10; addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> seems impressed by your lack of neediness. 'Respect.' But... you didn't get the Nitro."); }, nextScene: 'inside_activity_loop', dayIncrement: 1 }
+                 ]
+            },
+             nitro_hint_subtle: {
+                text: `You decide to drop a hint. How do you phrase it?`,
+                choices: [
+                    { text: `Post: "Sigh, my Nitro just expired. Back to low-res emojis..."`, action: () => { addStory("[SYSTEM] You post the hint. <span class=\"aura-member\">🇵🇱 HappyMan</span> reacts with F. <span class=\"meeth\">🇪🇪 Meeth</span> sees the message..."); nextScene = 'nitro_hint_reaction'; }, dayIncrement: 1 },
+                    { text: `Post: "Anyone know good deals on Nitro?"`, action: () => { addStory("[SYSTEM] <span class=\"aura-member\">🇰🇿 Henry</span> posts a link to Discord's pricing page. <span class=\"meeth\">🇪🇪 Meeth</span> doesn't react directly..."); gameState.suspicion += 5; nextScene = 'nitro_hint_reaction'; }, dayIncrement: 1 },
+                    { text: `DM Meeth: "Hey, my Nitro's out, kinda sucks."`, action: () => { gameState.suspicion += 10; addStory("[SYSTEM] You DM <span class=\"meeth\">Meeth 🇪🇪</span> directly. He leaves you on read for now..."); nextScene = 'nitro_hint_reaction'; }, dayIncrement: 1 }
+                ]
+            },
+            nitro_hint_reaction: {
+                 text: `You dropped the hint about <span style="color: #ff69b4; font-weight: bold;">Nitro</span>. Now you wait for <span class="meeth">🇪🇪 Meeth</span>'s reaction... or lack thereof.`,
+                 action: () => {
+                      let hintSuccessChance = (gameState.auraPoints / 15) + (gameState.meethImpressions / 1.5) - (gameState.suspicion / 8);
+                      hintSuccessChance = Math.max(0, hintSuccessChance);
+
+                      if (Math.random() * 100 < hintSuccessChance && gameState.trust.Meeth > 30) {
+                          addStory("[SYSTEM] A few minutes later, <span class=\"meeth\">Meeth 🇪🇪</span> pings you: 'Check ur DMs bro.' Inside, a gift link! 'I GOTCHU BRO'");
+                          gameState.nitroAcquired = true;
+                          nextScene = 'gameOverWin';
+                      } else {
+                          addStory("[SYSTEM] Nothing happens. Either <span class=\"meeth\">Meeth 🇪🇪</span> didn't see it, didn't care, or didn't think you deserved it yet. The hint failed.");
+                          gameState.suspicion += 3; // Slightly more sus for hinting
+                          nextScene = 'inside_activity_loop';
+                      }
+                 },
+                 nextScene: 'determined_by_action',
+                 dayIncrement: 1
+            },
+             nitro_ask_direct: {
+                 text: `Bold move. You decide to ask <span class="meeth">🇪🇪 Meeth</span> directly for <span style="color: #ff69b4; font-weight: bold;">Nitro</span>. How do you phrase the DM?`,
+                 choices: [
+                    { text: `"Hey Meeth, loving the group. Any chance you could hook a pigeon up with that Nitro? I GOTCHU BRO?"`, action: () => {
+                        let directAskChance = (gameState.auraPoints / 25) + (gameState.meethImpressions / 2.5) - (gameState.suspicion / 5) + (gameState.trust.Meeth / 5);
+                         if (Math.random() * 100 < directAskChance && gameState.meethImpressions > 15) {
+                             addStory("[SYSTEM] He replies: 'Cheeky pigeon. Aight fine. I GOTCHU BRO.' Success!");
+                             gameState.nitroAcquired = true;
+                             nextScene = 'gameOverWin';
+                         } else {
+                             addStory("[SYSTEM] He replies: 'Earn it.' Ouch. Direct ask failed.");
+                             gameState.suspicion += 15; gameState.meethImpressions -= 2;
+                             nextScene = 'inside_activity_loop';
+                         }
+                    }, nextScene: 'determined_by_action', dayIncrement: 1 },
+                    { text: `"GIVE ME NITRO NOW MEETH"`, action: () => { addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> replies: 'lol no.' Then you see the dreaded message: You have been kicked from AURA Groupchat."); gameState.suspicion = 100; }, nextScene: 'gameOverKick', dayIncrement: 1 },
+                    { text: `"Meeth, master of Aura, bestow upon this humble servant the gift of Nitro?"`, action: () => { addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> replies: 'WeirdChamp'. Request denied."); gameState.suspicion += 10; gameState.auraPoints -= 5; }, nextScene: 'inside_activity_loop', dayIncrement: 1 }
+                 ]
+             },
+            nitro_orchestrate: {
+                text: `You try to create a situation where needing <span style="color: #ff69b4; font-weight: bold;">Nitro</span> seems natural. You post: "Trying to upload this huge log file for <span class="aura-member">🇰🇿 Henry</span> but Discord file limit is too small without Nitro... struggling."`,
+                action: () => {
+                     addStory("[SYSTEM] <span class=\"aura-member\">🇰🇿 Henry</span> replies: 'Just use pastebin or wetransfer?' <span class=\"meeth\">🇪🇪 Meeth</span> reacts with 🤔.");
+                     // Check if Meeth falls for it or sees through it
+                     let orchestrateChance = (gameState.auraPoints / 20) + (gameState.meethImpressions / 2) - (gameState.suspicion / 6);
+                     if (Math.random() * 100 < orchestrateChance && gameState.meethImpressions > 10) {
+                          addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> sighs digitally. 'Fine, just take the Nitro so you stop making excuses. Check DMs.' Success!");
+                          gameState.nitroAcquired = true;
+                          nextScene = 'gameOverWin';
+                     } else {
+                          addStory("[SYSTEM] Your ploy seems too obvious. Nobody offers Nitro. Suspicion increased.");
+                          gameState.suspicion += 15;
+                          nextScene = 'inside_activity_loop';
+                     }
+                },
+                nextScene: 'determined_by_action',
+                dayIncrement: 1
+            },
+            inside_nitro_fail_early: {
+                 text: `Asking for <span style="color: #ff69b4; font-weight: bold;">Nitro</span> immediately upon joining was... a choice. The chat is awkwardly silent. <span class="meeth">🇪🇪 Meeth</span> posts: "Aura levels critical. Initiate removal sequence?"`,
+                 choices: [
+                    { text: "Apologize! 'Sorry, bad joke! Got carried away!'", action: () => {
+                        if (gameState.auraPoints > 10) { // If you had some starting aura
+                            addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span>: 'Hmm. Watch yourself, pigeon.' You survived... barely. Massive suspicion gain.");
+                             gameState.suspicion += 50;
+                             nextScene = 'inside_observe_1';
+                        } else {
+                            addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span>: 'Too late.' Kick initiated.");
+                            gameState.suspicion = 100;
+                             nextScene = 'gameOverKick';
+                        }
+                    }, nextScene: 'determined_by_action', dayIncrement: 1 },
+                    { text: "Double down: 'C'mon Meeth, I GOTCHU BRO energy?'", action: () => { addStory("[SYSTEM] <span class=\"meeth\">Meeth 🇪🇪</span> doesn't even reply. You are instantly kicked."); gameState.suspicion = 100; }, nextScene: 'gameOverKick', dayIncrement: 1 }
+                 ]
+            },
+
+            // --- Game Over Scenes ---
+            gameOverSuspicion: {
+                text: `[SYSTEM] Your actions have raised too much suspicion. You receive a notification: "You have been removed from the AURA Groupchat." <span class="meeth">Meeth 🇪🇪</span>'s final message in your DMs: "Aura depleted. Fly away, pigeon."\n\nGAME OVER - Too Suspicious`,
+                choices: []
+            },
+             gameOverKick: {
+                 text: `[SYSTEM] You crossed the line. Whether through greed, low Aura, or just bad vibes, you've been kicked out of the <span class="system">AURA Groupchat</span>. The invite is gone, the members have blocked you. The <span style="color: #ff69b4; font-weight: bold;">Nitro</span> remains out of reach.\n\nGAME OVER - Kicked Out`,
+                 choices: []
+             },
+             gameOverGiveUp: {
+                 text: `[SYSTEM] The challenge was too great. The Aura was too strong. You decide to abandon your quest to infiltrate the <span class="system">AURA Groupchat</span> and get <span style="color: #ff69b4; font-weight: bold;">Nitro</span> from <span class="meeth">🇪🇪 Meeth</span>. The legends remain legends, and you remain... a pigeon.\n\nGAME OVER - Gave Up`,
+                 choices: []
+             },
+            gameOverWin: {
+                text: `[SYSTEM] Success! Against the odds, you infiltrated the legendary <span class="system">AURA Groupchat</span>. You navigated the complex social dynamics, impressed the members, and gained the favor of the ultimate Aura master, <span class="meeth">🇪🇪 Meeth</span>.\n\nHe saw your worth, your vibe, your Aura... and he declared: "I GOTCHU BRO".\n\nYou now possess the coveted <span style="color: #ff69b4; font-weight: bold;">Nitro</span>! Your mission is complete. You are no longer just <span class="neshtek">Neshtek 🐦</span>, the outsider. You are <span class="neshtek">Neshtek 🐦</span>, the one who got the Nitro.\n\nCONGRATULATIONS! YOU WIN!`,
+                choices: []
+            }
+        };
+
+        // Initial game start
+        renderScene(gameState.currentScene);
+
+    </script>
+</body>
+</html>

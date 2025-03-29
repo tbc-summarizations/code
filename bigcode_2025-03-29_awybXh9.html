@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>HENRY X PILLOW: The Game.</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            touch-action: none; /* Prevent default touch actions like scrolling */
+        }
+        #game-container {
+            position: relative;
+            width: 95vw;
+            max-width: 800px;
+            height: 70vh;
+            max-height: 600px;
+            background-color: #333;
+            border: 2px solid #fff;
+            overflow: hidden;
+        }
+        .game-object {
+            position: absolute;
+            transition: transform 0.1s linear; /* Smooth movement */
+        }
+        #player {
+            width: 30px;
+            height: 30px;
+            background-color: blue; /* Simple square for player */
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            z-index: 10;
+        }
+        .enemy {
+            width: 25px;
+            height: 25px;
+            background-color: red; /* Simple square for enemy */
+            border-radius: 50%; /* Circle for Clyde clones */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            z-index: 5;
+        }
+        .boss {
+            width: 60px;
+            height: 60px;
+            background-color: purple;
+            border: 3px solid gold;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            text-align: center;
+            z-index: 8;
+        }
+        .projectile {
+            width: 10px;
+            height: 10px;
+            background-color: yellow;
+            border-radius: 50%;
+            position: absolute;
+            z-index: 7;
+        }
+        .benchod-projectile {
+             width: 15px;
+             height: 15px;
+             background-color: orange;
+             position: absolute;
+             z-index: 7;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             font-weight: bold;
+             font-size: 10px;
+             writing-mode: vertical-rl; /* Simple representation */
+             text-orientation: mixed;
+        }
+        .cannon-projectile {
+            width: 20px;
+            height: 20px;
+            background-color: gray;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            z-index: 6;
+        }
+        .obstacle {
+             position: absolute;
+             background-color: darkgray;
+             z-index: 4;
+        }
+        .football-cannon {
+            width: 40px;
+            height: 40px;
+            background-color: silver;
+            border: 2px solid black;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 25px;
+            z-index: 3;
+        }
+        #ui {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+        }
+        #controls {
+            display: none; /* Hidden by default, shown for touch devices */
+            margin-top: 10px;
+            user-select: none; /* Prevent text selection on buttons */
+        }
+        #controls button {
+            padding: 15px;
+            margin: 5px;
+            font-size: 18px;
+            background-color: #555;
+            color: white;
+            border: 1px solid white;
+            border-radius: 5px;
+            min-width: 60px;
+        }
+        #dialogue-box {
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 1px solid white;
+            padding: 10px;
+            margin-bottom: 5px;
+            min-height: 40px;
+            text-align: center;
+            width: 90%;
+            max-width: 780px;
+            box-sizing: border-box;
+        }
+        #progress-bar {
+            width: 90%;
+            max-width: 780px;
+            height: 20px;
+            background-color: #555;
+            border: 1px solid #fff;
+            margin-bottom: 5px;
+            position: relative;
+        }
+        #progress-fill {
+            width: 0%;
+            height: 100%;
+            background-color: lightgreen;
+            transition: width 0.5s ease;
+        }
+         #player-health-bar {
+            width: 150px;
+            height: 15px;
+            background-color: #555;
+            border: 1px solid #fff;
+            margin-bottom: 5px;
+            position: relative;
+        }
+        #player-health-fill {
+            width: 100%;
+            height: 100%;
+            background-color: red;
+            transition: width 0.2s linear;
+        }
+        #boss-health-bar {
+            width: 300px;
+            height: 15px;
+            background-color: #555;
+            border: 1px solid #fff;
+            margin-top: 5px;
+            position: relative;
+            display: none; /* Hidden initially */
+        }
+        #boss-health-fill {
+            width: 100%;
+            height: 100%;
+            background-color: darkred;
+            transition: width 0.2s linear;
+        }
+        #invincible-btn {
+            padding: 8px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+         #invincible-btn.active {
+             background-color: #ffc107;
+             color: black;
+         }
+         .damage-text {
+             position: absolute;
+             color: red;
+             font-weight: bold;
+             font-size: 14px;
+             animation: fadeUp 0.5s ease-out;
+             pointer-events: none;
+             z-index: 20;
+         }
+         .benchod-text {
+             position: absolute;
+             color: orange;
+             font-weight: bold;
+             font-size: 16px;
+             animation: fadeUp 0.6s ease-out;
+             pointer-events: none;
+             z-index: 20;
+         }
+         @keyframes fadeUp {
+             from { opacity: 1; transform: translateY(0); }
+             to { opacity: 0; transform: translateY(-20px); }
+         }
+
+        /* Mobile responsiveness */
+        @media (max-width: 600px) {
+            #controls {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                grid-template-rows: repeat(2, 1fr);
+                gap: 5px;
+                width: 90%;
+            }
+            #controls .spacer { display: none; } /* Hide spacers on small screens */
+            #move-up { grid-column: 2; grid-row: 1; }
+            #move-left { grid-column: 1; grid-row: 2; }
+            #move-down { grid-column: 2; grid-row: 2; }
+            #move-right { grid-column: 3; grid-row: 2; }
+            #attack { grid-column: 1; grid-row: 1; }
+            #benchod-gun { grid-column: 3; grid-row: 1; }
+
+            #player-health-bar { width: 100px; }
+            #boss-health-bar { width: 200px; }
+            .boss { width: 50px; height: 50px; font-size: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <h1>HENRY X PILLOW: The Game.</h1>
+
+    <div id="ui">
+        <div id="dialogue-box">Game Starting...</div>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+         <div>
+            Player Health: <div id="player-health-bar"><div id="player-health-fill"></div></div>
+            <button id="invincible-btn">Invincible: OFF</button>
+        </div>
+        <div id="boss-health-bar"><div id="boss-health-fill"></div></div>
+    </div>
+
+    <div id="game-container">
+        <div id="player" class="game-object">헨</div> <!-- Henry emoji -->
+        <!-- Enemies and other objects will be added here by JavaScript -->
+    </div>
+
+    <div id="controls">
+        <button id="attack">Attack</button>
+        <button id="move-up">▲</button>
+        <button id="benchod-gun">BGun</button>
+        <button id="move-left">◀</button>
+        <button id="move-down">▼</button>
+        <button id="move-right">▶</button>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const dialogueBox = document.getElementById('dialogue-box');
+        const progressBarFill = document.getElementById('progress-fill');
+        const playerHealthFill = document.getElementById('player-health-fill');
+        const bossHealthBar = document.getElementById('boss-health-bar');
+        const bossHealthFill = document.getElementById('boss-health-fill');
+        const invincibleBtn = document.getElementById('invincible-btn');
+        const controlsDiv = document.getElementById('controls');
+
+        const gameWidth = gameContainer.offsetWidth;
+        const gameHeight = gameContainer.offsetHeight;
+
+        let playerState = {
+            x: gameWidth / 2 - 15,
+            y: gameHeight - 50,
+            width: 30,
+            height: 30,
+            speed: 4,
+            health: 100,
+            maxHealth: 100,
+            attackCooldown: 0,
+            benchodGunCooldown: 0,
+            isInvincible: false,
+            facingRight: true // For projectile direction
+        };
+
+        let gameState = {
+            level: 0, // Corresponds to bosses/stages
+            enemies: [],
+            projectiles: [],
+            enemyProjectiles: [],
+            obstacles: [], // For cannons etc.
+            gameTime: 0,
+            paused: false,
+            currentBoss: null,
+            clydeBenchodResistance: 0, // Starts at 0, increases after SC0J
+            levelProgress: 0,
+            totalLevels: 14 // Start + 12 bosses + final boss
+        };
+
+        const levels = [
+            // 0: Intro Dialogue & Clyde Tutorial
+            { name: "Start", duration: 1000, dialogue: `Henry: Clyde, I want to cuddle pillow. || Clyde: Henry no! That's... not right! I must stop you!`, boss: { type: 'Clyde', name: 'Clyde', health: 100, emoji: '👮' } },
+            // 1: Post-Clyde Path 1
+            { name: "Path to Meeth", duration: 3000, dialogue: "Parts of Clyde roam... Must find Pillow.", enemyType: 'ClydeClone', enemyCount: 3 },
+            // 2: Meeththexep Boss
+            { name: "Meeththexep", duration: 1000, dialogue: "Meeth: Henry! What are you doing?! This path leads to trouble!", boss: { type: 'Meeththexep', name: 'Meeth', health: 150, emoji: '🤝' } },
+            // 3: Post-Meeth Path
+            { name: "Path to SC0J", duration: 3000, dialogue: "Meeth didn't stop me... Why was Clyde so against this?", enemyType: 'ClydeClone', enemyCount: 4 },
+            // 4: SC0J Boss
+            { name: "SC0J", duration: 1000, dialogue: "SC0J: Hmm? Henry? You seem determined... Pillow isn't bad, but maybe this isn't the way?", boss: { type: 'SC0J', name: 'SC0J', health: 80, emoji: '❓' } },
+            // 5: Post-SC0J Path (Clyde Resistance Increases)
+            { name: "Path to Frank", duration: 3500, dialogue: "Clyde heard SC0J... he seems tougher now.", enemyType: 'ClydeClone', enemyCount: 5 },
+            // 6: Frank Boss
+            { name: "Frank", duration: 1000, dialogue: "Frank: Henry, seeking comfort? Let's test your resolve!", boss: { type: 'Frank', name: 'Frank', health: 200, emoji: '🧱' } }, // Placeholder details
+            // 7: Post-Frank Path
+            { name: "Path to Admiral", duration: 4000, dialogue: "More resistance... Pillow must be close.", enemyType: 'ClydeClone', enemyCount: 5 },
+            // 8: Admiral Boss
+            { name: "Admiral", duration: 1000, dialogue: "Admiral: HALT! You trespass on the pitch of destiny! FACE THE FOOTBALLS!", boss: { type: 'Admiral', name: 'Admiral', health: 250, emoji: '⚽' } },
+            // 9: Post-Admiral Path (Football Cannons)
+            { name: "Football Fields", duration: 5000, dialogue: "Football cannons?! Gotta time this carefully.", enemyType: 'ClydeClone', enemyCount: 3, hazards: 'FootballCannons' },
+            // 10: BDYT Boss
+            { name: "BDYT", duration: 1000, dialogue: "BDYT: WEE-WOO WEE-WOO! Wrong way, Henry! Siren sounds intensify!", boss: { type: 'BDYT', name: 'BDYT', health: 220, emoji: '🚨' } },
+            // 11: Post-BDYT Path
+            { name: "Siren Alley", duration: 4000, dialogue: "Those sirens hurt my ears...", enemyType: 'ClydeClone', enemyCount: 6 },
+            // 12: Memo Boss
+            { name: "Memo", duration: 1000, dialogue: "Memo: Henry, remember the good times? Is this worth it?", boss: { type: 'Memo', name: 'Memo', health: 180, emoji: '📝' } }, // Placeholder details
+            // 13: Post-Memo Path
+            { name: "Memory Lane", duration: 4000, dialogue: "Must... reach... Pillow.", enemyType: 'ClydeClone', enemyCount: 6 },
+             // 14: Adam Boss
+            { name: "Adam", duration: 1000, dialogue: "Adam: System.out.println(\"Error: Path 'Pillow' not recommended. Engage defensive protocols.\");", boss: { type: 'Adam', name: 'Adam', health: 300, emoji: '💻' } },
+             // 15: Post-Adam Path
+            { name: "Code Corridors", duration: 4500, dialogue: "Debugging my way through...", enemyType: 'ClydeClone', enemyCount: 7 },
+            // 16: HappyMan Boss
+            { name: "HappyMan", duration: 1000, dialogue: "HappyMan: Bawk Bawk! Strongest chicken blocks your path! Cluck cluck!", boss: { type: 'HappyMan', name: 'HappyMan', health: 400, emoji: '🐔' } },
+             // 17: Post-HappyMan Path
+            { name: "Feather Fields", duration: 4500, dialogue: "That was one tough chicken...", enemyType: 'ClydeClone', enemyCount: 7 },
+            // 18: Alan Boss
+            { name: "Alan", duration: 1000, dialogue: "Alan: Analyzing trajectory... Henry, probability of success low. Reconsider.", boss: { type: 'Alan', name: 'Alan', health: 280, emoji: '📊' } }, // Placeholder details
+            // 19: Post-Alan Path
+            { name: "Analysis Avenue", duration: 4500, dialogue: "Almost there...", enemyType: 'ClydeClone', enemyCount: 8 },
+            // 20: Dekoder Boss
+            { name: "Dekoder", duration: 1000, dialogue: "Dekoder: Prepare for unforeseen consequences, Henry.", boss: { type: 'Dekoder', name: 'Dekoder', health: 320, emoji: '🔧' } }, // Half-Life ref
+            // 21: Post-Dekoder Path
+            { name: "Lambda Lane", duration: 5000, dialogue: "What consequences?", enemyType: 'ClydeClone', enemyCount: 8, hazards: 'FootballCannons' }, // Re-use hazard
+            // 22: Nagg Boss
+            { name: "Nagg", duration: 1000, dialogue: "Nagg: Henry! Stop! Are you listening? Henry! Why aren't you stopping? Henry!", boss: { type: 'Nagg', name: 'Nagg', health: 150, emoji: '🗣️' } }, // Annoying = lower health, faster attacks?
+            // 23: Post-Nagg Path
+            { name: "Nagging Nebula", duration: 4000, dialogue: "So annoying...", enemyType: 'ClydeClone', enemyCount: 9 },
+            // 24: Uami Bosim Boss
+            { name: "Uami Bosim", duration: 1000, dialogue: "Uami: Henry... my creation... you were meant for BFCS, not this obsession!", boss: { type: 'Uami', name: 'Uami Bosim', health: 500, emoji: '👑' } },
+            // 25: Post-Uami Path
+            { name: "Final Stretch", duration: 2000, dialogue: "Pillow... so close now.", enemyType: 'ClydeClone', enemyCount: 5 },
+            // 26: Kamran Final Boss
+            { name: "Kamran Returns", duration: 1000, dialogue: "Kamran: HENRY! I won't let them stop you! I'm here to help!", boss: { type: 'Kamran', name: 'KAMRAN IBRAHIM ABDULLAH', health: 1000, emoji: '💖', final: true } },
+            // 27: Game End
+             { name: "The End?", duration: 99999, dialogue: "...", boss: null }
+        ];
+
+        // --- Input Handling ---
+        let keys = {};
+        let touchMove = { x: 0, y: 0 };
+        let touchAttack = false;
+        let touchBenchod = false;
+
+        document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+        document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+        // Basic Touch Controls
+        function setupTouchControls() {
+            controlsDiv.style.display = 'grid'; // Show controls on touch devices
+
+            const buttons = {
+                'move-up': () => touchMove.y = -1,
+                'move-down': () => touchMove.y = 1,
+                'move-left': () => touchMove.x = -1,
+                'move-right': () => touchMove.x = 1,
+                'attack': () => touchAttack = true,
+                'benchod-gun': () => touchBenchod = true
+            };
+
+            for (const [id, action] of Object.entries(buttons)) {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.addEventListener('touchstart', (e) => { e.preventDefault(); action(); }, { passive: false });
+                    btn.addEventListener('touchend', (e) => {
+                        e.preventDefault();
+                        if (id.startsWith('move-')) {
+                            if (id === 'move-up' || id === 'move-down') touchMove.y = 0;
+                            if (id === 'move-left' || id === 'move-right') touchMove.x = 0;
+                        } else if (id === 'attack') {
+                            touchAttack = false;
+                        } else if (id === 'benchod-gun') {
+                             touchBenchod = false;
+                        }
+                    });
+                }
+            }
+        }
+
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            setupTouchControls();
+        }
+
+        // --- Utility Functions ---
+        function updatePlayerPosition() {
+            let dx = touchMove.x;
+            let dy = touchMove.y;
+
+            if (keys['w'] || keys['arrowup']) dy = -1;
+            if (keys['s'] || keys['arrowdown']) dy = 1;
+            if (keys['a'] || keys['arrowleft']) dx = -1;
+            if (keys['d'] || keys['arrowright']) dx = 1;
+
+             // Update facing direction
+            if (dx > 0) playerState.facingRight = true;
+            if (dx < 0) playerState.facingRight = false;
+
+            // Normalize diagonal movement
+            if (dx !== 0 && dy !== 0) {
+                 const length = Math.sqrt(dx * dx + dy * dy);
+                 dx = (dx / length);
+                 dy = (dy / length);
+            }
+
+            playerState.x += dx * playerState.speed;
+            playerState.y += dy * playerState.speed;
+
+            // Boundary checks
+            playerState.x = Math.max(0, Math.min(gameWidth - playerState.width, playerState.x));
+            playerState.y = Math.max(0, Math.min(gameHeight - playerState.height, playerState.y));
+
+            player.style.left = `${playerState.x}px`;
+            player.style.top = `${playerState.y}px`;
+        }
+
+         function createProjectile(x, y, dx, dy, speed, damage, owner, type = 'normal') {
+             const projectile = {
+                x, y, dx, dy, speed, damage, owner, type,
+                element: document.createElement('div')
+            };
+            projectile.element.classList.add('game-object');
+             if (type === 'benchod') {
+                projectile.element.classList.add('benchod-projectile');
+                projectile.element.textContent = 'B'; // Simple visual for the gun
+            } else if (type === 'cannon') {
+                projectile.element.classList.add('cannon-projectile');
+                projectile.element.textContent = '⚽'; // Football emoji
+            } else {
+                projectile.element.classList.add('projectile');
+             }
+            projectile.element.style.left = `${x}px`;
+            projectile.element.style.top = `${y}px`;
+            gameContainer.appendChild(projectile.element);
+
+             if (owner === 'player') {
+                 gameState.projectiles.push(projectile);
+            } else {
+                 gameState.enemyProjectiles.push(projectile);
+            }
+        }
+
+        function updateProjectiles(projectileList, targetList, damageCallback) {
+            for (let i = projectileList.length - 1; i >= 0; i--) {
+                const p = projectileList[i];
+                p.x += p.dx * p.speed;
+                p.y += p.dy * p.speed;
+                p.element.style.left = `${p.x}px`;
+                p.element.style.top = `${p.y}px`;
+
+                // Check boundaries
+                if (p.x < -10 || p.x > gameWidth || p.y < -10 || p.y > gameHeight) {
+                    gameContainer.removeChild(p.element);
+                    projectileList.splice(i, 1);
+                    continue;
+                }
+
+                 // Check collisions with targets
+                 for (let j = targetList.length - 1; j >= 0; j--) {
+                     const target = targetList[j];
+                     if (isColliding(p, target)) {
+                         damageCallback(target, p.damage, p);
+                         gameContainer.removeChild(p.element);
+                         projectileList.splice(i, 1);
+                         break; // Projectile hits one target and disappears
+                     }
+                 }
+            }
+        }
+
+         function isColliding(obj1, obj2) {
+            if (!obj1 || !obj2) return false; // Check if objects exist
+             // Adjust coordinates if needed (obj1 might be projectile, obj2 state object)
+             const x1 = obj1.x;
+             const y1 = obj1.y;
+             const w1 = obj1.element ? obj1.element.offsetWidth : obj1.width;
+             const h1 = obj1.element ? obj1.element.offsetHeight : obj1.height;
+
+             const x2 = obj2.x;
+             const y2 = obj2.y;
+             const w2 = obj2.element ? obj2.element.offsetWidth : obj2.width;
+             const h2 = obj2.element ? obj2.element.offsetHeight : obj2.height;
+
+            return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
+        }
+
+         function showDamageText(x, y, text, className = 'damage-text') {
+            const damageText = document.createElement('div');
+            damageText.classList.add(className);
+            damageText.textContent = text;
+            damageText.style.left = `${x}px`;
+            damageText.style.top = `${y}px`;
+            gameContainer.appendChild(damageText);
+             setTimeout(() => {
+                if (damageText.parentNode === gameContainer) {
+                    gameContainer.removeChild(damageText);
+                }
+            }, 500); // Match animation duration
+        }
+
+         function damageEnemy(enemy, damage, projectile = null) {
+             let actualDamage = damage;
+             let showBenchod = false;
+
+             if (projectile && projectile.type === 'benchod' && enemy.type === 'ClydeClone') {
+                 actualDamage *= (2 - gameState.clydeBenchodResistance); // Double damage initially, less effective later
+                 showDamageText(enemy.x, enemy.y - 10, "Benchod", 'benchod-text'); // Show the requested text
+                 showBenchod = true;
+             }
+
+             enemy.health -= actualDamage;
+             showDamageText(enemy.x + enemy.width / 2, enemy.y, Math.round(actualDamage));
+
+             if (enemy.health <= 0) {
+                // Handle enemy death
+                 if (enemy.isBoss) {
+                     handleBossDefeat(enemy);
+                 } else {
+                    // Find index and remove
+                    const index = gameState.enemies.findIndex(e => e === enemy);
+                    if (index > -1) {
+                         gameContainer.removeChild(enemy.element);
+                         gameState.enemies.splice(index, 1);
+                    }
+                }
+            } else if(enemy.isBoss) {
+                updateBossHealthBar();
+            }
+        }
+
+        function damagePlayer(damage) {
+            if (playerState.isInvincible) return;
+
+            playerState.health -= damage;
+            playerState.health = Math.max(0, playerState.health);
+            updatePlayerHealthBar();
+             showDamageText(playerState.x + playerState.width / 2, playerState.y, Math.round(damage));
+
+            if (playerState.health <= 0) {
+                endGame("Game Over!");
+            }
+        }
+
+
+         function createEnemy(type = 'ClydeClone', x, y, health = 30, emoji = '💧') {
+             const enemy = {
+                 x, y,
+                 width: 25, height: 25,
+                 health, maxHealth: health,
+                 type,
+                 speed: 1 + Math.random() * 1.5, // Randomize speed slightly
+                 element: document.createElement('div'),
+                 attackCooldown: 150 + Math.random() * 100, // Time between attacks
+                 shootTimer: 0,
+                 moveTimer: 0,
+                 moveDirection: {x: 0, y: 0}
+             };
+             enemy.element.classList.add('game-object', 'enemy');
+             enemy.element.textContent = emoji; // Clyde Clone parts emoji
+             enemy.element.style.left = `${x}px`;
+             enemy.element.style.top = `${y}px`;
+             gameContainer.appendChild(enemy.element);
+             gameState.enemies.push(enemy);
+             return enemy;
+         }
+
+         function createBoss(bossData) {
+             const boss = {
+                 x: gameWidth / 2 - 30, y: 50,
+                 width: 60, height: 60,
+                 health: bossData.health, maxHealth: bossData.health,
+                 type: bossData.type,
+                 name: bossData.name,
+                 emoji: bossData.emoji || '👿',
+                 isBoss: true,
+                 element: document.createElement('div'),
+                 attackPattern: 0, // Different patterns for variety
+                 attackCooldown: 100,
+                 moveTimer: 0,
+                 movePhase: 0,
+                 specialTimer: 0, // Timer for special attacks
+                 final: bossData.final || false // Is this the final boss?
+             };
+             boss.element.classList.add('game-object', 'boss');
+             boss.element.innerHTML = `${boss.emoji}<br>${boss.name}`;
+             boss.element.style.left = `${boss.x}px`;
+             boss.element.style.top = `${boss.y}px`;
+             gameContainer.appendChild(boss.element);
+             gameState.enemies.push(boss); // Add boss to enemies array for collision checks
+             gameState.currentBoss = boss;
+
+             // Show boss health bar
+             bossHealthBar.style.display = 'block';
+             updateBossHealthBar();
+             return boss;
+         }
+
+         function updateEnemies() {
+             gameState.enemies.forEach(enemy => {
+                 enemy.moveTimer--;
+                 enemy.shootTimer--;
+
+                 // Basic AI: Move randomly or towards player, shoot periodically
+                 if (enemy.moveTimer <= 0) {
+                     if (Math.random() < 0.7) { // 70% chance to move towards player
+                        const dx = playerState.x - enemy.x;
+                        const dy = playerState.y - enemy.y;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                         if (dist > 0) {
+                            enemy.moveDirection.x = (dx / dist) * enemy.speed;
+                            enemy.moveDirection.y = (dy / dist) * enemy.speed;
+                         }
+                     } else { // 30% chance to move randomly
+                         enemy.moveDirection.x = (Math.random() - 0.5) * enemy.speed * 2;
+                         enemy.moveDirection.y = (Math.random() - 0.5) * enemy.speed * 2;
+                     }
+                     enemy.moveTimer = 60 + Math.random() * 60; // Change direction every 1-2 seconds
+                 }
+
+                 enemy.x += enemy.moveDirection.x;
+                 enemy.y += enemy.moveDirection.y;
+
+                 // Boundary checks for enemies
+                 enemy.x = Math.max(0, Math.min(gameWidth - enemy.width, enemy.x));
+                 enemy.y = Math.max(0, Math.min(gameHeight - enemy.height - 100, enemy.y)); // Keep enemies in upper part mostly
+
+                 enemy.element.style.left = `${enemy.x}px`;
+                 enemy.element.style.top = `${enemy.y}px`;
+
+                 // Simple shooting AI (non-boss enemies)
+                 if (!enemy.isBoss && enemy.shootTimer <= 0 && Math.random() < 0.01) { // Low chance each frame
+                     const dx = playerState.x - enemy.x;
+                     const dy = playerState.y - enemy.y;
+                     const dist = Math.sqrt(dx * dx + dy * dy);
+                     if (dist > 0) {
+                         createProjectile(enemy.x + enemy.width / 2 - 5, enemy.y + enemy.height / 2 - 5,
+                             dx / dist, dy / dist, 3, 5, 'enemy');
+                     }
+                     enemy.shootTimer = enemy.attackCooldown;
+                 }
+
+                 // Check collision with player
+                 if (isColliding(playerState, enemy)) {
+                     damagePlayer(enemy.isBoss ? 15 : 5); // Bosses deal more collision damage
+                     // Optional: Add knockback effect here
+                 }
+             });
+         }
+
+         function updateBosses() {
+             if (!gameState.currentBoss || gameState.currentBoss.health <= 0) return;
+
+             const boss = gameState.currentBoss;
+             boss.moveTimer--;
+             boss.attackCooldown--;
+             boss.specialTimer--;
+
+             // Boss specific logic
+             switch(boss.type) {
+                 case 'Clyde': // Tutorial Boss
+                     // Simple pattern: move side to side, shoot downwards
+                     if (boss.moveTimer <= 0) {
+                         boss.movePhase = (boss.movePhase + 1) % 2;
+                         boss.moveTimer = 120; // Change direction every 2 seconds
+                     }
+                     boss.x += (boss.movePhase === 0 ? 2 : -2);
+                     boss.x = Math.max(0, Math.min(gameWidth - boss.width, boss.x));
+
+                     if (boss.attackCooldown <= 0) {
+                         createProjectile(boss.x + boss.width / 2 - 5, boss.y + boss.height, 0, 1, 4, 10, boss.type); // Shoots down
+                         boss.attackCooldown = 80;
+                     }
+                     break;
+
+                 case 'Meeththexep':
+                     // Moves more erratically, shoots bursts
+                     if (boss.moveTimer <= 0) {
+                         boss.moveDirection = { x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 4 };
+                         boss.moveTimer = 40;
+                     }
+                     boss.x += boss.moveDirection.x;
+                     boss.y += boss.moveDirection.y;
+                      boss.x = Math.max(0, Math.min(gameWidth - boss.width, boss.x));
+                     boss.y = Math.max(0, Math.min(gameHeight / 2 - boss.height, boss.y)); // Stays in top half
+
+
+                     if (boss.attackCooldown <= 0) {
+                         // Shoots a burst of 3 projectiles towards player
+                         for (let i = 0; i < 3; i++) {
+                             setTimeout(() => {
+                                 const dx = playerState.x - (boss.x + boss.width / 2);
+                                 const dy = playerState.y - (boss.y + boss.height / 2);
+                                 const dist = Math.sqrt(dx*dx + dy*dy);
+                                 if (dist > 0) {
+                                     createProjectile(boss.x + boss.width / 2 - 5, boss.y + boss.height / 2 - 5, dx / dist, dy / dist, 5, 8, boss.type);
+                                 }
+                             }, i * 100); // Staggered burst
+                         }
+                         boss.attackCooldown = 120;
+                     }
+                     break;
+
+                case 'SC0J':
+                    // Less aggressive, moves slowly, occasional single shot
+                    boss.x += (Math.sin(gameState.gameTime / 60) * 1); // Slow wave movement
+
+                    if (boss.attackCooldown <= 0 && Math.random() < 0.5) { // Doesn't always fire
+                        const dx = playerState.x - boss.x;
+                        const dy = playerState.y - boss.y;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        if (dist > 0) {
+                            createProjectile(boss.x + boss.width / 2 - 5, boss.y + boss.height / 2 - 5, dx / dist, dy / dist, 3, 5, boss.type);
+                        }
+                        boss.attackCooldown = 150;
+                    }
+                     break;
+
+                case 'Admiral': // Football Fan
+                    // Moves side to side, periodically "kicks" footballs (slower, heavier projectiles)
+                    if (boss.moveTimer <= 0) {
+                        boss.movePhase = (boss.movePhase + 1) % 2;
+                        boss.moveTimer = 100;
+                    }
+                    boss.x += (boss.movePhase === 0 ? 3 : -3);
+                    boss.x = Math.max(0, Math.min(gameWidth - boss.width, boss.x));
+
+                    if (boss.attackCooldown <= 0) {
+                         const dx = (Math.random() - 0.5) * 0.5; // Slight angle variance
+                         const dy = 1;
+                         createProjectile(boss.x + boss.width / 2 - 10, boss.y + boss.height, dx, dy, 3, 15, boss.type, 'cannon'); // Football projectile
+                        boss.attackCooldown = 90;
+                    }
+                     break;
+
+                case 'Kamran': // Final Boss - Placeholder complex pattern
+                     // Phase 1: Standard attacks
+                     // Phase 2 (low health): Faster attacks, maybe helper spawns?
+                     // Placeholder: Similar to Meeth but faster/more projectiles
+                     if (boss.moveTimer <= 0) {
+                         boss.moveDirection = { x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 6 };
+                         boss.moveTimer = 30;
+                     }
+                     boss.x += boss.moveDirection.x;
+                     boss.y += boss.moveDirection.y;
+                     boss.x = Math.max(0, Math.min(gameWidth - boss.width, boss.x));
+                     boss.y = Math.max(0, Math.min(gameHeight / 2 - boss.height, boss.y));
+
+                     if (boss.attackCooldown <= 0) {
+                         const numProjectiles = playerState.health < 50 ? 5 : 3; // More shots at low health
+                         for (let i = 0; i < numProjectiles; i++) {
+                             setTimeout(() => {
+                                 const dx = playerState.x - (boss.x + boss.width / 2);
+                                 const dy = playerState.y - (boss.y + boss.height / 2);
+                                 const angleOffset = (Math.random() - 0.5) * 0.4; // Spread shots
+                                 const angle = Math.atan2(dy, dx) + angleOffset;
+                                 if (true) { // always fire towards player direction
+                                     createProjectile(boss.x + boss.width / 2 - 5, boss.y + boss.height / 2 - 5, Math.cos(angle), Math.sin(angle), 6, 12, boss.type);
+                                 }
+                             }, i * 80);
+                         }
+                         boss.attackCooldown = 80;
+                     }
+                     break;
+
+
+                 default: // Default for unimplemented bosses
+                     // Generic side-to-side movement and shooting
+                     if (boss.moveTimer <= 0) {
+                         boss.movePhase = (boss.movePhase + 1) % 2;
+                         boss.moveTimer = 120;
+                     }
+                     boss.x += (boss.movePhase === 0 ? 2 : -2);
+                     boss.x = Math.max(0, Math.min(gameWidth - boss.width, boss.x));
+
+                     if (boss.attackCooldown <= 0) {
+                         createProjectile(boss.x + boss.width / 2 - 5, boss.y + boss.height, 0, 1, 4, 10, boss.type); // Shoots down
+                         boss.attackCooldown = 100;
+                     }
+                     break;
+             }
+
+             // Apply position updates for all bosses
+             boss.element.style.left = `${boss.x}px`;
+             boss.element.style.top = `${boss.y}px`;
+         }
+
+         function handleBossDefeat(boss) {
+             dialogueBox.textContent = `${boss.name} defeated!`;
+             gameState.currentBoss = null;
+             bossHealthBar.style.display = 'none';
+
+             // Remove boss from enemies list
+             const index = gameState.enemies.findIndex(e => e === boss);
+             if (index > -1) {
+                 gameContainer.removeChild(boss.element);
+                 gameState.enemies.splice(index, 1);
+             }
+
+             // Specific post-boss logic
+             if (boss.type === 'SC0J') {
+                 gameState.clydeBenchodResistance = Math.min(0.5, gameState.clydeBenchodResistance + 0.25); // Increase resistance, cap at 50% reduction (makes gun deal 1.5x)
+                 dialogueBox.textContent += " (Clyde seems more resistant to the Benchod Gun now!)";
+             }
+             if (boss.type === 'Admiral') {
+                 // Next level will have cannons, handled by loadLevel
+             }
+             if (boss.final) {
+                 endGame("VICTORY! Henry reaches Pillow...?"); // Or trigger final cutscene
+                 return;
+             }
+
+
+             // Delay before starting next level
+             setTimeout(() => {
+                 startNextLevel();
+             }, 3000); // 3 second delay
+         }
+
+         function updatePlayerHealthBar() {
+             const percentage = (playerState.health / playerState.maxHealth) * 100;
+             playerHealthFill.style.width = `${percentage}%`;
+         }
+
+         function updateBossHealthBar() {
+            if (!gameState.currentBoss) return;
+             const percentage = (gameState.currentBoss.health / gameState.currentBoss.maxHealth) * 100;
+             bossHealthFill.style.width = `${percentage}%`;
+         }
+
+         function updateProgressBar() {
+             const percentage = Math.min(100, (gameState.levelProgress / levels[gameState.level].duration) * 100);
+             progressBarFill.style.width = `${percentage}%`;
+         }
+
+         function clearLevel() {
+             // Remove existing enemies, projectiles, obstacles
+             gameState.enemies.forEach(e => gameContainer.removeChild(e.element));
+             gameState.enemies = [];
+             gameState.projectiles.forEach(p => gameContainer.removeChild(p.element));
+             gameState.projectiles = [];
+             gameState.enemyProjectiles.forEach(p => gameContainer.removeChild(p.element));
+             gameState.enemyProjectiles = [];
+             gameState.obstacles.forEach(o => gameContainer.removeChild(o.element));
+             gameState.obstacles = [];
+             gameState.currentBoss = null;
+             bossHealthBar.style.display = 'none';
+             gameState.levelProgress = 0;
+         }
+
+         function loadLevel(levelIndex) {
+             if (levelIndex >= levels.length) {
+                 endGame("You reached the end...?");
+                 return;
+             }
+             gameState.level = levelIndex;
+             const levelData = levels[levelIndex];
+             clearLevel();
+
+             dialogueBox.textContent = levelData.dialogue || levelData.name;
+             playerState.x = gameWidth / 2 - 15; // Reset player position
+             playerState.y = gameHeight - 50;
+
+
+             if (levelData.boss) {
+                 createBoss(levelData.boss);
+                 gameState.levelProgress = levelData.duration; // Boss levels end on defeat, not timer
+             } else {
+                 // Spawn enemies for non-boss levels
+                 for (let i = 0; i < (levelData.enemyCount || 0); i++) {
+                     createEnemy(levelData.enemyType, Math.random() * (gameWidth - 30), Math.random() * (gameHeight / 2));
+                 }
+                 // Spawn hazards
+                 if (levelData.hazards === 'FootballCannons') {
+                     createFootballCannons(4); // Add 4 cannons
+                 }
+             }
+              updateProgressBar(); // Reset progress bar visually
+         }
+
+         function createFootballCannons(count) {
+            const spacing = gameHeight / (count + 1);
+            for (let i = 0; i < count; i++) {
+                const cannon = {
+                    x: (i % 2 === 0) ? -10 : gameWidth - 30, // Alternate sides
+                    y: spacing * (i + 1) - 20,
+                    width: 40, height: 40,
+                    type: 'FootballCannon',
+                    fireRate: 120 + Math.random() * 60, // 2-3 seconds
+                    fireTimer: Math.random() * 100, // Stagger initial firing
+                    element: document.createElement('div')
+                };
+                cannon.element.classList.add('game-object', 'football-cannon');
+                cannon.element.textContent = '🥅'; // Goal emoji for cannon
+                cannon.element.style.left = `${cannon.x}px`;
+                cannon.element.style.top = `${cannon.y}px`;
+                 if (i % 2 !== 0) { // Cannon on the right aims left
+                    cannon.element.style.transform = 'scaleX(-1)';
+                 }
+                gameContainer.appendChild(cannon.element);
+                gameState.obstacles.push(cannon);
+            }
+        }
+
+         function updateObstacles() {
+            gameState.obstacles.forEach(obs => {
+                if (obs.type === 'FootballCannon') {
+                    obs.fireTimer--;
+                    if (obs.fireTimer <= 0) {
+                        const dirX = (obs.x < gameWidth / 2) ? 1 : -1; // Fire right if on left, left if on right
+                        createProjectile(obs.x + (dirX > 0 ? obs.width : -20), obs.y + obs.height / 2 - 10,
+                                         dirX, 0, 4, 20, 'obstacle', 'cannon');
+                        obs.fireTimer = obs.fireRate;
+                    }
+                }
+            });
+        }
+
+
+         function startNextLevel() {
+             loadLevel(gameState.level + 1);
+         }
+
+         function endGame(message) {
+             gameState.paused = true;
+             dialogueBox.textContent = message;
+             // Maybe add a restart button?
+         }
+
+        // --- Game Loop ---
+        function gameLoop() {
+            if (gameState.paused) {
+                requestAnimationFrame(gameLoop); // Keep loop running but don't update game state
+                return;
+            }
+
+            gameState.gameTime++;
+
+             // Cooldowns
+             if (playerState.attackCooldown > 0) playerState.attackCooldown--;
+             if (playerState.benchodGunCooldown > 0) playerState.benchodGunCooldown--;
+
+             // Player Actions
+             updatePlayerPosition();
+
+             // Handle Attack Input (Keyboard: Space, Touch: Button)
+            if ((keys[' '] || touchAttack) && playerState.attackCooldown <= 0) {
+                 const projX = playerState.x + (playerState.facingRight ? playerState.width : -10); // Position projectile based on facing direction
+                 const projY = playerState.y + playerState.height / 2 - 5;
+                 const dirX = playerState.facingRight ? 1 : -1;
+                 createProjectile(projX, projY, dirX, 0, 8, 10, 'player');
+                 playerState.attackCooldown = 20; // Cooldown frames
+                 touchAttack = false; // Reset touch state after firing once
+             }
+
+             // Handle Benchod Gun Input (Keyboard: b, Touch: Button)
+             if ((keys['b'] || touchBenchod) && playerState.benchodGunCooldown <= 0) {
+                 const projX = playerState.x + (playerState.facingRight ? playerState.width : -15); // Adjust position slightly
+                 const projY = playerState.y + playerState.height / 2 - 7;
+                 const dirX = playerState.facingRight ? 1 : -1;
+                 createProjectile(projX, projY, dirX, 0, 7, 20, 'player', 'benchod'); // Use 'benchod' type
+                 playerState.benchodGunCooldown = 60; // Longer cooldown for special weapon
+                 touchBenchod = false; // Reset touch state
+             }
+
+
+             // Update Game Objects
+             updateEnemies();
+             updateBosses();
+             updateObstacles(); // Update cannons etc.
+
+             // Update Projectiles and check collisions
+             updateProjectiles(gameState.projectiles, gameState.enemies, damageEnemy);
+             updateProjectiles(gameState.enemyProjectiles, [playerState], damagePlayer); // Player state needs to be in an array
+
+             // Level Progression (for non-boss levels)
+             if (!gameState.currentBoss && levels[gameState.level] && !levels[gameState.level].boss) {
+                 gameState.levelProgress++;
+                 updateProgressBar();
+                 if (gameState.levelProgress >= levels[gameState.level].duration) {
+                     startNextLevel();
+                 }
+                // Optional: Spawn enemies periodically during the level
+                 if(levels[gameState.level].enemyType && gameState.levelProgress % 120 === 0 && gameState.enemies.length < 8) { // Every 2 seconds if below cap
+                      createEnemy(levels[gameState.level].enemyType, Math.random() * (gameWidth - 30), Math.random() * (gameHeight / 3));
+                 }
+
+             }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Initialization ---
+        invincibleBtn.addEventListener('click', () => {
+            playerState.isInvincible = !playerState.isInvincible;
+            invincibleBtn.textContent = `Invincible: ${playerState.isInvincible ? 'ON' : 'OFF'}`;
+            invincibleBtn.classList.toggle('active', playerState.isInvincible);
+        });
+
+        // Start the game after a brief delay for elements to load
+        setTimeout(() => {
+            loadLevel(0); // Start at level 0
+            requestAnimationFrame(gameLoop);
+        }, 500);
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Meethexep Scooter Runner</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            color: white;
+        }
+        canvas {
+            border: 1px solid #555;
+            background-color: #00001a; /* Dark blue night sky */
+            display: block; /* Prevents extra space below canvas */
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
+            text-shadow: 1px 1px 2px black;
+            z-index: 10;
+        }
+        #boost-status {
+             display: block; /* Ensure it takes its own line */
+             margin-top: 5px;
+             font-weight: bold;
+        }
+        #debug {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 12px;
+            color: #888;
+            z-index: 10;
+        }
+        #mobile-controls {
+            display: none; /* Hidden by default */
+            position: absolute;
+            bottom: 15px; /* Adjusted position */
+            width: 100%;
+            text-align: center;
+            z-index: 5;
+        }
+        #mobile-controls button {
+            padding: 18px 30px; /* Larger buttons */
+            margin: 0 15px;
+            font-size: 18px;
+            background-color: rgba(100, 100, 100, 0.7);
+            border: 2px solid rgba(200, 200, 200, 0.8);
+            color: white;
+            border-radius: 10px;
+            font-weight: bold;
+            /* Prevent text selection */
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+             /* Prevent tap highlight */
+            -webkit-tap-highlight-color: transparent;
+        }
+         #mobile-controls button:active {
+             background-color: rgba(150, 150, 150, 0.8);
+         }
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 20;
+            display: none; /* Hidden initially */
+        }
+         #game-over-screen h1 {
+             font-size: 48px;
+             margin-bottom: 10px;
+             text-shadow: 2px 2px 4px #000;
+         }
+         #game-over-screen p {
+             font-size: 24px;
+             margin-bottom: 30px;
+         }
+         #restart-button {
+             padding: 15px 30px;
+             font-size: 20px;
+             background-color: #4CAF50;
+             border: none;
+             color: white;
+             border-radius: 5px;
+             cursor: pointer;
+             font-weight: bold;
+         }
+          #restart-button:hover {
+              background-color: #45a049;
+          }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        Aura Points: <span id="score">0</span>
+        <span id="boost-status" style="color: yellow;"></span>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="mobile-controls">
+        <button id="powerwheelie-btn">Power Wheelie (Hold)</button>
+        <button id="jump-btn">Jump</button>
+    </div>
+    <div id="debug">Device: Detecting...</div>
+
+    <div id="game-over-screen">
+        <h1>GAME OVER</h1>
+        <p>Final Aura Points: <span id="final-score">0</span></p>
+        <button id="restart-button">Restart</button>
+    </div>
+
+    <script>
+        // --- Game Setup ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const boostStatusEl = document.getElementById('boost-status');
+        const debugEl = document.getElementById('debug');
+        const mobileControlsEl = document.getElementById('mobile-controls');
+        const jumpBtn = document.getElementById('jump-btn');
+        const powerwheelieBtn = document.getElementById('powerwheelie-btn');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreEl = document.getElementById('final-score');
+        const restartButton = document.getElementById('restart-button');
+
+
+        let canvasWidth, canvasHeight;
+        function resizeCanvas() {
+            canvasWidth = Math.min(window.innerWidth * 0.95, 1000); // Max width 1000px
+            canvasHeight = Math.min(window.innerHeight * 0.95, 600); // Max height 600px
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            // Adjust building generation parameters based on new height if needed
+             maxBuildingHeight = canvasHeight * 0.6;
+             // Re-place player if necessary (or handle in game state reset)
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // Initial size calculation
+
+
+        let score = 0;
+        let gameSpeed = 3; // Base speed pixels per frame
+        let baseGameSpeed = 3;
+        let gravity = 0.5;
+        let buildings = [];
+        let particles = [];
+        let gameOver = false;
+        let gameRunning = false; // To prevent updates before start/after game over
+        let gameFrame = 0;
+        let isMobile = false;
+
+        // Game parameters adjusted by device type
+        let playerJumpPower;
+        let powerWheelieChargeRate;
+        let auraGainRatePowerWheelie;
+        let wheelieBoostAuraGain;
+        let buildingMinGap;
+        let buildingMaxGap;
+
+
+        // --- Device Detection ---
+        function detectDevice() {
+            isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth < 768;
+            debugEl.textContent = `Device: ${isMobile ? 'Mobile' : 'PC'} | Controls: ${isMobile ? 'Buttons' : 'Space (Jump), Shift (Wheelie)'}`;
+
+            if (isMobile) {
+                mobileControlsEl.style.display = 'block';
+                baseGameSpeed = 2.8;
+                gravity = 0.45;
+                playerJumpPower = -10;
+                powerWheelieChargeRate = 1.8;
+                auraGainRatePowerWheelie = 0.4;
+                wheelieBoostAuraGain = 4;
+                buildingMinGap = 70;
+                buildingMaxGap = 180;
+
+            } else {
+                mobileControlsEl.style.display = 'none';
+                baseGameSpeed = 3.5;
+                gravity = 0.5;
+                playerJumpPower = -11.5;
+                powerWheelieChargeRate = 2.2;
+                auraGainRatePowerWheelie = 0.6;
+                wheelieBoostAuraGain = 6;
+                buildingMinGap = 80;
+                buildingMaxGap = 210;
+            }
+            gameSpeed = baseGameSpeed; // Set initial game speed
+        }
+
+
+        // --- Player Setup ---
+        const player = {
+            x: 150,
+            y: canvas.height / 2,
+            width: 55, // Slightly larger for emoji rendering
+            height: 45,
+            vx: 0, // Player's horizontal velocity relative to screen (usually 0, buildings move)
+            vy: 0, // Vertical velocity
+            jumpPower: playerJumpPower, // Set during device detection
+            grounded: false,
+            rotation: 0, // Radians
+            isPowerWheeling: false,
+            powerWheelieStartTime: 0,
+            powerWheelieCharge: 0, // 0 to 100 (or some max value)
+            powerWheelieMaxCharge: 120, // ~2 seconds charge time at 60fps
+
+            isWheelieBoosting: false,
+            wheelieBoostJumpsNeeded: 10,
+            wheelieBoostJumpsLeft: 0,
+            wheelieBoostSpeedMultiplier: 2.5, // Multiplier for gameSpeed
+            wheelieBoostInvincible: false,
+            wheelieBoostBaseAuraGain: wheelieBoostAuraGain, // Set during device detection
+
+            // Input state flags
+            spacePressed: false, // For PC tap vs hold detection (if space was used for wheelie)
+            shiftPressed: false, // For PC wheelie hold
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                ctx.rotate(this.rotation);
+
+                // Emoji version 🐱🛴
+                ctx.font = `${this.height * 0.9}px Arial`; // Adjusted size slightly
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // Draw scooter slightly behind/below
+                ctx.fillText('🛴', 0, this.height * 0.15);
+                // Draw cat slightly ahead/above
+                ctx.fillText('🐱', -this.width * 0.1, -this.height * 0.1);
+
+                ctx.restore();
+
+                // Boost / Charge Aura visual
+                const auraX = this.x + this.width / 2;
+                const auraY = this.y + this.height / 2;
+                if (this.isWheelieBoosting) {
+                    ctx.fillStyle = `rgba(255, 255, 0, ${0.2 + Math.random() * 0.2})`; // Flickering Yellow aura
+                    ctx.beginPath();
+                    ctx.arc(auraX, auraY, this.width * 1.2, 0, Math.PI * 2); // Larger aura
+                    ctx.fill();
+                } else if (this.isPowerWheeling) {
+                     // Charging visual (e.g., growing circle or bar)
+                     const chargeRatio = this.powerWheelieCharge / this.powerWheelieMaxCharge;
+                     ctx.fillStyle = 'rgba(0, 150, 255, 0.4)'; // Blue charging aura
+                     ctx.beginPath();
+                     ctx.arc(auraX, auraY, this.width * 0.8 * chargeRatio, 0, Math.PI * 2);
+                     ctx.fill();
+                     // Optional: Add sparks effect while charging
+                      if (Math.random() > 0.7) {
+                          spawnParticles(auraX, auraY, 1, 'cyan', 3, 10);
+                      }
+                }
+            },
+
+            update() {
+                // Apply gravity
+                if (!this.grounded && !this.isWheelieBoosting) {
+                    this.vy += gravity;
+                } else if (this.isWheelieBoosting) {
+                    // Keep airborne during boost - gentle upward force cancels gravity mostly
+                    this.vy += (gravity * 0.8) - gravity; // Counteract most of gravity
+                    if(this.vy > 1) this.vy = 1; // Limit upward speed
+                    this.wheelieBoostInvincible = true;
+                    gameSpeed = baseGameSpeed * this.wheelieBoostSpeedMultiplier; // Speed up the game world
+                    this.rotation = 0.6 + Math.sin(gameFrame * 0.5) * 0.1; // More rotation + wobble
+                    score += this.wheelieBoostBaseAuraGain; // Gain boost aura
+                    boostStatusEl.textContent = `BOOST! Jumps left: ${this.wheelieBoostJumpsLeft}`;
+                    // Spawn boost particles
+                    if (gameFrame % 3 === 0) spawnParticles(this.x, this.y + this.height/2, 2, 'yellow', 4, 20);
+
+                } else { // Grounded or not boosting
+                    if (this.grounded) this.vy = 0;
+                    this.wheelieBoostInvincible = false;
+                    gameSpeed = baseGameSpeed; // Normal speed
+                    if (boostStatusEl.textContent) boostStatusEl.textContent = ''; // Clear boost status only once
+                }
+
+                // Update position
+                this.y += this.vy;
+                // Horizontal movement is handled by shifting the buildings left
+
+                // Update rotation based on state
+                if (this.isPowerWheeling && !this.isWheelieBoosting) {
+                    this.rotation = 0.25 + Math.sin(gameFrame * 0.3) * 0.05; // Slight rotation + wobble
+                    this.powerWheelieCharge = Math.min(this.powerWheelieMaxCharge, this.powerWheelieCharge + powerWheelieChargeRate);
+                    score += auraGainRatePowerWheelie;
+                    if (this.powerWheelieCharge >= this.powerWheelieMaxCharge) {
+                        this.startWheelieBoost();
+                    }
+                } else if (!this.isWheelieBoosting) {
+                    // Gradually return to normal rotation when grounded and not power wheeling
+                    if (this.grounded) {
+                         this.rotation *= 0.8; // Faster return when grounded
+                         if (Math.abs(this.rotation) < 0.01) this.rotation = 0;
+                    } else {
+                        // Slower return mid-air (looks more natural)
+                         this.rotation *= 0.95;
+                    }
+                }
+
+                // Prevent falling off screen (Game Over condition)
+                if (this.y > canvas.height + this.height * 2) { // Allow some leeway below screen
+                    triggerGameOver();
+                }
+
+                // Prevent going above screen too much (can happen during boost jump)
+                 if (this.y < -this.height) {
+                     this.y = -this.height;
+                     this.vy = Math.max(0, this.vy); // Stop upward momentum if hit ceiling
+                 }
+
+                // Update jump power based on device (in case detection was delayed)
+                this.jumpPower = playerJumpPower;
+            },
+
+            jump() {
+                let canJump = (this.grounded || (this.isWheelieBoosting && this.wheelieBoostJumpsLeft > 0)) && !this.isPowerWheeling;
+
+                if (canJump) {
+                    this.vy = this.jumpPower;
+                    this.grounded = false;
+                    spawnParticles(this.x + this.width / 2, this.y + this.height, 15, 'white', 5, 30); // Jump particles
+
+                    if (this.isWheelieBoosting) {
+                        this.wheelieBoostJumpsLeft--;
+                        spawnParticles(this.x + this.width / 2, this.y + this.height / 2, 20, 'gold', 6, 40); // Boost jump particles
+                        if (this.wheelieBoostJumpsLeft <= 0) {
+                            this.endWheelieBoost();
+                        }
+                    }
+                }
+            },
+
+            startPowerWheelie() {
+                if (this.grounded && !this.isWheelieBoosting && !this.isPowerWheeling) {
+                    this.isPowerWheeling = true;
+                    this.powerWheelieCharge = 0; // Reset charge on start
+                    spawnParticles(this.x + this.width/2, this.y + this.height, 5, 'cyan', 4, 15); // Small effect on start
+                }
+            },
+
+            endPowerWheelie() {
+                if (this.isPowerWheeling) { // Check only this flag
+                    this.isPowerWheeling = false;
+                    // Reset charge only if boost didn't trigger
+                    if (!this.isWheelieBoosting) {
+                         this.powerWheelieCharge = 0;
+                    }
+                }
+            },
+
+            startWheelieBoost() {
+                 if (!this.isWheelieBoosting) {
+                    this.isWheelieBoosting = true;
+                    this.isPowerWheeling = false; // Ensure power wheelie stops
+                    this.powerWheelieCharge = 0; // Reset charge
+                    this.wheelieBoostJumpsLeft = this.wheelieBoostJumpsNeeded;
+                    this.wheelieBoostInvincible = true;
+                    this.y -= 10; // Bump up to ensure airborne
+                    this.vy = this.jumpPower * 0.5; // Initial small upward boost hop
+                    spawnParticles(this.x + this.width / 2, this.y + this.height / 2, 100, 'rgba(255,255,0,0.8)', 8, 60); // Big Boost start particles
+                }
+            },
+
+             endWheelieBoost() {
+                 this.isWheelieBoosting = false;
+                 this.wheelieBoostInvincible = false;
+                 this.rotation = 0;
+                 gameSpeed = baseGameSpeed; // Return to normal speed
+                 if (boostStatusEl.textContent) boostStatusEl.textContent = ''; // Clear boost status
+
+                 // Find the next suitable building top to land on (safest point)
+                 let safeLandingSpot = null;
+                 let minSafeX = this.x + this.width; // Start looking after the player's right edge
+
+                 for (const building of buildings) {
+                     // Find the first building whose starting edge is beyond the player's potential landing zone
+                     if (building.x > minSafeX && building.x < canvas.width * 1.5) { // Check within reasonable forward distance
+                         safeLandingSpot = building;
+                         break;
+                     }
+                     // Also consider the current building if player is mostly over it
+                     if (building.x < this.x + this.width / 2 && building.x + building.width > this.x + this.width / 2) {
+                         safeLandingSpot = building;
+                         // Don't break immediately, prefer the next building if available soon
+                     }
+                 }
+
+
+                 if (safeLandingSpot) {
+                     this.y = safeLandingSpot.y - this.height;
+                     this.x = safeLandingSpot.x + safeLandingSpot.width / 2 - this.width / 2; // Center on landing spot
+                     this.vy = 0;
+                     this.grounded = true;
+                     safeLandingSpot.lightUp(true); // Force light up on safe landing
+                     spawnParticles(this.x + this.width / 2, this.y + this.height, 40, 'lightblue', 6, 50); // Landing particles
+                 } else {
+                     // Failsafe: If truly no building found (edge case)
+                     console.warn("Could not find safe landing spot after boost!");
+                     this.y = canvas.height / 3; // Place reasonably high
+                     this.vy = 0;
+                     this.grounded = false; // Technically not grounded
+                 }
+            },
+
+             reset() {
+                 this.x = 150;
+                 this.y = canvas.height / 2;
+                 this.vy = 0;
+                 this.vx = 0;
+                 this.rotation = 0;
+                 this.isPowerWheeling = false;
+                 this.powerWheelieCharge = 0;
+                 this.isWheelieBoosting = false;
+                 this.wheelieBoostJumpsLeft = 0;
+                 this.grounded = false;
+                 this.spacePressed = false;
+                 this.shiftPressed = false;
+                 // Place on first building will happen in generateInitialBuildings
+            }
+        };
+
+        // --- Building Setup ---
+        let minBuildingHeight = 80;
+        let maxBuildingHeight = canvas.height * 0.6; // Adjusted in resizeCanvas
+        let minBuildingWidth = 80;
+        let maxBuildingWidth = 250;
+        // minGap/maxGap set in detectDevice
+
+
+        class Building {
+            constructor(x, width, height) {
+                this.x = x;
+                this.width = width;
+                this.height = height > minBuildingHeight ? height : minBuildingHeight; // Ensure min height
+                this.y = canvas.height - this.height;
+                this.color = `hsl(${Math.random() * 60 + 190}, ${Math.random()*30+40}%, ${Math.random()*20+20}%)`; // Dark blues, purples, greys
+                this.windows = [];
+                this.litWindowIndices = []; // Store indices of windows forced lit by lightUp()
+                this.generateWindows();
+                this.isLit = false; // Flag if windows should be bright from landing
+                this.litTimer = 0;
+                this.litDuration = 45; // Frames (~0.75 sec at 60fps)
+            }
+
+            generateWindows() {
+                 const windowWidth = 10;
+                 const windowHeight = 15;
+                 const gapX = 10;
+                 const gapY = 12;
+                 const edgeMargin = 10; // Margin from building edge
+
+                 const availableWidth = this.width - 2 * edgeMargin;
+                 const availableHeight = this.height - gapY; // Start windows near top
+
+                 const numCols = Math.floor((availableWidth + gapX) / (windowWidth + gapX));
+                 const numRows = Math.floor((availableHeight + gapY) / (windowHeight + gapY));
+
+                 const totalWindowWidth = numCols * windowWidth + (numCols - 1) * gapX;
+                 const startX = this.x + (this.width - totalWindowWidth) / 2;
+                 const startY = this.y + gapY;
+
+
+                 for (let r = 0; r < numRows; r++) {
+                     for (let c = 0; c < numCols; c++) {
+                          // Random chance to place a window
+                         if (Math.random() > 0.2) {
+                             this.windows.push({
+                                 relX: startX - this.x + c * (windowWidth + gapX), // Store relative X
+                                 y: startY + r * (windowHeight + gapY),
+                                 w: windowWidth,
+                                 h: windowHeight,
+                                 // More windows start unlit for nighttime effect
+                                 baseLit: Math.random() > 0.85
+                             });
+                         }
+                     }
+                 }
+            }
+
+            update(currentScrollX) {
+                this.x -= gameSpeed; // Move building left
+
+                 if (this.isLit) {
+                     this.litTimer--;
+                     if (this.litTimer <= 0) {
+                         this.isLit = false;
+                         this.litWindowIndices = []; // Clear forced lit windows
+                     }
+                 }
+            }
+
+            draw() {
+                // Building base color
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+
+                // Windows
+                this.windows.forEach((win, index) => {
+                     let showLit = win.baseLit;
+                     // If the building is force-lit and this window is selected
+                     if (this.isLit && this.litWindowIndices.includes(index)) {
+                         showLit = true;
+                     }
+
+                    ctx.fillStyle = showLit ? '#FFFF99' : '#30304a'; // Lit yellow or dark blue/grey
+                    ctx.fillRect(this.x + win.relX, win.y, win.w, win.h); // Use current building x + relative x
+                });
+
+                 // Building outline (optional subtle)
+                 ctx.strokeStyle = 'rgba(180, 180, 180, 0.3)';
+                 ctx.strokeRect(this.x, this.y, this.width, this.height);
+            }
+
+            lightUp(force = false) {
+                 // Only light up if not already lit, or if forced (e.g., boost landing)
+                 if (!this.isLit || force) {
+                    this.isLit = true;
+                    this.litTimer = this.litDuration;
+                    this.litWindowIndices = []; // Reset which windows are lit
+
+                    // Randomly select a few windows to light up extra bright
+                    const numToLight = Math.max(1, Math.min(this.windows.length, Math.floor(Math.random() * 5) + 3)); // Light up 3-7 windows
+                    if (this.windows.length > 0) {
+                        for (let i = 0; i < numToLight; i++) {
+                            let randomIndex;
+                            let attempts = 0;
+                            do {
+                                randomIndex = Math.floor(Math.random() * this.windows.length);
+                                attempts++;
+                            } while (this.litWindowIndices.includes(randomIndex) && attempts < 10); // Ensure unique indices if possible
+                            if (!this.litWindowIndices.includes(randomIndex)) {
+                                this.litWindowIndices.push(randomIndex);
+                            }
+                        }
+                    }
+                     // Add impact particle effect
+                     spawnParticles(this.x + this.width / 2, this.y, 25, 'rgba(200, 200, 255, 0.7)', 5, 40);
+                 }
+            }
+        }
+
+        function generateInitialBuildings() {
+            buildings = []; // Clear existing buildings
+            let currentX = 0;
+            let lastHeight = canvas.height - (Math.random() * (maxBuildingHeight - minBuildingHeight) + minBuildingHeight);
+
+            // Create a solid starting platform
+            const startPlatformWidth = 300;
+            buildings.push(new Building(0, startPlatformWidth, canvas.height - lastHeight));
+            currentX += startPlatformWidth;
+
+            // Generate initial screen-filling buildings
+            while (currentX < canvas.width + maxBuildingWidth * 2) { // Generate further ahead
+                const lastBuilding = buildings[buildings.length - 1];
+                if (!lastBuilding) break; // Safety check
+
+                let newWidth, newHeight, gap, newX;
+                let jumpPossible = false;
+                let attempts = 0;
+
+                while (!jumpPossible && attempts < 20) {
+                    attempts++;
+                    newWidth = Math.random() * (maxBuildingWidth - minBuildingWidth) + minBuildingWidth;
+                    newHeight = Math.random() * (maxBuildingHeight - minBuildingHeight) + minBuildingHeight;
+                    gap = Math.random() * (buildingMaxGap - buildingMinGap) + buildingMinGap;
+                    newX = lastBuilding.x + lastBuilding.width + gap;
+                    const targetY = canvas.height - newHeight;
+                    const sourceY = lastBuilding.y;
+                    const heightDiff = targetY - sourceY; // Positive if new is lower, negative if higher
+
+                    // --- Jump Possibility Check (Simplified) ---
+                    // Max horizontal distance estimate based on jump power and typical air time
+                    const maxHorizontalReach = Math.abs(playerJumpPower) * (baseGameSpeed * 1.5); // Heuristic
+                    const maxVerticalReach = (playerJumpPower * playerJumpPower) / (2 * gravity);
+
+                    // Check horizontal gap
+                    if (gap < maxHorizontalReach) {
+                          // Check vertical gap (can jump up to a certain height)
+                          if (heightDiff <= 5 && Math.abs(heightDiff) < maxVerticalReach * 0.9) { // Allow small upward jumps, large downward
+                              jumpPossible = true;
+                          }
+                    }
+
+                    // Failsafe: create a safe, reachable building
+                    if (attempts >= 19) {
+                        console.warn("Forcing a possible jump after many attempts.");
+                        gap = buildingMinGap + (buildingMaxGap - buildingMinGap) / 2; // Average gap
+                        newHeight = lastBuilding.height + (Math.random() - 0.5) * 50; // Similar height +/-
+                        newHeight = Math.max(minBuildingHeight, Math.min(maxBuildingHeight, newHeight));
+                        newX = lastBuilding.x + lastBuilding.width + gap;
+                        jumpPossible = true;
+                    }
+                }
+                buildings.push(new Building(newX, newWidth, newHeight));
+                currentX = newX + newWidth; // Update currentX based on the *new* building's end
+            }
+
+             // Place player on the first building
+             if (buildings.length > 0) {
+                  player.y = buildings[0].y - player.height;
+                  player.x = buildings[0].x + buildings[0].width / 3 - player.width / 2; // Start further left on platform
+                  player.grounded = true;
+             } else {
+                 // Fallback if generation failed (shouldn't happen)
+                 player.y = canvas.height/2 - player.height;
+                 player.x = 150;
+                 player.grounded = false;
+             }
+        }
+
+
+        function manageBuildings() {
+            // Update and draw existing buildings
+            for (let i = buildings.length - 1; i >= 0; i--) {
+                buildings[i].update(); // Pass player's scroll position if needed for parallax windows etc.
+                buildings[i].draw();
+
+                // Remove buildings that are completely off-screen left
+                if (buildings[i].x + buildings[i].width < -200) { // Remove further off screen
+                    buildings.splice(i, 1);
+                }
+            }
+
+            // Add new buildings if needed
+            const lastBuilding = buildings[buildings.length - 1];
+             if (lastBuilding && lastBuilding.x + lastBuilding.width < canvas.width + maxBuildingWidth * 2) { // Generate more proactively
+                 let newWidth, newHeight, gap, newX;
+                 let jumpPossible = false;
+                 let attempts = 0;
+
+                 while (!jumpPossible && attempts < 20) {
+                    attempts++;
+                    newWidth = Math.random() * (maxBuildingWidth - minBuildingWidth) + minBuildingWidth;
+                    newHeight = Math.random() * (maxBuildingHeight - minBuildingHeight) + minBuildingHeight;
+                    gap = Math.random() * (buildingMaxGap - buildingMinGap) + buildingMinGap;
+                    newX = lastBuilding.x + lastBuilding.width + gap;
+                    const targetY = canvas.height - newHeight;
+                    const sourceY = lastBuilding.y;
+                    const heightDiff = targetY - sourceY; // Positive if new is lower, negative if higher
+
+                    const maxHorizontalReach = Math.abs(playerJumpPower) * (baseGameSpeed * 1.5);
+                    const maxVerticalReach = (playerJumpPower * playerJumpPower) / (2 * gravity);
+
+                    if (gap < maxHorizontalReach) {
+                         if (heightDiff <= 5 && Math.abs(heightDiff) < maxVerticalReach * 0.9) {
+                             jumpPossible = true;
+                         }
+                    }
+                    if (attempts >= 19) {
+                        gap = buildingMinGap + (buildingMaxGap - buildingMinGap) / 2;
+                        newHeight = lastBuilding.height + (Math.random() - 0.5) * 50;
+                        newHeight = Math.max(minBuildingHeight, Math.min(maxBuildingHeight, newHeight));
+                        newX = lastBuilding.x + lastBuilding.width + gap;
+                        jumpPossible = true;
+                    }
+                 }
+                 buildings.push(new Building(newX, newWidth, newHeight));
+            }
+        }
+
+
+        // --- Particle System ---
+        class Particle {
+            constructor(x, y, color, size, life, vx = null, vy = null, gravityScale = 1) {
+                this.x = x;
+                this.y = y;
+                this.size = Math.random() * size + 2;
+                this.color = color;
+                this.life = life || Math.random() * 30 + 30; // Frames
+                this.maxLife = this.life;
+                this.vx = vx !== null ? vx : (Math.random() - 0.5) * 6; // Random spread if not specified
+                this.vy = vy !== null ? vy : (Math.random() - 0.5) * 6 - 2; // Tend to go up slightly if not specified
+                this.gravity = 0.1 * gravityScale;
+                this.opacity = 1;
+            }
+            update() {
+                this.life--;
+                this.vy += this.gravity;
+                this.x += this.vx - gameSpeed; // Particles should move left with the world
+                this.y += this.vy;
+                // Fade out based on life
+                this.opacity = Math.max(0, this.life / this.maxLife);
+                 // Shrink size slightly
+                 this.size *= 0.98;
+            }
+            draw() {
+                if (this.opacity <= 0 || this.size < 0.5) return;
+                ctx.globalAlpha = this.opacity;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1; // Reset global alpha
+            }
+        }
+
+        function spawnParticles(x, y, count, color = 'white', size = 5, life = undefined, vx=null, vy=null, gravityScale=1) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, color, size, life, vx, vy, gravityScale));
+            }
+        }
+
+        function handleParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw();
+                if (particles[i].life <= 0 || particles[i].x < -50) { // Remove if dead or off-screen
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- Collision Detection ---
+        function handleCollisions() {
+             if (player.isWheelieBoosting && player.wheelieBoostInvincible) {
+                 player.grounded = false; // Never grounded during boost
+                 return; // Skip collision checks if invincible
+             }
+
+            let onBuilding = null;
+            let potentialLandingBuilding = null;
+            player.grounded = false; // Assume not grounded unless collision detected
+
+            for (const building of buildings) {
+                const playerBottom = player.y + player.height;
+                const playerRight = player.x + player.width;
+                const playerCenter = player.x + player.width / 2;
+
+                // Check for landing ON TOP of a building
+                // 1. Player's horizontal center is over the building
+                if (playerCenter > building.x && playerCenter < building.x + building.width) {
+                     potentialLandingBuilding = building; // Player is horizontally aligned
+                    // 2. Player is moving downwards or is very close vertically
+                    // 3. Player's bottom edge is at or below the building top
+                    if (player.vy >= -0.5 && playerBottom >= building.y && playerBottom <= building.y + player.vy + gravity + 5) { // Added buffer
+                         // Collision!
+                         player.y = building.y - player.height; // Correct position precisely
+                         player.vy = 0;
+                         player.grounded = true;
+                         onBuilding = building; // Confirmed landing
+                         building.lightUp(); // Light up windows on landing
+                         break; // Stop checking after landing
+                    }
+                }
+
+                 // Basic Side Collision (Game Over) - Crude Check
+                 // If player is NOT grounded, AND hits the vertical face of a building that is TALLER than their current vertical position allows landing on
+                 if (!player.grounded && !player.isWheelieBoosting && playerRight > building.x && player.x < building.x + building.width) {
+                      // Check if player's bottom is below the building's top AND player's top is above building's top (vertical overlap)
+                      if (playerBottom > building.y && player.y < building.y) {
+                          // Check if player hit the *side* face (not just landing)
+                          // If player's right edge just passed building's left edge OR player's left edge just passed building's right edge
+                          const hitLeftFace = playerRight >= building.x && playerRight <= building.x + 10 && player.vx >= 0; // Hitting left side
+                          // const hitRightFace = player.x <= building.x + building.width && player.x >= building.x + building.width - 10 && player.vx <= 0; // Hitting right side (less likely)
+
+                          if (hitLeftFace) {
+                              console.log("Side collision detected!");
+                              spawnParticles(playerRight, player.y + player.height/2, 30, 'red', 5, 40); // Impact particles
+                              triggerGameOver();
+                              break;
+                          }
+                      }
+                 }
+            }
+
+             // If player ran off an edge (was grounded, now isn't over a building)
+             if (player.wasGrounded && !potentialLandingBuilding) {
+                // Optional: Spawn 'running off edge' particles?
+             }
+             player.wasGrounded = player.grounded; // Track previous grounded state
+
+             // Apply landing effects if just landed
+             if (player.grounded && !player.wasGrounded) {
+                 spawnParticles(player.x + player.width / 2, player.y + player.height, 20, '#ccc', 4, 25); // Landing dust/impact
+             }
+        }
+
+
+        // --- Input Handling ---
+        const keys = {};
+
+        // PC Event Listeners
+        function keyDownHandler(e) {
+            if (gameOver || !gameRunning) return; // Ignore input if game not active
+
+            keys[e.key] = true;
+             // Prevent default browser actions for game keys
+             if (e.key === ' ' || e.key === 'Shift') e.preventDefault();
+
+             // PC Jump (Spacebar press) - Handle directly on keydown for responsiveness
+             if(e.key === ' ' && !isMobile && !player.spacePressed && !player.isPowerWheeling) {
+                 player.jump();
+                 player.spacePressed = true; // Prevent holding space for multiple jumps
+             }
+
+              // PC Power Wheelie (Shift key hold)
+              if(e.key === 'Shift' && !isMobile && !player.shiftPressed) {
+                  player.shiftPressed = true;
+                  player.startPowerWheelie(); // Attempt to start (checks grounded state internally)
+             }
+        }
+
+        function keyUpHandler(e) {
+             if (!gameRunning) return; // Ignore input if game not active (allows restart input)
+
+            keys[e.key] = false;
+            // Reset PC jump flag
+             if (e.key === ' ') {
+                 player.spacePressed = false;
+             }
+            // End PC power wheelie
+             if (e.key === 'Shift' && !isMobile) {
+                 player.shiftPressed = false;
+                 player.endPowerWheelie();
+             }
+        }
+
+        // Mobile Event Listeners (Touch)
+        let powerWheelieTouchId = null; // Track touch for power wheelie
+
+        function jumpButtonTouchStart(e) {
+            if (gameOver || !gameRunning) return;
+            e.preventDefault();
+            player.jump();
+             jumpBtn.style.backgroundColor = 'rgba(150, 150, 150, 0.8)'; // Feedback
+        }
+         function jumpButtonTouchEnd(e) {
+             if (gameOver || !gameRunning) return;
+             e.preventDefault();
+             jumpBtn.style.backgroundColor = 'rgba(100, 100, 100, 0.7)'; // Reset style
+         }
+
+        function powerWheelieButtonTouchStart(e) {
+             if (gameOver || !gameRunning) return;
+             e.preventDefault();
+             if (powerWheelieTouchId === null) { // Only process first touch
+                powerWheelieTouchId = e.changedTouches[0].identifier;
+                player.startPowerWheelie(); // Attempt start
+                powerwheelieBtn.style.backgroundColor = 'rgba(80, 120, 200, 0.8)'; // Feedback
+             }
+        }
+
+        function powerWheelieButtonTouchEnd(e) {
+             if (gameOver || !gameRunning) return;
+             e.preventDefault();
+             for (let i = 0; i < e.changedTouches.length; i++) {
+                 if (e.changedTouches[i].identifier === powerWheelieTouchId) {
+                    powerWheelieTouchId = null; // Release lock
+                    player.endPowerWheelie();
+                    powerwheelieBtn.style.backgroundColor = 'rgba(100, 100, 100, 0.7)'; // Reset style
+                    break;
+                 }
+             }
+        }
+
+        function setupInputListeners() {
+             // Remove existing listeners first to avoid duplicates on restart
+            window.removeEventListener('keydown', keyDownHandler);
+            window.removeEventListener('keyup', keyUpHandler);
+            jumpBtn.removeEventListener('touchstart', jumpButtonTouchStart);
+            jumpBtn.removeEventListener('touchend', jumpButtonTouchEnd);
+             jumpBtn.removeEventListener('touchcancel', jumpButtonTouchEnd); // Also reset on cancel
+            powerwheelieBtn.removeEventListener('touchstart', powerWheelieButtonTouchStart);
+            powerwheelieBtn.removeEventListener('touchend', powerWheelieButtonTouchEnd);
+            powerwheelieBtn.removeEventListener('touchcancel', powerWheelieButtonTouchEnd); // Also end on cancel
+
+
+             // Add listeners
+             window.addEventListener('keydown', keyDownHandler);
+             window.addEventListener('keyup', keyUpHandler);
+             if (isMobile) {
+                 jumpBtn.addEventListener('touchstart', jumpButtonTouchStart, { passive: false });
+                 jumpBtn.addEventListener('touchend', jumpButtonTouchEnd, { passive: false });
+                 jumpBtn.addEventListener('touchcancel', jumpButtonTouchEnd, { passive: false });
+                 powerwheelieBtn.addEventListener('touchstart', powerWheelieButtonTouchStart, { passive: false });
+                 powerwheelieBtn.addEventListener('touchend', powerWheelieButtonTouchEnd, { passive: false });
+                 powerwheelieBtn.addEventListener('touchcancel', powerWheelieButtonTouchEnd, { passive: false });
+             }
+        }
+
+
+        // --- Background ---
+        let stars = [];
+         function createStars() {
+             stars = [];
+             for (let i = 0; i < 150; i++) {
+                 stars.push({
+                     x: Math.random() * canvas.width,
+                     y: Math.random() * canvas.height * 0.8, // Upper 80%
+                     size: Math.random() * 1.5 + 0.5,
+                     opacity: Math.random() * 0.5 + 0.3, // Dim stars
+                     speed: Math.random() * 0.1 + 0.05 // Parallax speed
+                 });
+             }
+         }
+
+         function drawBackground() {
+             // Solid dark blue handled by canvas bg
+             // ctx.fillStyle = '#00001a';
+             // ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+             // Draw stars with parallax
+             ctx.fillStyle = 'white';
+             stars.forEach(star => {
+                 star.x -= star.speed * gameSpeed; // Move left based on game speed and star speed
+                 if (star.x < 0) star.x += canvas.width; // Wrap around
+                 ctx.globalAlpha = star.opacity;
+                 ctx.fillRect(star.x, star.y, star.size, star.size);
+             });
+             ctx.globalAlpha = 1.0;
+
+             // Draw a moon
+              ctx.fillStyle = '#f0f0e0';
+              ctx.beginPath();
+              // Parallax moon - moves slower than foreground
+              let moonX = canvas.width * 0.8 - (gameFrame * 0.2 * baseGameSpeed) % (canvas.width * 1.2);
+              if (moonX < -80) moonX += canvas.width * 1.2 + 80; // Wrap moon around
+              ctx.arc(moonX, 100, 40, 0, Math.PI * 2);
+              ctx.fill();
+               // Add subtle glow to moon
+               ctx.shadowColor = 'white';
+               ctx.shadowBlur = 15;
+               ctx.fillStyle = '#f0f0e0';
+               ctx.beginPath();
+               ctx.arc(moonX, 100, 40, 0, Math.PI * 2);
+               ctx.fill();
+               ctx.shadowBlur = 0; // Reset shadow
+         }
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        let deltaTime = 0; // Time since last frame in ms
+
+        function gameLoop(timestamp) {
+            deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Use requestAnimationFrame for smooth looping
+            if (!gameOver) {
+                 requestAnimationFrame(gameLoop);
+            }
+
+            if (!gameRunning) return; // Don't run updates if paused or game over
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background elements
+            drawBackground();
+
+            // Handle Buildings (update, draw, generate, remove)
+            manageBuildings();
+
+            // Update Player
+            player.update();
+
+            // Handle Collisions (after update)
+            handleCollisions();
+
+            // Draw Player
+            player.draw();
+
+            // Handle Particles
+            handleParticles();
+
+            // Update UI
+            scoreEl.textContent = Math.floor(score);
+
+            gameFrame++;
+        }
+
+        // --- Game State Management ---
+         function triggerGameOver() {
+             if (gameOver) return; // Don't trigger multiple times
+             gameOver = true;
+             gameRunning = false;
+             console.log("Game Over Triggered");
+
+             // Show game over screen
+             finalScoreEl.textContent = Math.floor(score);
+             gameOverScreen.style.display = 'flex';
+
+             // Stop player movement abruptly
+             player.vy = 0;
+             player.vx = 0;
+             gameSpeed = 0; // Stop world scroll
+
+             // Optional: Explosion effect
+             spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 80, 'orange', 10, 60);
+             spawnParticles(player.x + player.width / 2, player.y + player.height / 2, 50, 'red', 8, 70);
+         }
+
+        function startGame() {
+             console.log("Starting game...");
+             gameOver = false;
+             gameRunning = true;
+             score = 0;
+             gameFrame = 0;
+             lastTime = performance.now(); // Reset timer for deltaTime calculation
+             gameOverScreen.style.display = 'none'; // Hide game over screen
+
+             // Reset player and world state
+             player.reset();
+             particles = []; // Clear particles
+             detectDevice(); // Re-detect device settings
+             gameSpeed = baseGameSpeed; // Ensure speed is reset
+
+             // Generate world
+             createStars(); // Create background stars
+             generateInitialBuildings(); // Create buildings and place player
+
+             // Setup input listeners for the new game session
+             setupInputListeners();
+
+             // Start the game loop
+             gameLoop(lastTime);
+         }
+
+        // --- Initial Setup ---
+        restartButton.addEventListener('click', startGame); // Restart button functionality
+        // Add touch listener for restart button on mobile
+        restartButton.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent click event firing too
+            startGame();
+        }, { passive: false });
+
+
+        // Show initial message or start directly
+        // Let's start directly after a brief delay to allow loading/rendering
+         setTimeout(() => {
+             startGame();
+         }, 100); // Small delay
+
+    </script>
+</body>
+</html>

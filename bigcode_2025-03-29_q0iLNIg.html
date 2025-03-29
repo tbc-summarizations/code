@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gen Z Slang AI Simulator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+
+        :root {
+            --primary-color: #6a0dad; /* Purple */
+            --secondary-color: #ff69b4; /* Pink */
+            --background-color: #f0f0f0;
+            --text-color: #333;
+            --card-bg: #ffffff;
+            --border-radius: 8px;
+            --box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            --transition-speed: 0.3s;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 400;
+            color: var(--primary-color);
+            text-align: left;
+        }
+
+        input[type="text"] {
+            width: calc(100% - 22px); /* Account for padding and border */
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            transition: border-color var(--transition-speed);
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary-color);
+            outline: none;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color var(--transition-speed), transform var(--transition-speed);
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: var(--secondary-color);
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .slang-selection, #training-output, #final-result {
+            margin-top: 25px;
+            padding: 15px;
+            background-color: var(--background-color);
+            border-radius: var(--border-radius);
+            text-align: left;
+        }
+
+        h2 {
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            font-weight: 700;
+            font-size: 1.2rem;
+            border-bottom: 2px solid var(--secondary-color);
+            padding-bottom: 5px;
+        }
+
+        .slang-options button {
+            background-color: var(--secondary-color);
+            margin: 5px;
+            padding: 8px 15px;
+            font-size: 0.9rem;
+        }
+
+        .slang-options button:hover {
+            background-color: var(--primary-color);
+        }
+
+        .slang-options button.selected {
+            background-color: var(--primary-color);
+            font-weight: bold;
+            outline: 2px solid var(--secondary-color);
+        }
+
+        #attempts {
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre-wrap; /* Allow wrapping */
+            word-wrap: break-word; /* Break long words */
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #e0e0e0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        #final-word {
+            font-weight: bold;
+            color: var(--primary-color);
+            font-size: 1.5rem;
+            margin-top: 10px;
+            display: block; /* Ensure it takes its own line */
+            text-align: center; /* Center the final word */
+            padding: 10px;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading-emoji {
+            font-size: 1.5rem;
+            display: inline-block;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 Gen Z Slang AI Simulator ✨</h1>
+
+        <div class="input-group">
+            <label for="user-input">Seed Input (Optional Context):</label>
+            <input type="text" id="user-input" placeholder="e.g., 'that outfit is amazing'">
+        </div>
+
+        <button id="select-slang-btn">Select Target Slang & Prepare Training</button>
+
+        <div id="slang-selection" class="slang-selection hidden">
+            <h2>Select Relevant Slang to Learn:</h2>
+            <div id="slang-options" class="slang-options">
+                <!-- Slang buttons will be injected here -->
+            </div>
+        </div>
+
+        <div id="training-section" class="hidden">
+            <button id="start-training-btn" disabled>Start Training</button>
+             <span id="loading" class="hidden loading-emoji">⏳</span>
+        </div>
+
+
+        <div id="training-output" class="hidden">
+            <h2>Training Progress... 🤖</h2>
+            <div id="attempts"></div>
+        </div>
+
+        <div id="final-result" class="hidden">
+            <h2>🎉 Training Complete! Learned Slang:</h2>
+            <span id="final-word"></span>
+        </div>
+    </div>
+
+    <script>
+        const genZSlang = ["rizz", "bet", "slay", "no cap", "bussin'", "mid", "sus", "vibe check", "cheugy", "iykyk", "periodt", "main character", "era", "delulu", "ick"];
+        let selectedSlang = null;
+        let trainingInterval = null;
+
+        const userInput = document.getElementById('user-input');
+        const selectSlangBtn = document.getElementById('select-slang-btn');
+        const slangSelectionDiv = document.getElementById('slang-selection');
+        const slangOptionsDiv = document.getElementById('slang-options');
+        const trainingSectionDiv = document.getElementById('training-section');
+        const startTrainingBtn = document.getElementById('start-training-btn');
+        const trainingOutputDiv = document.getElementById('training-output');
+        const attemptsDiv = document.getElementById('attempts');
+        const finalResultDiv = document.getElementById('final-result');
+        const finalWordSpan = document.getElementById('final-word');
+        const loadingEmoji = document.getElementById('loading');
+
+        // Populate slang options
+        genZSlang.forEach(slang => {
+            const button = document.createElement('button');
+            button.textContent = slang;
+            button.dataset.slang = slang;
+            button.onclick = () => selectTargetSlang(slang, button);
+            slangOptionsDiv.appendChild(button);
+        });
+
+        selectSlangBtn.addEventListener('click', () => {
+            slangSelectionDiv.classList.remove('hidden');
+            // Reset previous selections and results if any
+            resetTraining();
+            const buttons = slangOptionsDiv.querySelectorAll('button');
+            buttons.forEach(btn => btn.classList.remove('selected'));
+            selectedSlang = null;
+            startTrainingBtn.disabled = true;
+        });
+
+        function selectTargetSlang(slang, clickedButton) {
+            selectedSlang = slang;
+            // Highlight selected button
+            const buttons = slangOptionsDiv.querySelectorAll('button');
+            buttons.forEach(btn => btn.classList.remove('selected'));
+            clickedButton.classList.add('selected');
+
+            // Enable training start
+            trainingSectionDiv.classList.remove('hidden');
+            startTrainingBtn.disabled = false;
+            console.log(`Selected slang: ${selectedSlang}`);
+        }
+
+        startTrainingBtn.addEventListener('click', () => {
+            if (!selectedSlang) {
+                alert("Please select a slang word first!");
+                return;
+            }
+            startTrainingSimulation();
+        });
+
+        function resetTraining() {
+            clearInterval(trainingInterval);
+            trainingInterval = null;
+            slangSelectionDiv.classList.add('hidden');
+            trainingSectionDiv.classList.add('hidden');
+            trainingOutputDiv.classList.add('hidden');
+            finalResultDiv.classList.add('hidden');
+            attemptsDiv.innerHTML = '';
+            finalWordSpan.textContent = '';
+            loadingEmoji.classList.add('hidden');
+            startTrainingBtn.disabled = true; // Disable until slang is re-selected
+            startTrainingBtn.textContent = 'Start Training';
+        }
+
+
+        function startTrainingSimulation() {
+            console.log(`Starting training for: ${selectedSlang}`);
+            startTrainingBtn.disabled = true;
+            startTrainingBtn.textContent = 'Training...';
+            loadingEmoji.classList.remove('hidden');
+            trainingOutputDiv.classList.remove('hidden');
+            finalResultDiv.classList.add('hidden'); // Hide previous result if any
+            attemptsDiv.innerHTML = ''; // Clear previous attempts
+
+            const targetWord = selectedSlang;
+            const targetLength = targetWord.length;
+            let currentAttempt = generateRandomString(targetLength);
+            let iterations = 0;
+            const maxIterations = targetLength * 5 + 10; // More iterations for longer words
+            const simulationSpeed = 150; // ms between steps
+
+            addAttemptToLog(`Initial state: ${currentAttempt}`);
+
+            trainingInterval = setInterval(() => {
+                if (currentAttempt === targetWord || iterations >= maxIterations) {
+                    clearInterval(trainingInterval);
+                    trainingInterval = null;
+                    finalizeTraining(targetWord); // Ensure final word is correct
+                    return;
+                }
+
+                currentAttempt = improveAttempt(currentAttempt, targetWord);
+                addAttemptToLog(`Iteration ${iterations + 1}: ${currentAttempt}`);
+                iterations++;
+
+            }, simulationSpeed);
+        }
+
+        function generateRandomString(length) {
+            const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>? ';
+            let result = '';
+            for (let i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * characters.length));
+            }
+            return result;
+        }
+
+        function improveAttempt(current, target) {
+            let currentChars = current.split('');
+            const targetChars = target.split('');
+            const length = target.length;
+
+            // Randomly pick an index to potentially correct
+            const indexToChange = Math.floor(Math.random() * length);
+
+            // Introduce a bias towards correcting wrong characters
+            if (currentChars[indexToChange] !== targetChars[indexToChange]) {
+                 // Higher chance (e.g., 80%) to correct a wrong character
+                if (Math.random() < 0.8) {
+                     currentChars[indexToChange] = targetChars[indexToChange];
+                } else {
+                    // Small chance to randomize it again
+                     currentChars[indexToChange] = generateRandomString(1);
+                }
+            } else {
+                 // Small chance (e.g., 10%) to accidentally change a correct character
+                 if (Math.random() < 0.1) {
+                     currentChars[indexToChange] = generateRandomString(1);
+                 }
+            }
+
+             // Additionally, ensure at least one character improves towards the target per few steps
+             // Find a wrong character and correct it with some probability
+             let wrongIndices = [];
+             for(let i=0; i<length; i++) {
+                 if (currentChars[i] !== targetChars[i]) {
+                     wrongIndices.push(i);
+                 }
+             }
+             if (wrongIndices.length > 0 && Math.random() < 0.5) { // 50% chance to force a correction
+                let randomIndex = wrongIndices[Math.floor(Math.random() * wrongIndices.length)];
+                currentChars[randomIndex] = targetChars[randomIndex];
+             }
+
+
+            return currentChars.join('');
+        }
+
+
+        function addAttemptToLog(attemptText) {
+            const p = document.createElement('p');
+            p.textContent = attemptText;
+            attemptsDiv.appendChild(p);
+            // Scroll to the bottom
+            attemptsDiv.scrollTop = attemptsDiv.scrollHeight;
+        }
+
+        function finalizeTraining(finalWord) {
+            addAttemptToLog(`Convergence reached: ${finalWord}`);
+            finalResultDiv.classList.remove('hidden');
+            finalWordSpan.textContent = finalWord;
+            loadingEmoji.classList.add('hidden');
+            startTrainingBtn.textContent = 'Start Training'; // Reset button text
+            // Keep start button disabled until new selection
+            console.log("Training finished.");
+        }
+
+    </script>
+</body>
+</html>

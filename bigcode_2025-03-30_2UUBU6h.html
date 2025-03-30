@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programming Quiz</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .quiz-container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 80%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .quiz-header {
+            padding: 20px;
+        }
+
+        h1 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        #score {
+            font-size: 1.2em;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .question-container {
+            padding: 20px;
+            background-color: #eee;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        #question-number {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        #question-text {
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+
+        .options-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .option-button {
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            text-align: center;
+        }
+
+        .option-button:hover {
+            background-color: #e0e0e0;
+        }
+
+        .option-button.correct {
+            background-color: #c3e6cb;
+            border-color: #b1dfbb;
+        }
+
+        .option-button.incorrect {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        #feedback {
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        #next-button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s;
+        }
+
+        #next-button:hover {
+            background-color: #0056b3;
+        }
+
+        #results-container {
+            display: none;
+            padding: 20px;
+            text-align: center;
+        }
+
+        #results-container h2 {
+            color: #333;
+        }
+
+        #final-score {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+
+        #restart-button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s;
+        }
+
+        #restart-button:hover {
+            background-color: #1e7e34;
+        }
+    </style>
+</head>
+<body>
+    <div class="quiz-container">
+        <div class="quiz-header">
+            <h1>Programming Quiz 💡</h1>
+            <div id="score">Score: 0</div>
+        </div>
+
+        <div id="quiz-body">
+            <div class="question-container">
+                <div id="question-number">Question 1/5</div>
+                <div id="question-text">What is the output of `console.log(2 + '2')` in JavaScript?</div>
+                <div class="options-container">
+                    <button class="option-button" onclick="checkAnswer('A')">A) 4</button>
+                    <button class="option-button" onclick="checkAnswer('B')">B) 22</button>
+                    <button class="option-button" onclick="checkAnswer('C')">C) "4"</button>
+                    <button class="option-button" onclick="checkAnswer('D')">D) Error</button>
+                </div>
+                <div id="feedback"></div>
+            </div>
+
+            <button id="next-button" onclick="nextQuestion()">Next Question ▶️</button>
+        </div>
+
+        <div id="results-container">
+            <h2>Quiz Completed! 🎉</h2>
+            <div id="final-score">Your final score: </div>
+            <button id="restart-button" onclick="restartQuiz()">Restart Quiz 🔄</button>
+        </div>
+    </div>
+
+    <script>
+        const questions = [
+            {
+                question: "What is the output of `console.log(2 + '2')` in JavaScript?",
+                options: ["A) 4", "B) 22", "C) '4'", "D) Error"],
+                correctAnswer: "B"
+            },
+            {
+                question: "Which of these is NOT a primitive data type in JavaScript?",
+                options: ["A) number", "B) boolean", "C) object", "D) string"],
+                correctAnswer: "C"
+            },
+            {
+                question: "What does CSS stand for?",
+                options: ["A) Computer Style Sheets", "B) Creative Style Sheets", "C) Cascading Style Sheets", "D) Colorful Style Sheets"],
+                correctAnswer: "C"
+            },
+            {
+                question: "What is the purpose of the `typeof` operator in JavaScript?",
+                options: ["A) To check if a variable is defined", "B) To determine the type of a variable", "C) To change the type of a variable", "D) To create a new type of variable"],
+                correctAnswer: "B"
+            },
+            {
+                question: "Which HTML tag is used to link an external JavaScript file?",
+                options: ["A) `<script>`", "B) `<link>`", "C) `<javascript>`", "D) `<js>`"],
+                correctAnswer: "A"
+            }
+        ];
+
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let feedbackElement = document.getElementById('feedback');
+        let scoreElement = document.getElementById('score');
+        let questionNumberElement = document.getElementById('question-number');
+        let questionTextElement = document.getElementById('question-text');
+        let optionsContainerElement = document.querySelector('.options-container');
+        let nextButton = document.getElementById('next-button');
+        let quizBody = document.getElementById('quiz-body');
+        let resultsContainer = document.getElementById('results-container');
+        let finalScoreElement = document.getElementById('final-score');
+
+        function loadQuestion() {
+            const currentQuestion = questions[currentQuestionIndex];
+            questionNumberElement.textContent = `Question ${currentQuestionIndex + 1}/${questions.length}`;
+            questionTextElement.textContent = currentQuestion.question;
+            optionsContainerElement.innerHTML = ''; // Clear previous options
+
+            currentQuestion.options.forEach(option => {
+                const button = document.createElement('button');
+                button.textContent = option;
+                button.classList.add('option-button');
+                button.onclick = () => checkAnswer(option.split(')')[0]); // Get option letter
+                optionsContainerElement.appendChild(button);
+            });
+            feedbackElement.textContent = '';
+            nextButton.style.display = 'none'; // Hide next button initially
+        }
+
+        function checkAnswer(selectedOption) {
+            const currentQuestion = questions[currentQuestionIndex];
+            const correctOptionLetter = currentQuestion.correctAnswer;
+            let correctAnswerText = "";
+            currentQuestion.options.forEach(option => {
+                if (option.startsWith(correctOptionLetter + ')')) {
+                    correctAnswerText = option;
+                }
+            });
+
+            if (selectedOption === correctOptionLetter) {
+                score++;
+                feedbackElement.textContent = "Correct! ✅";
+                feedbackElement.style.color = 'green';
+                scoreElement.textContent = `Score: ${score}`;
+                optionsContainerElement.querySelectorAll('.option-button').forEach(button => {
+                    if (button.textContent.startsWith(correctAnswerText)) {
+                        button.classList.add('correct');
+                    }
+                });
+
+            } else {
+                feedbackElement.textContent = `Incorrect ❌. Correct answer is ${correctAnswerText}.`;
+                feedbackElement.style.color = 'red';
+                optionsContainerElement.querySelectorAll('.option-button').forEach(button => {
+                    if (button.textContent.startsWith(correctAnswerText)) {
+                        button.classList.add('correct');
+                    }
+                    if (button.textContent.startsWith(selectedOption + ')')) {
+                        button.classList.add('incorrect');
+                    }
+                });
+            }
+            nextButton.style.display = 'block'; // Show next button after answering
+            disableOptions();
+        }
+
+        function disableOptions() {
+            optionsContainerElement.querySelectorAll('.option-button').forEach(button => {
+                button.disabled = true;
+            });
+        }
+
+        function nextQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < questions.length) {
+                loadQuestion();
+                enableOptions();
+            } else {
+                showResults();
+            }
+        }
+
+        function enableOptions() {
+            optionsContainerElement.querySelectorAll('.option-button').forEach(button => {
+                button.disabled = false;
+                button.classList.remove('correct', 'incorrect');
+            });
+        }
+
+
+        function showResults() {
+            quizBody.style.display = 'none';
+            resultsContainer.style.display = 'block';
+            finalScoreElement.textContent = `Your final score: ${score} out of ${questions.length}  (${((score / questions.length) * 100).toFixed(0)}%)`;
+        }
+
+        function restartQuiz() {
+            currentQuestionIndex = 0;
+            score = 0;
+            scoreElement.textContent = 'Score: 0';
+            resultsContainer.style.display = 'none';
+            quizBody.style.display = 'block';
+            loadQuestion();
+            enableOptions();
+        }
+
+        loadQuestion();
+    </script>
+</body>
+</html>

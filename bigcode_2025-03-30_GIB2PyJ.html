@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bedroom Encounter</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0e4f7; /* Light lavender background */
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden; /* Hide scrollbars */
+        }
+
+        #game-container {
+            width: 800px;
+            max-width: 95%;
+            height: 600px;
+            background-color: #fff0f5; /* Lavender blush */
+            border: 5px solid #d8bfd8; /* Thistle border */
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden; /* Important for positioning elements */
+            display: flex;
+            flex-direction: column;
+        }
+
+        #scene {
+            flex-grow: 1;
+            background-color: #ffe4e1; /* Misty Rose - representing the bedroom */
+            position: relative;
+            display: flex;
+            justify-content: space-around; /* Position characters */
+            align-items: flex-end; /* Place characters at the bottom */
+            padding-bottom: 150px; /* Space above the dialogue box */
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        .character {
+            font-size: 5rem; /* Size of character shapes/emojis */
+            margin-bottom: 10px;
+            transition: transform 0.3s ease; /* Simple animation */
+        }
+
+        .character:hover {
+             transform: scale(1.1);
+        }
+
+        #player {
+             /* Blue Square */
+             width: 70px;
+             height: 70px;
+             background-color: #add8e6; /* Light blue */
+             border: 2px solid #4682b4; /* Steel blue */
+        }
+
+        #npc {
+            /* Red Triangle (using border trick) or Emoji */
+            font-size: 5rem;
+            color: #e53935; /* Red */
+             /* Alternatively, use an emoji:
+             content: '💃';
+             font-size: 5rem; */
+        }
+
+        #dialogue-box {
+            height: 150px;
+            background-color: rgba(216, 191, 216, 0.9); /* Thistle with transparency */
+            border-top: 3px solid #ba55d3; /* Medium Orchid */
+            padding: 15px;
+            box-sizing: border-box;
+            color: #333;
+            font-size: 1.1em;
+            line-height: 1.5;
+            overflow-y: auto;
+        }
+
+        #choices {
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 15px;
+            background-color: rgba(216, 191, 216, 0.9); /* Match dialogue box */
+            border-top: 1px solid #ba55d3;
+            height: 60px; /* Fixed height for buttons */
+            box-sizing: border-box;
+        }
+
+        .choice-button {
+            background-color: #ffb6c1; /* Light Pink */
+            border: 2px solid #ff69b4; /* Hot Pink */
+            color: #333;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: background-color 0.3s, transform 0.2s;
+            flex-grow: 1;
+            margin: 0 5px;
+            text-align: center;
+        }
+
+        .choice-button:hover {
+            background-color: #ff69b4; /* Hot Pink */
+            color: white;
+            transform: translateY(-2px);
+        }
+
+         #ending-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            color: white;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 1.8em;
+            padding: 30px;
+            box-sizing: border-box;
+            z-index: 100;
+        }
+
+         #ending-screen.good {
+             background-color: rgba(40, 167, 69, 0.9); /* Greenish success */
+         }
+
+         #ending-screen.bad {
+            background-color: rgba(220, 53, 69, 0.9); /* Reddish failure */
+         }
+
+         #ending-screen button {
+            margin-top: 30px;
+            padding: 15px 30px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #f8f9fa;
+            color: #333;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+         }
+
+         #ending-screen button:hover {
+             background-color: #e2e6ea;
+         }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="scene">
+            <div id="player" class="character">🟦</div>
+            <div id="npc" class="character">💃</div>
+        </div>
+        <div id="dialogue-box">
+            <p id="dialogue-text">Loading game...</p>
+        </div>
+        <div id="choices">
+            <!-- Buttons will be added here by JavaScript -->
+        </div>
+    </div>
+
+    <div id="ending-screen">
+        <p id="ending-text"></p>
+        <button onclick="restartGame()">Play Again?</button>
+    </div>
+
+    <script>
+        const dialogueTextElement = document.getElementById('dialogue-text');
+        const choicesElement = document.getElementById('choices');
+        const endingScreenElement = document.getElementById('ending-screen');
+        const endingTextElement = document.getElementById('ending-text');
+
+        let currentSceneId = 'start';
+
+        const gameData = {
+            'start': {
+                text: "You find yourself hanging out in Elena's bedroom. She's looking through some records. The atmosphere is relaxed.",
+                choices: [
+                    { text: "Compliment her taste in music", nextScene: 'music_compliment' },
+                    { text: "Ask what she's listening to", nextScene: 'ask_music' },
+                    { text: "Make a lighthearted joke", nextScene: 'joke_start' }
+                ]
+            },
+            // --- Branch 1: Compliment ---
+            'music_compliment': {
+                text: "Elena smiles slightly. 'Thanks! I've been really into this artist lately.'",
+                choices: [
+                    { text: "Ask more about the artist", nextScene: 'ask_artist_good' },
+                    { text: "Share a related band you like", nextScene: 'share_band_neutral' },
+                    { text: "Suddenly change the subject", nextScene: 'change_subject_bad' }
+                ]
+            },
+            'ask_artist_good': {
+                text: "She lights up, talking enthusiastically about the musician's style and lyrics. She seems happy to share her passion.",
+                choices: [
+                    { text: "Listen intently and ask thoughtful questions", nextScene: 'listen_good' },
+                    { text: "Try to impress her with your own obscure music knowledge", nextScene: 'impress_bad' },
+                    { text: "Suggest you listen together sometime", nextScene: 'suggest_listen_good' }
+                ]
+            },
+             'share_band_neutral': {
+                text: "Elena nods. 'Oh yeah, I know them. They're okay.' The conversation stalls slightly.",
+                choices: [
+                    { text: "Ask her opinion on them", nextScene: 'ask_opinion_neutral' },
+                    { text: "Steer back to her music", nextScene: 'ask_artist_good' }, // Redirect back
+                    { text: "Comment on something in the room", nextScene: 'change_subject_bad' }
+                ]
+            },
+            // --- Branch 2: Ask Music ---
+             'ask_music': {
+                text: "Elena holds up a record sleeve. 'Just rediscovered this gem. It's got such a great vibe.'",
+                choices: [
+                    { text: "Express genuine interest", nextScene: 'ask_artist_good' }, // Converge path
+                    { text: "'Never heard of it.'", nextScene: 'never_heard_bad' },
+                    { text: "Say you prefer something else", nextScene: 'prefer_other_bad' }
+                ]
+            },
+            'never_heard_bad': {
+                text: "She lowers the record slightly, a little deflated. 'Oh. Well, it's really good.' An awkward silence starts.",
+                choices: [
+                    { text: "Quickly ask her to tell you about it", nextScene: 'ask_artist_good'}, // Recovery attempt
+                    { text: "Let the silence hang", nextScene: 'ending_b3' }, // Bad Ending 3
+                    { text: "Make another joke", nextScene: 'joke_awkward' }
+                ]
+            },
+            // --- Branch 3: Joke ---
+             'joke_start': {
+                text: "You make a joke. Elena chuckles softly. 'That was kinda cheesy, but funny.'",
+                choices: [
+                    { text: "Ask about her day", nextScene: 'ask_day_neutral' },
+                    { text: "Double down with another joke", nextScene: 'joke_awkward' },
+                    { text: "Compliment her laugh", nextScene: 'compliment_laugh_good'}
+                ]
+            },
+             'joke_awkward': {
+                 text: "You try another joke, but it falls flat. Elena just gives a polite, tight-lipped smile.",
+                 choices: [
+                     { text: "Apologize for the bad joke", nextScene: 'apology_neutral'},
+                     { text: "Pretend it landed and move on", nextScene: 'ending_b4'}, // Bad Ending 4
+                     { text: "Blame her for not getting it", nextScene: 'ending_b5'} // Bad Ending 5
+                 ]
+             },
+             // --- Mid-Game Convergences & Divergences ---
+             'compliment_laugh_good': {
+                 text: "She blushes a little. 'Oh, stop!' she says, but she looks pleased.",
+                 choices: [
+                     { text: "Ask her something personal (gently)", nextScene: 'ask_personal_good' },
+                     { text: "Suggest doing something fun together", nextScene: 'suggest_activity_good' },
+                     { text: "Keep the mood light, talk about hobbies", nextScene: 'talk_hobbies_neutral'}
+                 ]
+             },
+             'ask_day_neutral': {
+                 text: "Elena shrugs. 'It was okay, pretty standard stuff. How about yours?'",
+                 choices: [
+                     { text: "Share an interesting anecdote", nextScene: 'share_anecdote_good'},
+                     { text: "Keep it brief and vague", nextScene: 'vague_day_neutral'},
+                     { text: "Complain about your day", nextScene: 'complain_day_bad'}
+                 ]
+             },
+             'ask_personal_good': {
+                 text: "You ask her about her dreams or aspirations. She opens up a bit, sharing some of her thoughts.",
+                 choices: [
+                    { text: "Share some of your own dreams", nextScene: 'share_dreams_good'},
+                    { text: "Offer encouragement", nextScene: 'ending_g3'}, // Good Ending 3
+                    { text: "Get too pushy with questions", nextScene: 'ending_b1'}  // Bad Ending 1
+                 ]
+             },
+             'suggest_activity_good': {
+                 text: "'What did you have in mind?' Elena asks, looking curious.",
+                 choices: [
+                     { text: "Suggest watching a movie now", nextScene: 'ending_g4' }, // Good Ending 4
+                     { text: "Ask her out on a proper date", nextScene: 'ask_date_direct' },
+                     { text: "Suggest grabbing food sometime soon", nextScene: 'ending_g1' } // Good Ending 1
+                 ]
+             },
+             'listen_good': {
+                 text: "She seems to appreciate you listening. 'It's nice talking to someone who's actually interested,' she says warmly.",
+                  choices: [
+                    { text: "Tell her you enjoy talking to her", nextScene: 'confess_interest_gentle' },
+                    { text: "Suggest you hang out more often", nextScene: 'suggest_hangout_more' },
+                    { text: "Ask if she wants to put the record on", nextScene: 'play_record_good' }
+                 ]
+             },
+              'play_record_good': {
+                 text: "She puts the record on. A smooth melody fills the room. You both listen for a moment.",
+                  choices: [
+                    { text: "Comment on how nice the atmosphere is", nextScene: 'ending_g3' }, // Good Ending 3
+                    { text: "Ask her to dance (playfully)", nextScene: 'ask_dance_bold' },
+                    { text: "Ask her for her number", nextScene: 'ending_g5' } // Good Ending 5
+                 ]
+             },
+             // --- Towards Endings ---
+             'confess_interest_gentle': {
+                 text: "'I really enjoy talking to you too,' Elena replies, her gaze soft.",
+                 choices: [
+                     { text: "Ask if she'd like to go on a date", nextScene: 'ask_date_direct' },
+                     { text: "Just smile and enjoy the moment", nextScene: 'ending_g1' } // Good Ending 1
+                 ]
+             },
+             'ask_date_direct': {
+                 text: "Elena considers for a moment, a hopeful look in her eyes. 'A date? Yeah... I'd like that.'",
+                 choices: [
+                     { text: "Awesome! (Plan details)", nextScene: 'ending_g2' }, // Good Ending 2
+                     { text: "Get her number to plan later", nextScene: 'ending_g5' } // Good Ending 5
+                 ]
+             },
+             'change_subject_bad': {
+                 text: "You abruptly change the subject. Elena looks a bit confused and the previous warmth fades.",
+                 choices: [
+                    { text: "Try to recover the conversation", nextScene: 'ask_opinion_neutral' }, // Attempt recovery
+                    { text: "Let the awkwardness settle", nextScene: 'ending_b3' }, // Bad Ending 3
+                    { text: "Make an excuse to leave", nextScene: 'ending_b1'} // Bad Ending 1
+                 ]
+             },
+             'impress_bad': {
+                 text: "You start listing obscure bands. Elena seems unimpressed, maybe even a little annoyed. 'Right...' she says coolly.",
+                 choices: [
+                     { text: "Apologize for showing off", nextScene: 'apology_neutral' },
+                     { text: "Ask about her interests instead", nextScene: 'ask_artist_good'}, // Try to recover
+                     { text: "Keep trying to impress her", nextScene: 'ending_b4' } // Bad Ending 4
+                 ]
+             },
+              'prefer_other_bad': {
+                 text: "'Oh,' Elena says, sounding disappointed. 'Well, everyone has different tastes, I guess.' The mood shifts.",
+                 choices: [
+                    { text: "Ask her why she likes it", nextScene: 'ask_artist_good'}, // Recovery
+                    { text: "Defend your music taste", nextScene: 'ending_b5'}, // Bad Ending 5
+                    { text: "Say nothing more", nextScene: 'ending_b3'} // Bad Ending 3
+                 ]
+             },
+            'ask_opinion_neutral': {
+                text: "She gives a non-committal answer. The conversation feels a bit strained.",
+                choices: [
+                    { text: "Try a different topic (Hobbies?)", nextScene: 'talk_hobbies_neutral' },
+                    { text: "Politely say you should get going", nextScene: 'ending_b2' }, // Bad Ending 2 (Friendzone)
+                    { text: "Ask if everything is okay", nextScene: 'check_in_awkward'}
+                ]
+            },
+            'check_in_awkward': {
+                text: "'Yeah, fine,' she says, but her tone is flat. It feels like the connection isn't quite there.",
+                 choices: [
+                    { text: "Suggest hanging out again another time", nextScene: 'ending_b2' }, // Bad Ending 2
+                    { text: "Apologize if you said something wrong", nextScene: 'apology_neutral' },
+                    { text: "Quietly leave", nextScene: 'ending_b1' } // Bad Ending 1
+                 ]
+            },
+            'apology_neutral': {
+                text: "'It's okay,' Elena says, though the mood hasn't fully recovered.",
+                choices: [
+                    { text: "Try talking about a shared interest", nextScene: 'talk_hobbies_neutral' },
+                    { text: "Suggest listening to her music choice", nextScene: 'play_record_good' }, // Recovery chance
+                    { text: "Decide to call it a day", nextScene: 'ending_b2' } // Bad Ending 2
+                ]
+            },
+             'talk_hobbies_neutral': {
+                text: "You talk about hobbies for a while. It's pleasant, but maybe lacks a certain spark.",
+                choices: [
+                    { text: "Express interest in one of her hobbies", nextScene: 'interest_hobby_good' },
+                    { text: "Keep it surface level", nextScene: 'ending_b2' }, // Bad Ending 2
+                    { text: "Hint at wanting something more", nextScene: 'hint_more_risky'}
+                ]
+            },
+            'interest_hobby_good': {
+                text: "Her eyes light up when you ask about her hobby. 'Really? You're interested in that?'",
+                choices: [
+                    { text: "Yes! Tell me more!", nextScene: 'ending_g1' }, // Good Ending 1
+                    { text: "Suggest doing the hobby together", nextScene: 'ending_g4' }, // Good Ending 4
+                ]
+            },
+             'hint_more_risky': {
+                text: "Elena looks a little unsure how to respond to your hinting.",
+                 choices: [
+                    { text: "Be direct and ask her out", nextScene: 'ask_date_direct_risky' },
+                    { text: "Backpedal and keep it friendly", nextScene: 'ending_b2' }, // Bad Ending 2
+                    { text: "Make an awkward comment", nextScene: 'ending_b4' } // Bad Ending 4
+                 ]
+             },
+            'ask_date_direct_risky': {
+                 text: "You directly ask her out. She seems surprised.",
+                 // 50/50 chance based on prior interactions (simplified here)
+                 choices: [
+                     { text: "(Assume she says yes!)", nextScene: 'ending_g2' }, // Good Ending 2
+                     { text: "(Assume she says no gently)", nextScene: 'ending_b2' }  // Bad Ending 2
+                 ]
+             },
+            'share_anecdote_good': {
+                text: "Elena laughs genuinely at your story. 'That's hilarious! You have a good way of telling things.'",
+                choices: [
+                    { text: "Compliment her laugh", nextScene: 'compliment_laugh_good' },
+                    { text: "Ask her to share a story", nextScene: 'ask_story_good' },
+                ]
+            },
+            'ask_story_good': {
+                text: "She shares a funny story from her own week. You both feel more comfortable and connected.",
+                 choices: [
+                     { text: "Suggest doing something spontaneous", nextScene: 'suggest_activity_good' },
+                     { text: "Say you're really enjoying her company", nextScene: 'confess_interest_gentle' }
+                 ]
+            },
+            'vague_day_neutral': {
+                text: "'Ah, okay,' Elena replies. The conversation lags a little.",
+                choices: [
+                    { text: "Ask more about her day instead", nextScene: 'ask_day_neutral_retry' }, // Retry asking about her
+                    { text: "Comment on the music again", nextScene: 'ask_music' }, // Backtrack slightly
+                    { text: "Fall into silence", nextScene: 'ending_b3' } // Bad Ending 3
+                ]
+            },
+             'ask_day_neutral_retry': { // A slight variation to avoid identical loops
+                text: "'Anything interesting happen for you though?' you ask, trying to re-engage.",
+                choices: [
+                    { text: "(She shares something minor)", nextScene: 'talk_hobbies_neutral' }, // Move towards neutral ground
+                    { text: "(She seems hesitant)", nextScene: 'check_in_awkward' }, // Check if something's wrong
+                ]
+            },
+            'complain_day_bad': {
+                text: "You vent about your day. Elena listens politely but seems a bit put off by the negativity.",
+                choices: [
+                    { text: "Realize and apologize for complaining", nextScene: 'apology_neutral'},
+                    { text: "Ask if she ever has days like that", nextScene: 'ask_opinion_neutral' }, // Risky, could lead to B2
+                    { text: "Keep complaining", nextScene: 'ending_b5'} // Bad Ending 5
+                ]
+            },
+             'share_dreams_good': {
+                text: "Sharing your aspirations creates a deeper connection. Elena listens intently.",
+                 choices: [
+                    { text: "Ask about the future (gently)", nextScene: 'ending_g3' }, // Good Ending 3
+                    { text: "Suggest supporting each other's goals", nextScene: 'ending_g1' } // Good Ending 1
+                 ]
+             },
+             'suggest_hangout_more': {
+                text: "'I'd like that,' Elena says with a genuine smile. 'We should.'",
+                 choices: [
+                    { text: "Get her number to make plans", nextScene: 'ending_g5' }, // Good Ending 5
+                    { text: "Suggest something specific for next time", nextScene: 'ending_g1' } // Good Ending 1
+                 ]
+             },
+              'ask_dance_bold': {
+                 text: "Elena looks surprised, then laughs. 'Dance? Right here?'",
+                  choices: [
+                     { text: "Yes! (If she agrees)", nextScene: 'ending_g2' }, // Good Ending 2 (Playful acceptance)
+                     { text: "Okay, maybe later (If she seems hesitant)", nextScene: 'ending_g1' } // Good Ending 1 (Reads the room)
+                  ]
+              },
+
+            // --- Endings ---
+            'ending_g1': { text: "Ending 1/10 (Good): She smiles warmly. 'Yeah, hanging out again soon sounds great.' You feel a positive connection forming.", isEnding: true, type: 'good' },
+            'ending_g2': { text: "Ending 2/10 (Good): She laughs, playfully touching your arm. 'Okay, smooth talker. A date sounds fun.' Success!", isEnding: true, type: 'good' },
+            'ending_g3': { text: "Ending 3/10 (Good): 'I feel it too,' she admits softly, looking at you with genuine affection. 'There's definitely something here.'", isEnding: true, type: 'good' },
+            'ending_g4': { text: "Ending 4/10 (Good): 'A movie right now? Yeah, why not!' Elena grabs the remote, and you both settle in. A perfect, cozy outcome.", isEnding: true, type: 'good' },
+            'ending_g5': { text: "Ending 5/10 (Good): 'Sure,' she says, pulling out her phone. She gives you her number with a hopeful smile. 'Text me!'", isEnding: true, type: 'good' },
+            'ending_b1': { text: "Ending 6/10 (Bad): She suddenly looks uncomfortable. 'Hey, I should probably... get going actually. Early start tomorrow.' She quickly excuses herself.", isEnding: true, type: 'bad' },
+            'ending_b2': { text: "Ending 7/10 (Bad): Elena gives you a polite, slightly distant smile. 'It was nice hanging out, you're a good friend.' The 'friend' word hangs in the air.", isEnding: true, type: 'bad' },
+            'ending_b3': { text: "Ending 8/10 (Bad): An awkward silence stretches uncomfortably. The relaxed vibe from before is completely gone. It feels like you blew it.", isEnding: true, type: 'bad' },
+            'ending_b4': { text: "Ending 9/10 (Bad): You see her roll her eyes subtly after your comment. She clearly wasn't impressed or amused. The mood turns sour.", isEnding: true, type: 'bad' },
+            'ending_b5': { text: "Ending 10/10 (Bad): 'Okay, seriously?' Elena looks genuinely annoyed. 'Can you maybe not? That's really not cool.' The conversation is definitely over.", isEnding: true, type: 'bad' }
+        };
+
+        function showScene(sceneId) {
+            const scene = gameData[sceneId];
+            if (!scene) {
+                console.error("Scene not found:", sceneId);
+                dialogueTextElement.textContent = "Error: Scene not found.";
+                choicesElement.innerHTML = '';
+                return;
+            }
+
+            currentSceneId = sceneId;
+            dialogueTextElement.textContent = scene.text;
+            choicesElement.innerHTML = ''; // Clear old choices
+
+            if (scene.isEnding) {
+                showEnding(scene.text, scene.type);
+            } else if (scene.choices) {
+                scene.choices.forEach(choice => {
+                    const button = document.createElement('button');
+                    button.textContent = choice.text;
+                    button.classList.add('choice-button');
+                    button.onclick = () => showScene(choice.nextScene);
+                    choicesElement.appendChild(button);
+                });
+            } else {
+                 // Should not happen in a well-structured game, but handle it
+                 console.error("Scene has no choices and is not an ending:", sceneId);
+                 const button = document.createElement('button');
+                 button.textContent = "Restart";
+                 button.classList.add('choice-button');
+                 button.onclick = () => restartGame();
+                 choicesElement.appendChild(button);
+            }
+        }
+
+        function showEnding(text, type) {
+            endingTextElement.textContent = text;
+            endingScreenElement.className = ''; // Reset classes
+            endingScreenElement.classList.add(type); // Add 'good' or 'bad' class
+            endingScreenElement.style.display = 'flex';
+        }
+
+        function restartGame() {
+            endingScreenElement.style.display = 'none';
+            currentSceneId = 'start';
+            showScene(currentSceneId);
+        }
+
+        // Initial game load
+        document.addEventListener('DOMContentLoaded', () => {
+            showScene(currentSceneId);
+        });
+
+    </script>
+</body>
+</html>

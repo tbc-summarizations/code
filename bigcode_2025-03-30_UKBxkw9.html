@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pigeon Poop Runner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+            overflow: hidden;
+            font-family: 'Arial', sans-serif;
+            color: white;
+        }
+        canvas {
+            border: 2px solid black;
+            background-color: #87CEEB; /* Sky blue */
+            display: block;
+        }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        Controls: [Space] to Flap | [X] to Poop | Avoid Hunter Shots!
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game settings
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 600;
+        canvas.width = GAME_WIDTH;
+        canvas.height = GAME_HEIGHT;
+
+        const GRAVITY = 0.3;
+        const FLAP_STRENGTH = -6;
+        const PIGEON_SIZE = 30;
+        const POOP_SIZE = 5;
+        const POOP_SPEED = 5;
+        const GAME_SPEED = 3; // Horizontal scroll speed
+        const TARGET_WIDTH = 80;
+        const TARGET_HEIGHT = 40;
+        const PERSON_WIDTH = 20;
+        const PERSON_HEIGHT = 50;
+        const COLLECTIBLE_PIGEON_SIZE = 15;
+        const HUNTER_WIDTH = 40;
+        const HUNTER_HEIGHT = 60;
+        const BULLET_SIZE = 5;
+        const BULLET_SPEED = 7;
+        const FLOCK_OFFSET = 25;
+
+        let score = 0;
+        let flockSize = 0;
+        let gameSpeed = GAME_SPEED;
+        let gameOver = false;
+        let gameStarted = false;
+        let frame = 0;
+
+        // Player (Pigeon)
+        const pigeon = {
+            x: 100,
+            y: GAME_HEIGHT / 2,
+            width: PIGEON_SIZE,
+            height: PIGEON_SIZE,
+            velocityY: 0,
+            emoji: '🐦'
+        };
+
+        // Arrays for game objects
+        let poops = [];
+        let targets = []; // cars and people
+        let collectiblePigeons = [];
+        let flock = [];
+        let hunters = [];
+        let bullets = [];
+        let backgroundObjects = []; // Buildings, clouds
+
+        // --- Input Handling ---
+        document.addEventListener('keydown', (e) => {
+            if (!gameStarted && !gameOver) {
+                startGame();
+            }
+            if (e.code === 'Space' && !gameOver) {
+                pigeon.velocityY = FLAP_STRENGTH;
+            }
+            if (e.code === 'KeyX' && !gameOver) {
+                createPoop();
+            }
+            if (gameOver && e.code === 'Space') {
+                restartGame();
+            }
+        });
+
+        // --- Game Object Creation ---
+        function createPoop() {
+            poops.push({
+                x: pigeon.x + pigeon.width / 2 - POOP_SIZE / 2,
+                y: pigeon.y + pigeon.height,
+                width: POOP_SIZE,
+                height: POOP_SIZE
+            });
+        }
+
+        function createTarget() {
+            const type = Math.random() < 0.6 ? 'car' : 'person';
+            const groundY = GAME_HEIGHT - 50; // Ground level
+
+            if (type === 'car') {
+                targets.push({
+                    x: GAME_WIDTH,
+                    y: groundY - TARGET_HEIGHT,
+                    width: TARGET_WIDTH,
+                    height: TARGET_HEIGHT,
+                    type: 'car',
+                    color: `hsl(${Math.random() * 360}, 70%, 50%)` // Random car color
+                });
+            } else {
+                targets.push({
+                    x: GAME_WIDTH,
+                    y: groundY - PERSON_HEIGHT,
+                    width: PERSON_WIDTH,
+                    height: PERSON_HEIGHT,
+                    type: 'person'
+                });
+            }
+        }
+
+        function createCollectiblePigeon() {
+             collectiblePigeons.push({
+                x: GAME_WIDTH,
+                y: Math.random() * (GAME_HEIGHT - 100) + 50, // Random height, not too close to edges
+                width: COLLECTIBLE_PIGEON_SIZE,
+                height: COLLECTIBLE_PIGEON_SIZE,
+                emoji: '🐦'
+            });
+        }
+
+        function createHunter() {
+             hunters.push({
+                x: GAME_WIDTH,
+                y: GAME_HEIGHT - 50 - HUNTER_HEIGHT, // On the ground
+                width: HUNTER_WIDTH,
+                height: HUNTER_HEIGHT,
+                shootCooldown: Math.random() * 100 + 100 // Frames between shots
+            });
+        }
+
+         function createBullet(hunter) {
+             bullets.push({
+                 x: hunter.x,
+                 y: hunter.y + HUNTER_HEIGHT / 3, // Muzzle position
+                 width: BULLET_SIZE,
+                 height: BULLET_SIZE * 2, // Make it slightly elongated
+                 speed: BULLET_SPEED
+             });
+         }
+
+        function createBackgroundObject() {
+            const type = Math.random() < 0.7 ? 'building' : 'cloud';
+            if (type === 'building') {
+                const buildingHeight = Math.random() * 200 + 100;
+                backgroundObjects.push({
+                    x: GAME_WIDTH,
+                    y: GAME_HEIGHT - 50 - buildingHeight,
+                    width: Math.random() * 50 + 50,
+                    height: buildingHeight,
+                    type: 'building',
+                    color: `hsl(0, 0%, ${Math.random() * 20 + 40}%)` // Shades of grey
+                });
+            } else {
+                 backgroundObjects.push({
+                    x: GAME_WIDTH,
+                    y: Math.random() * (GAME_HEIGHT / 3), // Upper part of sky
+                    radius: Math.random() * 20 + 15,
+                    type: 'cloud'
+                });
+            }
+        }
+
+
+        // --- Update Functions ---
+        function updatePlayer() {
+            pigeon.velocityY += GRAVITY;
+            pigeon.y += pigeon.velocityY;
+
+            // Keep pigeon within bounds
+            if (pigeon.y < 0) {
+                pigeon.y = 0;
+                pigeon.velocityY = 0;
+            }
+            if (pigeon.y + pigeon.height > GAME_HEIGHT - 50) { // Hit ground
+                pigeon.y = GAME_HEIGHT - 50 - pigeon.height;
+                pigeon.velocityY = 0;
+                // Don't trigger game over on ground hit unless specific mechanic wanted
+            }
+        }
+
+        function updatePoops() {
+            poops.forEach((poop, index) => {
+                poop.y += POOP_SPEED;
+                if (poop.y > GAME_HEIGHT) {
+                    poops.splice(index, 1); // Remove off-screen poop
+                }
+            });
+        }
+
+        function updateTargets() {
+            targets.forEach((target, index) => {
+                target.x -= gameSpeed;
+                if (target.x + target.width < 0) {
+                    targets.splice(index, 1); // Remove off-screen targets
+                }
+            });
+            // Spawn new targets periodically
+            if (frame % 100 === 0 && Math.random() < 0.8) { // Adjust spawn rate
+                createTarget();
+            }
+        }
+
+         function updateCollectiblePigeons() {
+            collectiblePigeons.forEach((cp, index) => {
+                cp.x -= gameSpeed;
+                if (cp.x + cp.width < 0) {
+                    collectiblePigeons.splice(index, 1);
+                }
+            });
+            // Spawn new collectible pigeons periodically
+            if (frame % 250 === 0 && Math.random() < 0.5) { // Less frequent than targets
+                createCollectiblePigeon();
+            }
+        }
+
+         function updateHunters() {
+             hunters.forEach((hunter, index) => {
+                hunter.x -= gameSpeed;
+                if (hunter.x + hunter.width < 0) {
+                    hunters.splice(index, 1);
+                } else {
+                    // Hunter shooting logic
+                    hunter.shootCooldown--;
+                    if (hunter.shootCooldown <= 0) {
+                        createBullet(hunter);
+                        hunter.shootCooldown = Math.random() * 150 + 120; // Reset cooldown
+                    }
+                }
+            });
+            // Spawn new hunters periodically
+             if (frame > 500 && frame % 350 === 0 && Math.random() < 0.6) { // Spawn after a delay, less frequent
+                 // Ensure hunter doesn't overlap excessively with recent one
+                 const lastHunter = hunters[hunters.length - 1];
+                 if (!lastHunter || GAME_WIDTH - lastHunter.x > 200) {
+                    createHunter();
+                 }
+            }
+        }
+
+         function updateBullets() {
+             bullets.forEach((bullet, index) => {
+                 bullet.y -= bullet.speed; // Bullets go up
+                 if (bullet.y + bullet.height < 0) {
+                     bullets.splice(index, 1); // Remove off-screen bullets
+                 }
+             });
+         }
+
+        function updateFlock() {
+            let leader = pigeon;
+            flock.forEach((follower) => {
+                // Simple follow logic: trail behind the leader (previous flock member or player)
+                const targetX = leader.x - FLOCK_OFFSET;
+                const targetY = leader.y;
+
+                // Smoothly move towards the target position
+                follower.x += (targetX - follower.x) * 0.1;
+                follower.y += (targetY - follower.y) * 0.1;
+
+                leader = follower; // Next follower trails this one
+            });
+        }
+
+         function updateBackground() {
+             backgroundObjects.forEach((obj, index) => {
+                 obj.x -= gameSpeed * 0.5; // Slower parallax scroll for background
+                 if (obj.x + (obj.width || obj.radius * 2) < 0) {
+                     backgroundObjects.splice(index, 1);
+                 }
+             });
+             // Spawn new background objects
+              if (frame % 60 === 0 && Math.random() < 0.4) {
+                  createBackgroundObject();
+              }
+         }
+
+
+        // --- Collision Detection ---
+        function checkCollisions() {
+            // Poop hitting targets
+            poops.forEach((poop, pIndex) => {
+                targets.forEach((target, tIndex) => {
+                    if (isColliding(poop, target)) {
+                        poops.splice(pIndex, 1); // Remove poop
+                        targets.splice(tIndex, 1); // Remove target
+                        score += (target.type === 'car' ? 10 : 20); // More points for people
+                        return; // Poop can only hit one target
+                    }
+                });
+            });
+
+            // Player hitting collectible pigeons
+            collectiblePigeons.forEach((cp, cpIndex) => {
+                 if (isColliding(pigeon, cp)) {
+                     collectiblePigeons.splice(cpIndex, 1);
+                     flockSize++;
+                     // Add a visual flock member
+                     flock.push({
+                         x: pigeon.x - FLOCK_OFFSET * (flock.length + 1),
+                         y: pigeon.y,
+                         width: COLLECTIBLE_PIGEON_SIZE,
+                         height: COLLECTIBLE_PIGEON_SIZE,
+                         emoji: '🐦'
+                     });
+                 }
+            });
+
+            // Player (or flock) hitting bullets
+            bullets.forEach((bullet, bIndex) => {
+                 if (isColliding(pigeon, bullet)) {
+                     bullets.splice(bIndex, 1);
+                     gameOver = true;
+                     return;
+                 }
+                 // Check flock collision (optional, makes it harder)
+                 flock.forEach((follower, fIndex) => {
+                     if(isColliding(follower, bullet)) {
+                         bullets.splice(bIndex, 1);
+                         flock.splice(fIndex, 1); // Remove hit flock member
+                         flockSize--;
+                         // Maybe adjust score or have a sound effect
+                         return;
+                     }
+                 });
+            });
+
+             // Player hitting hunters (optional: maybe game over if hits hunter directly)
+            // hunters.forEach((hunter) => {
+            //     if (isColliding(pigeon, hunter)) {
+            //         gameOver = true;
+            //     }
+            // });
+        }
+
+        function isColliding(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // --- Drawing Functions ---
+        function drawBackground() {
+            // Sky
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Background objects (buildings, clouds)
+             backgroundObjects.forEach(obj => {
+                 if (obj.type === 'building') {
+                    ctx.fillStyle = obj.color;
+                    ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+                 } else if (obj.type === 'cloud') {
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath();
+                    ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                     // Add smaller circles for cloud shape
+                    ctx.beginPath();
+                    ctx.arc(obj.x + obj.radius * 0.6, obj.y - obj.radius * 0.3, obj.radius * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(obj.x - obj.radius * 0.5, obj.y - obj.radius * 0.2, obj.radius * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+                 }
+            });
+
+            // Ground
+            ctx.fillStyle = '#8B4513'; // Brown
+            ctx.fillRect(0, GAME_HEIGHT - 50, GAME_WIDTH, 50);
+        }
+
+        function drawPlayer() {
+            // Simple triangle or emoji for pigeon
+            ctx.font = `${pigeon.width}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Add slight rotation based on velocity for effect
+            ctx.save();
+            ctx.translate(pigeon.x + pigeon.width / 2, pigeon.y + pigeon.height / 2);
+            ctx.rotate(Math.max(-0.5, Math.min(0.5, pigeon.velocityY * 0.05))); // Clamp rotation
+            ctx.fillText(pigeon.emoji, 0, 0);
+            ctx.restore();
+
+            // Draw flock
+            ctx.font = `${COLLECTIBLE_PIGEON_SIZE}px Arial`;
+            flock.forEach(follower => {
+                 ctx.fillText(follower.emoji, follower.x + follower.width / 2, follower.y + follower.height / 2);
+            });
+        }
+
+        function drawPoops() {
+            ctx.fillStyle = 'white';
+            poops.forEach(poop => {
+                ctx.beginPath();
+                ctx.arc(poop.x + poop.width / 2, poop.y + poop.height / 2, poop.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawTargets() {
+            targets.forEach(target => {
+                if (target.type === 'car') {
+                    ctx.fillStyle = target.color;
+                    ctx.fillRect(target.x, target.y, target.width, target.height);
+                    // Add wheels (simple circles)
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(target.x + 10, target.y + target.height - 5, 15, 10); // Wheel 1
+                    ctx.fillRect(target.x + target.width - 25, target.y + target.height -5, 15, 10); // Wheel 2
+                } else { // Person
+                    // Simple stick figure or shape
+                    ctx.fillStyle = 'black';
+                    // Body
+                    ctx.fillRect(target.x + target.width / 2 - 2 , target.y + 10, 4, target.height - 10);
+                    // Head
+                    ctx.beginPath();
+                    ctx.arc(target.x + target.width / 2, target.y + 5, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Legs (crude animation)
+                    const legOffset = Math.sin(frame * 0.2) * 5;
+                    ctx.fillRect(target.x + target.width / 2 - 4 , target.y + target.height - 10 + legOffset, 3, 10);
+                    ctx.fillRect(target.x + target.width / 2 + 1 , target.y + target.height - 10 - legOffset, 3, 10);
+                }
+            });
+        }
+
+        function drawCollectiblePigeons() {
+             ctx.font = `${COLLECTIBLE_PIGEON_SIZE}px Arial`;
+             ctx.textAlign = 'center';
+             ctx.textBaseline = 'middle';
+             collectiblePigeons.forEach(cp => {
+                 ctx.fillText(cp.emoji, cp.x + cp.width / 2, cp.y + cp.height / 2);
+             });
+        }
+
+        function drawHunters() {
+            hunters.forEach(hunter => {
+                // Body
+                ctx.fillStyle = '#556B2F'; // Dark Olive Green
+                ctx.fillRect(hunter.x, hunter.y, hunter.width, hunter.height);
+                // Head
+                ctx.fillStyle = '#F5DEB3'; // Wheat (skin tone)
+                ctx.beginPath();
+                ctx.arc(hunter.x + hunter.width / 2, hunter.y + 10, 10, 0, Math.PI * 2);
+                ctx.fill();
+                // Gun (simple line/rectangle pointing up slightly)
+                ctx.fillStyle = 'grey';
+                ctx.save();
+                ctx.translate(hunter.x + hunter.width / 2, hunter.y + hunter.height / 2);
+                ctx.rotate(-0.3); // Angle upwards slightly
+                ctx.fillRect(0, -5, 30, 5); // Barrel
+                ctx.restore();
+            });
+        }
+
+        function drawBullets() {
+            ctx.fillStyle = 'red';
+            bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'black';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(`Score: ${score}`, 10, 10);
+            ctx.fillText(`Flock: ${flockSize}`, 10, 40);
+        }
+
+        function drawStartScreen() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            ctx.fillStyle = 'white';
+            ctx.font = '40px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Pigeon Poop Runner', GAME_WIDTH / 2, GAME_HEIGHT / 3);
+            ctx.font = '20px Arial';
+            ctx.fillText('Press any key to Start', GAME_WIDTH / 2, GAME_HEIGHT / 2);
+            ctx.font = '16px Arial';
+            ctx.fillText('[Space] to Flap | [X] to Poop', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40);
+            ctx.fillText('Poop on cars and people!', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 70);
+            ctx.fillText('Collect pigeons for your flock!', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 100);
+            ctx.fillText('Avoid the hunters!', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 130);
+        }
+
+        function drawGameOverScreen() {
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.7)'; // Red overlay
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            ctx.fillStyle = 'white';
+            ctx.font = '50px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('GAME OVER!', GAME_WIDTH / 2, GAME_HEIGHT / 3);
+            ctx.font = '30px Arial';
+            ctx.fillText(`Final Score: ${score}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+             ctx.fillText(`Final Flock Size: ${flockSize}`, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40);
+            ctx.font = '20px Arial';
+            ctx.fillText('Press [Space] to Restart', GAME_WIDTH / 2, GAME_HEIGHT * 2 / 3);
+        }
+
+        // --- Game Loop ---
+        function gameLoop() {
+            if (!gameStarted) {
+                drawStartScreen();
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            if (gameOver) {
+                drawGameOverScreen();
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Clear canvas
+            // ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT); // Can skip if background redraws fully
+
+            // Update game state
+            updatePlayer();
+            updatePoops();
+            updateTargets();
+            updateCollectiblePigeons();
+            updateHunters();
+            updateBullets();
+            updateFlock();
+            updateBackground();
+            checkCollisions();
+
+             // Increase difficulty over time
+            if (frame % 500 === 0 && frame > 0) {
+                 gameSpeed += 0.1;
+                 console.log("Speed Increased:", gameSpeed);
+             }
+
+
+            // Draw everything
+            drawBackground();
+            drawTargets(); // Draw targets behind player/poop
+            drawHunters();
+            drawCollectiblePigeons();
+            drawBullets(); // Draw bullets under player
+            drawPlayer(); // Includes flock
+            drawPoops();
+            drawScore();
+
+            frame++;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            if (!gameStarted) {
+                gameStarted = true;
+                document.getElementById('instructions').style.display = 'block'; // Show controls during game
+            }
+        }
+
+        function restartGame() {
+            // Reset all game variables
+            score = 0;
+            flockSize = 0;
+            gameSpeed = GAME_SPEED;
+            gameOver = false;
+            frame = 0;
+
+            pigeon.y = GAME_HEIGHT / 2;
+            pigeon.velocityY = 0;
+
+            poops = [];
+            targets = [];
+            collectiblePigeons = [];
+            flock = [];
+            hunters = [];
+            bullets = [];
+            backgroundObjects = [];
+
+            // Re-initialize some background elements for immediate start visual
+            for(let i=0; i<5; i++) { // Pre-populate some bg
+                createBackgroundObject();
+                backgroundObjects[backgroundObjects.length-1].x = Math.random() * GAME_WIDTH; // Spread them out
+            }
+
+            // Make sure the loop continues correctly
+             if (!gameStarted) startGame(); // Should already be true, but safety
+        }
+
+        // --- Initial Setup ---
+        document.getElementById('instructions').style.display = 'none'; // Hide initially
+        drawStartScreen(); // Show start screen before loop starts waiting for key press
+        requestAnimationFrame(gameLoop); // Start the loop, initially showing start screen
+
+    </script>
+</body>
+</html>

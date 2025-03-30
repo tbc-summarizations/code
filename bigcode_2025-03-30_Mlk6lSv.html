@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Floyd: The Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #111;
+            color: #eee;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrolling on main page */
+        }
+        .container {
+            padding: 20px;
+            max-width: 800px;
+            margin: auto;
+            background-color: #222;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            max-height: 95vh;
+            overflow-y: auto;
+        }
+        h1, h2, h3 {
+            color: #ffcc00;
+            border-bottom: 1px solid #ffcc00;
+            padding-bottom: 5px;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            background-color: #333;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        li strong {
+            color: #ffdd55;
+        }
+        .game-area {
+            border: 2px solid #444;
+            background-color: #000;
+            height: 400px; /* Placeholder height */
+            position: relative;
+            margin-top: 20px;
+            overflow: hidden; /* Keep game elements contained */
+            cursor: crosshair;
+        }
+        .player {
+            position: absolute;
+            bottom: 10px;
+            left: 50px;
+            width: 30px;
+            height: 40px;
+            background-color: blue; /* Simple square for player */
+            border: 1px solid lightblue;
+        }
+        .enemy {
+            position: absolute;
+            bottom: 10px;
+            right: 50px;
+            width: 35px;
+            height: 35px;
+            background-color: red; /* Simple square for enemy */
+            border: 1px solid pink;
+        }
+        .platform {
+            position: absolute;
+            bottom: 70px;
+            left: 150px;
+            width: 100px;
+            height: 15px;
+            background-color: grey; /* Simple rectangle for platform */
+        }
+         .projectile {
+            position: absolute;
+            width: 10px;
+            height: 5px;
+            background-color: yellow; /* Simple rectangle for projectile */
+        }
+        .touch-controls {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 100;
+            user-select: none; /* Prevent text selection on buttons */
+        }
+        .touch-controls button {
+            background-color: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            font-size: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin: 5px;
+            cursor: pointer;
+            touch-action: manipulation; /* Improve touch responsiveness */
+        }
+         .touch-controls .actions button {
+            font-size: 16px;
+         }
+
+        /* Basic representation of assets */
+        .asset-shape-square {
+            display: inline-block;
+            width: 1em;
+            height: 1em;
+            background-color: currentColor;
+            margin: 0 2px;
+        }
+        .asset-shape-triangle {
+            display: inline-block;
+            width: 0;
+            height: 0;
+            border-left: 0.5em solid transparent;
+            border-right: 0.5em solid transparent;
+            border-bottom: 1em solid currentColor;
+             margin: 0 2px;
+             vertical-align: middle;
+        }
+        /* Game State Display */
+        .game-stats {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            color: white;
+            font-size: 14px;
+            z-index: 5;
+        }
+        .boss-health {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 150px;
+            height: 15px;
+            background: #555;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            z-index: 5;
+        }
+        .boss-health-bar {
+             height: 100%;
+             width: 100%; /* Start full */
+             background: red;
+             border-radius: 2px;
+        }
+         .message-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: #ffcc00;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.5em;
+            z-index: 10;
+            display: none; /* Hidden by default */
+         }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Floyd: The Game</h1>
+
+        <section id="timeline">
+            <h2>TIMELINE</h2>
+            <p>George Floyd awakens in an unknown city <span class="asset-shape-square" style="color: grey;"></span>, forced to battle through waves of enemies to reclaim justice and peace <span class="asset-shape-triangle" style="color: yellow;"></span>.</p>
+        </section>
+
+        <section id="bosses">
+            <h2>Bosses</h2>
+            <ul>
+                <li><strong>Tutorial Boss: Drake (The Rap Titan)</strong> <span style="font-size: 1.2em;">🎤</span><br>Tries to dissuade George with charisma but fails. His ghost <span style="opacity: 0.6;">👻</span> later spawns, distracting with music <span style="font-size: 1.2em;">🎶</span>.</li>
+                <li><strong>First Boss: 2Pac (The Rap Legend)</strong> <span style="font-size: 1.2em;">👑</span><br>Returns from the afterlife to test George in a battle of lyrical attacks.</li>
+                <li><strong>Second Boss: Siri (The AI Overlord)</strong> <span style="font-size: 1.2em;">🤖</span><br>Manipulates terrain and summons tech-based minions <span class="asset-shape-square" style="color: cyan;"></span> to slow George down.</li>
+                <li><strong>Third Boss: JPEGMAFIA (The Chaotic Producer)</strong> <span style="font-size: 1.2em;">🎧</span><br>Uses unpredictable sound-based attacks <span style="color: magenta;">〰️</span>, turning beats into projectiles <span class="asset-shape-triangle" style="color: red;"></span>.</li>
+                <li><strong>Fourth Boss: Ronald Reagan (The Ghost of the Past)</strong> <span style="opacity: 0.6;">🏛️</span><br>Summons economic waves 💲 and historical policies <span style="font-size: 1.2em;">📜</span> to push George back.</li>
+                <li><strong>Fifth Boss: Smoke Detector (The Alarm of Oppression)</strong> <span style="font-size: 1.2em;">🚨</span><br>A relentless noise-based enemy, stunning <span style="color: orange;">💥</span> and obscuring vision <span style="color: grey;">🌫️</span>.</li>
+                <li><strong>Sixth Boss: Elon Musk (The Tech Mogul)</strong> <span style="font-size: 1.2em;">🚀</span><br>Fights in a cybernetic suit, using drones <span style="font-size: 1.2em;">🛸</span> and space-tech weaponry.</li>
+                <li><strong>Seventh Boss: Donald Trump (The Former President)</strong> <span style="font-size: 1.2em;">🏛️</span><br>Attacks with executive orders <span style="font-size: 1.2em;">✍️</span> and tweets <span style="font-size: 1.2em;">📱</span> from his golden escalator.</li>
+                <li><strong>Eighth Boss: Jefferson Davis (The Confederate Leader)</strong> <span style="opacity: 0.6;">👻</span><br>Summons Confederate ghosts, trying to drag George into the past <span style="font-size: 1.2em;">⏳</span>.</li>
+                <li><strong>Ninth Boss: The Police (The Enforcers)</strong> <span style="font-size: 1.2em;">🛡️</span><br>A swarm battle against waves of riot-shielded officers with tasers <span style="color: yellow;">⚡</span>.</li>
+                <li><strong>Tenth Boss: The Klan (The Hate Group)</strong> <span style="font-size: 1.2em;">🔥</span><br>Uses fire and fear as weapons in an ultimate test of endurance.</li>
+                <li><strong>Final Boss: Derek Chauvin (The Ultimate Oppressor)</strong> <span style="font-size: 1.2em;">🧱</span><br>The toughest battle—George must counter suppression to win.</li>
+            </ul>
+        </section>
+
+        <section id="features">
+            <h2>Gameplay Features</h2>
+            <ul>
+                <li><strong>Mobile Support:</strong> Touchscreen controls with fluid mechanics. <span style="font-size: 1.2em;">📱</span></li>
+                <li><strong>Combat System:</strong> Melee <span style="font-size: 1.2em;">⚔️</span> & ranged <span class="asset-shape-triangle" style="color: orange;"></span> attacks, plus power-ups <span style="font-size: 1.2em;">⭐</span>.</li>
+                <li><strong>Upgrades:</strong> Unlock new abilities after each boss. <span style="font-size: 1.2em;">📈</span></li>
+                <li><strong>Map Progression:</strong> Evolving hazards <span style="color: red;">⚠️</span> after key battles.</li>
+                <li><strong>Special Abilities:</strong> "Justice Wave" <span style="color: cyan;">🌊</span>, "Truth Bomb" <span style="font-size: 1.2em;">💣</span>, "Resilience Shield" <span style="font-size: 1.2em;">🛡️</span>.</li>
+                <li><strong>Mini-bosses:</strong> Recurring enemies from past fights. <span class="asset-shape-square" style="color: purple;"></span></li>
+            </ul>
+        </section>
+
+         <section id="game-play-area">
+             <h2>Game Simulation Area</h2>
+             <div class="game-area" id="gameArea">
+                 <div class="game-stats" id="stats">
+                     Score: 0 | Health: 100% | Level: 1
+                 </div>
+                 <div class="boss-health" id="bossHealthContainer" style="display: none;"> Boss Health:
+                    <div class="boss-health-bar" id="bossHealthBar"></div>
+                 </div>
+                 <div class="player" id="player"></div>
+                 <!-- Enemies and platforms will be added dynamically via JS -->
+                  <div class="enemy" id="enemyPlaceholder" style="left: 75%; background-color: green;"></div> <!-- Placeholder enemy -->
+                  <div class="platform" style="left: 30%; bottom: 100px; width: 150px;"></div>
+                  <div class="platform" style="left: 60%; bottom: 150px; width: 120px;"></div>
+                  <div class="message-overlay" id="message">Level Start!</div>
+             </div>
+         </section>
+
+    </div> <!-- /container -->
+
+    <!-- Mobile Controls -->
+    <div class="touch-controls" id="touchControls">
+        <div class="movement">
+            <button id="leftBtn">◀</button>
+            <button id="rightBtn">▶</button>
+            <button id="jumpBtn">▲</button>
+        </div>
+        <div class="actions">
+            <button id="attackMeleeBtn">⚔️</button>
+            <button id="attackRangedBtn">🔫</button> <!-- Placeholder icon -->
+            <button id="special1Btn">S1</button>
+            <button id="special2Btn">S2</button>
+        </div>
+    </div>
+
+    <script>
+        // Basic interactivity simulation - NOT a full game engine.
+        // This demonstrates structure but lacks actual game logic, physics, collision, AI, etc.
+        document.addEventListener('DOMContentLoaded', () => {
+            const player = document.getElementById('player');
+            const gameArea = document.getElementById('gameArea');
+            const statsDisplay = document.getElementById('stats');
+            const messageOverlay = document.getElementById('message');
+            const bossHealthContainer = document.getElementById('bossHealthContainer');
+            const bossHealthBar = document.getElementById('bossHealthBar');
+
+            // Placeholder game state
+            let score = 0;
+            let health = 100;
+            let currentLevel = 1;
+            let playerX = 50;
+            let playerY = 10; // Position from bottom
+            let playerVelX = 0;
+            let playerVelY = 0;
+            let isJumping = false;
+            const gravity = 0.5;
+            const moveSpeed = 3;
+            const jumpPower = 10;
+
+            function updateStats() {
+                statsDisplay.textContent = `Score: ${score} | Health: ${health}% | Level: ${currentLevel}`;
+            }
+
+            function showMessage(text, duration = 1500) {
+                messageOverlay.textContent = text;
+                messageOverlay.style.display = 'block';
+                setTimeout(() => {
+                    messageOverlay.style.display = 'none';
+                }, duration);
+            }
+
+            function gameLoop() {
+                 // Apply gravity
+                 if (playerY > 10 || playerVelY < 0) { // Simple floor check at y=10
+                     playerVelY -= gravity;
+                 } else {
+                     playerVelY = 0;
+                     playerY = 10;
+                     isJumping = false;
+                 }
+
+                // Update position
+                playerX += playerVelX;
+                playerY += playerVelY;
+
+                // Prevent moving out of bounds (simple)
+                if (playerX < 0) playerX = 0;
+                if (playerX > gameArea.clientWidth - player.clientWidth) {
+                    playerX = gameArea.clientWidth - player.clientWidth;
+                }
+                if (playerY < 10) { // Floor boundary
+                    playerY = 10;
+                    playerVelY = 0;
+                    isJumping = false;
+                }
+
+                // Update player element style
+                player.style.left = `${playerX}px`;
+                player.style.bottom = `${playerY}px`;
+
+                // Reset horizontal velocity if no keys pressed (handled by keyup)
+                // playerVelX = 0; // This would stop movement immediately, better handled in key events
+
+                 // Dummy enemy movement (example)
+                 const enemy = document.getElementById('enemyPlaceholder');
+                 if (enemy) {
+                     let enemyX = parseFloat(enemy.style.left || '75%');
+                     if(Math.random() > 0.98) { // Randomly move slightly
+                         enemyX += (Math.random() - 0.5) * 5;
+                         enemy.style.left = `${enemyX}%`;
+                     }
+                 }
+
+
+                requestAnimationFrame(gameLoop); // Continue the loop
+            }
+
+             // Keyboard controls
+            const keyState = {};
+            document.addEventListener('keydown', (e) => {
+                keyState[e.key.toLowerCase()] = true;
+                handleInput();
+            });
+            document.addEventListener('keyup', (e) => {
+                keyState[e.key.toLowerCase()] = false;
+                handleInput(); // Update velocity on key up too
+            });
+
+            // Touch controls
+            const addTouchListener = (elementId, action) => {
+                const button = document.getElementById(elementId);
+                 button.addEventListener('touchstart', (e) => { e.preventDefault(); action(true); }, { passive: false });
+                 button.addEventListener('touchend', (e) => { e.preventDefault(); action(false); }, { passive: false });
+                 button.addEventListener('mousedown', (e) => { action(true); }); // Support mouse clicks too
+                 button.addEventListener('mouseup', (e) => { action(false); });
+            };
+
+            addTouchListener('leftBtn', (pressed) => keyState['arrowleft'] = pressed);
+            addTouchListener('rightBtn', (pressed) => keyState['arrowright'] = pressed);
+            addTouchListener('jumpBtn', (pressed) => {
+                if(pressed && !isJumping) { // Only trigger jump on press down
+                    keyState['arrowup'] = true;
+                    handleInput(); // Process jump immediately
+                } else if (!pressed) {
+                    keyState['arrowup'] = false; // Allow releasing the jump button conceptually
+                }
+            });
+            addTouchListener('attackMeleeBtn', (pressed) => keyState['attack_melee'] = pressed);
+            addTouchListener('attackRangedBtn', (pressed) => keyState['attack_ranged'] = pressed);
+            addTouchListener('special1Btn', (pressed) => keyState['special1'] = pressed);
+            addTouchListener('special2Btn', (pressed) => keyState['special2'] = pressed);
+
+
+            function handleInput() {
+                 // Horizontal Movement
+                if (keyState['arrowleft'] || keyState['a']) {
+                    playerVelX = -moveSpeed;
+                } else if (keyState['arrowright'] || keyState['d']) {
+                    playerVelX = moveSpeed;
+                } else {
+                    playerVelX = 0; // Stop moving if no direction key is pressed
+                }
+
+                // Jumping
+                if ((keyState['arrowup'] || keyState['w'] || keyState[' ']) && !isJumping) {
+                    playerVelY = jumpPower;
+                    isJumping = true;
+                     // Remove the key state immediately after jump impulse to prevent holding jump
+                     keyState['arrowup'] = false; keyState['w'] = false; keyState[' '] = false;
+                }
+
+                 // Placeholder Attack Actions (just log or show message)
+                if (keyState['attack_melee']) {
+                    console.log("Action: Melee Attack!");
+                    player.style.backgroundColor = 'orange'; // Visual feedback
+                    setTimeout(() => player.style.backgroundColor = 'blue', 100);
+                    keyState['attack_melee'] = false; // Treat as single press
+                }
+                 if (keyState['attack_ranged']) {
+                    console.log("Action: Ranged Attack!");
+                    // Simulate projectile
+                    const proj = document.createElement('div');
+                    proj.classList.add('projectile');
+                    proj.style.position = 'absolute';
+                    proj.style.bottom = `${playerY + 20}px`; // Position near player center
+                    proj.style.left = `${playerX + player.clientWidth}px`; // Position right of player
+                    gameArea.appendChild(proj);
+                    let projX = playerX + player.clientWidth;
+                    let projInterval = setInterval(() => {
+                         projX += 5; // Move projectile right
+                         proj.style.left = `${projX}px`;
+                         if(projX > gameArea.clientWidth) {
+                             clearInterval(projInterval);
+                             gameArea.removeChild(proj);
+                         }
+                    }, 20);
+                    keyState['attack_ranged'] = false; // Treat as single press
+                }
+                if (keyState['special1']) { showMessage('Used Justice Wave!'); keyState['special1'] = false; }
+                if (keyState['special2']) { showMessage('Used Truth Bomb!'); keyState['special2'] = false; }
+            }
+
+            // --- Game Progression Simulation ---
+            function startLevel(level) {
+                currentLevel = level;
+                showMessage(`Level ${level} Start!`, 2000);
+                updateStats();
+                // Reset player pos, clear enemies, load level layout etc. (Not implemented)
+                playerX = 50; playerY = 10; playerVelX=0; playerVelY=0;
+                 document.getElementById('enemyPlaceholder').style.display = 'block'; // Show basic enemy
+
+                 // Example: Show boss health bar on later levels
+                 if (level > 1) { // Example: Boss appears on level 2
+                      bossHealthContainer.style.display = 'block';
+                      bossHealthBar.style.width = '100%';
+                      document.getElementById('enemyPlaceholder').style.backgroundColor = 'purple'; // Make it look different
+                 } else {
+                      bossHealthContainer.style.display = 'none';
+                 }
+            }
+
+            // Simulate defeating an enemy/boss to progress (very basic)
+             document.getElementById('enemyPlaceholder').addEventListener('click', () => { // Click enemy to "defeat"
+                 if(currentLevel < 11) { // Assuming 11 total levels (10 bosses + final)
+                     score += 100 * currentLevel;
+                      document.getElementById('enemyPlaceholder').style.display = 'none'; // Hide enemy
+                      if (bossHealthContainer.style.display === 'block') { // If it was a 'boss'
+                          bossHealthBar.style.width = '0%'; // Empty health bar
+                      }
+                     showMessage(`Level ${currentLevel} Cleared!`, 1500);
+                     setTimeout(() => startLevel(currentLevel + 1) , 2000); // Start next level after delay
+                 } else {
+                     showMessage("Final Boss Defeated! Game Over!", 5000);
+                 }
+                 updateStats();
+             });
+
+
+            // Initial setup
+            updateStats();
+            startLevel(1); // Start game at level 1
+            gameLoop(); // Start the game loop
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flirting Simulator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            color: #333;
+            margin: 0;
+        }
+        #game-container {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 30px;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+        }
+        #character-area {
+            font-size: 5rem; /* Make emoji large */
+            margin-bottom: 20px;
+            height: 80px; /* Fixed height */
+            line-height: 80px; /* Center emoji vertically */
+            background-color: #eee;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        #dialogue-area {
+            min-height: 60px; /* Ensure space for text */
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            text-align: left;
+            font-style: italic;
+        }
+        #options-area button {
+            display: block;
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #5c9ded;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        #options-area button:hover {
+            background-color: #3a8ae2;
+        }
+        #options-area button:active {
+            background-color: #2a78c8;
+        }
+        #status-area {
+            margin-top: 25px;
+            font-weight: bold;
+        }
+        #affection-meter-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 20px;
+            margin-top: 5px;
+        }
+        #affection-meter-bar {
+            height: 100%;
+            width: 50%; /* Start at neutral */
+            background-color: #ff69b4; /* Pink */
+            transition: width 0.5s ease, background-color 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <h2>Flirting Simulator 💕</h2>
+        <div id="character-area">😊</div>
+        <div id="dialogue-area">Welcome! Ready to chat?</div>
+        <div id="options-area">
+            <!-- Options will be generated here -->
+        </div>
+        <div id="status-area">
+            Affection: <span id="affection-level">Neutral</span>
+            <div id="affection-meter-container">
+                <div id="affection-meter-bar"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const characterArea = document.getElementById('character-area');
+        const dialogueArea = document.getElementById('dialogue-area');
+        const optionsArea = document.getElementById('options-area');
+        const affectionLevel = document.getElementById('affection-level');
+        const affectionMeterBar = document.getElementById('affection-meter-bar');
+
+        let gameState = {
+            currentNode: 'start',
+            affection: 50 // Start at 50 out of 100
+        };
+
+        const gameData = {
+            start: {
+                character: '😊',
+                dialogue: 'You spot someone interesting across the room at a party. They glance your way. What do you do?',
+                options: [
+                    { text: 'Smile warmly', next: 'smileBack', points: 5 },
+                    { text: 'Give a confident nod', next: 'nodResponse', points: 3 },
+                    { text: 'Look away shyly', next: 'shyLook', points: -2 },
+                    { text: 'Wink 😉', next: 'winkResponse', points: 10 }
+                ]
+            },
+            // Branch 1: Smile
+            smileBack: {
+                character: '🙂',
+                dialogue: 'They offer a small, polite smile in return. The ball is in your court.',
+                options: [
+                    { text: 'Approach and introduce yourself', next: 'approachIntro', points: 10 },
+                    { text: 'Wait for them to approach', next: 'waitPassive', points: -5 },
+                    { text: 'Give a little wave', next: 'waveAfterSmile', points: 3 }
+                ]
+            },
+            waveAfterSmile: {
+                 character: '👋',
+                 dialogue: 'They wave back, looking a bit more interested now.',
+                 options: [
+                    { text: 'Okay, definitely time to approach', next: 'approachIntro', points: 10 },
+                    { text: 'Stay put, maybe they\'ll come over', next: 'waitPassive', points: -3 }
+                 ]
+            },
+            // Branch 2: Nod
+            nodResponse: {
+                character: '🤔',
+                dialogue: 'They raise an eyebrow, seemingly unsure how to interpret the nod.',
+                options: [
+                    { text: 'Walk over confidently', next: 'approachIntro', points: 8 },
+                    { text: 'Offer a quick smile now', next: 'smileBack', points: 2 },
+                    { text: 'Just keep nodding occasionally', next: 'awkwardNod', points: -8 }
+                ]
+            },
+            awkwardNod: {
+                character: '😬',
+                dialogue: 'They look confused and slightly uncomfortable, turning to talk to someone else.',
+                options: [
+                    { text: 'Game Over (Awkward)', next: 'endAwkward' }
+                ]
+            },
+            // Branch 3: Shy Look
+            shyLook: {
+                character: '😔',
+                dialogue: 'They look away, maybe thinking you\'re not interested.',
+                options: [
+                    { text: 'Try to catch their eye again and smile', next: 'smileBack', points: 5 },
+                    { text: 'Decide it\'s too late and get a drink', next: 'endMissed', points: -5 }
+                ]
+            },
+             // Branch 4: Wink
+            winkResponse: {
+                character: '😳',
+                dialogue: 'Whoa, bold move! They look surprised, maybe a little flustered, but definitely intrigued.',
+                options: [
+                    { text: 'Saunter over with a smirk', next: 'approachConfident', points: 15 },
+                    { text: 'Follow up with a charming smile', next: 'smileBack', points: 5 },
+                    { text: 'Wait for their reaction', next: 'waitAfterWink', points: 0 }
+                ]
+            },
+            waitAfterWink: {
+                character: '🧐',
+                dialogue: 'They seem to be considering your bold wink. After a moment, they gesture for you to come over.',
+                options: [
+                    { text: 'Go over smoothly', next: 'approachIntro', points: 10 },
+                    { text: 'Suddenly feel shy and wave it off', next: 'endAwkward', points: -10 }
+                ]
+            },
+            // Approach Scenarios
+            approachIntro: {
+                character: '💬',
+                dialogue: 'You walk over. "Hi, I saw you from across the room. I\'m [Your Name]." What do you say next?',
+                options: [
+                    { text: '"Mind if I join you for a bit?"', next: 'askToJoin', points: 7 },
+                    { text: '"This party is alright, isn\'t it?" (Small talk)', next: 'smallTalk', points: 4 },
+                    { text: '"You have a really great smile."', next: 'compliment', points: 12 }
+                ]
+            },
+             approachConfident: {
+                character: '😎',
+                dialogue: 'You arrive with swagger. "That wink was just a preview," you say smoothly. They laugh.',
+                options: [
+                    { text: '"What brings a person like you to a party like this?"', next: 'flirtyQuestion', points: 10 },
+                    { text: '"Can I get you a drink?"', next: 'offerDrink', points: 8 },
+                    { text: '"So, do you believe in love at first wink?"', next: 'cheesyLine', points: 5 } // Cheesy lines are risky!
+                ]
+            },
+             // Mid-Conversation Nodes
+            askToJoin: {
+                character: '😊',
+                dialogue: '"Not at all, please do," they say, gesturing to an empty spot. Success! The conversation starts flowing.',
+                options: [
+                     { text: 'Ask about their interests', next: 'goodConversation', points: 10 },
+                     { text: 'Tell a funny (appropriate) story', next: 'goodConversation', points: 8 },
+                     { text: 'Just listen attentively', next: 'goodConversation', points: 6 }
+                ]
+            },
+             smallTalk: {
+                character: '😐',
+                dialogue: '"Yeah, it\'s okay," they reply politely, but the conversation stalls slightly.',
+                options: [
+                    { text: 'Try a genuine compliment', next: 'compliment', points: 10 },
+                    { text: 'Ask an open-ended question', next: 'flirtyQuestion', points: 8 },
+                    { text: 'Make an excuse and leave', next: 'endNeutral', points: -5 }
+                ]
+            },
+             compliment: {
+                character: '🥰',
+                dialogue: 'They blush slightly. "Oh, thank you! That\'s sweet of you to say."',
+                options: [
+                     { text: 'Ask about them', next: 'goodConversation', points: 10 },
+                     { text: 'Offer to get them a drink', next: 'offerDrink', points: 8 }
+                ]
+            },
+             flirtyQuestion: {
+                character: '🤔',
+                dialogue: 'They ponder your question with a smile, giving a playful answer. The banter is good!',
+                options: [
+                     { text: 'Keep the flirty vibe going', next: 'goodConversation', points: 12 },
+                     { text: 'Offer a drink to keep it relaxed', next: 'offerDrink', points: 8 }
+                ]
+            },
+             offerDrink: {
+                character: '🥂',
+                dialogue: '"Sure, that would be nice," they reply. You head to the bar together, chatting along the way.',
+                 options: [
+                     { text: 'Continue the great conversation', next: 'goodConversation', points: 10 }
+                 ]
+            },
+             cheesyLine: {
+                character: '😅',
+                dialogue: 'They chuckle. "Wow, okay. Points for confidence, I guess!" It could go either way.',
+                 options: [
+                     { text: '"Hey, sometimes cheesy works!" (Own it)', next: 'goodConversation', points: 5 },
+                     { text: '"Too much? Sorry!" (Backtrack)', next: 'smallTalk', points: -2 }
+                 ]
+            },
+            goodConversation: {
+                character: '😍',
+                dialogue: 'The conversation is sparkling! You\'re both laughing and learning about each other. Things are looking promising.',
+                options: [
+                    { text: 'Suggest exchanging numbers', next: 'askNumber', points: 20 },
+                    { text: 'Ask if they\'d like to dance (if applicable)', next: 'askDance', points: 15 },
+                    { text: 'Just enjoy the moment a bit longer', next: 'endPositive', points: 10 }
+                ]
+            },
+             // Passive/Negative Branches
+            waitPassive: {
+                character: '⏳',
+                dialogue: 'You wait... and wait. They start talking to someone else. Opportunity missed?',
+                options: [
+                    { text: 'Okay, NOW approach them', next: 'approachIntro', points: -2 }, // Penalty for waiting
+                    { text: 'Sigh and give up', next: 'endMissed', points: -10 }
+                ]
+            },
+             // Endings
+            askNumber: {
+                character: '💖',
+                dialogue: 'They smile brightly. "I\'d like that!" You exchange numbers. Success!',
+                options: [{ text: 'Play Again?', next: 'start' }]
+            },
+            askDance: {
+                 character: '💃🕺',
+                 dialogue: '"Sure!" They take your hand, and you head to the dance floor. Great connection!',
+                 options: [{ text: 'Play Again?', next: 'start' }]
+            },
+            endPositive: {
+                character: '🌟',
+                dialogue: 'You had a great chat! Even if you didn\'t get a number yet, you definitely made a good impression.',
+                options: [{ text: 'Play Again?', next: 'start' }]
+            },
+            endNeutral: {
+                character: '🤷',
+                dialogue: 'Well, that didn\'t really go anywhere. Maybe better luck next time.',
+                options: [{ text: 'Play Again?', next: 'start' }]
+            },
+            endMissed: {
+                character: '😥',
+                dialogue: 'You hesitated too long, and the moment passed. They seem occupied now.',
+                options: [{ text: 'Play Again?', next: 'start' }]
+            },
+            endAwkward: {
+                character: '🤦',
+                dialogue: 'Oof, that was pretty awkward. They quickly excused themselves. Maybe less nodding next time?',
+                options: [{ text: 'Play Again?', next: 'start' }]
+            }
+        };
+
+
+        function updateAffection(points = 0) {
+            gameState.affection += points;
+            // Clamp affection between 0 and 100
+            gameState.affection = Math.max(0, Math.min(100, gameState.affection));
+
+            let levelText = 'Neutral';
+            let barColor = '#ffb86c'; // Orange-ish neutral
+
+            if (gameState.affection > 75) {
+                levelText = 'Great! 😍';
+                barColor = '#50fa7b'; // Green
+            } else if (gameState.affection > 60) {
+                levelText = 'Good 😊';
+                barColor = '#f1fa8c'; // Yellow
+            } else if (gameState.affection > 40) {
+                levelText = 'Neutral 🙂';
+                 barColor = '#ffb86c'; // Orange
+            } else if (gameState.affection > 25) {
+                levelText = 'Not Great 😕';
+                 barColor = '#ff79c6'; // Pink (less positive)
+            } else {
+                levelText = 'Bad 😥';
+                 barColor = '#ff5555'; // Red
+            }
+
+            affectionLevel.textContent = levelText;
+            affectionMeterBar.style.width = `${gameState.affection}%`;
+            affectionMeterBar.style.backgroundColor = barColor;
+        }
+
+        function displayState() {
+            const node = gameData[gameState.currentNode];
+            if (!node) {
+                console.error("Error: Node not found", gameState.currentNode);
+                dialogueArea.textContent = "Oops, something went wrong in the simulation!";
+                optionsArea.innerHTML = '';
+                return;
+            }
+
+            characterArea.textContent = node.character || '❔';
+            dialogueArea.textContent = node.dialogue;
+            optionsArea.innerHTML = ''; // Clear old options
+
+            if (node.options) {
+                node.options.forEach((option, index) => {
+                    const button = document.createElement('button');
+                    button.textContent = option.text;
+                    button.onclick = () => handleChoice(index);
+                    optionsArea.appendChild(button);
+                });
+            } else {
+                 // If no options, it's likely an end state, maybe add a restart button?
+                 // Handled within node definitions for now (e.g., "Play Again?")
+            }
+
+            // Initial affection update for the start node or nodes without point changes
+            if(node.options && node.options.every(opt => typeof opt.points === 'undefined')) {
+                 updateAffection(0); // Update display without changing value
+            } else if (!node.options) {
+                 // Also update display for end nodes
+                 updateAffection(0);
+            }
+        }
+
+        function handleChoice(choiceIndex) {
+            const node = gameData[gameState.currentNode];
+            const choice = node.options[choiceIndex];
+
+            if (!choice || !choice.next) {
+                 console.error("Error: Invalid choice or next node missing", choice);
+                 dialogueArea.textContent = "Something went wrong with that choice!";
+                 return;
+            }
+
+             // Update affection based on the choice made
+            updateAffection(choice.points || 0);
+
+            // Move to the next node
+            gameState.currentNode = choice.next;
+
+            // Check for game reset
+            if (gameState.currentNode === 'start') {
+                gameState.affection = 50; // Reset affection
+            }
+
+            // Display the new state
+            displayState();
+        }
+
+        // Initialize the game
+        document.addEventListener('DOMContentLoaded', () => {
+            gameState.currentNode = 'start'; // Ensure starting node
+            gameState.affection = 50; // Ensure starting affection
+            displayState(); // Display the initial state
+        });
+
+    </script>
+
+</body>
+</html>

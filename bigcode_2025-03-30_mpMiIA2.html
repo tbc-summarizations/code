@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Cup Simulator (1914-2034)</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f0f4f8;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #1a237e;
+        }
+        label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        select {
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            min-width: 100px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-left: 15px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #infoDisplay, #simulationResult {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        #infoDisplay p, #simulationResult p {
+            margin: 5px 0;
+        }
+        .control-panel {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .icon {
+            display: inline-block;
+            margin: 0 5px;
+            font-size: 1.2em;
+        }
+        .winner {
+            color: #006400;
+            font-weight: bold;
+        }
+        .runner-up {
+            color: #b22222;
+        }
+        .host {
+            color: #4682b4;
+        }
+        .notes {
+            font-style: italic;
+            color: #555;
+        }
+         .team-flag { /* Simple square shape as placeholder */
+            display: inline-block;
+            width: 18px;
+            height: 12px;
+            border: 1px solid #ccc;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        /* Basic colors for some flags - replace with actual flags if desired */
+        .flag-Uruguay { background-color: #add8e6; }
+        .flag-Argentina { background-color: #75aadb; }
+        .flag-Italy { background-color: #009246; } /* Tricolore part */
+        .flag-Czechoslovakia { background-color: #d7141a; } /* Red part */
+        .flag-Germany, .flag-West { background-color: #ffce00; } /* Yellow part */
+        .flag-Hungary { background-color: #436f4d; } /* Green part */
+        .flag-Brazil { background-color: #009c3b; } /* Green part */
+        .flag-Sweden { background-color: #006aa7; } /* Blue part */
+        .flag-Switzerland { background-color: #ff0000; }
+        .flag-England { background-color: #cf142b; } /* Red cross part */
+        .flag-Mexico { background-color: #006847; } /* Green part */
+        .flag-Netherlands { background-color: #ae1c28; } /* Red part */
+        .flag-Poland { background-color: #dc143c; } /* Red part */
+        .flag-Spain { background-color: #c60b1e; } /* Red part */
+        .flag-France { background-color: #0055a4; } /* Blue part */
+        .flag-Croatia { background-color: #171796; } /* Blue part */
+        .flag-USA { background-color: #bf0a30; } /* Red stripe part */
+        .flag-Canada { background-color: #ff0000; }
+        .flag-Qatar { background-color: #8d1b3d; }
+        .flag-Morocco { background-color: #c1272d; }
+        .flag-Portugal { background-color: #046a38; } /* Green part */
+        .flag-Paraguay { background-color: #d52b1e; } /* Red part */
+        .flag-Saudi { background-color: #006c35; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1><span class="icon">⚽</span> World Cup Historical Simulator <span class="icon">⚽</span></h1>
+    <p style="text-align: center;">Select a year between 1914 and 2034 to see historical info and simulate the final (if applicable).</p>
+
+    <div class="control-panel">
+        <label for="yearSelect">Select World Cup Year:</label>
+        <select id="yearSelect"></select>
+        <button id="simulateButton" disabled>Simulate Final</button>
+    </div>
+
+    <div id="infoDisplay">
+        <p>Select a year to display World Cup information.</p>
+    </div>
+
+    <div id="simulationResult">
+        <p>Simulation results will appear here.</p>
+    </div>
+</div>
+
+<script>
+    const worldCupData = {
+        // Pre-World Cup Era & Non-Held Years
+        1914: { notes: "World Cup not established yet." },
+        1918: { notes: "World Cup not established yet. Interrupted by World War I." },
+        1922: { notes: "World Cup not established yet." },
+        1926: { notes: "World Cup not established yet." },
+        // World Cups Held
+        1930: { year: 1930, host: 'Uruguay', winner: 'Uruguay', runnerUp: 'Argentina', score: '4-2', notes: 'First FIFA World Cup.' },
+        1934: { year: 1934, host: 'Italy', winner: 'Italy', runnerUp: 'Czechoslovakia', score: '2-1 (AET)', notes: 'First World Cup with qualification stage.' },
+        1938: { year: 1938, host: 'France', winner: 'Italy', runnerUp: 'Hungary', score: '4-2', notes: 'Last World Cup before World War II.' },
+        1942: { notes: "Cancelled due to World War II." },
+        1946: { notes: "Cancelled due to World War II." },
+        1950: { year: 1950, host: 'Brazil', winner: 'Uruguay', runnerUp: 'Brazil', score: '2-1', notes: 'Final round-robin format; decisive match known as the Maracanazo.' },
+        1954: { year: 1954, host: 'Switzerland', winner: 'West Germany', runnerUp: 'Hungary', score: '3-2', notes: 'The "Miracle of Bern".' },
+        1958: { year: 1958, host: 'Sweden', winner: 'Brazil', runnerUp: 'Sweden', score: '5-2', notes: 'Pelé bursts onto the world stage.' },
+        1962: { year: 1962, host: 'Chile', winner: 'Brazil', runnerUp: 'Czechoslovakia', score: '3-1', notes: 'Brazil defends title despite Pelé\'s injury.' },
+        1966: { year: 1966, host: 'England', winner: 'England', runnerUp: 'West Germany', score: '4-2 (AET)', notes: 'England\'s only World Cup title; controversial goal.' },
+        1970: { year: 1970, host: 'Mexico', winner: 'Brazil', runnerUp: 'Italy', score: '4-1', notes: 'Brazil\'s third title; considered one of the greatest teams ever.' },
+        1974: { year: 1974, host: 'West Germany', winner: 'West Germany', runnerUp: 'Netherlands', score: '2-1', notes: 'Total Football vs German efficiency.' },
+        1978: { year: 1978, host: 'Argentina', winner: 'Argentina', runnerUp: 'Netherlands', score: '3-1 (AET)', notes: 'Argentina wins first title on home soil.' },
+        1982: { year: 1982, host: 'Spain', winner: 'Italy', runnerUp: 'West Germany', score: '3-1', notes: 'Paolo Rossi leads Italy to glory.' },
+        1986: { year: 1986, host: 'Mexico', winner: 'Argentina', runnerUp: 'West Germany', score: '3-2', notes: 'Maradona\'s tournament; "Hand of God" and "Goal of the Century".' },
+        1990: { year: 1990, host: 'Italy', winner: 'West Germany', runnerUp: 'Argentina', score: '1-0', notes: 'Considered a defensive tournament; controversial penalty.' },
+        1994: { year: 1994, host: 'USA', winner: 'Brazil', runnerUp: 'Italy', score: '0-0 (3-2 pens)', notes: 'First World Cup final decided by penalties.' },
+        1998: { year: 1998, host: 'France', winner: 'France', runnerUp: 'Brazil', score: '3-0', notes: 'France wins first title on home soil; Zidane stars.' },
+        2002: { year: 2002, host: 'South Korea/Japan', winner: 'Brazil', runnerUp: 'Germany', score: '2-0', notes: 'First co-hosted World Cup; Ronaldo\'s redemption.' },
+        2006: { year: 2006, host: 'Germany', winner: 'Italy', runnerUp: 'France', score: '1-1 (5-3 pens)', notes: 'Zidane\'s headbutt incident in the final.' },
+        2010: { year: 2010, host: 'South Africa', winner: 'Spain', runnerUp: 'Netherlands', score: '1-0 (AET)', notes: 'First World Cup held in Africa; Spain\'s tiki-taka dominates.' },
+        2014: { year: 2014, host: 'Brazil', winner: 'Germany', runnerUp: 'Argentina', score: '1-0 (AET)', notes: 'Germany humiliates Brazil 7-1 in semi-finals.' },
+        2018: { year: 2018, host: 'Russia', winner: 'France', runnerUp: 'Croatia', score: '4-2', notes: 'High-scoring final; Mbappé shines.' },
+        2022: { year: 2022, host: 'Qatar', winner: 'Argentina', runnerUp: 'France', score: '3-3 (4-2 pens)', notes: 'Thrilling final; Messi achieves ultimate glory.' },
+        // Future World Cups (Data is speculative/planned)
+        2026: { year: 2026, host: 'Canada/Mexico/USA', winner: '?', runnerUp: '?', score: '?', notes: 'Future Event: First 48-team World Cup.' },
+        2030: { year: 2030, host: 'Morocco/Portugal/Spain & Uruguay/Argentina/Paraguay', winner: '?', runnerUp: '?', score: '?', notes: 'Future Event: Centenary celebration across multiple continents.' },
+        2034: { year: 2034, host: 'Saudi Arabia (Expected)', winner: '?', runnerUp: '?', score: '?', notes: 'Future Event: Expected host.' }
+    };
+
+    const yearSelect = document.getElementById('yearSelect');
+    const infoDisplay = document.getElementById('infoDisplay');
+    const simulationResult = document.getElementById('simulationResult');
+    const simulateButton = document.getElementById('simulateButton');
+
+    // Populate year selector
+    function populateYearSelector() {
+        const startYear = 1914;
+        const endYear = 2034;
+        for (let year = startYear; year <= endYear; year++) {
+             // World Cups are typically every 4 years, but need to include all requested years
+             // We check existence in data later
+             if ( (year >= 1930 && (year - 1930) % 4 === 0) || // Standard WC years from 1930
+                  year === 1950 || // Special case
+                  year < 1930 || // Pre-WC years
+                  (year > 1938 && year < 1950) || // WW2 gap years
+                  year >= 2026 // Future WC years
+                )
+             {
+                // Only add years that align with WC schedule or are special cases/requested range
+                if(worldCupData[year] || (year >= 1914 && year < 1930) || (year > 1938 && year < 1950 && (year - 1938) % 4 === 0) || (year > 2022 && (year-2022)%4===0) ) {
+                     const option = document.createElement('option');
+                     option.value = year;
+                     option.textContent = year;
+                     yearSelect.appendChild(option);
+                }
+             } else if (year === 1914 || year === 1918 || year === 1922 || year === 1926 || year === 1942 || year === 1946) {
+                 // Explicitly add non-held years mentioned in data
+                 const option = document.createElement('option');
+                 option.value = year;
+                 option.textContent = year;
+                 yearSelect.appendChild(option);
+             }
+        }
+        // Set default to most recent actual event or a relevant year
+        yearSelect.value = 2022;
+        displayInfo(); // Display info for default year
+    }
+
+     // Function to create a simple flag placeholder span
+    function createFlag(country) {
+        // Basic mapping for demo purposes
+        const simpleName = country ? country.replace(/ /g, '').replace('WestGermany', 'West').replace('Czechoslovakia','Czechoslovakia').replace('South Korea','SKorea').replace('Saudi Arabia','Saudi') : '';
+        const flagSpan = document.createElement('span');
+        flagSpan.className = `team-flag flag-${simpleName}`;
+        flagSpan.title = country; // Tooltip for country name
+         // Add default background if no specific class matches
+        if (!flagSpan.classList.contains(`flag-${simpleName}`) || simpleName === '?') {
+             flagSpan.style.backgroundColor = '#eee'; // Default placeholder color
+        }
+        return flagSpan;
+    }
+
+
+    // Display World Cup Info
+    function displayInfo() {
+        const year = yearSelect.value;
+        const data = worldCupData[year];
+        let html = `<h2>World Cup ${year}</h2>`;
+        simulationResult.innerHTML = '<p>Simulation results will appear here.</p>'; // Reset simulation result
+
+        if (data) {
+            if (data.host) {
+                html += `<p><span class="host"><strong>Host:</strong> ${createFlag(data.host).outerHTML} ${data.host}</span></p>`;
+            }
+            if (data.winner && data.winner !== '?') {
+                html += `<p><span class="winner"><strong>Winner:</strong> ${createFlag(data.winner).outerHTML} ${data.winner}</span></p>`;
+            } else if (data.winner === '?') {
+                 html += `<p><strong>Winner:</strong> To be determined</p>`;
+            }
+            if (data.runnerUp && data.runnerUp !== '?') {
+                html += `<p><span class="runner-up"><strong>Runner-up:</strong> ${createFlag(data.runnerUp).outerHTML} ${data.runnerUp}</span></p>`;
+            } else if (data.runnerUp === '?') {
+                 html += `<p><strong>Runner-up:</strong> To be determined</p>`;
+            }
+             if (data.score && data.score !== '?') {
+                html += `<p><strong>Final Score:</strong> ${data.score}</p>`;
+            }
+            if (data.notes) {
+                html += `<p><em class="notes">${data.notes}</em></p>`;
+            }
+
+            // Enable simulate button only if there are known finalists (not '?' or cancelled)
+            if (data.winner && data.winner !== '?' && data.runnerUp && data.runnerUp !== '?') {
+                simulateButton.disabled = false;
+            } else {
+                simulateButton.disabled = true;
+                 if(data.winner === '?' || data.runnerUp === '?') {
+                    simulationResult.innerHTML = '<p>Cannot simulate final for future or undecided tournaments.</p>';
+                 } else {
+                    simulationResult.innerHTML = '<p>No final match held or data unavailable for simulation.</p>';
+                 }
+            }
+        } else {
+            // This case should technically not happen with the current population logic
+            // but added as a fallback.
+            html += "<p>No information available for this year.</p>";
+            simulateButton.disabled = true;
+        }
+
+        infoDisplay.innerHTML = html;
+    }
+
+    // Simple Match Simulation Logic
+    function simulateMatch(team1, team2) {
+        // Basic simulation: random scores, slightly weighted if needed (but keeping it simple here)
+        const score1 = Math.floor(Math.random() * 5); // 0-4 goals
+        const score2 = Math.floor(Math.random() * 5); // 0-4 goals
+        let resultText = `${createFlag(team1).outerHTML} ${team1} ${score1} - ${score2} ${team2} ${createFlag(team2).outerHTML}`;
+        let winner = "";
+
+        if (score1 > score2) {
+            winner = team1;
+            resultText += ` (<span class="winner">${winner} wins!</span>)`;
+        } else if (score2 > score1) {
+            winner = team2;
+             resultText += ` (<span class="winner">${winner} wins!</span>)`;
+        } else {
+            // Simulate penalties for a draw
+            resultText += " (Draw after full time - simulating penalties...)<br>";
+            const penaltyWinner = Math.random() > 0.5 ? team1 : team2;
+            winner = penaltyWinner;
+            resultText += `<strong>${createFlag(winner).outerHTML} ${winner} wins on simulated penalties!</strong>`;
+        }
+        return `<p>${resultText}</p>`;
+    }
+
+    // Event Listeners
+    yearSelect.addEventListener('change', displayInfo);
+    simulateButton.addEventListener('click', () => {
+        const year = yearSelect.value;
+        const data = worldCupData[year];
+        if (data && data.winner && data.winner !== '?' && data.runnerUp && data.runnerUp !== '?') {
+            simulationResult.innerHTML = `<h2>Simulated ${year} Final</h2>` + simulateMatch(data.winner, data.runnerUp);
+        } else {
+             simulationResult.innerHTML = '<p>Cannot simulate this final (data missing or future event).</p>';
+        }
+    });
+
+    // Initial population
+    populateYearSelector();
+
+</script>
+
+</body>
+</html>

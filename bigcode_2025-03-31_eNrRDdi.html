@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7 Levels of Mechanics FPS</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #333; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; }
+        canvas { display: block; background-color: #000; cursor: crosshair; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
+        #message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; text-align: center; display: none; }
+        #controls { margin-top: 10px; font-size: 0.9em; }
+        .key { background: #555; padding: 2px 6px; border-radius: 3px; border: 1px solid #777; margin: 0 2px; }
+        .mouse { background: #555; padding: 2px 6px; border-radius: 3px; border: 1px solid #777; margin: 0 2px; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div>Level: <span id="level-display">1</span>/7</div>
+        <div>Health: <span id="health-display">100</span></div>
+        <div>Ammo: <span id="ammo-display">10</span></div>
+        <div>Keys: <span id="keys-display">0</span></div>
+        <div id="level-objective">Objective: Find the exit (🟩)</div>
+    </div>
+    <div id="message">
+        <h2>Level Complete!</h2>
+        <p id="next-level-info">Loading next level...</p>
+        <p>(Click to continue)</p>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="controls">
+       <span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span>: Move | <span class="mouse">Mouse</span>: Look | <span class="mouse">Click</span>: Shoot | <span class="key">E</span>: Interact | <span class="key">R</span>: Restart Level
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiLevel = document.getElementById('level-display');
+        const uiHealth = document.getElementById('health-display');
+        const uiAmmo = document.getElementById('ammo-display');
+        const uiKeys = document.getElementById('keys-display');
+        const uiObjective = document.getElementById('level-objective');
+        const messageDiv = document.getElementById('message');
+        const nextLevelInfo = document.getElementById('next-level-info');
+
+        let screenWidth = window.innerWidth * 0.8;
+        let screenHeight = window.innerHeight * 0.8;
+        canvas.width = screenWidth;
+        canvas.height = screenHeight;
+
+        // --- Game Settings ---
+        const TILE_SIZE = 64;
+        const FOV = Math.PI / 3; // 60 degrees
+        const HALF_FOV = FOV / 2;
+        const NUM_RAYS = Math.floor(screenWidth / 2); // Number of rays to cast
+        const RAY_ANGLE_STEP = FOV / NUM_RAYS;
+        const MAX_DEPTH = 1000; // Max rendering distance
+        const MOUSE_SENSITIVITY = 0.002;
+        const PLAYER_SPEED = 2;
+        const PLAYER_ROTATION_SPEED = 0.03;
+        const INTERACT_DISTANCE = TILE_SIZE * 1.5;
+        const SHOOT_DISTANCE = MAX_DEPTH;
+        const SHOOT_DAMAGE = 25;
+
+        // --- Game State ---
+        let currentLevel = 1;
+        let player = {
+            x: 0,
+            y: 0,
+            angle: Math.PI / 2, // Pointing up initially
+            health: 100,
+            ammo: 10,
+            keys: 0
+        };
+        let map = [];
+        let sprites = []; // { x, y, type: 'enemy' | 'key' | 'health' | 'ammo' | 'exit' | 'door', state: 'active' | 'opening' | 'inactive', health?: number, texture: string | emoji }
+        let levelObjectives = [
+            "Find the exit (🟩)", // Level 1
+            "Open the locked door (🚪) using <span class='key'>E</span>", // Level 2
+            "Find the key (🔑) to unlock the exit door", // Level 3
+            "Eliminate the enemy (🔻) using <span class='mouse'>Click</span>", // Level 4
+            "Replenish health (❤️) and ammo (⚪)", // Level 5
+            "Navigate the timed hazard (🟧 -> 🟥)", // Level 6
+            "Use all mechanics to reach the final exit!" // Level 7
+        ];
+
+        let keys = { w: false, a: false, s: false, d: false, e: false, r: false };
+        let mouseDeltaX = 0;
+        let shooting = false;
+        let gamePaused = false;
+        let pointerLocked = false;
+
+        // --- Level Data ---
+        const levelData = [
+            // Level 1: Basic Movement
+            {
+                map: [
+                    [1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 0, 1, 1, 0, 1, 0, 1],
+                    [1, 0, 0, 0, 0, 1, 0, 1],
+                    [1, 1, 1, 0, 1, 1, 0, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 0, 1, 1, 1, 1, 0, 1],
+                    [1, 9, 0, 0, 0, 0, 0, 1], // 9 = Player Start
+                    [1, 1, 1, 1, 1, 1, 8, 1]  // 8 = Exit
+                ],
+                sprites: []
+            },
+            // Level 2: Doors
+            {
+                map: [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 9, 0, 0, 1, 0, 0, 0, 0, 1],
+                    [1, 0, 1, 0, 1, 0, 1, 1, 0, 1],
+                    [1, 0, 1, 0, 0, 0, 0, 1, 0, 1],
+                    [1, 0, 1, 1, 2, 1, 1, 1, 0, 1], // 2 = Door
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 1, 1, 1, 8, 1, 1, 1, 1, 1]
+                ],
+                sprites: [] // Doors are handled via map now
+            },
+            // Level 3: Keys
+            {
+                map: [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 9, 0, 1, 0, 0, 0, 0, 0, 1],
+                    [1, 0, 0, 1, 0, 1, 1, 1, 0, 1],
+                    [1, 1, 0, 1, 0, 0, 0, 0, 0, 1],
+                    [1, 0, 0, 0, 0, 1, 1, 1, 0, 1],
+                    [1, 0, 1, 1, 1, 1, 0, K, 0, 1], // K represents key placement
+                    [1, 0, 0, 0, 0, 1, 0, 1, 0, 1],
+                    [1, 1, 1, 1, 3, 1, 1, 1, 1, 1]  // 3 = Locked Door (needs 1 key)
+                ],
+                sprites: [] // Key will be placed dynamically where 'K' is
+            },
+            // Level 4: Enemies
+            {
+                map: [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 9, 0, 0, 0, 1, 0, 0, 0, 0, E, 1], // E represents enemy placement
+                    [1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1],
+                    [1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 1]
+                ],
+                sprites: [] // Enemy placed at 'E'
+            },
+             // Level 5: Pickups
+            {
+                map: [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 9, 0, 1, 0, 0, 1, 0, 0, 1],
+                    [1, 0, H, 1, 0, 0, 1, A, 0, 1], // H = Health, A = Ammo
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 0, 1, 1, 1, 1, 1, 1, 0, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 1, 1, 1, 1, 1, 1, 1, 8, 1]
+                ],
+                 sprites: [] // Pickups placed at H, A
+            },
+            // Level 6: Timed Hazard
+             {
+                map: [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 9, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 1, 1, 5, 1, 5, 1, 1, 1], // 5 = Timed Wall/Hazard
+                    [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 0, 1, 1, 1, 1, 1, 0, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 1, 1, 1, 8, 1, 1, 1, 1],
+                ],
+                sprites: [],
+                timedHazards: [], // { x, y, timer, active }
+                hazardTimerMax: 2000 // ms
+            },
+             // Level 7: Combine All
+            {
+                map: [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    [1, 9, 0, 1, K, 1, 0, 0, 0, 1, 0, 0, A, 0, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1],
+                    [1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, H, 0, 1],
+                    [1, E, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 1, 0, 1, 1, 2, 1, 1, 1, 1, 0, 1, 1, 1, 1],
+                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+                    [1, 0, 1, 1, 1, 1, 5, 1, 0, 1, 1, 1, 0, 1, 1],
+                    [1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1],
+                    [1, 1, 1, 1, 3, 1, 1, 1, 1, 1, 1, 1, 1, 8, 1]
+                ],
+                sprites: [],
+                timedHazards: [],
+                hazardTimerMax: 1500
+            }
+        ];
+
+        // --- Utility Functions ---
+        function degToRad(d) { return d * Math.PI / 180; }
+        function distance(x1, y1, x2, y2) { return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2); }
+        function normalizeAngle(angle) {
+            angle = angle % (2 * Math.PI);
+            if (angle < 0) angle += (2 * Math.PI);
+            return angle;
+        }
+
+        // --- Wall Data ---
+        const wallTypes = {
+            0: { color: '#1a1a1a', solid: false }, // Empty space
+            1: { color: '#888888', solid: true, texture: null }, // Grey wall
+            2: { color: '#654321', solid: true, texture: '🚪', requiresInteraction: true, state: 'closed' }, // Door
+            3: { color: '#FFD700', solid: true, texture: '🔒', requiresKey: 1, state: 'locked' }, // Locked Door
+            4: { color: '#CC0000', solid: true, texture: '🧱', requiresKey: 2 }, // Red Key Door (example)
+            5: { color: 'orange', solid: true, texture: '🟧', isTimed: true, state: 'active' }, // Timed Hazard
+            8: { color: '#00FF00', solid: false, texture: '🟩', isExit: true }, // Exit
+            9: { solid: false }, // Player start - not drawn
+        };
+
+        // --- Sprite Data ---
+        const spriteTypes = {
+            'enemy': { texture: '🔻', health: 50, size: 0.8, speed: 0.5, hostile: true, collision: true },
+            'key': { texture: '🔑', size: 0.5, pickup: true, collision: false },
+            'health': { texture: '❤️', size: 0.5, pickup: true, heal: 50, collision: false },
+            'ammo': { texture: '⚪', size: 0.4, pickup: true, amount: 10, collision: false }
+        };
+
+        // --- Level Loading ---
+        function loadLevel(levelNumber) {
+            if (levelNumber > levelData.length) {
+                showEndGame();
+                return;
+            }
+            currentLevel = levelNumber;
+            const data = levelData[currentLevel - 1];
+            map = JSON.parse(JSON.stringify(data.map)); // Deep copy
+            sprites = []; // Clear previous sprites
+
+            // Reset Timed Hazards if any
+            if (data.timedHazards) {
+                data.timedHazards = [];
+            }
+
+            // Reset wall states (doors, etc.)
+             Object.values(wallTypes).forEach(wt => {
+                 if (wt.requiresInteraction) wt.state = 'closed';
+                 if (wt.requiresKey) wt.state = 'locked';
+                 if (wt.isTimed) wt.state = 'active';
+             });
+             wallTypes[5].color = 'orange'; // Reset timed wall color
+             wallTypes[5].texture = '🟧';
+
+
+            let mapHeight = map.length;
+            let mapWidth = map[0].length;
+
+            for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    const tile = map[y][x];
+                    const worldX = (x + 0.5) * TILE_SIZE;
+                    const worldY = (y + 0.5) * TILE_SIZE;
+
+                    if (tile === 9) { // Player Start
+                        player.x = worldX;
+                        player.y = worldY;
+                        player.angle = Math.PI / 2; // Reset angle facing up
+                        map[y][x] = 0; // Clear start position from map
+                    } else if (tile === 'K') { // Key
+                         sprites.push({ x: worldX, y: worldY, type: 'key', state: 'active' });
+                         map[y][x] = 0;
+                    } else if (tile === 'E') { // Enemy
+                        sprites.push({ x: worldX, y: worldY, type: 'enemy', state: 'active', health: spriteTypes['enemy'].health });
+                        map[y][x] = 0;
+                    } else if (tile === 'H') { // Health
+                        sprites.push({ x: worldX, y: worldY, type: 'health', state: 'active' });
+                        map[y][x] = 0;
+                    } else if (tile === 'A') { // Ammo
+                        sprites.push({ x: worldX, y: worldY, type: 'ammo', state: 'active' });
+                        map[y][x] = 0;
+                    } else if (tile === 5 && data.timedHazards) { // Timed Hazard Wall
+                        data.timedHazards.push({ x: x, y: y, timer: Date.now() + Math.random() * data.hazardTimerMax, active: true});
+                    } else if (tile === 8) { // Add exit sprite for rendering order
+                        sprites.push({x: worldX, y: worldY, type: 'exit', state: 'active'});
+                        map[y][x] = 0; // Allow walking onto exit tile
+                    }
+                }
+            }
+
+            // Reset player stats (partial reset for progression)
+            player.health = 100;
+            player.keys = 0;
+            // Keep ammo across levels? Or reset? Let's reset for balance.
+            player.ammo = (currentLevel >= 4) ? 20 : 0; // Give ammo starting level 4
+
+            updateUI();
+            hideMessage();
+            gamePaused = false;
+            if (pointerLocked) {
+                 canvas.requestPointerLock();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateUI() {
+            uiLevel.textContent = currentLevel;
+            uiHealth.textContent = player.health;
+            uiAmmo.textContent = player.ammo;
+            uiKeys.textContent = player.keys;
+            uiObjective.innerHTML = levelObjectives[currentLevel - 1] || "Reach the Exit"; // Use innerHTML for key styling
+        }
+
+        function showMessage(title, text) {
+            messageDiv.style.display = 'block';
+            messageDiv.querySelector('h2').textContent = title;
+            nextLevelInfo.innerHTML = text; // Use innerHTML if text contains HTML
+            gamePaused = true;
+             if (document.pointerLockElement === canvas) {
+                document.exitPointerLock();
+            }
+        }
+
+        function hideMessage() {
+            messageDiv.style.display = 'none';
+        }
+
+        function showEndGame() {
+             showMessage("Congratulations!", "You have completed all 7 levels!<br>Thanks for playing!");
+             // Disable click to continue for the final message
+             messageDiv.onclick = null;
+        }
+
+        function completeLevel() {
+            if (currentLevel < levelData.length) {
+                 showMessage(`Level ${currentLevel} Complete!`, `Get ready for Level ${currentLevel + 1}...<br>${levelObjectives[currentLevel] || ''}<br>(Click to continue)`);
+                 messageDiv.onclick = () => {
+                      loadLevel(currentLevel + 1);
+                      messageDiv.onclick = null; // Prevent multiple clicks
+                 };
+            } else {
+                showEndGame();
+            }
+        }
+
+        // --- Collision Detection ---
+        function getMapCoords(x, y) {
+            return { x: Math.floor(x / TILE_SIZE), y: Math.floor(y / TILE_SIZE) };
+        }
+
+        function isWall(worldX, worldY) {
+            const mapCoords = getMapCoords(worldX, worldY);
+            if (mapCoords.x < 0 || mapCoords.x >= map[0].length || mapCoords.y < 0 || mapCoords.y >= map.length) {
+                return true; // Out of bounds is a wall
+            }
+            const tileType = map[mapCoords.y][mapCoords.x];
+            const wallInfo = wallTypes[tileType];
+            return wallInfo && wallInfo.solid;
+        }
+
+        // --- Input Handling ---
+        window.addEventListener('keydown', (e) => {
+            if (gamePaused) return;
+            if (e.key.toLowerCase() === 'w') keys.w = true;
+            if (e.key.toLowerCase() === 's') keys.s = true;
+            if (e.key.toLowerCase() === 'a') keys.a = true;
+            if (e.key.toLowerCase() === 'd') keys.d = true;
+            if (e.key.toLowerCase() === 'e') keys.e = true;
+             if (e.key.toLowerCase() === 'r') keys.r = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+             if (e.key.toLowerCase() === 'w') keys.w = false;
+             if (e.key.toLowerCase() === 's') keys.s = false;
+             if (e.key.toLowerCase() === 'a') keys.a = false;
+             if (e.key.toLowerCase() === 'd') keys.d = false;
+             if (e.key.toLowerCase() === 'e') keys.e = false; // Reset E key state immediately
+             if (e.key.toLowerCase() === 'r') keys.r = false;
+        });
+
+        canvas.addEventListener('click', () => {
+            if (gamePaused && messageDiv.style.display === 'block' && messageDiv.onclick) {
+                 // Allow clicking the message box handled by its own onclick
+                 return;
+            }
+            if (!pointerLocked && !gamePaused) {
+                canvas.requestPointerLock()
+                    .then(() => { pointerLocked = true; })
+                    .catch(err => console.error("Pointer lock failed:", err));
+            } else if (pointerLocked && !gamePaused && currentLevel >= 4) { // Allow shooting from level 4
+                shooting = true;
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === canvas) {
+                pointerLocked = true;
+                console.log('Pointer Locked');
+            } else {
+                pointerLocked = false;
+                console.log('Pointer Unlocked');
+                // Optional: Pause game when pointer is unlocked?
+                // if (!messageDiv.style.display || messageDiv.style.display === 'none') {
+                //      showMessage("Paused", "Click the screen to resume");
+                // }
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (pointerLocked && !gamePaused) {
+                mouseDeltaX = e.movementX || 0;
+            }
+        });
+
+        // --- Game Logic Update ---
+        function update(deltaTime) {
+            if (gamePaused) return;
+
+            // --- Mouse Look ---
+            if (pointerLocked) {
+                player.angle += mouseDeltaX * MOUSE_SENSITIVITY;
+                player.angle = normalizeAngle(player.angle);
+                mouseDeltaX = 0; // Reset delta after processing
+            }
+
+            // --- Movement ---
+            let moveX = 0;
+            let moveY = 0;
+            let playerCos = Math.cos(player.angle);
+            let playerSin = Math.sin(player.angle);
+
+            if (keys.w) { moveX += playerCos; moveY += playerSin; }
+            if (keys.s) { moveX -= playerCos; moveY -= playerSin; }
+            if (keys.a) { moveX += playerSin; moveY -= playerCos; } // Strafe left
+            if (keys.d) { moveX -= playerSin; moveY += playerCos; } // Strafe right
+
+            // Normalize diagonal movement
+            const moveMagnitude = Math.sqrt(moveX * moveX + moveY * moveY);
+            if (moveMagnitude > 0) {
+                 moveX = (moveX / moveMagnitude) * PLAYER_SPEED;
+                 moveY = (moveY / moveMagnitude) * PLAYER_SPEED;
+            }
+
+
+            // Collision Detection & Movement Application
+            const newPlayerX = player.x + moveX;
+            const newPlayerY = player.y + moveY;
+            const collisionPadding = TILE_SIZE * 0.15; // Prevent getting stuck in corners
+
+            // Check X movement collision
+            if (!isWall(newPlayerX + Math.sign(moveX) * collisionPadding, player.y)) {
+                player.x = newPlayerX;
+            }
+            // Check Y movement collision
+            if (!isWall(player.x, newPlayerY + Math.sign(moveY) * collisionPadding)) {
+                player.y = newPlayerY;
+            }
+
+
+             // --- Interaction (E key) ---
+             if (keys.e) {
+                 handleInteraction();
+                 keys.e = false; // Process interaction only once per press
+             }
+
+              // --- Shooting ---
+             if (shooting && player.ammo > 0) {
+                 handleShooting();
+                 player.ammo--;
+                 updateUI();
+             }
+             shooting = false; // Reset shooting state after processing
+
+             // --- Check Exit Condition ---
+             const playerMapPos = getMapCoords(player.x, player.y);
+             const exitSprite = sprites.find(s => s.type === 'exit');
+             if(exitSprite) {
+                 const exitMapPos = getMapCoords(exitSprite.x, exitSprite.y);
+                  if (playerMapPos.x === exitMapPos.x && playerMapPos.y === exitMapPos.y) {
+                    // Check level-specific win conditions
+                    let canExit = true;
+                    if(currentLevel === 3 && player.keys < 1) canExit = false; // Need key for level 3 exit (which is type 3 wall)
+                    if(currentLevel === 4) { // Need to kill enemy
+                        if (sprites.some(s => s.type === 'enemy' && s.state === 'active')) canExit = false;
+                    }
+                    if (currentLevel === 7) { // Example: Need key AND kill enemy
+                         if (player.keys < 1 || sprites.some(s => s.type === 'enemy' && s.state === 'active')) canExit = false;
+                    }
+
+                    if (canExit) {
+                        completeLevel();
+                    }
+                }
+             }
+
+
+            // --- Sprite Logic (Enemies, Pickups) ---
+            sprites.forEach((sprite, index) => {
+                if (sprite.state !== 'active') return;
+
+                const spriteInfo = spriteTypes[sprite.type];
+                if (!spriteInfo) return;
+
+                // Basic Enemy AI (Move towards player if close and hostile)
+                if (spriteInfo.hostile) {
+                    const distToPlayer = distance(player.x, player.y, sprite.x, sprite.y);
+                    if (distToPlayer < TILE_SIZE * 5 && distToPlayer > TILE_SIZE * 0.8) { // Range check
+                        const angleToPlayer = Math.atan2(player.y - sprite.y, player.x - sprite.x);
+                        const moveSpeed = spriteInfo.speed || 0.5;
+                        const moveX = Math.cos(angleToPlayer) * moveSpeed;
+                        const moveY = Math.sin(angleToPlayer) * moveSpeed;
+
+                        // Simple collision for enemy movement
+                        const nextX = sprite.x + moveX;
+                        const nextY = sprite.y + moveY;
+                        if (!isWall(nextX, nextY)) {
+                            // Check collision with other sprites? (simple version omits this)
+                             sprite.x = nextX;
+                             sprite.y = nextY;
+                        }
+                    }
+                    // Basic attack (damage player on contact)
+                     if (distToPlayer < TILE_SIZE * 0.7) {
+                         player.health -= 1; // Small damage per frame on contact
+                         if (player.health <= 0) gameOver("Defeated by 🔻!");
+                         updateUI();
+                     }
+                }
+
+                // Player collision with pickup sprites
+                if (spriteInfo.pickup) {
+                    const distToPlayer = distance(player.x, player.y, sprite.x, sprite.y);
+                    if (distToPlayer < TILE_SIZE * 0.5) { // Pickup radius
+                        handlePickup(sprite, index);
+                    }
+                }
+            });
+
+             // --- Timed Hazards (Level 6+) ---
+             const levelConfig = levelData[currentLevel - 1];
+             if (levelConfig.timedHazards) {
+                 const now = Date.now();
+                 levelConfig.timedHazards.forEach(hazard => {
+                     if (now > hazard.timer) {
+                         hazard.active = !hazard.active; // Toggle state
+                         hazard.timer = now + levelConfig.hazardTimerMax; // Reset timer
+
+                         const wallInfo = wallTypes[5]; // Assuming 5 is the timed wall type
+                         if (hazard.active) {
+                             wallInfo.solid = true;
+                             wallInfo.color = 'orange';
+                             wallInfo.texture = '🟧';
+                             // Check if player is inside the reactivated wall and damage/push them
+                             const playerPos = getMapCoords(player.x, player.y);
+                             if(playerPos.x === hazard.x && playerPos.y === hazard.y) {
+                                 player.health -= 20; // Damage for being caught
+                                 // Optional: push player out slightly (complex)
+                                  if (player.health <= 0) gameOver("Crushed by hazard!");
+                                  updateUI();
+                             }
+                         } else {
+                             wallInfo.solid = false;
+                             wallInfo.color = 'darkred';
+                             wallInfo.texture = '🟥';
+                         }
+                         // Important: Update the map state. This simplistic approach changes ALL timed walls at once.
+                         // A better approach would store state per hazard instance.
+                         // For this single-file constraint, we update the global type state.
+                         map[hazard.y][hazard.x] = hazard.active ? 5 : 0; // Change map tile type directly (5 = active, 0 = inactive)
+                     }
+                 });
+             }
+
+            // --- Restart ---
+             if (keys.r) {
+                 gameOver("Restarting level..."); // Use gameOver to handle pause/cleanup
+                 setTimeout(() => loadLevel(currentLevel), 100); // Short delay
+                 keys.r = false;
+             }
+        }
+
+        function handleInteraction() {
+            // Find the tile directly in front of the player
+             const lookX = player.x + Math.cos(player.angle) * TILE_SIZE * 0.6; // Check slightly in front
+             const lookY = player.y + Math.sin(player.angle) * TILE_SIZE * 0.6;
+             const mapCoords = getMapCoords(lookX, lookY);
+
+             if (mapCoords.x < 0 || mapCoords.x >= map[0].length || mapCoords.y < 0 || mapCoords.y >= map.length) return;
+
+             const tileType = map[mapCoords.y][mapCoords.x];
+             const wallInfo = wallTypes[tileType];
+
+             if (wallInfo && distance(player.x, player.y, (mapCoords.x + 0.5) * TILE_SIZE, (mapCoords.y + 0.5) * TILE_SIZE) < INTERACT_DISTANCE) {
+                 // Interact with Doors (Type 2)
+                 if (tileType === 2 && wallInfo.requiresInteraction) {
+                      console.log("Interacting with door");
+                      map[mapCoords.y][mapCoords.x] = 0; // Open the door by changing map tile
+                      wallInfo.solid = false; // Update wall type property (though map change is main)
+                      wallInfo.state = 'open'; // Track state if needed later
+                      // Add sound effect here if implemented
+                 }
+                  // Interact with Locked Doors (Type 3)
+                 else if (tileType === 3 && wallInfo.requiresKey) {
+                     console.log("Interacting with locked door");
+                     if (player.keys >= wallInfo.requiresKey) {
+                         player.keys -= wallInfo.requiresKey;
+                         map[mapCoords.y][mapCoords.x] = 8; // Change to an exit tile upon unlock
+                         wallInfo.solid = false;
+                         wallInfo.state = 'unlocked';
+                         updateUI();
+                         // Add unlock sound effect here
+                     } else {
+                         // Add locked sound effect here
+                         console.log("Door is locked. Need key.");
+                     }
+                 }
+             }
+        }
+
+        function handleShooting() {
+             // Cast a ray straight forward from the player's viewpoint
+             const angle = player.angle;
+             let hit = false;
+             let dist = 0;
+             const step = 1; // Check every 1 world unit
+
+             for (dist = 0; dist < SHOOT_DISTANCE; dist += step) {
+                 const checkX = player.x + Math.cos(angle) * dist;
+                 const checkY = player.y + Math.sin(angle) * dist;
+
+                 // Check wall collision first
+                 if (isWall(checkX, checkY)) {
+                     // Hit a wall, maybe add particle effect?
+                     // console.log("Shot hit wall");
+                     hit = true;
+                     break;
+                 }
+
+                 // Check sprite collision
+                 for (let sprite of sprites) {
+                     if (sprite.state !== 'active' || !spriteTypes[sprite.type]?.hostile) continue;
+
+                     const spriteDist = distance(checkX, checkY, sprite.x, sprite.y);
+                     const spriteSize = (spriteTypes[sprite.type]?.size || 0.5) * TILE_SIZE * 0.5; // Hitbox radius
+
+                     if (spriteDist < spriteSize) {
+                         // Hit an enemy!
+                          console.log("Hit enemy!");
+                         sprite.health -= SHOOT_DAMAGE;
+                         if (sprite.health <= 0) {
+                             sprite.state = 'inactive'; // Mark as dead/inactive
+                             // Optionally change texture to a 'defeated' state or remove
+                             console.log("Enemy defeated");
+                         }
+                         hit = true;
+                         break; // Stop checking after hitting one sprite
+                     }
+                 }
+                 if (hit) break;
+             }
+             // Add visual effect for firing (e.g., muzzle flash) here if desired
+        }
+
+        function handlePickup(sprite, spriteIndex) {
+            const spriteInfo = spriteTypes[sprite.type];
+            if (!spriteInfo || !spriteInfo.pickup) return;
+
+            switch(sprite.type) {
+                case 'key':
+                    player.keys++;
+                    sprite.state = 'inactive';
+                    console.log("Picked up key!");
+                    break;
+                case 'health':
+                    player.health = Math.min(100, player.health + spriteInfo.heal);
+                    sprite.state = 'inactive';
+                     console.log("Picked up health!");
+                    break;
+                case 'ammo':
+                    player.ammo += spriteInfo.amount;
+                    sprite.state = 'inactive';
+                    console.log("Picked up ammo!");
+                    break;
+            }
+            updateUI();
+            // Remove sprite visually? Or just mark inactive. Marking inactive is simpler.
+            // For simplicity, inactive sprites won't be rendered or updated.
+        }
+
+        function gameOver(reason) {
+            showMessage("Game Over", `${reason}<br>(Click to restart level)`);
+            messageDiv.onclick = () => {
+                 loadLevel(currentLevel); // Restart current level
+                 messageDiv.onclick = null;
+            };
+        }
+
+        // --- Rendering ---
+        function render() {
+            // --- Clear Screen ---
+            ctx.fillStyle = '#333'; // Floor color
+            ctx.fillRect(0, screenHeight / 2, screenWidth, screenHeight / 2);
+            ctx.fillStyle = '#66aaff'; // Ceiling color
+            ctx.fillRect(0, 0, screenWidth, screenHeight / 2);
+
+            const rays = []; // Store raycasting results for sprite rendering
+
+            // --- Raycasting Walls ---
+            let currentAngle = player.angle - HALF_FOV;
+            for (let i = 0; i < NUM_RAYS; i++) {
+                currentAngle = normalizeAngle(currentAngle);
+                let rayDist = 0;
+                let hitWall = false;
+                let hitBoundary = false; // Was the hit vertical or horizontal wall boundary?
+
+                const angleCos = Math.cos(currentAngle);
+                const angleSin = Math.sin(currentAngle);
+
+                let wallTypeHit = 0;
+                let textureXCoord = 0; // For texture mapping (simplified here)
+
+                for (rayDist = 0; rayDist < MAX_DEPTH; rayDist += 1) {
+                    const checkX = player.x + angleCos * rayDist;
+                    const checkY = player.y + angleSin * rayDist;
+                    const mapX = Math.floor(checkX / TILE_SIZE);
+                    const mapY = Math.floor(checkY / TILE_SIZE);
+
+                    if (mapX < 0 || mapX >= map[0].length || mapY < 0 || mapY >= map.length) {
+                        hitWall = true; // Hit edge of map
+                        wallTypeHit = 1; // Treat as standard wall
+                        rayDist = MAX_DEPTH; // Stop ray
+                        break;
+                    }
+
+                    const currentTile = map[mapY][mapX];
+                    if (currentTile > 0 && wallTypes[currentTile]?.solid) { // Hit a solid wall tile
+                        hitWall = true;
+                        wallTypeHit = currentTile;
+
+                        // Determine texture coordinate (which part of the wall was hit)
+                        const hitX = checkX % TILE_SIZE;
+                        const hitY = checkY % TILE_SIZE;
+                        const epsilon = 1; // Small value to determine edge preference
+
+                        if (Math.abs(hitX) < epsilon || Math.abs(hitX - TILE_SIZE) < epsilon) {
+                           textureXCoord = hitY / TILE_SIZE;
+                           hitBoundary = true; // Hit vertical edge
+                        } else if (Math.abs(hitY) < epsilon || Math.abs(hitY - TILE_SIZE) < epsilon) {
+                           textureXCoord = hitX / TILE_SIZE;
+                           hitBoundary = false; // Hit horizontal edge
+                        } else {
+                            // This case should ideally not happen with small steps, but use fallback
+                            textureXCoord = hitX / TILE_SIZE;
+                        }
+
+                        break;
+                    }
+                }
+
+
+                // Store ray distance for Z-buffer
+                rays[i] = rayDist;
+
+                // --- Draw Wall Slice ---
+                if (hitWall) {
+                    // Fix Fisheye effect
+                    const correctedDist = rayDist * Math.cos(player.angle - currentAngle);
+
+                    const wallHeight = (TILE_SIZE / correctedDist) * (screenWidth / 2 / Math.tan(HALF_FOV)); // Perspective projection
+                    const wallTop = (screenHeight / 2) - (wallHeight / 2);
+                    const wallBottom = wallTop + wallHeight;
+
+                    const wallInfo = wallTypes[wallTypeHit] || wallTypes[1]; // Default to type 1 if unknown
+                    let color = wallInfo.color || '#FF00FF'; // Magenta for errors
+
+                    // Simple shading based on distance and boundary hit
+                    const brightness = Math.max(0.1, Math.min(1, 1 - (correctedDist / (MAX_DEPTH * 0.7))));
+                    ctx.globalAlpha = 1; // Reset alpha before drawing wall
+
+                    if(wallInfo.texture) {
+                         // Simple text 'texture'
+                         ctx.fillStyle = `rgba(0,0,0, ${1 - brightness})`; // Darken bg slightly
+                         ctx.fillRect(i * (screenWidth / NUM_RAYS), wallTop, screenWidth / NUM_RAYS, wallHeight);
+                         ctx.font = `${Math.min(wallHeight * 0.8, screenWidth / NUM_RAYS * 0.8)}px sans-serif`;
+                         ctx.fillStyle = `rgba(255, 255, 255, ${brightness})`; // White text, adjust brightness
+                         ctx.textAlign = 'center';
+                         ctx.textBaseline = 'middle';
+                         ctx.fillText(wallInfo.texture, i * (screenWidth / NUM_RAYS) + (screenWidth / NUM_RAYS / 2), wallTop + wallHeight / 2);
+
+                    } else {
+                        // Solid color wall with shading
+                         const rgb = hexToRgb(color);
+                         const shadedR = Math.floor(rgb.r * brightness * (hitBoundary ? 0.7 : 1)); // Darker if vertical boundary
+                         const shadedG = Math.floor(rgb.g * brightness * (hitBoundary ? 0.7 : 1));
+                         const shadedB = Math.floor(rgb.b * brightness * (hitBoundary ? 0.7 : 1));
+                         ctx.fillStyle = `rgb(${shadedR}, ${shadedG}, ${shadedB})`;
+                         ctx.fillRect(i * (screenWidth / NUM_RAYS), wallTop, Math.ceil(screenWidth / NUM_RAYS), wallHeight); // Use ceil to avoid gaps
+                    }
+
+
+                }
+
+                currentAngle += RAY_ANGLE_STEP;
+            }
+
+             // --- Render Sprites ---
+             // Sort sprites by distance from player (far to near) for correct occlusion
+             const visibleSprites = sprites
+                 .filter(s => s.state === 'active') // Only render active sprites
+                 .map(sprite => {
+                     const dx = sprite.x - player.x;
+                     const dy = sprite.y - player.y;
+                     const dist = Math.sqrt(dx * dx + dy * dy);
+                     let angle = Math.atan2(dy, dx) - player.angle;
+                     angle = normalizeAngle(angle);
+                      // Adjust angle to be within [-PI, PI] relative to player view center
+                     if (angle > Math.PI) angle -= 2 * Math.PI;
+
+                     return { ...sprite, dist, angle };
+                 })
+                 .filter(sprite => Math.abs(sprite.angle) < HALF_FOV + 0.2) // Basic frustum culling (+ buffer)
+                 .sort((a, b) => b.dist - a.dist); // Sort far to near
+
+            visibleSprites.forEach(sprite => {
+                 const spriteInfo = spriteTypes[sprite.type] || { texture: '❓', size: 0.5 }; // Default for unknown/exit
+                 if(sprite.type === 'exit') spriteInfo.texture = '🟩'; // Ensure exit has texture
+
+                 // Project sprite onto screen
+                 const correctedDist = sprite.dist * Math.cos(sprite.angle); // Correct distance like walls
+                 if (correctedDist < TILE_SIZE * 0.3) return; // Don't draw if too close
+
+                 const spriteScreenHeight = (TILE_SIZE / correctedDist) * (screenWidth / 2 / Math.tan(HALF_FOV));
+                 const spriteScreenSize = spriteScreenHeight * (spriteInfo.size || 1.0);
+                 const spriteScreenX = Math.tan(sprite.angle) * (screenWidth / 2) + (screenWidth / 2) - (spriteScreenSize / 2);
+                 const spriteScreenY = (screenHeight / 2) - (spriteScreenSize / 2);
+
+                 // Check Z-buffer (if sprite is behind a wall at this screen X)
+                 const startRay = Math.floor((spriteScreenX / screenWidth) * NUM_RAYS);
+                 const endRay = Math.floor(((spriteScreenX + spriteScreenSize) / screenWidth) * NUM_RAYS);
+
+                 for (let i = Math.max(0, startRay); i < Math.min(NUM_RAYS, endRay); i++) {
+                      if (rays[i] && rays[i] >= correctedDist) { // Only draw pixels if sprite is closer than wall
+                         // Draw the sprite 'texture' (emoji/text)
+                         ctx.font = `${spriteScreenSize}px sans-serif`;
+                         ctx.textAlign = 'center';
+                         ctx.textBaseline = 'middle';
+
+                         // Simple brightness based on distance
+                         const brightness = Math.max(0.1, Math.min(1, 1 - (correctedDist / (MAX_DEPTH * 0.8))));
+                         ctx.fillStyle = `rgba(255, 255, 255, ${brightness})`; // Apply brightness to white base for emoji rendering
+
+                          // Calculate the slice's X position more accurately
+                          const sliceX = i * (screenWidth / NUM_RAYS);
+                          const nextSliceX = (i + 1) * (screenWidth / NUM_RAYS);
+                          const sliceWidth = nextSliceX - sliceX;
+
+                         // Clipping needed if we drew slices, but with fillText, we draw whole emoji once
+                         // We need to check *if any part* of the sprite width for this ray is visible
+                         // Simplified: Draw the full sprite if the center ray is visible.
+                          if (i === Math.floor((startRay + endRay) / 2)) {
+                               ctx.fillText(spriteInfo.texture || sprite.texture , spriteScreenX + spriteScreenSize / 2, spriteScreenY + spriteScreenSize / 2);
+
+                                // Optional: Draw health bar above enemies
+                                if (spriteInfo.hostile && sprite.health < spriteInfo.health) {
+                                    const healthBarWidth = spriteScreenSize * 0.8;
+                                    const healthBarHeight = 5;
+                                    const healthBarX = spriteScreenX + (spriteScreenSize - healthBarWidth) / 2;
+                                    const healthBarY = spriteScreenY - healthBarHeight - 2;
+                                    const healthPercentage = sprite.health / spriteInfo.health;
+                                    ctx.fillStyle = 'red';
+                                    ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+                                    ctx.fillStyle = 'green';
+                                    ctx.fillRect(healthBarX, healthBarY, healthBarWidth * healthPercentage, healthBarHeight);
+                                }
+                                break; // Draw sprite only once
+                          }
+                      }
+                 }
+             });
+
+              // --- Weapon Sight (simple crosshair) ---
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+              ctx.fillRect(screenWidth / 2 - 5, screenHeight / 2 - 1, 10, 2);
+              ctx.fillRect(screenWidth / 2 - 1, screenHeight / 2 - 5, 2, 10);
+
+        }
+
+        function hexToRgb(hex) {
+            var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            if (!gamePaused) {
+                update(deltaTime);
+                render();
+            }
+
+             // Keep requesting frames unless explicitly stopped (e.g., final level complete)
+            if (!(gamePaused && currentLevel > levelData.length)) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // --- Initialization ---
+        function init() {
+             // Adjust canvas size on resize
+            window.addEventListener('resize', () => {
+                screenWidth = window.innerWidth * 0.8;
+                screenHeight = window.innerHeight * 0.8;
+                canvas.width = screenWidth;
+                canvas.height = screenHeight;
+                // Recalculate NUM_RAYS? Might affect performance/look
+            });
+
+            loadLevel(1); // Start game at level 1
+        }
+
+        // --- Start Game ---
+        init();
+
+    </script>
+</body>
+</html>

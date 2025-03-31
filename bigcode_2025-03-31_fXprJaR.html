@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7 Levels FPS</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; color: #fff; font-family: sans-serif; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
+        #instructions { position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; max-width: 300px;}
+        #skipButton { position: absolute; top: 10px; right: 10px; padding: 10px 15px; background-color: #555; border: none; color: white; cursor: pointer; border-radius: 5px;}
+        #skipButton:hover { background-color: #777; }
+        #winScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); color: white; display: none; flex-direction: column; justify-content: center; align-items: center; text-align: center; font-size: 2em; }
+        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; background-color: rgba(255, 255, 255, 0.5); border-radius: 50%; pointer-events: none; }
+         #levelGoal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; text-align: center; display: none; /* Initially hidden */ }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div>Level: <span id="levelDisplay">1</span>/7</div>
+        <div>Health: <span id="healthDisplay">100</span></div>
+        <div>Ammo: <span id="ammoDisplay">10</span></div>
+        <div>Objective: <span id="objectiveDisplay">Reach the exit (🟩)</span></div>
+        <div>Keys: <span id="keyDisplay">0</span></div>
+    </div>
+    <div id="instructions">
+        Controls: [WASD] to Move, [Mouse] to Look, [Click] to Shoot. Press [E] to interact/use switch.
+        <br>Click the screen to lock mouse control. Press [ESC] to unlock.
+    </div>
+    <button id="skipButton">Skip Level</button>
+    <div id="crosshair">+</div>
+     <div id="levelGoal">
+        <h2>Level <span id="goalLevelNum">1</span> Complete!</h2>
+        <p id="goalMessage">Loading next level...</p>
+    </div>
+    <div id="winScreen">
+        <h1>Congratulations!</h1>
+        <p>You have completed all 7 levels!</p>
+        <button onclick="location.reload()">Play Again?</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiLevel = document.getElementById('levelDisplay');
+        const uiHealth = document.getElementById('healthDisplay');
+        const uiAmmo = document.getElementById('ammoDisplay');
+        const uiObjective = document.getElementById('objectiveDisplay');
+        const uiKeys = document.getElementById('keyDisplay');
+        const skipButton = document.getElementById('skipButton');
+        const winScreen = document.getElementById('winScreen');
+        const levelGoalScreen = document.getElementById('levelGoal');
+        const goalLevelNum = document.getElementById('goalLevelNum');
+        const goalMessage = document.getElementById('goalMessage');
+
+        let screenWidth = window.innerWidth;
+        let screenHeight = window.innerHeight;
+        canvas.width = screenWidth;
+        canvas.height = screenHeight;
+
+        // Game State
+        let currentLevel = 1;
+        let player = {
+            x: 2,
+            y: 2,
+            dirX: -1,
+            dirY: 0,
+            planeX: 0,
+            planeY: 0.66, // Field of view
+            moveSpeed: 0.05,
+            rotSpeed: 0.03,
+            health: 100,
+            ammo: 10,
+            keys: 0,
+            hasShot: false // To prevent holding mouse down
+        };
+        let keys = {}; // Keyboard state
+        let map = []; // Current level map
+        let sprites = []; // Sprites (enemies, items)
+
+        const mapWidth = 24;
+        const mapHeight = 24;
+
+        // Level Definitions (0: empty, 1: wall, 2: exit, 3: key, 4: locked door, 5: button, 6: button door, 7: ammo, 8: health, 9: enemy, 10: damaging floor)
+        const levels = [
+            // Level 1: Basic Movement & Shooting (Exit)
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9,1],
+                [1,0,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1],
+                [1,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1,0,1],
+                [1,0,1,0,1,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1],
+                [1,0,1,0,0,0,0,0,0,1,0,1,0,1,0,0,0,0,0,1,0,1,0,1],
+                [1,0,1,1,1,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,0,1],
+                [1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+                [1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1],
+                [1,9,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+                [1,0,0,0,0,1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1,1,0,1],
+                [1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,9,1,0,1],
+                [1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1], // Exit on right side
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // Padding row
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+             // Level 2: Keys & Doors
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,0,1,0,1,1,1,1,1,4,4,4,4,1,1,1,1,1,0,1,0,1,0,1], // Locked Door (4)
+                [1,0,1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+                [1,0,1,1,1,1,1,0,1,0,0,0,0,1,0,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,1,2,0,0,0,1,0,0,0,0,0,0,0,0,0,1], // Exit behind door
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], // Wall separating areas
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,1], // Key (3)
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+             // Level 3: Switches/Buttons
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,1,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1], // Button (5)
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,1,1,1,1,1,1,1,6,6,6,6,1,1,1,1,1,1,1,1,1,1,0,1], // Button Door (6)
+                [1,0,0,0,0,0,0,0,6,0,0,6,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,6,0,0,6,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1],
+                [1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
+                [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1], // Exit
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            // Level 4: Hazards (Damaging Floor)
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,1,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,1,0,1], // Damaging Floor (10)
+                [1,0,1,10,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,10,1,0,1],
+                [1,0,1,10,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,10,1,0,1],
+                [1,0,1,10,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,10,1,0,1],
+                [1,0,1,10,1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1,10,1,0,1],
+                [1,0,1,10,1,0,1,0,1,1,1,1,1,1,1,1,0,1,0,1,10,1,0,1],
+                [1,0,1,10,1,0,1,0,1,2,0,0,0,0,0,1,0,1,0,1,10,1,0,1], // Exit
+                [1,0,1,10,1,0,1,0,1,1,1,1,1,1,1,1,0,1,0,1,10,1,0,1],
+                [1,0,1,10,1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1,10,1,0,1],
+                [1,0,1,10,1,0,1,1,1,1,1,1,1,1,1,1,1,1,0,1,10,1,0,1],
+                [1,0,1,10,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,10,1,0,1],
+                [1,0,1,10,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,10,1,0,1],
+                [1,0,1,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,1,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            // Level 5: Limited Ammo & Resources
+             [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,9,9,1,0,0,0,1], // Enemies guarding exit path
+                [1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,0,0,1,0,1,0,1],
+                [1,0,1,0,1,0,0,0,7,0,0,0,0,0,1,0,1,0,0,1,0,1,0,1], // Ammo (7)
+                [1,0,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,0,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,1],
+                [1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+                [1,9,0,0,0,0,0,0,1,7,1,8,1,7,1,0,0,0,0,0,0,0,0,1], // Enemy, Ammo(7), Health(8)
+                [1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0,1],
+                [1,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,0,9,0,0,0,0,1],
+                [1,0,1,7,0,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,0,1],
+                [1,0,1,1,1,1,1,1,1,0,1,2,1,1,1,0,0,0,1,0,1,1,0,1], // Exit
+                [1,0,0,0,0,0,0,0,1,0,1,1,1,1,1,0,1,0,1,0,0,0,0,1],
+                [1,1,1,1,1,1,1,0,1,0,0,0,0,0,0,0,1,9,1,1,1,1,1,1], // Enemy guarding path
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            // Level 6: Stealth/Enemies (Simplified: enemies hurt on touch)
+             [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+                [1,0,1,1,1,1,1,0,1,0,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,1,9,1,1,0,1,0,1,0,0,0,1,0,1], // Enemy patrols/stands guard
+                [1,1,1,1,1,0,1,1,1,1,1,0,0,0,0,1,0,1,0,1,0,1,0,1],
+                [1,0,0,0,1,0,0,0,0,0,1,0,1,1,1,1,0,1,0,1,0,1,0,1],
+                [1,0,1,0,1,1,1,1,1,0,1,0,1,0,0,0,0,1,0,1,9,1,0,1], // Enemy
+                [1,0,1,0,0,0,0,0,1,0,1,0,1,0,1,1,1,1,0,1,1,1,0,1],
+                [1,0,1,1,1,1,1,0,1,0,1,0,1,0,1,0,0,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,1,0,0,0,1,0,1,0,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0,0,0,0,0,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,1,1,1,0,1],
+                [1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,9,0,1,0,1], // Enemy
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1], // Exit
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ],
+            // Level 7: Combine All
+            [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,1,0,0,0,0,7,0,0,1,0,0,0,0,0,9,0,0,0,0,1], // Start near ammo, enemy nearby
+                [1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1],
+                [1,0,1,0,1,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,1],
+                [1,0,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,1,0,1,0,1],
+                [1,0,1,0,1,0,0,0,1,3,0,0,1,0,0,0,1,9,0,1,0,1,0,1], // Key (3), enemy near path
+                [1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,4,1,0,1,0,1,0,1], // Locked Door (4)
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,4,1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,1,0,1,0,1,0,1],
+                [1,0,1,1,1,1,1,1,1,1,6,6,1,1,1,1,1,1,0,1,0,1,0,1], // Button Door (6)
+                [1,0,1,5,0,0,0,0,1,10,10,10,0,0,0,0,0,0,0,1,0,1,0,1], // Button (5), damaging floor (10)
+                [1,0,1,1,1,1,1,0,1,10,1,1,1,1,1,1,1,1,1,1,0,1,0,1],
+                [1,8,0,0,0,0,1,0,1,10,1,9,1,0,0,0,0,0,0,0,0,0,2,1], // Health (8), enemy, Exit (2)
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ]
+        ];
+
+        // Sprite definitions
+        const spriteTypes = {
+            3: { color: 'gold', symbol: '🔑', type: 'key' },       // Key
+            7: { color: 'grey', symbol: '💣', type: 'ammo' },       // Ammo
+            8: { color: 'lightgreen', symbol: '➕', type: 'health' }, // Health
+            9: { color: 'red', symbol: '😈', type: 'enemy', health: 30 } // Enemy
+        };
+
+        function findSprites() {
+            sprites = [];
+            for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    let tile = map[y][x];
+                    if (spriteTypes[tile]) {
+                        sprites.push({
+                            x: x + 0.5, // Center of the tile
+                            y: y + 0.5,
+                            texture: tile,
+                            ...spriteTypes[tile] // Copy properties like color, symbol, type, health
+                        });
+                         // Keep the original map tile walkable unless it's an enemy?
+                        // For simplicity, let's make item tiles walkable after placing sprite
+                        if(tile !== 9) map[y][x] = 0; // Clear item spot on map after adding sprite
+                    }
+                }
+            }
+        }
+
+        function loadLevel(levelNum) {
+            if (levelNum > levels.length) {
+                showWinScreen();
+                return;
+            }
+            currentLevel = levelNum;
+            // Deep copy the map to avoid modifying the original levels array
+            map = levels[currentLevel - 1].map(row => [...row]);
+
+            // Reset player state (position depends on level design, find '0' near corner)
+            player.x = 1.5; // Default start position
+            player.y = 1.5;
+             for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    if (map[y][x] === 0) { // Find first empty space
+                       // Check neighbours to avoid spawning inside walls immediately
+                        if (map[y-1]?.[x] !== 1 && map[y+1]?.[x] !== 1 && map[y]?.[x-1] !== 1 && map[y]?.[x+1] !== 1) {
+                            player.x = x + 0.5;
+                            player.y = y + 0.5;
+                            break; // Found a suitable start point
+                        }
+                    }
+                }
+                 if(player.x !== 1.5 || player.y !== 1.5) break; // Exit outer loop if position found
+            }
+
+             // Reset defaults maybe modified by previous level mechanics
+            player.health = 100;
+            player.ammo = 10;
+            player.keys = 0;
+            player.dirX = -1; // Reset direction
+            player.dirY = 0;
+            player.planeX = 0;
+            player.planeY = 0.66;
+
+
+            findSprites(); // Find sprites for the loaded level
+            updateUI(); // Update UI for new level
+            setObjective(); // Set objective message
+            showLevelGoalScreen(); // Show goal transition
+        }
+
+        function setObjective() {
+            let objective = "Reach the exit (🟩)";
+            switch(currentLevel) {
+                case 1: objective = "Find and shoot the targets (😈), then reach the exit (🟩)"; break;
+                case 2: objective = "Find the key (🔑) to open the locked door (🚪), then reach the exit (🟩)"; break;
+                case 3: objective = "Find and press the button ('E' key on 🟧) to open the path (🟫), then reach the exit (🟩)"; break;
+                case 4: objective = "Navigate the hazardous floor (🟥) and reach the exit (🟩)"; break;
+                case 5: objective = "Conserve ammo (💣)! Defeat enemies (😈) and reach the exit (🟩). Find health (➕)."; break;
+                case 6: objective = "Avoid or defeat the enemies (😈) and reach the exit (🟩)"; break;
+                case 7: objective = "Survive! Use all your skills: find key (🔑), press button (🟧), manage ammo (💣)/health (➕), defeat enemies (😈), navigate hazards (🟥), and reach the exit (🟩)!"; break;
+            }
+            uiObjective.textContent = objective;
+        }
+
+        function showLevelGoalScreen() {
+            goalLevelNum.textContent = currentLevel;
+            goalMessage.textContent = `Objective: ${uiObjective.textContent}`;
+            levelGoalScreen.style.display = 'flex';
+            // Hide after a delay
+            setTimeout(() => {
+                levelGoalScreen.style.display = 'none';
+            }, 4000); // Show for 4 seconds
+        }
+
+
+        function updateUI() {
+            uiLevel.textContent = `${currentLevel}/${levels.length}`;
+            uiHealth.textContent = player.health;
+            uiAmmo.textContent = player.ammo;
+            uiKeys.textContent = player.keys;
+        }
+
+        function skipLevel() {
+            loadLevel(currentLevel + 1);
+        }
+        skipButton.addEventListener('click', skipLevel);
+
+        function showWinScreen() {
+            winScreen.style.display = 'flex';
+            if (document.pointerLockElement === canvas) {
+                document.exitPointerLock();
+            }
+        }
+
+        // Pointer Lock
+        canvas.addEventListener('click', () => {
+            if (!document.pointerLockElement && winScreen.style.display === 'none' && levelGoalScreen.style.display === 'none') {
+                canvas.requestPointerLock().catch(err => console.error("Pointer lock failed:", err));
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === canvas) {
+                document.addEventListener("mousemove", handleMouseMove, false);
+                console.log('Pointer Lock On');
+            } else {
+                document.removeEventListener("mousemove", handleMouseMove, false);
+                console.log('Pointer Lock Off');
+            }
+        }, false);
+
+        function handleMouseMove(e) {
+            let movementX = e.movementX || e.mozMovementX || e.webkitMovementX || 0;
+
+            // Rotation
+            let rotSpeed = player.rotSpeed * (Math.abs(movementX)/10 + 1); // Faster rotation with faster mouse movement, adjust sensitivity multiplier as needed
+             rotSpeed = Math.min(rotSpeed, player.rotSpeed * 5); // Cap rotation speed
+
+            let oldDirX = player.dirX;
+            player.dirX = player.dirX * Math.cos(-rotSpeed * movementX * 0.1) - player.dirY * Math.sin(-rotSpeed * movementX * 0.1);
+            player.dirY = oldDirX * Math.sin(-rotSpeed * movementX * 0.1) + player.dirY * Math.cos(-rotSpeed * movementX * 0.1);
+            let oldPlaneX = player.planeX;
+            player.planeX = player.planeX * Math.cos(-rotSpeed * movementX * 0.1) - player.planeY * Math.sin(-rotSpeed * movementX * 0.1);
+            player.planeY = oldPlaneX * Math.sin(-rotSpeed * movementX * 0.1) + player.planeY * Math.cos(-rotSpeed * movementX * 0.1);
+        }
+
+
+        // Keyboard Input
+        window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+             if(e.code === 'KeyE') interact(); // Handle interaction on key up
+        });
+         window.addEventListener('mousedown', (e) => {
+            if (document.pointerLockElement === canvas && !player.hasShot && e.button === 0) { // Left click
+                shoot();
+                player.hasShot = true; // Set flag to prevent continuous shooting
+            }
+        });
+        window.addEventListener('mouseup', (e) => {
+             if (e.button === 0) { // Left click released
+                 player.hasShot = false; // Reset flag
+             }
+         });
+
+
+        function handleInput() {
+            if (winScreen.style.display === 'flex' || levelGoalScreen.style.display !== 'none') return; // Don't process input if win/level screen is up
+
+            let moveSpeed = player.moveSpeed;
+            let rotSpeed = player.rotSpeed; // Keep rotation speed consistent regardless of mouse look for potential keyboard turn fallback (though mouse is primary)
+
+             // Strafing modifier (optional, makes diagonal movement same speed as forward)
+            let diagonalFactor = (keys['KeyW'] || keys['KeyS']) && (keys['KeyA'] || keys['KeyD']) ? 0.7071 : 1.0;
+
+
+            // Move forward if no wall in front
+            if (keys['KeyW']) {
+                let nextX = player.x + player.dirX * moveSpeed * diagonalFactor;
+                let nextY = player.y + player.dirY * moveSpeed * diagonalFactor;
+                if (!isWall(Math.floor(nextX), Math.floor(player.y))) player.x = nextX;
+                if (!isWall(Math.floor(player.x), Math.floor(nextY))) player.y = nextY;
+                 checkTileEffect(Math.floor(player.x), Math.floor(player.y));
+            }
+            // Move backwards if no wall behind
+            if (keys['KeyS']) {
+                let nextX = player.x - player.dirX * moveSpeed * diagonalFactor;
+                let nextY = player.y - player.dirY * moveSpeed * diagonalFactor;
+                if (!isWall(Math.floor(nextX), Math.floor(player.y))) player.x = nextX;
+                if (!isWall(Math.floor(player.x), Math.floor(nextY))) player.y = nextY;
+                 checkTileEffect(Math.floor(player.x), Math.floor(player.y));
+            }
+            // Strafe right
+            if (keys['KeyD']) {
+                let nextX = player.x + player.planeX * moveSpeed * diagonalFactor;
+                let nextY = player.y + player.planeY * moveSpeed * diagonalFactor;
+                if (!isWall(Math.floor(nextX), Math.floor(player.y))) player.x = nextX;
+                if (!isWall(Math.floor(player.x), Math.floor(nextY))) player.y = nextY;
+                 checkTileEffect(Math.floor(player.x), Math.floor(player.y));
+            }
+             // Strafe left
+            if (keys['KeyA']) {
+                let nextX = player.x - player.planeX * moveSpeed * diagonalFactor;
+                let nextY = player.y - player.planeY * moveSpeed * diagonalFactor;
+                 if (!isWall(Math.floor(nextX), Math.floor(player.y))) player.x = nextX;
+                 if (!isWall(Math.floor(player.x), Math.floor(nextY))) player.y = nextY;
+                 checkTileEffect(Math.floor(player.x), Math.floor(player.y));
+            }
+
+            // // Keyboard Rotation (Fallback/Alternative) - Commented out as mouse look is primary
+            // if (keys['ArrowRight']) {
+            //     let oldDirX = player.dirX;
+            //     player.dirX = player.dirX * Math.cos(-rotSpeed) - player.dirY * Math.sin(-rotSpeed);
+            //     player.dirY = oldDirX * Math.sin(-rotSpeed) + player.dirY * Math.cos(-rotSpeed);
+            //     let oldPlaneX = player.planeX;
+            //     player.planeX = player.planeX * Math.cos(-rotSpeed) - player.planeY * Math.sin(-rotSpeed);
+            //     player.planeY = oldPlaneX * Math.sin(-rotSpeed) + player.planeY * Math.cos(-rotSpeed);
+            // }
+            // if (keys['ArrowLeft']) {
+            //     let oldDirX = player.dirX;
+            //     player.dirX = player.dirX * Math.cos(rotSpeed) - player.dirY * Math.sin(rotSpeed);
+            //     player.dirY = oldDirX * Math.sin(rotSpeed) + player.dirY * Math.cos(rotSpeed);
+            //     let oldPlaneX = player.planeX;
+            //     player.planeX = player.planeX * Math.cos(rotSpeed) - player.planeY * Math.sin(rotSpeed);
+            //     player.planeY = oldPlaneX * Math.sin(rotSpeed) + player.planeY * Math.cos(rotSpeed);
+            // }
+
+             // Check for level completion / game over
+            checkGameStatus();
+        }
+
+        function isWall(x, y) {
+            if (x < 0 || x >= mapWidth || y < 0 || y >= mapHeight) return true; // Out of bounds is a wall
+            const tile = map[y][x];
+            if (tile === 1) return true; // Solid wall
+            if (tile === 4 && player.keys === 0) return true; // Locked door without key
+            if (tile === 6) return true; // Button-activated door (initially closed)
+            return false;
+        }
+
+        function checkTileEffect(mapX, mapY) {
+            if (mapX < 0 || mapX >= mapWidth || mapY < 0 || mapY >= mapHeight) return;
+            const tile = map[mapY][mapX];
+
+             switch(tile) {
+                case 2: // Exit
+                    loadLevel(currentLevel + 1);
+                    break;
+                 // Item pickups are handled by sprite collision now
+                // case 3: // Key
+                //     if(map[mapY][mapX] !== 0) { // Check if not already picked up
+                //          player.keys++;
+                //          map[mapY][mapX] = 0; // Remove key from map
+                //          updateUI();
+                //          console.log("Picked up key!");
+                //     }
+                //     break;
+                // case 7: // Ammo
+                //     if(map[mapY][mapX] !== 0) {
+                //         player.ammo += 10;
+                //         map[mapY][mapX] = 0;
+                //         updateUI();
+                //         console.log("Picked up ammo!");
+                //     }
+                //     break;
+                // case 8: // Health
+                //     if(map[mapY][mapX] !== 0) {
+                //         player.health = Math.min(100, player.health + 25);
+                //         map[mapY][mapX] = 0;
+                //         updateUI();
+                //          console.log("Picked up health!");
+                //     }
+                //     break;
+                case 10: // Damaging floor
+                    player.health -= 1; // Small damage per frame/step on tile
+                    if (player.health < 0) player.health = 0;
+                    updateUI();
+                    // Add visual/audio cue?
+                    break;
+            }
+
+            // Check sprite collisions for items/enemies
+             checkSpriteCollisions(mapX, mapY);
+        }
+
+         function checkSpriteCollisions(playerMapX, playerMapY) {
+             // Simple check: if player is in the same tile as a sprite
+             for (let i = sprites.length - 1; i >= 0; i--) {
+                 const sprite = sprites[i];
+                 const spriteMapX = Math.floor(sprite.x);
+                 const spriteMapY = Math.floor(sprite.y);
+
+                 if (playerMapX === spriteMapX && playerMapY === spriteMapY) {
+                     switch (sprite.type) {
+                         case 'key':
+                             player.keys++;
+                             sprites.splice(i, 1); // Remove sprite from list
+                             updateUI();
+                             console.log("Picked up key!");
+                             // Optionally play sound
+                             break;
+                         case 'ammo':
+                             player.ammo += 10;
+                             sprites.splice(i, 1);
+                             updateUI();
+                             console.log("Picked up ammo!");
+                             break;
+                         case 'health':
+                             player.health = Math.min(100, player.health + 25);
+                             sprites.splice(i, 1);
+                             updateUI();
+                             console.log("Picked up health!");
+                             break;
+                         case 'enemy':
+                             // Take damage on touch (simple 'stealth' mechanic for level 6)
+                              player.health -= 5; // More damage for touching enemy
+                              if (player.health < 0) player.health = 0;
+                              updateUI();
+                              // Optional knockback or stun?
+                             break;
+                     }
+                 }
+             }
+         }
+
+
+        function interact() {
+            // Check tile in front of player
+             let interactDist = 0.8;
+            let frontX = Math.floor(player.x + player.dirX * interactDist);
+            let frontY = Math.floor(player.y + player.dirY * interactDist);
+
+            if (frontX >= 0 && frontX < mapWidth && frontY >= 0 && frontY < mapHeight) {
+                 const tile = map[frontY][frontX];
+                if (tile === 5) { // Button
+                    console.log("Button pressed!");
+                    // Find and toggle corresponding door(s) (tile 6)
+                    for (let y = 0; y < mapHeight; y++) {
+                        for (let x = 0; x < mapWidth; x++) {
+                            if (levels[currentLevel - 1][y][x] === 6) { // Check original map for door locations
+                                // Toggle state: if it's currently a wall (6), make it floor (0), else make it wall (6)
+                                map[y][x] = (map[y][x] === 6) ? 0 : 6;
+                            }
+                        }
+                    }
+                     // Optionally change button appearance or play sound
+                }
+                 else if (tile === 4 && player.keys > 0) { // Locked door with key
+                     console.log("Unlocked door!");
+                     player.keys--; // Use a key
+                     map[frontY][frontX] = 0; // Open the door permanently
+                     updateUI();
+                     // Optionally play sound
+                 }
+            }
+        }
+
+        function shoot() {
+            if (player.ammo <= 0) {
+                 console.log("Out of ammo!");
+                 // Play empty clip sound
+                 return;
+            }
+
+            player.ammo--;
+            updateUI();
+            console.log("Shoot!");
+            // Play gunshot sound
+
+            // Simple Raycast for shooting target
+            let hit = false;
+            let hitDist = 0;
+             let hitSpriteIdx = -1;
+
+            for(let x = 0; x < screenWidth; x++) {
+                if (x === Math.floor(screenWidth / 2)) { // Cast ray from center of screen
+                     let cameraX = 2 * x / screenWidth - 1; // x-coordinate in camera space
+                     let rayDirX = player.dirX + player.planeX * cameraX;
+                     let rayDirY = player.dirY + player.planeY * cameraX;
+
+                     let mapX = Math.floor(player.x);
+                     let mapY = Math.floor(player.y);
+
+                     let sideDistX, sideDistY;
+                     let deltaDistX = (rayDirX === 0) ? 1e30 : Math.abs(1 / rayDirX);
+                     let deltaDistY = (rayDirY === 0) ? 1e30 : Math.abs(1 / rayDirY);
+                     let perpWallDist;
+
+                     let stepX, stepY;
+                     let wallHit = 0; // was a wall hit?
+                     let side; // was a NS or a EW wall hit?
+
+                     if (rayDirX < 0) {
+                         stepX = -1;
+                         sideDistX = (player.x - mapX) * deltaDistX;
+                     } else {
+                         stepX = 1;
+                         sideDistX = (mapX + 1.0 - player.x) * deltaDistX;
+                     }
+                     if (rayDirY < 0) {
+                         stepY = -1;
+                         sideDistY = (player.y - mapY) * deltaDistY;
+                     } else {
+                         stepY = 1;
+                         sideDistY = (mapY + 1.0 - player.y) * deltaDistY;
+                     }
+
+                     // Perform DDA
+                     while (wallHit === 0) {
+                         if (sideDistX < sideDistY) {
+                             sideDistX += deltaDistX;
+                             mapX += stepX;
+                             side = 0;
+                         } else {
+                             sideDistY += deltaDistY;
+                             mapY += stepY;
+                             side = 1;
+                         }
+                         // Check if ray has hit a wall or obstacle
+                         if (isWall(mapX, mapY)) {
+                             wallHit = 1;
+                             perpWallDist = (side === 0) ? (mapX - player.x + (1 - stepX) / 2) / rayDirX : (mapY - player.y + (1 - stepY) / 2) / rayDirY;
+                              hitDist = perpWallDist;
+                             hit = true; // Hit a wall
+                         }
+
+                          // Check for sprite intersection along the way (before hitting wall)
+                         for (let i = 0; i < sprites.length; i++) {
+                              const sprite = sprites[i];
+                              if (sprite.type === 'enemy' && Math.floor(sprite.x) === mapX && Math.floor(sprite.y) === mapY) {
+                                   // Simple check if ray passes through the sprite's tile before hitting wall
+                                   let spriteDist = Math.sqrt((player.x - sprite.x)**2 + (player.y - sprite.y)**2);
+                                   if (spriteDist < perpWallDist) { // Check if sprite is closer than wall
+                                       hit = true;
+                                       hitDist = spriteDist;
+                                       hitSpriteIdx = i;
+                                       wallHit = 1; // Stop DDA
+                                       break; // Found closest sprite hit in this tile
+                                   }
+                              }
+                          }
+                           if (perpWallDist > 50) break; // Max shooting distance maybe?
+                     }
+                     break; // Only cast one ray for shooting
+                }
+            }
+
+
+            if (hit && hitSpriteIdx !== -1) {
+                let hitSprite = sprites[hitSpriteIdx];
+                if(hitSprite.type === 'enemy') {
+                    console.log(`Hit enemy at distance ${hitDist}!`);
+                     hitSprite.health -= 25; // Damage enemy
+                     if (hitSprite.health <= 0) {
+                         console.log("Enemy defeated!");
+                         // Replace enemy sprite spot on map with 0 (empty) if needed, though sprite list handles it
+                          // map[Math.floor(hitSprite.y)][Math.floor(hitSprite.x)] = 0; // Make sure tile is clear after enemy death
+                         sprites.splice(hitSpriteIdx, 1); // Remove enemy from sprites list
+                     } else {
+                         console.log(`Enemy health: ${hitSprite.health}`);
+                         // Make enemy flash or react?
+                     }
+                }
+            } else if (hit) {
+                console.log(`Hit wall at distance ${hitDist}`);
+                // Show bullet impact effect on wall?
+            } else {
+                 console.log("Shot missed.");
+            }
+        }
+
+
+        function checkGameStatus() {
+            if (player.health <= 0) {
+                console.log("Game Over!");
+                // Show game over screen (reload for now)
+                alert("Game Over! You ran out of health.");
+                location.reload();
+            }
+
+             // Check if all enemies are defeated for Level 1 objective update (as an example)
+             if (currentLevel === 1 || currentLevel === 5 || currentLevel === 6 || currentLevel === 7) {
+                 let enemiesRemaining = sprites.some(s => s.type === 'enemy');
+                 if (!enemiesRemaining && !uiObjective.textContent.includes("Reach the exit")) {
+                    let currentObj = uiObjective.textContent;
+                     if(currentObj.startsWith("Find and shoot") || currentObj.startsWith("Conserve ammo") || currentObj.startsWith("Avoid or defeat") || currentObj.startsWith("Survive!")) {
+                         uiObjective.textContent = "All targets down! Now reach the exit (🟩)";
+                     }
+                 } else if (enemiesRemaining && uiObjective.textContent.includes("All targets down")) {
+                      // If somehow enemies respawned or check was wrong, revert objective
+                      setObjective(); // Reset to default level objective if enemies are back
+                 }
+             }
+        }
+
+        function getWallColor(mapX, mapY, side) {
+             let tileType = map[mapY][mapX];
+             let color = 'grey'; // Default wall
+
+             switch (tileType) {
+                 case 1: color = 'grey'; break;
+                 case 2: color = 'lime'; break; // Exit
+                 // case 3: color = 'yellow'; break; // Key (now a sprite)
+                 case 4: color = player.keys > 0 ? 'darkgoldenrod' : 'saddlebrown'; break; // Locked Door (shows slightly different if player has key)
+                 case 5: color = 'darkorange'; break; // Button
+                 case 6: color = 'brown'; break; // Button-activated door (closed state)
+                 // case 7: color = 'silver'; break; // Ammo (now sprite)
+                 // case 8: color = 'pink'; break; // Health (now sprite)
+                 // case 9: color = 'darkred'; break; // Enemy (now sprite)
+                 case 10: color = 'darkred'; break; // Treat damaging floor tile as a low wall for rendering? Or better handled separately? Let's make it red wall for now.
+                 default: color = 'darkgrey'; break; // Unknown tile type
+             }
+
+             // Make N/S walls slightly darker for depth
+             if (side === 1) {
+                 // Simple darkening: reduce RGB values. Convert color name to RGB first (approximate).
+                 // This is tricky without a color library. Let's use fixed darker shades.
+                 switch (color) {
+                     case 'grey': color = '#666666'; break;
+                     case 'lime': color = 'darkgreen'; break;
+                     case 'saddlebrown': color = '#6B4226'; break;
+                      case 'darkgoldenrod': color = '#9A6A15'; break;
+                     case 'darkorange': color = '#CC7000'; break;
+                     case 'brown': color = '#654321'; break;
+                      case 'darkred': color = '#600'; break;
+                     default: color = '#555555'; break;
+                 }
+             }
+             return color;
+        }
+
+        function render() {
+            // Clear screen
+            ctx.fillStyle = '#333'; // Floor color
+            ctx.fillRect(0, screenHeight / 2, screenWidth, screenHeight / 2);
+            ctx.fillStyle = '#66b3ff'; // Ceiling color
+            ctx.fillRect(0, 0, screenWidth, screenHeight / 2);
+
+            let zBuffer = new Array(screenWidth); // For sprite depth sorting
+
+            // Raycasting loop
+            for(let x = 0; x < screenWidth; x++) {
+                let cameraX = 2 * x / screenWidth - 1; // x-coordinate in camera space
+                let rayDirX = player.dirX + player.planeX * cameraX;
+                let rayDirY = player.dirY + player.planeY * cameraX;
+
+                let mapX = Math.floor(player.x);
+                let mapY = Math.floor(player.y);
+
+                let sideDistX, sideDistY;
+                let deltaDistX = (rayDirX === 0) ? 1e30 : Math.abs(1 / rayDirX);
+                let deltaDistY = (rayDirY === 0) ? 1e30 : Math.abs(1 / rayDirY);
+                let perpWallDist;
+
+                let stepX, stepY;
+                let hit = 0; // was a wall hit?
+                let side; // was a NS or a EW wall hit?
+
+                if (rayDirX < 0) {
+                    stepX = -1;
+                    sideDistX = (player.x - mapX) * deltaDistX;
+                } else {
+                    stepX = 1;
+                    sideDistX = (mapX + 1.0 - player.x) * deltaDistX;
+                }
+                if (rayDirY < 0) {
+                    stepY = -1;
+                    sideDistY = (player.y - mapY) * deltaDistY;
+                } else {
+                    stepY = 1;
+                    sideDistY = (mapY + 1.0 - player.y) * deltaDistY;
+                }
+
+                // Perform DDA
+                while (hit === 0) {
+                    if (sideDistX < sideDistY) {
+                        sideDistX += deltaDistX;
+                        mapX += stepX;
+                        side = 0; // EW wall hit
+                    } else {
+                        sideDistY += deltaDistY;
+                        mapY += stepY;
+                        side = 1; // NS wall hit
+                    }
+                    // Check if ray has hit a wall
+                    if (mapX < 0 || mapX >= mapWidth || mapY < 0 || mapY >= mapHeight || isWall(mapX, mapY)) { // Check using isWall which includes doors etc.
+                         if(mapX < 0 || mapX >= mapWidth || mapY < 0 || mapY >= mapHeight) {
+                             // Hit edge of map, treat as infinite wall? Or just stop drawing?
+                              perpWallDist = 1000; // Make it very far away
+                         } else {
+                            hit = map[mapY][mapX] > 0 ? map[mapY][mapX] : 1; // Use tile type or default 1 if it's a derived wall (like closed door)
+                         }
+
+                    }
+                     // Safety break for open maps/errors
+                     if (sideDistX > 100 && sideDistY > 100) {
+                         perpWallDist = 1000; // Far distance if no hit found quickly
+                         break;
+                     }
+                }
+
+                // Calculate distance projected on camera direction
+                if (side === 0) {
+                    perpWallDist = (mapX - player.x + (1 - stepX) / 2) / rayDirX;
+                } else {
+                    perpWallDist = (mapY - player.y + (1 - stepY) / 2) / rayDirY;
+                }
+
+                // Calculate height of line to draw on screen
+                let lineHeight = Math.floor(screenHeight / perpWallDist);
+
+                // Calculate lowest and highest pixel to fill in current stripe
+                let drawStart = -lineHeight / 2 + screenHeight / 2;
+                if (drawStart < 0) drawStart = 0;
+                let drawEnd = lineHeight / 2 + screenHeight / 2;
+                if (drawEnd >= screenHeight) drawEnd = screenHeight - 1;
+
+                // Choose wall color
+                 // Ensure mapX/mapY are valid before getting color
+                let validMapX = Math.max(0, Math.min(mapWidth - 1, mapX));
+                let validMapY = Math.max(0, Math.min(mapHeight - 1, mapY));
+                let color = getWallColor(validMapX, validMapY, side);
+
+
+                // Draw the vertical stripe
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1; // Draw thin stripes
+                ctx.moveTo(x + 0.5, drawStart);
+                ctx.lineTo(x + 0.5, drawEnd);
+                ctx.stroke();
+
+                 // Store depth for sprite rendering
+                 zBuffer[x] = perpWallDist;
+
+                  // Render floor/ceiling casting (simple solid colors already done)
+                 // OR: Simple textured floor/ceiling (checkerboard?)
+                 // This requires more complex calculations based on wall bottom/top and perspective
+                 // For simplicity, stick with solid colors for now.
+            }
+
+            // --- Sprite Casting ---
+            // Sort sprites from far to near
+            sprites.sort((a, b) => {
+                let distA = (player.x - a.x)**2 + (player.y - a.y)**2;
+                let distB = (player.x - b.x)**2 + (player.y - b.y)**2;
+                return distB - distA; // Farthest first
+            });
+
+            for (let i = 0; i < sprites.length; i++) {
+                const sprite = sprites[i];
+                // Translate sprite position to relative to camera
+                let spriteX = sprite.x - player.x;
+                let spriteY = sprite.y - player.y;
+
+                // Transform sprite with the inverse camera matrix
+                // [ planeX   dirX ] -1                               [ dirY      -dirX ]
+                // [               ]       =  1/(planeX*dirY-dirX*planeY) * [               ]
+                // [ planeY   dirY ]                               [ -planeY  planeX ]
+                let invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY); // Required for correct matrix calculation
+
+                let transformX = invDet * (player.dirY * spriteX - player.dirX * spriteY);
+                let transformY = invDet * (-player.planeY * spriteX + player.planeX * spriteY); // This is actually the depth inside the screen, that what Z is in 3D
+
+                 if (transformY > 0) { // Only draw sprites in front of the camera plane
+                    let spriteScreenX = Math.floor((screenWidth / 2) * (1 + transformX / transformY));
+
+                    // Calculate height of the sprite on screen
+                    let spriteHeight = Math.abs(Math.floor(screenHeight / transformY)); // Using 'transformY' as depth
+                    let drawStartY = Math.floor(-spriteHeight / 2 + screenHeight / 2);
+                    if (drawStartY < 0) drawStartY = 0;
+                    let drawEndY = Math.floor(spriteHeight / 2 + screenHeight / 2);
+                    if (drawEndY >= screenHeight) drawEndY = screenHeight - 1;
+
+                    // Calculate width of the sprite
+                    let spriteWidth = Math.abs(Math.floor(screenHeight / transformY)); // Assume square sprites for simplicity
+                    let drawStartX = Math.floor(-spriteWidth / 2 + spriteScreenX);
+                    let drawEndX = Math.floor(spriteWidth / 2 + spriteScreenX);
+
+
+                    // Loop through every vertical stripe of the sprite on screen
+                    for (let stripe = drawStartX; stripe < drawEndX; stripe++) {
+                         // Conditions:
+                         // 1. it's visible on screen and not behind player: transformY > 0
+                         // 2. it's on the screen (left): stripe >= 0
+                         // 3. it's on the screen (right): stripe < screenWidth
+                         // 4. ZBuffer check: stripe's depth (transformY) is smaller than wall depth in zBuffer
+                         if (stripe >= 0 && stripe < screenWidth && transformY < zBuffer[stripe]) {
+
+                             // Draw the sprite stripe (using simple shapes/colors)
+                             ctx.fillStyle = sprite.color || 'purple'; // Use sprite color or default
+                             // ctx.fillRect(stripe, drawStartY, 1, spriteHeight); // Simple rectangle
+
+                              // Draw emoji/symbol centered
+                               let fontSize = spriteWidth * 0.8; // Adjust size as needed
+                              if(fontSize > 5) { // Don't draw tiny emojis
+                                  ctx.font = `${fontSize}px Arial`;
+                                  ctx.textAlign = 'center';
+                                  ctx.textBaseline = 'middle';
+                                  // Draw slightly offset to center emoji better within the calculated box
+                                  ctx.fillText(sprite.symbol || '?', spriteScreenX, screenHeight / 2);
+                              }
+                              // Optimization: since we draw the whole emoji at once, break after drawing it once centered
+                             break; // Stop drawing stripes for this sprite once the center is drawn
+                         }
+                    }
+                }
+            }
+             // Reset context properties potentially changed by sprite drawing
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+
+        }
+
+
+        function gameLoop() {
+            handleInput();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialization
+        loadLevel(1); // Start at level 1
+        updateUI();
+        gameLoop(); // Start the game loop
+
+        window.addEventListener('resize', () => {
+            screenWidth = window.innerWidth;
+            screenHeight = window.innerHeight;
+            canvas.width = screenWidth;
+            canvas.height = screenHeight;
+             // Re-render immediately after resize
+             render();
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>2D Platformer Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #333;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            max-width: 100%;
+             /* Aspect ratio */
+            overflow: hidden; /* Ensure buttons stay within */
+        }
+        canvas {
+            display: block;
+            background-color: #87CEEB; /* Sky blue */
+            border: 2px solid #000;
+            width: 100%;
+            height: 100%;
+        }
+        .controls {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            width: 100%;
+            display: none; /* Hidden by default, shown via JS or media query if needed */
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 10;
+             -webkit-touch-callout: none; /* iOS Safari */
+            -webkit-user-select: none; /* Safari */
+             -khtml-user-select: none; /* Konqueror HTML */
+               -moz-user-select: none; /* Old versions of Firefox */
+                -ms-user-select: none; /* Internet Explorer/Edge */
+                    user-select: none; /* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
+        }
+        .controls button {
+            padding: 15px 20px;
+            font-size: 1.5em;
+            background-color: rgba(100, 100, 100, 0.7);
+            color: white;
+            border: 2px solid rgba(200, 200, 200, 0.8);
+            border-radius: 10px;
+            cursor: pointer;
+            touch-action: manipulation; /* Prevent double tap zoom */
+        }
+        .controls .left-controls {
+            display: flex;
+            gap: 10px;
+        }
+         .controls .right-controls {
+            display: flex;
+        }
+
+        #skipLevelBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            font-size: 0.9em;
+            background-color: #ff4d4d;
+            color: white;
+            border: 1px solid #cc0000;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 10;
+            user-select: none;
+        }
+
+        /* Show controls on touch devices */
+        @media (hover: none) and (pointer: coarse) {
+            .controls {
+                display: flex;
+            }
+        }
+         /* Alternative: Always show controls if preferred */
+         /* .controls { display: flex; } */
+
+    </style>
+</head>
+<body>
+    <h1 id="levelTitle">Level 1</h1>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <button id="skipLevelBtn">Skip Level</button>
+        <div class="controls">
+            <div class="left-controls">
+                <button id="leftBtn">◀</button>
+                <button id="rightBtn">▶</button>
+            </div>
+            <div class="right-controls">
+                <button id="jumpBtn">▲</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelTitle = document.getElementById('levelTitle');
+        const gameContainer = document.getElementById('gameContainer');
+
+        // Adjust canvas size based on container
+        function resizeCanvas() {
+            const containerWidth = gameContainer.clientWidth;
+            // Maintain 4:3 aspect ratio
+            const canvasHeight = containerWidth * (600 / 800);
+            gameContainer.style.height = `${canvasHeight}px`;
+            canvas.width = 800; // Keep internal resolution fixed
+            canvas.height = 600;
+            // Optional: Scale drawing if needed, but fixed resolution is simpler here
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+
+        // Game constants
+        const GRAVITY = 0.5;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = 12;
+        const FRICTION = 0.8;
+
+        // Game state
+        let player;
+        let platforms = [];
+        let goal;
+        let scenery = [];
+        let currentLevel = 0;
+        let keys = {};
+        let touchLeft = false;
+        let touchRight = false;
+        let touchJump = false;
+        let gameWon = false;
+
+        // Player object
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 30;
+                this.height = 40;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.isGrounded = false;
+                this.color = '#FF5733'; // Orange-Red
+            }
+
+            jump() {
+                if (this.isGrounded) {
+                    this.velocityY = -JUMP_FORCE;
+                    this.isGrounded = false;
+                }
+            }
+
+            moveLeft() {
+                this.velocityX = -PLAYER_SPEED;
+            }
+
+            moveRight() {
+                this.velocityX = PLAYER_SPEED;
+            }
+
+            update(platforms) {
+                // Apply horizontal movement and friction
+                this.x += this.velocityX;
+                this.velocityX *= FRICTION;
+                if (Math.abs(this.velocityX) < 0.1) {
+                    this.velocityX = 0;
+                }
+
+                // Apply gravity
+                this.velocityY += GRAVITY;
+                this.y += this.velocityY;
+
+                this.isGrounded = false; // Assume not grounded until collision check
+
+                // Collision with platforms
+                platforms.forEach(platform => {
+                    // Check horizontal collision
+                    if (this.x < platform.x + platform.width &&
+                        this.x + this.width > platform.x &&
+                        this.y < platform.y + platform.height &&
+                        this.y + this.height > platform.y) {
+
+                        // Horizontal collision resolution
+                        if (this.velocityX > 0 && this.x + this.width > platform.x && this.x < platform.x) { // Moving right, collide left side of platform
+                             this.x = platform.x - this.width;
+                             this.velocityX = 0;
+                        } else if (this.velocityX < 0 && this.x < platform.x + platform.width && this.x + this.width > platform.x + platform.width) { // Moving left, collide right side of platform
+                             this.x = platform.x + platform.width;
+                             this.velocityX = 0;
+                        }
+                    }
+
+
+                    // Check vertical collision AFTER potentially resolving horizontal
+                     if (this.x < platform.x + platform.width &&
+                        this.x + this.width > platform.x &&
+                        this.y < platform.y + platform.height &&
+                        this.y + this.height > platform.y) {
+
+                        // Vertical collision resolution
+                        if (this.velocityY > 0 && this.y + this.height > platform.y && this.y < platform.y) { // Falling down onto platform
+                            this.y = platform.y - this.height;
+                            this.velocityY = 0;
+                            this.isGrounded = true;
+                        } else if (this.velocityY < 0 && this.y < platform.y + platform.height && this.y + this.height > platform.y + platform.height) { // Jumping up into platform
+                             this.y = platform.y + platform.height;
+                             this.velocityY = 0.1; // Add small downward velocity to prevent sticking
+                        }
+                    }
+
+                });
+
+                 // Boundary checks (canvas edges)
+                if (this.x < 0) {
+                    this.x = 0;
+                    this.velocityX = 0;
+                }
+                if (this.x + this.width > canvas.width) {
+                    this.x = canvas.width - this.width;
+                    this.velocityX = 0;
+                }
+                 if (this.y > canvas.height) { // Fell off screen
+                    loadLevel(currentLevel); // Reset level
+                }
+                 // Prevent going above top boundary (optional)
+                 if (this.y < 0) {
+                    this.y = 0;
+                    this.velocityY = 0.1; // Push down slightly
+                 }
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                 // Simple eye
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(this.x + this.width * 0.6, this.y + this.height * 0.2, 5, 5);
+                 ctx.fillStyle = '#000000';
+                ctx.fillRect(this.x + this.width * 0.65, this.y + this.height * 0.25, 2, 2);
+            }
+        }
+
+        // Platform object
+        class Platform {
+            constructor(x, y, width, height, color = '#654321') { // Brown
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                 // Add a simple grass top
+                if (this.color === '#654321') { // Only for brown platforms
+                    ctx.fillStyle = '#228B22'; // ForestGreen
+                    ctx.fillRect(this.x, this.y, this.width, 5);
+                }
+            }
+        }
+
+        // Goal object
+        class Goal {
+            constructor(x, y, width = 40, height = 50, color = '#FFD700') { // Gold
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+            }
+
+            draw(ctx) {
+                // Draw a simple flag/portal
+                ctx.fillStyle = '#C0C0C0'; // Silver pole
+                ctx.fillRect(this.x, this.y, 5, this.height);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(this.x + 5, this.y);
+                ctx.lineTo(this.x + this.width, this.y + this.height / 3);
+                ctx.lineTo(this.x + 5, this.y + this.height * 2 / 3);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        // Scenery Object (simple shapes)
+         class SceneryObject {
+            constructor(type, x, y, size, color) {
+                this.type = type; // 'cloud', 'mountain', 'tree', 'sun'
+                this.x = x;
+                this.y = y;
+                this.size = size;
+                this.color = color;
+            }
+
+            draw(ctx) {
+                ctx.fillStyle = this.color;
+                switch (this.type) {
+                    case 'cloud':
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size * 0.6, 0, Math.PI * 2);
+                        ctx.arc(this.x + this.size * 0.5, this.y - this.size * 0.1, this.size * 0.7, 0, Math.PI * 2);
+                        ctx.arc(this.x + this.size, this.y, this.size * 0.6, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'mountain':
+                        ctx.beginPath();
+                        ctx.moveTo(this.x, this.y);
+                        ctx.lineTo(this.x + this.size / 2, this.y - this.size * 1.5);
+                        ctx.lineTo(this.x + this.size, this.y);
+                        ctx.closePath();
+                        ctx.fill();
+                         // Snow cap
+                         ctx.fillStyle = '#FFFFFF';
+                         ctx.beginPath();
+                         ctx.moveTo(this.x + this.size * 0.3, this.y - this.size * 0.9);
+                         ctx.lineTo(this.x + this.size / 2, this.y - this.size * 1.5);
+                         ctx.lineTo(this.x + this.size * 0.7, this.y - this.size * 0.9);
+                         ctx.closePath();
+                         ctx.fill();
+                        break;
+                    case 'tree':
+                        // Trunk
+                        ctx.fillStyle = '#8B4513'; // SaddleBrown
+                        ctx.fillRect(this.x + this.size * 0.4, this.y - this.size, this.size * 0.2, this.size);
+                        // Leaves
+                        ctx.fillStyle = this.color; // Green
+                        ctx.beginPath();
+                        ctx.arc(this.x + this.size / 2, this.y - this.size * 1.2, this.size * 0.6, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                     case 'sun':
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+                        ctx.fill();
+                        break;
+                }
+            }
+        }
+
+
+        // Level Data
+        const levelData = [
+            // Level 1: Introduction
+            {
+                platforms: [
+                    { x: 0, y: 550, w: 800, h: 50 }, // Ground
+                    { x: 200, y: 450, w: 100, h: 20 },
+                    { x: 400, y: 350, w: 100, h: 20 },
+                ],
+                start: { x: 50, y: 500 },
+                goal: { x: 700, y: 500 },
+                scenery: [
+                     { type: 'sun', x: 700, y: 80, size: 30, color: '#FFFF00' },
+                     { type: 'cloud', x: 100, y: 100, size: 50, color: '#FFFFFF' },
+                     { type: 'cloud', x: 500, y: 150, size: 60, color: '#FFFFFF' },
+                     { type: 'tree', x: 150, y: 550, size: 50, color: '#2E8B57' }, // SeaGreen
+                ]
+            },
+            // Level 2: Simple Jumps
+            {
+                platforms: [
+                    { x: 0, y: 550, w: 150, h: 50 },
+                    { x: 250, y: 500, w: 100, h: 20 },
+                    { x: 400, y: 450, w: 100, h: 20 },
+                    { x: 550, y: 500, w: 100, h: 20 },
+                    { x: 700, y: 550, w: 100, h: 50 },
+                ],
+                start: { x: 50, y: 500 },
+                goal: { x: 730, y: 500 },
+                scenery: [
+                    { type: 'sun', x: 100, y: 100, size: 30, color: '#FFFF00' },
+                    { type: 'cloud', x: 300, y: 120, size: 40, color: '#FFFFFF' },
+                    { type: 'mountain', x: 400, y: 550, size: 150, color: '#A9A9A9'}, // DarkGray mountain
+                ]
+            },
+            // Level 3: Higher Platforms
+            {
+                platforms: [
+                    { x: 0, y: 550, w: 800, h: 50 },
+                    { x: 100, y: 450, w: 80, h: 15 },
+                    { x: 250, y: 380, w: 80, h: 15 },
+                    { x: 400, y: 300, w: 80, h: 15 },
+                     { x: 550, y: 380, w: 80, h: 15 },
+                     { x: 700, y: 450, w: 80, h: 15 },
+                ],
+                start: { x: 50, y: 500 },
+                goal: { x: 420, y: 250 },
+                 scenery: [
+                    { type: 'cloud', x: 150, y: 80, size: 50, color: '#FFFFFF' },
+                    { type: 'cloud', x: 600, y: 130, size: 60, color: '#FFFFFF' },
+                    { type: 'tree', x: 50, y: 550, size: 60, color: '#2E8B57' },
+                     { type: 'tree', x: 650, y: 550, size: 50, color: '#228B22' },
+                ]
+            },
+             // Level 4: Small Gaps
+            {
+                platforms: [
+                    { x: 0, y: 550, w: 200, h: 50 },
+                    { x: 280, y: 550, w: 200, h: 50 },
+                    { x: 560, y: 550, w: 240, h: 50 },
+                     { x: 400, y: 450, w: 50, h: 150, color: '#A0522D'}, // Sienna pillar
+                     { x: 150, y: 350, w: 100, h: 20 },
+                     { x: 550, y: 350, w: 100, h: 20 },
+                ],
+                start: { x: 50, y: 500 },
+                goal: { x: 700, y: 300 },
+                 scenery: [
+                     { type: 'sun', x: 700, y: 80, size: 30, color: '#FFFF00' },
+                     { type: 'mountain', x: 200, y: 550, size: 180, color: '#808080'}, // Gray mountain
+                     { type: 'cloud', x: 400, y: 100, size: 50, color: '#FFFFFF' },
+                ]
+            },
+             // Level 5: Verticality
+            {
+                platforms: [
+                    { x: 0, y: 550, w: 100, h: 50 },
+                    { x: 150, y: 480, w: 100, h: 120 },
+                    { x: 300, y: 400, w: 100, h: 200 },
+                    { x: 450, y: 320, w: 100, h: 280 },
+                    { x: 600, y: 240, w: 100, h: 360 },
+                    { x: 750, y: 160, w: 50, h: 440 },
+                     // Small platform for goal
+                     { x: 50, y: 150, w: 80, h: 20 },
+                ],
+                start: { x: 30, y: 500 },
+                goal: { x: 70, y: 100 },
+                 scenery: [
+                    { type: 'cloud', x: 200, y: 50, size: 40, color: '#FFFFFF' },
+                    { type: 'cloud', x: 500, y: 80, size: 50, color: '#FFFFFF' },
+                    // Background mountains suggesting height
+                    { type: 'mountain', x: 50, y: 600, size: 150, color: '#A9A9A9'},
+                    { type: 'mountain', x: 350, y: 600, size: 200, color: '#808080'},
+                    { type: 'mountain', x: 650, y: 600, size: 120, color: '#A9A9A9'},
+                ]
+            },
+             // Level 6: Tricky Jumps
+            {
+                platforms: [
+                    { x: 0, y: 550, w: 50, h: 50 }, // Start
+                    { x: 150, y: 500, w: 50, h: 20 },
+                    { x: 300, y: 450, w: 50, h: 20 },
+                    { x: 450, y: 500, w: 50, h: 20 },
+                    { x: 600, y: 450, w: 50, h: 20 },
+                    { x: 750, y: 400, w: 50, h: 200 }, // Goal platform
+                    // A low ceiling part
+                     { x: 250, y: 300, w: 300, h: 20, color: '#778899' }, // LightSlateGray ceiling
+                ],
+                start: { x: 10, y: 500 },
+                goal: { x: 760, y: 350 },
+                 scenery: [
+                     { type: 'sun', x: 50, y: 70, size: 30, color: '#FFFF00' },
+                     { type: 'tree', x: 700, y: 400, size: 40, color: '#228B22' },
+                     { type: 'cloud', x: 400, y: 150, size: 60, color: '#FFFFFF' },
+                ]
+            },
+            // Level 7: Falling Platforms Illusion (just spaced platforms)
+            {
+                platforms: [
+                    { x: 0, y: 550, w: 100, h: 50 },
+                    { x: 200, y: 500, w: 80, h: 20 },
+                    // Gap
+                    { x: 400, y: 450, w: 80, h: 20 },
+                     // Gap
+                    { x: 600, y: 400, w: 80, h: 20 },
+                    { x: 700, y: 550, w: 100, h: 50 }, // Landing
+                     // Upper path
+                     { x: 150, y: 300, w: 100, h: 20 },
+                     { x: 350, y: 250, w: 100, h: 20 },
+                     { x: 550, y: 200, w: 100, h: 20 }, // Goal is here
+                ],
+                start: { x: 30, y: 500 },
+                goal: { x: 600, y: 150 },
+                scenery: [
+                    { type: 'mountain', x: 100, y: 550, size: 100, color: '#A9A9A9'},
+                    { type: 'mountain', x: 500, y: 550, size: 150, color: '#808080'},
+                     { type: 'cloud', x: 300, y: 100, size: 50, color: '#FFFFFF' },
+                      { type: 'cloud', x: 650, y: 80, size: 40, color: '#FFFFFF' },
+                ]
+            },
+            // Level 8: Maze-like Structure
+             {
+                platforms: [
+                    { x: 0, y: 550, w: 800, h: 50 }, // Floor
+                    // Walls
+                    { x: 100, y: 400, w: 20, h: 150 },
+                    { x: 300, y: 450, w: 20, h: 100 },
+                    { x: 500, y: 400, w: 20, h: 150 },
+                    { x: 700, y: 350, w: 20, h: 200 },
+                    // Platforms inside
+                    { x: 120, y: 400, w: 180, h: 20 },
+                    { x: 320, y: 450, w: 180, h: 20 },
+                    { x: 520, y: 400, w: 180, h: 20 },
+                     // Upper level
+                    { x: 0, y: 300, w: 150, h: 20 },
+                    { x: 250, y: 250, w: 150, h: 20 },
+                    { x: 450, y: 200, w: 150, h: 20 },
+                    { x: 650, y: 150, w: 150, h: 20 }, // Goal platform
+                ],
+                start: { x: 30, y: 500 },
+                goal: { x: 750, y: 100 },
+                scenery: [
+                    { type: 'sun', x: 400, y: 80, size: 30, color: '#FFFF00' },
+                    // Less scenery, focus on structure
+                ]
+            },
+             // Level 9: Precision Jumps
+            {
+                platforms: [
+                    { x: 0, y: 580, w: 50, h: 20 }, // Start (small)
+                    { x: 150, y: 550, w: 30, h: 20 },
+                    { x: 250, y: 500, w: 30, h: 20 },
+                    { x: 350, y: 450, w: 30, h: 20 },
+                    { x: 450, y: 400, w: 30, h: 20 },
+                    { x: 550, y: 350, w: 30, h: 20 },
+                    { x: 650, y: 300, w: 30, h: 20 },
+                    { x: 750, y: 250, w: 50, h: 150 }, // Goal platform (larger)
+                     // Some obstacles/distractions
+                      { x: 200, y: 350, w: 100, h: 15, color: '#778899' },
+                      { x: 500, y: 250, w: 100, h: 15, color: '#778899' },
+                ],
+                start: { x: 10, y: 550 },
+                goal: { x: 760, y: 200 },
+                 scenery: [
+                     { type: 'cloud', x: 100, y: 100, size: 40, color: '#FFFFFF' },
+                     { type: 'cloud', x: 500, y: 150, size: 50, color: '#FFFFFF' },
+                      { type: 'mountain', x: 300, y: 580, size: 120, color: '#808080'},
+                ]
+            },
+            // Level 10: Final Challenge - Mix of elements
+            {
+                platforms: [
+                    { x: 0, y: 550, w: 50, h: 50 }, // Start
+                    // Small jumps
+                    { x: 120, y: 520, w: 30, h: 20 },
+                    { x: 220, y: 480, w: 30, h: 20 },
+                     // Wall jump section? (simple version: platforms near wall)
+                     { x: 300, y: 150, w: 20, h: 350 }, // Left wall
+                     { x: 320, y: 400, w: 50, h: 15 },
+                     { x: 270, y: 300, w: 30, h: 15 }, // Requires jumping back towards wall
+                     { x: 320, y: 200, w: 50, h: 15 },
+                     // Moving across
+                     { x: 400, y: 150, w: 100, h: 20 },
+                     { x: 550, y: 250, w: 30, h: 20 }, // Drop down
+                     { x: 450, y: 350, w: 30, h: 20 },
+                     { x: 350, y: 450, w: 30, h: 20 },
+                     // Final ascent
+                     { x: 500, y: 550, w: 300, h: 50 }, // Lower ground
+                     { x: 600, y: 450, w: 50, h: 100 },
+                     { x: 700, y: 350, w: 50, h: 200 }, // Tall pillar
+                     { x: 750, y: 200, w: 50, h: 20 }, // Goal platform
+                ],
+                start: { x: 10, y: 500 },
+                goal: { x: 760, y: 150 },
+                 scenery: [
+                    { type: 'sun', x: 700, y: 80, size: 40, color: '#FFFF00' },
+                     { type: 'mountain', x: 100, y: 550, size: 200, color: '#A9A9A9'},
+                     { type: 'mountain', x: 450, y: 550, size: 150, color: '#808080'},
+                      { type: 'cloud', x: 250, y: 100, size: 60, color: '#FFFFFF' },
+                      { type: 'tree', x: 550, y: 550, size: 50, color: '#228B22' },
+                ]
+            }
+        ];
+
+        // Load level function
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levelData.length) {
+                gameWon = true;
+                return;
+            }
+             gameWon = false;
+            const level = levelData[levelIndex];
+            levelTitle.textContent = `Level ${levelIndex + 1}`;
+
+            player = new Player(level.start.x, level.start.y);
+            platforms = level.platforms.map(p => new Platform(p.x, p.y, p.w, p.h, p.color));
+            goal = new Goal(level.goal.x, level.goal.y);
+            scenery = level.scenery.map(s => new SceneryObject(s.type, s.x, s.y, s.size, s.color));
+
+             // Reset velocities and state
+            player.velocityX = 0;
+            player.velocityY = 0;
+            player.isGrounded = false;
+        }
+
+        // Input Handling
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        // Touch Controls
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        const jumpBtn = document.getElementById('jumpBtn');
+        const skipLevelBtn = document.getElementById('skipLevelBtn');
+
+         // Use pointer events for broader compatibility (touch + mouse)
+         leftBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); touchLeft = true; });
+         leftBtn.addEventListener('pointerup', (e) => { e.preventDefault(); touchLeft = false; });
+         leftBtn.addEventListener('pointerleave', (e) => { touchLeft = false; }); // Stop if finger slides off
+
+         rightBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); touchRight = true; });
+         rightBtn.addEventListener('pointerup', (e) => { e.preventDefault(); touchRight = false; });
+         rightBtn.addEventListener('pointerleave', (e) => { touchRight = false; });
+
+         jumpBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); touchJump = true; });
+         jumpBtn.addEventListener('pointerup', (e) => { e.preventDefault(); touchJump = false; });
+        // No pointerleave needed for jump, it's instant
+
+
+        skipLevelBtn.addEventListener('click', () => {
+            currentLevel++;
+            if (currentLevel >= levelData.length) {
+                gameWon = true; // Show win message immediately if skipping last level
+                // Optional: Reset to first level or stay on win screen
+                // currentLevel = 0;
+            }
+             if(!gameWon) {
+                 loadLevel(currentLevel);
+             }
+        });
+
+        function handleInput() {
+            if (keys['KeyA'] || keys['ArrowLeft'] || touchLeft) {
+                player.moveLeft();
+            }
+            if (keys['KeyD'] || keys['ArrowRight'] || touchRight) {
+                player.moveRight();
+            }
+            if (keys['KeyW'] || keys['ArrowUp'] || keys['Space'] || touchJump) {
+                player.jump();
+                touchJump = false; // Reset touch jump after use (like key press)
+            }
+        }
+
+        // Collision check between two rectangles
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // Game Loop
+        function gameLoop() {
+            if (gameWon) {
+                 // Clear canvas
+                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                 // Draw Win Message
+                 ctx.fillStyle = '#000';
+                 ctx.font = '48px Arial';
+                 ctx.textAlign = 'center';
+                 ctx.fillText('You Win!', canvas.width / 2, canvas.height / 2 - 30);
+                 ctx.font = '24px Arial';
+                 ctx.fillText('Congratulations!', canvas.width / 2, canvas.height / 2 + 20);
+                  // Maybe add a 'Play Again' button functionality here later
+                 requestAnimationFrame(gameLoop); // Keep looping to display message
+                 return; // Stop game logic
+            }
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Background color (redundant if canvas CSS background is set, but good practice)
+            ctx.fillStyle = '#87CEEB'; // Sky blue
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Scenery
+            scenery.forEach(s => s.draw(ctx));
+
+            // Draw Platforms
+            platforms.forEach(platform => platform.draw(ctx));
+
+            // Draw Goal
+            goal.draw(ctx);
+
+            // Handle Input
+            handleInput();
+
+            // Update Player
+            player.update(platforms);
+
+            // Draw Player
+            player.draw(ctx);
+
+             // Draw Level Number (optional, already in H1)
+             ctx.fillStyle = '#000';
+             ctx.font = '16px Arial';
+             ctx.textAlign = 'left';
+             ctx.fillText(`Level: ${currentLevel + 1}`, 10, 20);
+
+
+            // Check for level completion
+            if (checkCollision(player, goal)) {
+                currentLevel++;
+                if (currentLevel < levelData.length) {
+                    loadLevel(currentLevel);
+                } else {
+                    gameWon = true; // Set win state
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initial setup
+        resizeCanvas(); // Initial canvas sizing
+        loadLevel(currentLevel);
+        gameLoop();
+
+         // Show controls if touch is detected (simple check)
+         if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+             document.querySelector('.controls').style.display = 'flex';
+         }
+
+
+    </script>
+</body>
+</html>

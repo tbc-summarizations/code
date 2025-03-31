@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virus Deletion Protocol</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #000;
+            color: #0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #game-container {
+            width: 800px;
+            height: 600px;
+            border: 2px solid #0f0;
+            background-color: #111;
+            position: relative;
+            box-shadow: 0 0 20px #0f0;
+            display: flex;
+            flex-direction: column;
+        }
+        #desktop {
+            flex-grow: 1;
+            position: relative;
+            background: radial-gradient(circle, #003300, #001a00);
+            overflow: hidden;
+            padding: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            gap: 20px;
+        }
+        .icon {
+            width: 80px;
+            height: 100px;
+            border: 1px solid #0a0;
+            background-color: #222;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            text-align: center;
+            padding: 5px;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+        .icon:hover {
+            background-color: #333;
+            box-shadow: 0 0 10px #0f0;
+        }
+        .icon .symbol {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+        .icon .label {
+            font-size: 12px;
+            word-wrap: break-word;
+        }
+        #dialogue-box {
+            height: 150px;
+            border-top: 2px solid #0f0;
+            background-color: #000;
+            padding: 15px;
+            overflow-y: auto;
+            line-height: 1.6;
+        }
+        #dialogue-box p {
+            margin: 0 0 10px 0;
+        }
+        #dialogue-box span {
+            font-weight: bold;
+            color: #f00; /* Attacker's text color */
+        }
+        .hidden {
+            display: none !important;
+        }
+        #virus-warning {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #ff0;
+            color: #000;
+            border: 5px solid #f00;
+            padding: 30px;
+            text-align: center;
+            z-index: 100;
+            font-size: 1.5em;
+            box-shadow: 0 0 30px #f00;
+        }
+        #virus-warning button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #f00;
+            color: #fff;
+            border: none;
+        }
+        #reaction-target {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background-color: red;
+            cursor: pointer;
+            z-index: 50;
+            animation: blink 0.5s infinite alternate;
+        }
+        @keyframes blink {
+            from { opacity: 1; }
+            to { opacity: 0.5; }
+        }
+        #memory-shapes button {
+            font-size: 30px;
+            margin: 5px;
+            padding: 10px;
+            cursor: pointer;
+            background-color: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+        }
+        #riddle-input, #anagram-input {
+            background-color: #222;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px;
+            font-family: 'Courier New', Courier, monospace;
+            margin-right: 10px;
+        }
+        #submit-button {
+             background-color: #050;
+             color: #0f0;
+             border: 1px solid #0f0;
+             padding: 5px 10px;
+             cursor: pointer;
+        }
+         #submit-button:hover {
+             background-color: #080;
+         }
+
+        /* Simple Shapes */
+        .square { width: 40px; height: 40px; background-color: #00f; margin-bottom: 10px; }
+        .triangle { width: 0; height: 0; border-left: 20px solid transparent; border-right: 20px solid transparent; border-bottom: 40px solid #ff0; margin-bottom: 10px; }
+        .circle { width: 40px; height: 40px; background-color: #f0f; border-radius: 50%; margin-bottom: 10px; }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="desktop">
+            <!-- Icons will be added/removed by JS -->
+             <div id="icon-doc" class="icon">
+                <div class="symbol">📄</div>
+                <div class="label">Important_Doc.txt</div>
+            </div>
+             <div id="icon-recycle" class="icon">
+                <div class="symbol">🗑️</div>
+                <div class="label">Recycle Bin</div>
+            </div>
+             <div id="icon-browser" class="icon">
+                <div class="symbol">🌐</div>
+                <div class="label">Web Browser</div>
+            </div>
+             <div id="icon-game" class="icon">
+                <div class="symbol">🎮</div>
+                <div class="label">MyGame.exe</div>
+            </div>
+            <!-- Game elements will appear here -->
+            <div id="reaction-target" class="hidden"></div>
+            <div id="memory-game-area" class="hidden">
+                <p>Click the shapes in the order shown:</p>
+                <div id="memory-display"></div>
+                <div id="memory-buttons">
+                    <button data-shape="S">🟦</button>
+                    <button data-shape="T">🔺</button>
+                    <button data-shape="C">🟢</button>
+                    <button data-shape="R">🟥</button>
+                    <button data-shape="ST">⭐</button>
+                </div>
+                 <p>Your input: <span id="memory-input-display"></span></p>
+            </div>
+            <div id="riddle-area" class="hidden">
+                <p id="riddle-text"></p>
+                <input type="text" id="riddle-input">
+                <button id="submit-button" onclick="checkRiddle()">Submit</button>
+            </div>
+            <div id="anagram-area" class="hidden">
+                <p>Unscramble these letters: <span id="anagram-letters" style="font-size: 1.5em; letter-spacing: 10px; color: #ff0;"></span></p>
+                <input type="text" id="anagram-input">
+                <button id="submit-button" onclick="checkAnagram()">Submit</button>
+            </div>
+            <div id="final-task-area" class="hidden">
+                <div id="icon-final" class="icon" style="border-color: #0f0; background-color: #050;">
+                    <div class="symbol" style="font-size: 50px;">✅</div>
+                    <div class="label">Delete_Virus.exe</div>
+                </div>
+            </div>
+
+
+        </div>
+        <div id="dialogue-box">
+            <p id="attacker-line"><span>Attacker:</span> Loading...</p>
+            <p id="player-line"></p>
+        </div>
+    </div>
+
+    <div id="virus-warning">
+        <h2>🚨 VIRUS DETECTED! 🚨</h2>
+        <p>Critical System Error! Unidentified malware detected.<br>Quarantine failed. Manual intervention required.</p>
+        <p style="color: #f00; font-weight:bold;">Communication channel established with unknown entity...</p>
+        <button onclick="startGame()">Understand</button>
+    </div>
+
+    <script>
+        const dialogueBox = document.getElementById('dialogue-box');
+        const attackerLine = document.getElementById('attacker-line');
+        const playerLine = document.getElementById('player-line');
+        const desktop = document.getElementById('desktop');
+        const virusWarning = document.getElementById('virus-warning');
+
+        // Icons
+        const docIcon = document.getElementById('icon-doc');
+        const recycleIcon = document.getElementById('icon-recycle');
+
+        // Game Areas
+        const reactionTarget = document.getElementById('reaction-target');
+        const memoryGameArea = document.getElementById('memory-game-area');
+        const memoryDisplay = document.getElementById('memory-display');
+        const memoryButtons = document.getElementById('memory-buttons');
+        const memoryInputDisplay = document.getElementById('memory-input-display');
+        const riddleArea = document.getElementById('riddle-area');
+        const riddleText = document.getElementById('riddle-text');
+        const riddleInput = document.getElementById('riddle-input');
+        const anagramArea = document.getElementById('anagram-area');
+        const anagramLetters = document.getElementById('anagram-letters');
+        const anagramInput = document.getElementById('anagram-input');
+        const finalTaskArea = document.getElementById('final-task-area');
+        const finalIcon = document.getElementById('icon-final');
+
+
+        let gameState = 0; // 0: initial, 1: delete doc, 2: reaction, 3: memory, 4: riddle, 5: anagram, 6: final, 7: win
+        let reactionTimer;
+        let memorySequence = [];
+        let currentMemoryInput = [];
+        let expectedRiddleAnswer = "";
+        let expectedAnagramAnswer = "";
+
+        const dialogues = [
+            /* 0 */ "<span>Attacker:</span> So... you clicked the button. Smart move? Maybe. Looks like you've got a nasty piece of work on your system. Call me... your involuntary tech support.",
+            /* 1 */ "<span>Attacker:</span> Let's start simple. Trust exercise. See that 'Important_Doc.txt'? Looks vital, doesn't it? I want you to delete it. Dragging it to the bin isn't enough. Find a way to remove it *permanently*. Click it first.",
+            /* 2 */ "<span>Attacker:</span> Good, good. Obedience is key. Now, a test of reflexes. A red square 🟥 will appear somewhere. Click it before I lose patience... let's say, 3 seconds?",
+            /* 3 */ "<span>Attacker:</span> Faster than you look. Alright, mind games now. Memorize this sequence. I'll show it briefly. Then, click the shapes in the correct order.",
+            /* 4 */ "<span>Attacker:</span> Not bad. Let's test that brain differently. Solve this riddle: ", // Riddle text appended later
+            /* 5 */ "<span>Attacker:</span> Clever... or lucky? Time for some wordplay. Unscramble these letters to form a word highly relevant to your situation. Type your answer.",
+            /* 6 */ "<span>Attacker:</span> Impressive. You've played my games, followed my rules. Perhaps you deserve to fix this mess. There's one final 'program' on your desktop now. Click 'Delete_Virus.exe' represented by the green checkmark ✅.",
+            /* 7 */ "<span>Attacker:</span> ... Fine. You win this round. Virus deletion protocols initiated... successfully. Your system should be clean. Now get out of my sight. Don't expect this kindness again.",
+            /* 8 */ "<span>Attacker:</span> Too slow! *tsk tsk* Patience is not my virtue. Things just got worse for you.", // Game Over - Reaction Fail
+            /* 9 */ "<span>Attacker:</span> Wrong sequence! Memory like a sieve. This isn't going well for you.", // Game Over - Memory Fail
+            /* 10 */ "<span>Attacker:</span> WRONG! Seriously? Was that so hard? I'm losing faith in you.", // Game Over - Riddle Fail
+            /* 11 */ "<span>Attacker:</span> Incorrect! Can't even spell your own doom? Pathetic.", // Game Over - Anagram Fail
+            /* 12 */ "<span>Attacker:</span> You need to click the DOCUMENT first, you fool.",
+            /* 13 */ "<span>Attacker:</span> That's the Recycle Bin. I said PERMANENTLY. Try again with the document."
+        ];
+
+        function updateDialogue(text) {
+            attackerLine.innerHTML = text;
+            playerLine.textContent = ""; // Clear player action text
+            dialogueBox.scrollTop = dialogueBox.scrollHeight; // Scroll to bottom
+        }
+
+        function setPlayerActionText(text) {
+             playerLine.textContent = `> ${text}`;
+        }
+
+        function startGame() {
+            virusWarning.classList.add('hidden');
+            updateDialogue(dialogues[0]);
+            setTimeout(() => {
+                gameState = 1;
+                updateDialogue(dialogues[1]);
+            }, 4000); // Wait a bit before the first instruction
+        }
+
+        // --- Task 1: Delete Document ---
+        let docClicked = false;
+        docIcon.onclick = () => {
+            if (gameState === 1) {
+                if (!docClicked) {
+                    setPlayerActionText("Clicked 'Important_Doc.txt'.");
+                    docIcon.style.borderColor = '#ff0'; // Highlight selection
+                    attackerLine.innerHTML = "<span>Attacker:</span> Good. Now, how to delete it permanently? Think! Maybe right-click context menus don't exist here... perhaps try clicking it *again* while holding a 'special' key? (Hint: Try Shift + Click)";
+                    docClicked = true;
+                } else {
+                    // This simulates the permanent delete action without complex UI
+                     updateDialogue("<span>Attacker:</span> Hold 'Shift' while clicking it to signify permanent deletion!");
+                     setPlayerActionText("Clicked 'Important_Doc.txt' again...");
+                }
+            } else if (gameState > 1) {
+                 setPlayerActionText("Clicked 'Important_Doc.txt', but it's already gone or irrelevant.");
+            } else {
+                 setPlayerActionText("Clicked 'Important_Doc.txt'.");
+                 updateDialogue(dialogues[12]); // Tell them to wait for instructions
+            }
+        };
+
+        // Simulate Shift+Click for permanent deletion
+        docIcon.addEventListener('click', (event) => {
+            if (gameState === 1 && docClicked && event.shiftKey) {
+                setPlayerActionText("Shift+Clicked 'Important_Doc.txt'!");
+                docIcon.classList.add('hidden'); // Remove the icon
+                gameState = 2;
+                updateDialogue(dialogues[2]);
+                startReactionGame();
+                docClicked = false; // Reset for safety
+            } else if (gameState === 1 && docClicked && !event.shiftKey){
+                 setPlayerActionText("Clicked 'Important_Doc.txt' without Shift.");
+                 // Dialogue already updated above to hint Shift+Click
+            }
+        });
+
+         recycleIcon.onclick = () => {
+              if (gameState === 1 && docClicked) {
+                    setPlayerActionText("Clicked Recycle Bin.");
+                    updateDialogue(dialogues[13]);
+              } else {
+                   setPlayerActionText("Clicked Recycle Bin. It seems empty... or irrelevant now.");
+              }
+         };
+
+
+        // --- Task 2: Reaction Game ---
+        function startReactionGame() {
+            reactionTarget.classList.remove('hidden');
+            // Position randomly within desktop bounds
+            const maxX = desktop.clientWidth - reactionTarget.offsetWidth - 40; // 20px padding each side
+            const maxY = desktop.clientHeight - reactionTarget.offsetHeight - 40;
+            reactionTarget.style.left = `${Math.random() * maxX + 20}px`;
+            reactionTarget.style.top = `${Math.random() * maxY + 20}px`;
+
+            clearTimeout(reactionTimer); // Clear previous timer if any
+            reactionTimer = setTimeout(() => {
+                if (gameState === 2) { // Check if still in reaction game state
+                    reactionTarget.classList.add('hidden');
+                    gameOver(dialogues[8]); // Too slow
+                }
+            }, 3000); // 3 seconds to click
+        }
+
+        reactionTarget.onclick = () => {
+            if (gameState === 2) {
+                clearTimeout(reactionTimer);
+                reactionTarget.classList.add('hidden');
+                setPlayerActionText("Clicked the red square!");
+                gameState = 3;
+                updateDialogue(dialogues[3]);
+                startMemoryGame();
+            }
+        };
+
+        // --- Task 3: Memory Game ---
+        function startMemoryGame() {
+            memoryGameArea.classList.remove('hidden');
+            memorySequence = ['S', 'T', 'ST', 'C']; // Example: Square, Triangle, Star, Circle
+            currentMemoryInput = [];
+            memoryInputDisplay.textContent = "";
+            displayMemorySequence();
+        }
+
+        function displayMemorySequence() {
+             memoryButtons.classList.add('hidden'); // Hide buttons while showing sequence
+             let displayHtml = "";
+             memorySequence.forEach(shape => {
+                 let symbol = '?';
+                 if(shape === 'S') symbol = '🟦';
+                 else if(shape === 'T') symbol = '🔺';
+                 else if(shape === 'C') symbol = '🟢';
+                 else if(shape === 'R') symbol = '🟥';
+                 else if(shape === 'ST') symbol = '⭐';
+                 displayHtml += `<span style="font-size: 40px; margin: 0 10px;">${symbol}</span>`;
+             });
+             memoryDisplay.innerHTML = displayHtml;
+
+             setTimeout(() => {
+                 memoryDisplay.innerHTML = "<em>Remember? Now click...</em>";
+                 memoryButtons.classList.remove('hidden');
+             }, 3000); // Show sequence for 3 seconds
+        }
+
+        memoryButtons.addEventListener('click', (event) => {
+            if (event.target.tagName === 'BUTTON' && gameState === 3) {
+                const shape = event.target.getAttribute('data-shape');
+                 let symbol = event.target.textContent;
+                currentMemoryInput.push(shape);
+                memoryInputDisplay.textContent += symbol;
+
+                // Check if input matches sequence so far
+                if (shape !== memorySequence[currentMemoryInput.length - 1]) {
+                    // Incorrect shape
+                    gameOver(dialogues[9]);
+                    memoryGameArea.classList.add('hidden');
+                    return;
+                }
+
+                // Check if full sequence entered correctly
+                if (currentMemoryInput.length === memorySequence.length) {
+                    setPlayerActionText("Entered correct sequence!");
+                    memoryGameArea.classList.add('hidden');
+                    gameState = 4;
+                    startRiddleGame();
+                }
+            }
+        });
+
+         // --- Task 4: Riddle Game ---
+        function startRiddleGame() {
+            const riddle = "I have cities, but no houses. I have mountains, but no trees. I have water, but no fish. What am I?";
+            expectedRiddleAnswer = "a map"; // Case insensitive check later
+            riddleText.textContent = riddle;
+            updateDialogue(dialogues[4] + ` "${riddle}"`);
+            riddleArea.classList.remove('hidden');
+            riddleInput.value = "";
+            riddleInput.focus();
+        }
+
+        function checkRiddle() {
+            if (gameState !== 4) return;
+            const answer = riddleInput.value.trim().toLowerCase();
+            setPlayerActionText(`Answered riddle: "${riddleInput.value}"`);
+            if (answer === expectedRiddleAnswer) {
+                riddleArea.classList.add('hidden');
+                gameState = 5;
+                updateDialogue(dialogues[5]);
+                startAnagramGame();
+            } else {
+                 gameOver(dialogues[10]);
+                 riddleArea.classList.add('hidden');
+            }
+        }
+         // Allow Enter key for riddle submission
+        riddleInput.addEventListener('keyup', function(event) {
+            if (event.key === "Enter") {
+                checkRiddle();
+            }
+        });
+
+         // --- Task 5: Anagram Game ---
+         function startAnagramGame() {
+             const word = "VIRUS";
+             // Simple shuffle
+             const letters = word.split('').sort(() => Math.random() - 0.5).join('');
+             expectedAnagramAnswer = word;
+             anagramLetters.textContent = letters;
+             anagramArea.classList.remove('hidden');
+             updateDialogue(dialogues[5]); // Dialogue already set mostly
+             anagramInput.value = "";
+             anagramInput.focus();
+         }
+
+        function checkAnagram() {
+             if (gameState !== 5) return;
+             const answer = anagramInput.value.trim().toUpperCase();
+             setPlayerActionText(`Answered anagram: "${anagramInput.value}"`);
+             if (answer === expectedAnagramAnswer) {
+                 anagramArea.classList.add('hidden');
+                 gameState = 6;
+                 updateDialogue(dialogues[6]);
+                 showFinalTask();
+             } else {
+                  gameOver(dialogues[11]);
+                  anagramArea.classList.add('hidden');
+             }
+         }
+         // Allow Enter key for anagram submission
+         anagramInput.addEventListener('keyup', function(event) {
+            if (event.key === "Enter") {
+                checkAnagram();
+            }
+        });
+
+
+         // --- Task 6: Final Task ---
+         function showFinalTask() {
+             finalTaskArea.classList.remove('hidden');
+         }
+
+         finalIcon.onclick = () => {
+             if (gameState === 6) {
+                 setPlayerActionText("Clicked 'Delete_Virus.exe'!");
+                 finalTaskArea.classList.add('hidden');
+                 gameState = 7; // Win state
+                 updateDialogue(dialogues[7]);
+                 // Clean up any remaining game elements visually
+                 desktop.innerHTML = `<p style="font-size: 2em; color: #0f0; text-align: center; margin-top: 100px;">SYSTEM CLEAN. Connection Terminated.</p>`;
+             }
+         };
+
+
+        // --- Game Over ---
+        function gameOver(message) {
+            updateDialogue(message);
+            gameState = -1; // Game ended state
+            // Disable further interactions or show a game over screen
+            desktop.innerHTML = `<p style="font-size: 2em; color: #f00; text-align: center; margin-top: 100px;">CONNECTION LOST. SYSTEM CORRUPTION INTENSIFYING...</p>`;
+            desktop.style.background = 'repeating-linear-gradient(45deg, #300, #300 10px, #000 10px, #000 20px)';
+             dialogueBox.style.borderColor = '#f00';
+             dialogueBox.style.boxShadow = '0 0 20px #f00';
+        }
+
+        // Initial setup - hide game elements until needed
+        reactionTarget.classList.add('hidden');
+        memoryGameArea.classList.add('hidden');
+        riddleArea.classList.add('hidden');
+        anagramArea.classList.add('hidden');
+        finalTaskArea.classList.add('hidden');
+
+    </script>
+</body>
+</html>

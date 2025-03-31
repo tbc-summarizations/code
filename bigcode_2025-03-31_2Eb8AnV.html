@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mechanic Platformer</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: sans-serif;
+        }
+        canvas {
+            background-color: #282828;
+            border: 1px solid #555;
+            display: block; /* Prevent extra space below canvas */
+        }
+        #gameUI {
+            margin-top: 10px;
+            text-align: center;
+        }
+        #controls {
+             margin-top: 5px;
+        }
+        button {
+            background-color: #444;
+            color: #e0e0e0;
+            border: 1px solid #666;
+            padding: 8px 15px;
+            font-size: 1em;
+            cursor: pointer;
+            margin: 0 5px;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #555;
+        }
+        button:active {
+            background-color: #333;
+        }
+        #levelInfo {
+            margin-bottom: 5px;
+            font-size: 1.1em;
+        }
+         #instructions {
+             font-style: italic;
+             color: #aaa;
+         }
+    </style>
+</head>
+<body>
+
+    <div id="gameUI">
+        <div id="levelInfo">Level: <span id="levelDisplay">1</span></div>
+        <div id="instructions">Use Arrow Keys to Move, Up Arrow to Jump. Reach the Star (★)!</div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <div id="controls">
+        <button id="resetButton">Reset Level</button>
+        <button id="skipButton">Skip Level</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const instructionsDisplay = document.getElementById('instructions');
+        const skipButton = document.getElementById('skipButton');
+        const resetButton = document.getElementById('resetButton');
+
+        // Game Constants
+        const GRAVITY = 0.5;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = 12;
+        const DOUBLE_JUMP_FORCE = 10;
+        const WALL_JUMP_X_FORCE = 6;
+        const WALL_JUMP_Y_FORCE = 10;
+        const WALL_SLIDE_SPEED = 1;
+        const PLATFORM_MOVE_SPEED = 1;
+        const DISAPPEAR_TIME = 50; // Frames until disappear
+        const REAPPEAR_TIME = 100; // Frames until reappear
+
+        // Game State
+        let currentLevel = 1;
+        let keys = {};
+        let player;
+        let platforms = [];
+        let goal;
+        let hazards = [];
+        let movingPlatforms = [];
+        let disappearingPlatforms = [];
+        let keysToCollect = [];
+        let switches = [];
+        let doors = [];
+        let levelComplete = false;
+        let frameCount = 0; // For timed events like disappearing platforms
+
+        const levelData = [
+            // Level 1: Basic Jump
+            {
+                playerStart: { x: 50, y: 400 },
+                goalPos: { x: 700, y: 100 },
+                platforms: [
+                    { x: 0, y: 450, w: 200, h: 50 },
+                    { x: 250, y: 380, w: 150, h: 20 },
+                    { x: 450, y: 300, w: 150, h: 20 },
+                    { x: 650, y: 150, w: 100, h: 20 },
+                ],
+                instructions: "Use Arrow Keys to Move, Up Arrow to Jump. Reach the Star (★)!"
+            },
+            // Level 2: Moving Platforms
+            {
+                playerStart: { x: 50, y: 100 },
+                goalPos: { x: 700, y: 400 },
+                platforms: [
+                    { x: 0, y: 150, w: 100, h: 20 },
+                    { x: 650, y: 450, w: 100, h: 20 },
+                ],
+                movingPlatforms: [
+                    { x: 200, y: 250, w: 100, h: 20, moveX: 200, moveY: 0, speed: PLATFORM_MOVE_SPEED },
+                    { x: 400, y: 350, w: 100, h: 20, moveX: 0, moveY: -150, speed: PLATFORM_MOVE_SPEED * 0.8 }
+                ],
+                instructions: "Some platforms move. Time your jumps!"
+            },
+            // Level 3: Disappearing Platforms
+            {
+                playerStart: { x: 50, y: 400 },
+                goalPos: { x: 700, y: 100 },
+                platforms: [
+                    { x: 0, y: 450, w: 100, h: 50 },
+                    { x: 650, y: 150, w: 100, h: 20 },
+                ],
+                disappearingPlatforms: [
+                    { x: 180, y: 380, w: 80, h: 20 },
+                    { x: 350, y: 300, w: 80, h: 20 },
+                    { x: 520, y: 220, w: 80, h: 20 },
+                ],
+                instructions: "Careful! Some platforms disappear after you touch them."
+            },
+             // Level 4: Wall Jump
+            {
+                playerStart: { x: 50, y: 400 },
+                goalPos: { x: 700, y: 50 },
+                 platforms: [
+                    { x: 0, y: 450, w: 100, h: 50 }, // Start
+                    { x: 200, y: 200, w: 20, h: 300 }, // First wall
+                    { x: 400, y: 150, w: 20, h: 350 }, // Second wall
+                    { x: 600, y: 100, w: 20, h: 400 }, // Third wall
+                    { x: 680, y: 100, w: 100, h: 20 }, // Goal platform
+                ],
+                instructions: "Slide down walls (Arrow Down while touching). Jump (Up Arrow) while sliding to Wall Jump!"
+            },
+            // Level 5: Double Jump
+            {
+                playerStart: { x: 50, y: 400 },
+                goalPos: { x: 700, y: 100 },
+                platforms: [
+                    { x: 0, y: 450, w: 150, h: 50 },
+                    { x: 300, y: 350, w: 100, h: 20 }, // Requires double jump
+                    { x: 550, y: 250, w: 100, h: 20 }, // Requires double jump
+                    { x: 650, y: 150, w: 100, h: 20 }, // Goal platform
+                ],
+                 hazards: [
+                    { x: 200, y: 480, w: 500, h: 20 }, // Floor hazard
+                 ],
+                instructions: "You can now Double Jump! Press Up Arrow again while in the air. Avoid the red triangles (▼)!"
+            },
+            // Level 6: Keys and Doors
+            {
+                playerStart: { x: 50, y: 50 },
+                goalPos: { x: 700, y: 400 },
+                platforms: [
+                    { x: 0, y: 100, w: 100, h: 20 },
+                    { x: 200, y: 200, w: 100, h: 20 },
+                    { x: 400, y: 300, w: 100, h: 20 },
+                    { x: 650, y: 450, w: 100, h: 20 }, // Goal platform
+                ],
+                keysToCollect: [
+                    { x: 230, y: 170, w: 20, h: 20, id: 1 }
+                ],
+                doors: [
+                    { x: 550, y: 350, w: 20, h: 100, keyId: 1 } // Door blocking path to goal
+                ],
+                 hazards: [
+                    { x: 0, y: 480, w: canvas.width, h: 20 }, // Floor hazard
+                 ],
+                instructions: "Collect the Key (🔑) to open the matching Door (▓)."
+            },
+            // Level 7: Combine All
+            {
+                playerStart: { x: 50, y: 400 },
+                goalPos: { x: 750, y: 50 },
+                platforms: [
+                    { x: 0, y: 450, w: 100, h: 50 }, // Start
+                    { x: 400, y: 150, w: 20, h: 350 }, // Wall jump wall
+                    { x: 730, y: 100, w: 70, h: 20 }, // Goal platform
+                ],
+                movingPlatforms: [
+                    { x: 150, y: 350, w: 80, h: 20, moveX: 100, moveY: 0, speed: PLATFORM_MOVE_SPEED * 0.7 } // Moving plat
+                ],
+                disappearingPlatforms: [
+                    { x: 300, y: 280, w: 60, h: 20 } // Disappearing plat leading to wall
+                ],
+                 keysToCollect: [
+                    { x: 450, y: 100, w: 20, h: 20, id: 1 } // Key near wall top
+                ],
+                 doors: [
+                    { x: 650, y: 0, w: 20, h: 120, keyId: 1 } // Door blocking goal path - requires wall jump after key
+                ],
+                 hazards: [
+                    { x: 120, y: 480, w: canvas.width - 120, h: 20 }, // Floor hazard
+                    { x: 500, y: 400, w: 100, h: 20 }, // Hazard platform
+                 ],
+                instructions: "Combine all skills: Moving, Disappearing, Wall Jump, Double Jump, Key & Door! Good luck!"
+            },
+        ];
+
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 30;
+                this.height = 30;
+                this.dx = 0;
+                this.dy = 0;
+                this.onGround = false;
+                this.canDoubleJump = false;
+                this.jumpsLeft = 0; // Used for double jump
+                this.wallSliding = false;
+                this.wallDirection = 0; // -1 for left wall, 1 for right wall
+                this.hasKey = null; // ID of the key held
+                this.color = '#FFF'; // White square
+            }
+
+            jump() {
+                if (this.wallSliding) {
+                    this.dy = -WALL_JUMP_Y_FORCE;
+                    this.dx = -this.wallDirection * WALL_JUMP_X_FORCE;
+                    this.wallSliding = false;
+                    this.jumpsLeft = (currentLevel >= 5) ? 1 : 0; // Allow one more jump (double jump) after wall jump if unlocked
+                } else if (this.onGround) {
+                    this.dy = -JUMP_FORCE;
+                    this.onGround = false;
+                    this.jumpsLeft = (currentLevel >= 5) ? 1 : 0; // Reset jumps for double jump
+                } else if (currentLevel >= 5 && this.jumpsLeft > 0) {
+                    this.dy = -DOUBLE_JUMP_FORCE;
+                    this.jumpsLeft--;
+                }
+            }
+
+            move() {
+                 // Horizontal Movement
+                if (keys['ArrowLeft']) {
+                    this.dx = -PLAYER_SPEED;
+                } else if (keys['ArrowRight']) {
+                    this.dx = PLAYER_SPEED;
+                } else {
+                    // Apply friction only if not wall jumping
+                    if (!this.wallSliding) {
+                         this.dx *= 0.8; // Simple friction
+                         if (Math.abs(this.dx) < 0.1) this.dx = 0;
+                    }
+                }
+
+                // Apply Gravity
+                this.dy += GRAVITY;
+
+                // Wall Sliding Logic (only if unlocked)
+                this.wallSliding = false;
+                if (currentLevel >= 4 && !this.onGround && this.dx !== 0) {
+                    let touchingWall = false;
+                    this.wallDirection = 0;
+                    platforms.concat(doors.filter(d => d.isSolid)).forEach(platform => {
+                        // Check collision slightly to the left
+                        if (isColliding(this, { ...platform, x: platform.x + 1 } ) && this.dx < 0) {
+                            touchingWall = true;
+                            this.wallDirection = -1; // Left wall
+                             this.x = platform.x + platform.w; // Snap to wall edge
+                             this.dx = 0; // Stop horizontal move into wall
+                        }
+                         // Check collision slightly to the right
+                        if (isColliding(this, { ...platform, x: platform.x - 1 } ) && this.dx > 0) {
+                            touchingWall = true;
+                            this.wallDirection = 1; // Right wall
+                             this.x = platform.x - this.width; // Snap to wall edge
+                             this.dx = 0; // Stop horizontal move into wall
+                        }
+                    });
+
+                    if (touchingWall && keys['ArrowDown'] && this.dy > 0) { // Added ArrowDown condition and check falling
+                        this.wallSliding = true;
+                        this.dy = WALL_SLIDE_SPEED; // Slide down slowly
+                        this.jumpsLeft = (currentLevel >= 5) ? 1 : 0; // Can wall jump even if double jump used
+                    }
+                }
+
+
+                // Update position based on velocity
+                this.x += this.dx;
+                this.y += this.dy;
+                this.onGround = false; // Assume not on ground until collision check proves otherwise
+
+                 // Collision with canvas bounds
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+                if (this.y < 0) { // Hit ceiling
+                    this.y = 0;
+                    this.dy = 0;
+                }
+                 // Fall off screen (reset) handled in main loop update
+            }
+
+            handleCollisions(allPlatforms) {
+                 allPlatforms.forEach(platform => {
+                    if (isColliding(this, platform)) {
+                        // Determine collision side
+                        let overlapX = (this.width / 2 + platform.w / 2) - Math.abs((this.x + this.width / 2) - (platform.x + platform.w / 2));
+                        let overlapY = (this.height / 2 + platform.h / 2) - Math.abs((this.y + this.height / 2) - (platform.y + platform.h / 2));
+
+                        if (overlapY < overlapX) {
+                            // Vertical collision
+                            if (this.y + this.height - this.dy <= platform.y + 1) { // Landed on top (allow small dy tolerance)
+                                this.y = platform.y - this.height;
+                                this.dy = 0;
+                                this.onGround = true;
+                                this.jumpsLeft = (currentLevel >= 5) ? 2 : 1; // Reset jumps on landing
+                                this.wallSliding = false; // Stop wall sliding if landed
+
+                                // Stick to moving platforms
+                                if (platform.type === 'moving') {
+                                    this.x += platform.vx;
+                                    // Prevent falling through slow vertical moving platform
+                                    if(platform.vy > 0 && platform.vy < GRAVITY * 2) {
+                                        this.y += platform.vy;
+                                    }
+                                }
+                                // Handle disappearing platforms
+                                if (platform.type === 'disappearing' && !platform.touched) {
+                                    platform.touched = true;
+                                    platform.timer = DISAPPEAR_TIME;
+                                }
+
+                            } else { // Hit bottom of platform
+                                this.y = platform.y + platform.h;
+                                this.dy *= 0.5; // Lose some upward momentum
+                            }
+                        } else {
+                             // Horizontal collision - prevent sticking inside, but wall jump relies on move() logic mostly
+                            if (this.x + this.width - this.dx <= platform.x + 1) { // Hit left side of platform
+                                this.x = platform.x - this.width;
+                                if (!this.wallSliding) this.dx = 0; // Stop if not intending to wall slide/jump
+                            } else if (this.x - this.dx >= platform.x + platform.w - 1) { // Hit right side of platform
+                                this.x = platform.x + platform.w;
+                                if (!this.wallSliding) this.dx = 0; // Stop if not intending to wall slide/jump
+                            }
+                        }
+                    }
+                });
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                // Draw key indicator if holding one
+                if (this.hasKey) {
+                     ctx.fillStyle = '#FFD700'; // Gold
+                     ctx.font = '15px Arial';
+                     ctx.fillText('🔑', this.x + this.width / 2 - 5, this.y - 5);
+                }
+            }
+        }
+
+        class Platform {
+             constructor(x, y, w, h, type = 'static') {
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.type = type; // 'static', 'moving', 'disappearing'
+                this.color = '#888'; // Grey rectangle
+             }
+
+             draw() {
+                 ctx.fillStyle = this.color;
+                 ctx.fillRect(this.x, this.y, this.w, this.h);
+             }
+             // Update needed for moving/disappearing platforms (handled in their specific classes or main loop)
+             update(){} // Placeholder for potential future use
+        }
+
+        class MovingPlatform extends Platform {
+            constructor(x, y, w, h, moveX, moveY, speed) {
+                super(x, y, w, h, 'moving');
+                this.startX = x;
+                this.startY = y;
+                this.targetX = x + moveX;
+                this.targetY = y + moveY;
+                this.speed = speed;
+                this.direction = 1; // 1 towards target, -1 towards start
+                this.vx = 0; // Velocity for player sticking
+                this.vy = 0;
+            }
+
+            update() {
+                let prevX = this.x;
+                let prevY = this.y;
+
+                let dx = this.targetX - this.startX;
+                let dy = this.targetY - this.startY;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+
+                if (dist === 0) return; // No movement
+
+                let moveRatio = this.speed / dist;
+
+                if (this.direction === 1) { // Moving towards target
+                    this.x += dx * moveRatio;
+                    this.y += dy * moveRatio;
+                     // Check if overshoot or reached target
+                    if ((dx > 0 && this.x >= this.targetX) || (dx < 0 && this.x <= this.targetX) ||
+                        (dy > 0 && this.y >= this.targetY) || (dy < 0 && this.y <= this.targetY) ||
+                         (Math.abs(this.x - this.targetX) < this.speed && Math.abs(this.y - this.targetY) < this.speed))
+                    {
+                        this.x = this.targetX;
+                        this.y = this.targetY;
+                        this.direction = -1; // Change direction
+                    }
+                } else { // Moving towards start
+                    this.x -= dx * moveRatio;
+                    this.y -= dy * moveRatio;
+                     // Check if overshoot or reached start
+                     if ((dx > 0 && this.x <= this.startX) || (dx < 0 && this.x >= this.startX) ||
+                         (dy > 0 && this.y <= this.startY) || (dy < 0 && this.y >= this.startY) ||
+                          (Math.abs(this.x - this.startX) < this.speed && Math.abs(this.y - this.startY) < this.speed))
+                     {
+                        this.x = this.startX;
+                        this.y = this.startY;
+                        this.direction = 1; // Change direction
+                    }
+                }
+                this.vx = this.x - prevX;
+                this.vy = this.y - prevY;
+            }
+        }
+
+        class DisappearingPlatform extends Platform {
+             constructor(x, y, w, h) {
+                 super(x, y, w, h, 'disappearing');
+                 this.visible = true;
+                 this.touched = false;
+                 this.timer = 0; // Countdown timer
+                 this.reappearTimer = 0;
+                 this.color = '#AAA'; // Lighter grey initially
+             }
+
+             update() {
+                 if (this.touched && this.visible) {
+                     this.timer--;
+                     // Fade effect could be added here
+                     this.color = `rgba(170, 170, 170, ${this.timer / DISAPPEAR_TIME})`;
+                     if (this.timer <= 0) {
+                         this.visible = false;
+                         this.touched = false; // Reset touched state
+                         this.reappearTimer = REAPPEAR_TIME;
+                     }
+                 } else if (!this.visible) {
+                     this.reappearTimer--;
+                     if (this.reappearTimer <= 0) {
+                         this.visible = true;
+                         this.color = '#AAA';
+                     }
+                 }
+             }
+
+              draw() {
+                 if (this.visible) {
+                     ctx.fillStyle = this.color;
+                     ctx.fillRect(this.x, this.y, this.w, this.h);
+                 }
+             }
+        }
+
+         class Hazard {
+             constructor(x, y, w, h) {
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.color = '#F00'; // Red
+             }
+             draw() {
+                ctx.fillStyle = this.color;
+                // Draw as triangle(s) for classic hazard look
+                let triangleSize = Math.min(this.w, this.h); // Base size on smaller dimension
+                let numTriangles = Math.floor(this.w / triangleSize);
+                 if (numTriangles === 0 && this.w > 0) numTriangles = 1; // Ensure at least one if width exists
+
+                 for(let i = 0; i < numTriangles; i++) {
+                    let baseX = this.x + i * triangleSize;
+                    ctx.beginPath();
+                    ctx.moveTo(baseX, this.y + this.h);
+                    ctx.lineTo(baseX + triangleSize / 2, this.y);
+                    ctx.lineTo(baseX + triangleSize, this.y + this.h);
+                    ctx.closePath();
+                    ctx.fill();
+                 }
+                 // Fallback rectangle if dimensions are weird
+                 if(numTriangles === 0) {
+                     ctx.fillRect(this.x, this.y, this.w, this.h);
+                 }
+             }
+         }
+
+         class CollectibleKey {
+             constructor(x, y, w, h, id) {
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.id = id;
+                this.collected = false;
+             }
+             draw() {
+                 if (!this.collected) {
+                    ctx.fillStyle = '#FFD700'; // Gold
+                    ctx.font = `${this.h}px Arial`; // Adjust size
+                    ctx.fillText('🔑', this.x, this.y + this.h * 0.9); // Draw emoji
+                 }
+             }
+         }
+
+         class Door {
+             constructor(x, y, w, h, keyId) {
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.keyId = keyId; // ID of the key that opens this door
+                this.isSolid = true; // Starts solid
+                this.color = '#654321'; // Brownish
+                this.type = 'door'; // For collision identification
+             }
+             update(playerHasKeyId) {
+                 if (this.isSolid && playerHasKeyId === this.keyId) {
+                     this.isSolid = false;
+                 }
+             }
+             draw() {
+                 if (this.isSolid) {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.w, this.h);
+                    // Draw keyhole symbol
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(this.x + this.w/2 - 5, this.y + this.h/2 - 10, 10, 10); // Square part
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + this.w/2, this.y + this.h/2);
+                    ctx.lineTo(this.x + this.w/2, this.y + this.h/2 + 10);
+                    ctx.lineTo(this.x + this.w/2 - 3, this.y + this.h/2 + 13);
+                    ctx.moveTo(this.x + this.w/2, this.y + this.h/2 + 10);
+                    ctx.lineTo(this.x + this.w/2 + 3, this.y + this.h/2 + 13);
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                 } else {
+                    // Optional: Draw opened door frame or nothing
+                    ctx.strokeStyle = '#444';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(this.x, this.y, this.w, this.h);
+                 }
+             }
+         }
+
+
+         class Goal {
+             constructor(x, y) {
+                 this.x = x;
+                 this.y = y;
+                 this.width = 30;
+                 this.height = 30;
+                 this.color = '#FFD700'; // Gold star
+             }
+             draw() {
+                 ctx.fillStyle = this.color;
+                 ctx.font = `${this.height * 1.5}px Arial`; // Make star bigger
+                 ctx.fillText('★', this.x - this.width*0.25, this.y + this.height);
+             }
+         }
+
+        // --- Helper Functions ---
+        function isColliding(rect1, rect2) {
+            if (!rect2.visible === false && // Check if platform is visible (for disappearing ones)
+                !rect2.isSolid === false) { // Check if door is solid
+                 return false;
+            }
+            return rect1.x < rect2.x + rect2.w &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.h &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function loadLevel(levelNum) {
+            if (levelNum > levelData.length) {
+                // Handle game win condition
+                 displayWinMessage();
+                 return; // Stop loading further
+            }
+             if (levelNum <= 0) levelNum = 1; // Prevent going below level 1
+
+            currentLevel = levelNum;
+            levelComplete = false;
+            frameCount = 0;
+            const data = levelData[currentLevel - 1];
+
+            // Reset game objects
+            platforms = [];
+            movingPlatforms = [];
+            disappearingPlatforms = [];
+            hazards = [];
+            keysToCollect = [];
+            doors = [];
+
+
+            player = new Player(data.playerStart.x, data.playerStart.y);
+            goal = new Goal(data.goalPos.x, data.goalPos.y);
+
+            // Load static platforms
+            data.platforms?.forEach(p => platforms.push(new Platform(p.x, p.y, p.w, p.h)));
+
+            // Load moving platforms
+            data.movingPlatforms?.forEach(p => movingPlatforms.push(new MovingPlatform(p.x, p.y, p.w, p.h, p.moveX, p.moveY, p.speed)));
+
+             // Load disappearing platforms
+             data.disappearingPlatforms?.forEach(p => disappearingPlatforms.push(new DisappearingPlatform(p.x, p.y, p.w, p.h)));
+
+             // Load hazards
+             data.hazards?.forEach(h => hazards.push(new Hazard(h.x, h.y, h.w, h.h)));
+
+             // Load keys
+             data.keysToCollect?.forEach(k => keysToCollect.push(new CollectibleKey(k.x, k.y, k.w, k.h, k.id)));
+
+             // Load doors
+             data.doors?.forEach(d => doors.push(new Door(d.x, d.y, d.w, d.h, d.keyId)));
+
+
+            // Update UI
+            levelDisplay.textContent = currentLevel;
+            instructionsDisplay.textContent = data.instructions;
+             skipButton.disabled = (currentLevel === levelData.length); // Disable skip on last level
+
+              // Reset keys pressed
+            keys = {};
+
+            // Ensure player gets the correct abilities for the level
+             player.jumpsLeft = (currentLevel >= 5) ? 2 : 1;
+        }
+
+         function resetCurrentLevel() {
+             loadLevel(currentLevel);
+         }
+
+        function displayWinMessage() {
+             ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+             ctx.fillRect(0, 0, canvas.width, canvas.height);
+             ctx.fillStyle = '#0F0'; // Green text
+             ctx.font = '40px Arial';
+             ctx.textAlign = 'center';
+             ctx.fillText('Congratulations!', canvas.width / 2, canvas.height / 2 - 30);
+             ctx.font = '20px Arial';
+             ctx.fillText('You completed all levels!', canvas.width / 2, canvas.height / 2 + 20);
+             ctx.fillText('Press Reset Level to play again from Level 1.', canvas.width / 2, canvas.height / 2 + 50);
+             levelComplete = true; // Stop game loop updates
+        }
+
+
+        // --- Input Handling ---
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            // Prevent default scrolling behavior for arrow keys
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+                e.preventDefault();
+            }
+             // Allow jump with Space as well
+             if (e.code === 'Space' || e.code === 'ArrowUp') {
+                 player.jump();
+             }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+         // Button Listeners
+         resetButton.addEventListener('click', () => {
+             if (levelComplete && currentLevel > levelData.length) { // If game was won, reset to level 1
+                  loadLevel(1);
+             } else {
+                  resetCurrentLevel();
+             }
+         });
+         skipButton.addEventListener('click', () => {
+             if (currentLevel < levelData.length) {
+                 loadLevel(currentLevel + 1);
+             } else if (currentLevel === levelData.length) {
+                 // Allow "skipping" the last level to the win screen
+                  displayWinMessage();
+             }
+         });
+
+
+        // --- Game Loop ---
+        function gameLoop() {
+            if (levelComplete && currentLevel > levelData.length) { // Stop loop if game won message is displayed
+                 requestAnimationFrame(gameLoop);
+                 return;
+            }
+
+            frameCount++;
+
+            // 1. Clear Canvas
+            ctx.fillStyle = '#282828'; // Dark background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. Update Game Objects
+            player.move();
+
+            movingPlatforms.forEach(p => p.update());
+            disappearingPlatforms.forEach(p => p.update());
+            doors.forEach(d => d.update(player.hasKey)); // Update door state based on player key
+
+            // 3. Handle Collisions
+             let allCollisionPlatforms = [
+                 ...platforms,
+                 ...movingPlatforms,
+                 ...disappearingPlatforms.filter(p => p.visible), // Only collide with visible ones
+                 ...doors.filter(d => d.isSolid) // Only collide with solid doors
+             ];
+            player.handleCollisions(allCollisionPlatforms);
+
+            // Check collision with hazards
+             hazards.forEach(hazard => {
+                 if (isColliding(player, hazard)) {
+                     resetCurrentLevel(); // Reset on touch
+                     return; // Exit hazard check early
+                 }
+             });
+
+             // Check collision with keys
+             keysToCollect.forEach((key, index) => {
+                if (!key.collected && isColliding(player, key)) {
+                    key.collected = true;
+                    player.hasKey = key.id; // Player picks up the key
+                    // Optional: remove key visually or keep it collected
+                }
+             });
+
+
+            // Check collision with goal
+            if (isColliding(player, goal)) {
+                levelComplete = true;
+                 // Add a small delay before loading next level for visual feedback
+                 setTimeout(() => {
+                      loadLevel(currentLevel + 1);
+                 }, 200); // 200ms delay
+            }
+
+            // Check for falling off screen
+            if (player.y > canvas.height) {
+                resetCurrentLevel();
+            }
+
+
+            // 4. Draw Game Objects
+            platforms.forEach(p => p.draw());
+            movingPlatforms.forEach(p => p.draw());
+            disappearingPlatforms.forEach(p => p.draw()); // Draw handles visibility internally
+            hazards.forEach(h => h.draw());
+            keysToCollect.forEach(k => k.draw());
+            doors.forEach(d => d.draw());
+
+            goal.draw();
+            player.draw();
+
+
+            // 5. Request Next Frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Initial Load ---
+        loadLevel(1);
+        gameLoop();
+
+    </script>
+
+</body>
+</html>

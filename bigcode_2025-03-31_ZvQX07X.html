@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7 Levels FPS</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #333; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+        #gameCanvas { background-color: #000; border: 1px solid #fff; display: block; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
+        #message { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; font-size: 1.2em; text-align: center; display: none; }
+        #controls { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; font-size: 0.9em; }
+        .simple-shape { display: inline-block; width: 1em; height: 1em; margin-right: 5px; vertical-align: middle; }
+        .square { background-color: currentColor; }
+        .triangle { width: 0; height: 0; border-left: 0.5em solid transparent; border-right: 0.5em solid transparent; border-bottom: 1em solid currentColor; }
+    </style>
+</head>
+<body>
+    <h1>7 Levels FPS</h1>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="ui">
+        <div>Level: <span id="levelDisplay">1</span>/7</div>
+        <div>Health: <span id="healthDisplay">100</span></div>
+        <div>Ammo: <span id="ammoDisplay">Inf</span></div>
+        <div>Keys: <span id="keysDisplay">None</span></div>
+        <div>Objective: <span id="objectiveDisplay">Reach the Exit (🟩)</span></div>
+    </div>
+    <div id="message">Level Complete!</div>
+    <div id="controls">
+        Controls: WASD - Move | Arrow Keys - Turn | Space - Shoot | E - Interact
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiLevel = document.getElementById('levelDisplay');
+        const uiHealth = document.getElementById('healthDisplay');
+        const uiAmmo = document.getElementById('ammoDisplay');
+        const uiKeys = document.getElementById('keysDisplay');
+        const uiObjective = document.getElementById('objectiveDisplay');
+        const messageDiv = document.getElementById('message');
+
+        // --- Game Settings ---
+        const screenWidth = canvas.width;
+        const screenHeight = canvas.height;
+        const mapWidth = 20;
+        const mapHeight = 20;
+        const FOV = Math.PI / 3; // 60 degrees
+        const rayCount = screenWidth / 4; // Number of rays to cast (performance vs quality)
+        const moveSpeed = 0.08;
+        const rotSpeed = 0.05;
+        const spriteScale = 0.8;
+
+        // --- Game State ---
+        let player = {
+            x: 2.5,
+            y: 2.5,
+            angle: Math.PI / 4,
+            health: 100,
+            ammo: Infinity, // Start infinite, change in level 5
+            keys: [],
+            interactionTarget: null
+        };
+        let currentLevel = 0;
+        let map = [];
+        let sprites = []; // Enemies, items, etc. { x, y, type, health?, active?, texture }
+        let projectiles = []; // { x, y, angle, owner }
+        let levelState = {}; // For level-specific data like switches, timers
+
+        const keysPressed = {};
+        let gameRunning = true;
+
+        // --- Level Definitions ---
+        // '#': Wall, '.': Floor, 'E': Exit, 'P': Player Start
+        // Lvl 2: 'K': Key, 'D': Locked Door
+        // Lvl 3: 'M': Moving Wall (Toggles), 'T': Trigger for 'M'
+        // Lvl 4: 'X': Enemy, '+': Health Pack
+        // Lvl 5: 'A': Ammo Pack
+        // Lvl 6: 'S1','S2','S3': Switches, 'F': Final Locked Door (puzzle)
+        // Lvl 7: Combination
+        const levels = [
+            // Level 1: Basic Movement & Shooting
+            {
+                mapString: [
+                    "####################",
+                    "#P..X...........#..#",
+                    "#.#.###########.#..#",
+                    "#.#.......#...#.#..#",
+                    "#.#.#####.#.#.#.#..#",
+                    "#.....#...#.#.#....#",
+                    "#####.#.###.#.#####",
+                    "#...#.#...#.#...#.#",
+                    "#.X.#.###.#.###.#.#",
+                    "#...#.#...#.....#.#",
+                    "#.###.#.#####.###.#",
+                    "#.#...#...X.#.....#",
+                    "#.#.#####.#.#####.#",
+                    "#.#.....#.#.....#.#",
+                    "#.#.###.#.#.###.#.#",
+                    "#...#...#...#...#.#",
+                    "#.###.#######.###.#",
+                    "#.#...........#...#",
+                    "#.....X.......#..E#",
+                    "####################",
+                ],
+                objective: "Reach the Exit (🟩)",
+                playerStart: { ammo: Infinity, keys: [] },
+                init: () => {
+                     player.ammo = Infinity; uiAmmo.textContent = "Inf";
+                }
+            },
+            // Level 2: Keys and Doors
+            {
+                mapString: [
+                    "####################",
+                    "#P..#...........#..#",
+                    "#.#.#.#########.#..#",
+                    "#...#.....K...#....#",
+                    "#.###.#######.#.####",
+                    "#.#...#.....#.#....#",
+                    "#.#.###D###.#.######",
+                    "#.#...#...#...#...E#",
+                    "#.#.###.#.#####.####",
+                    "#.....#.#.........K#",
+                    "#.#####.###########",
+                    "#.#.........#...#..#",
+                    "#.#.#######.#.#.#..#",
+                    "#...#.....#.#.#.#..#",
+                    "#.###D#####.#.#.####",
+                    "#.#...#.....#.#...K#",
+                    "#.#.#.#.#######.####",
+                    "#.#.#.#.#.....#....#",
+                    "#...#...#.....#..X.#",
+                    "####################",
+                ],
+                objective: "Find Keys (🔑) to open Doors (🚪) and reach Exit (🟩)",
+                playerStart: { ammo: Infinity, keys: [] },
+                 init: () => {
+                     player.ammo = Infinity; uiAmmo.textContent = "Inf";
+                }
+            },
+            // Level 3: Moving Walls / Triggers
+             {
+                mapString: [
+                    "####################",
+                    "#P.........T#......#",
+                    "#.#####.### #.######",
+                    "#.#...#.#...#.#....#",
+                    "#.#M#M#.#.###.#.####",
+                    "#.....#.....#......#",
+                    "#######.#####.######",
+                    "#T....#.#...#......#",
+                    "######M##.###.######",
+                    "#.........#........#",
+                    "#T#####.###.######E#",
+                    "#.#...#.#...#....#.#",
+                    "#.#####M#####.##.#.#",
+                    "#.#.....#.....#..#.#",
+                    "#.#.#####.#####.##.#",
+                    "#.#.#.....#......#.#",
+                    "#.#.#M#######M##.#.#",
+                    "#.#.#.........#..#.#",
+                    "#...#.........#..X.#",
+                    "####################",
+                ],
+                objective: "Use Triggers (👆) to toggle Walls (🧱) and reach Exit (🟩)",
+                playerStart: { ammo: Infinity, keys: [] },
+                init: () => {
+                    player.ammo = Infinity; uiAmmo.textContent = "Inf";
+                    levelState = { movingWallTimer: 0, movingWallInterval: 180 }; // Toggle every 3 seconds (60fps * 3)
+                },
+                update: () => {
+                    levelState.movingWallTimer = (levelState.movingWallTimer + 1) % levelState.movingWallInterval;
+                     if (levelState.movingWallTimer === 0) {
+                        toggleWalls('M');
+                    }
+                }
+            },
+            // Level 4: Enemies Shoot Back / Health
+            {
+               mapString: [
+                    "####################",
+                    "#P..X.......#X#....#",
+                    "#.#.#####.###.#.####",
+                    "#.#.#.....#...#....#",
+                    "#...#+#####.#####.##",
+                    "#.###.#...#.#...#..#",
+                    "#.#...#.#.#.#.#####",
+                    "#.#.###.#.#.#...#X#",
+                    "#...#...#.#.###.#.#",
+                    "#.#####.#...#...#.#",
+                    "#.#...#.#.#####.#.#",
+                    "#.#.#.#...#.....#..#",
+                    "#.#.#.#####.#######",
+                    "#...+.....#.#.....#",
+                    "#.#######.#.#+###.#",
+                    "#.#.....#...#...#.#",
+                    "#.#.###.#####.#.#.#",
+                    "#.#.#.....X...#.#.#",
+                    "#X..#.........#..E#",
+                    "####################",
+                ],
+                objective: "Avoid enemy fire (💥)! Find Health (+) and reach Exit (🟩)",
+                playerStart: { health: 100, ammo: Infinity, keys: [] },
+                 init: () => {
+                     player.ammo = Infinity; uiAmmo.textContent = "Inf";
+                }
+            },
+            // Level 5: Limited Ammo
+            {
+                mapString: [
+                    "####################",
+                    "#P..A.......#..#...#",
+                    "#.####.####.#..#...#",
+                    "#.#..#.#....#..#...#",
+                    "#.#X.#.#.######.####",
+                    "#....A.#....X.....A#",
+                    "#.######.########.##",
+                    "#.#....#.#......#..#",
+                    "#.#.####.#.####.#..#",
+                    "#.#.#..#.#.#..#.#..#",
+                    "#...#A.#...#X.#....#",
+                    "#.####.#####.####.##",
+                    "#.#....#...#.#.....#",
+                    "#.#.####.#.#.#.#####",
+                    "#.#.#....#.#.#.....#",
+                    "#...#..X.#...#.#####",
+                    "#.#########A#######",
+                    "#A#.........#.....#",
+                    "#X#.........#...AE#",
+                    "####################",
+                ],
+                objective: "Conserve Ammo! Find Ammo (📦) and reach Exit (🟩)",
+                playerStart: { health: 100, ammo: 15, keys: [] },
+                 init: () => {
+                     player.ammo = 15; updateUI(); // Set initial ammo
+                }
+            },
+            // Level 6: Puzzle Switches
+             {
+                 mapString: [
+                    "####################",
+                    "#P..#.....#........#",
+                    "#.S1#.#.#.#.########",
+                    "#...#.#.#.#.#F.....#",
+                    "#.###.#.#...#F.....#",
+                    "#.#.....#####F.....#",
+                    "#.#.#######.#F#####",
+                    "#.#.#.....#.#......#",
+                    "#...#.S2#.#.########",
+                    "#.###.#.#.#........#",
+                    "#.#...#.#.#.######.#",
+                    "#.#.#####.#.#....#.#",
+                    "#.#.......#.#.S3.#.#",
+                    "#.#########.#....#.#",
+                    "#...........#####..#",
+                    "#.###############..#",
+                    "#..................#",
+                    "#.##################",
+                    "#..................E",
+                    "####################",
+                 ],
+                 objective: "Activate Switches (S1▶️S2▶️S3) to open Final Door (🚪) and reach Exit (🟩)",
+                 playerStart: { health: 100, ammo: 30, keys: [] },
+                 init: () => {
+                     levelState = { switches: { S1: false, S2: false, S3: false }, requiredSequence: ['S1', 'S2', 'S3'], currentSequenceIndex: 0 };
+                     updateUI();
+                 }
+             },
+            // Level 7: Combination
+            {
+                mapString: [
+                    "####################",
+                    "#P.A#.....#+.....X.#",
+                    "#.#K#D#.###.####.#.#",
+                    "#.#.#.#.#...#..#.#.#",
+                    "#X..#.#.###M##.#.T.#",
+                    "#.####....#....#...#",
+                    "#.#..#.S1.######.##",
+                    "#.#A.#.##.#F...#..#",
+                    "#+####..#.#F.X.#..#",
+                    "#....K#...#F...#..#",
+                    "#.####.######.####",
+                    "#.#..#.#....#.#..#",
+                    "#.#X.#.#.S2.#.#..#",
+                    "#A####.#.####.####",
+                    "#......#.#..#....#",
+                    "#.######.#K##.####",
+                    "#.#....#D#..#.#S3#",
+                    "#.#+##.#..X.#....#",
+                    "#..A #....# #...E#",
+                    "####################",
+                ],
+                objective: "Survive and escape! Use all mechanics learned.",
+                playerStart: { health: 100, ammo: 20, keys: [] },
+                 init: () => {
+                    levelState = {
+                        switches: { S1: false, S2: false, S3: false },
+                        requiredSequence: ['S1', 'S2', 'S3'],
+                        currentSequenceIndex: 0,
+                        movingWallTimer: 0,
+                        movingWallInterval: 150 // Faster toggle
+                    };
+                    updateUI();
+                },
+                update: () => {
+                    // Moving wall logic for level 7
+                    levelState.movingWallTimer = (levelState.movingWallTimer + 1) % levelState.movingWallInterval;
+                     if (levelState.movingWallTimer === 0) {
+                        toggleWalls('M');
+                    }
+                }
+            },
+        ];
+
+        // --- Asset Mapping --- (Simple Emojis/Shapes)
+        const textures = {
+            '#': { color: '#888', emoji: '🧱' }, // Wall
+            'D': { color: '#a65428', emoji: '🚪' }, // Door (Locked)
+            'F': { color: '#a65428', emoji: '🚪' }, // Final Door (Locked) - Same visual for simplicity
+            'M': { color: '#aaa', emoji: '🧱' }, // Moving Wall (when active)
+            // Sprites
+            'X': { type: 'enemy', texture: '👿', health: 50, speed: 0.02, shootCooldown: 120, currentCooldown: 0, damage: 10 },
+            'K': { type: 'key', texture: '🔑', keyId: 'standard' },
+            'E': { type: 'exit', texture: '🟩' },
+            'T': { type: 'trigger', texture: '👆' },
+            '+': { type: 'health', texture: '❤️', amount: 25 },
+            'A': { type: 'ammo', texture: '📦', amount: 10 },
+            'S1': { type: 'switch', texture: '1️⃣', switchId: 'S1', activeTexture: '✅' },
+            'S2': { type: 'switch', texture: '2️⃣', switchId: 'S2', activeTexture: '✅' },
+            'S3': { type: 'switch', texture: '3️⃣', switchId: 'S3', activeTexture: '✅' },
+            // Projectiles
+            'bullet': { color: '#ff0', size: 0.1 },
+            'enemy_bullet': { color: '#f00', size: 0.15 }
+        };
+
+        // --- Functions ---
+
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                showMessage("YOU WIN! 🎉", true);
+                gameRunning = false;
+                return;
+            }
+            const levelData = levels[levelIndex];
+            map = levelData.mapString.map(row => row.split(''));
+            sprites = [];
+            projectiles = [];
+            levelState = {}; // Reset level state
+            player.keys = [];
+
+            for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    const cell = map[y][x];
+                    if (cell === 'P') {
+                        player.x = x + 0.5;
+                        player.y = y + 0.5;
+                        map[y][x] = '.'; // Clear player start marker
+                    } else if (textures[cell] && textures[cell].type) {
+                         // Sprite found
+                        const spriteInfo = textures[cell];
+                        const newSprite = {
+                            x: x + 0.5,
+                            y: y + 0.5,
+                            originalChar: cell, // Keep track of original map char
+                            ...JSON.parse(JSON.stringify(spriteInfo)) // Deep copy base properties
+                         };
+                        // Initialize sprite-specific state if needed
+                         if (newSprite.type === 'enemy') {
+                             newSprite.currentCooldown = Math.random() * newSprite.shootCooldown; // Stagger shooting
+                         } else if (newSprite.type === 'switch') {
+                             newSprite.active = false;
+                         }
+                        sprites.push(newSprite);
+                        map[y][x] = '.'; // Clear sprite marker from map grid for raycasting walls
+                    } else if (cell === 'D' || cell === 'F' || cell === 'M') {
+                         // Keep track of special walls if needed, but primarily handle via map char
+                    }
+                }
+            }
+
+            // Apply level start state
+            if (levelData.playerStart) {
+                player.health = levelData.playerStart.health !== undefined ? levelData.playerStart.health : 100;
+                player.ammo = levelData.playerStart.ammo !== undefined ? levelData.playerStart.ammo : Infinity;
+                player.keys = levelData.playerStart.keys ? [...levelData.playerStart.keys] : [];
+            } else {
+                 // Default reset if not specified
+                player.health = 100;
+                player.ammo = Infinity;
+                player.keys = [];
+            }
+
+
+            currentLevel = levelIndex;
+
+            // Run level-specific initialization
+            if (levelData.init) {
+                levelData.init();
+            }
+
+             // Initial UI update for the new level
+            uiLevel.textContent = currentLevel + 1;
+            uiObjective.textContent = levelData.objective;
+            updateUI();
+            showMessage(`Level ${currentLevel + 1}: ${levelData.objective}`, false, 4000);
+            gameRunning = true; // Ensure game is running
+        }
+
+         function toggleWalls(wallType) {
+             for (let y = 0; y < mapHeight; y++) {
+                 for (let x = 0; x < mapWidth; x++) {
+                     if (map[y][x] === wallType) {
+                         map[y][x] = 'temp_floor'; // Mark for change
+                     } else if (map[y][x] === '.') {
+                         // Check if this position originally held a wallType (might need better tracking)
+                         // Simple approach: Check neighbors, less robust.
+                         // Better: Store original positions of toggleable walls.
+                         // For this basic version, let's just toggle M <-> .
+                         // This requires knowing the ORIGINAL map state which we don't store simply here.
+                         // Simplification: Just toggle M to . and vice versa if it's adjacent to a trigger maybe?
+                         // Easier: Just toggle between '#' and '.' for 'M' cells
+                         // Let's make 'M' toggle between '#' and '.'
+                          // Need original map state or mark 'M' positions
+                          // For now: If it was 'M' it becomes '.', if it was '.' maybe it becomes 'M'? Too simple.
+                          // Let's just make existing 'M's disappear. Need a way to bring them back.
+                          // Okay, let's try M <-> O (Open) state stored internally? No, map based.
+                          // Simplest: Toggle M between '#' and '.' directly in the map.
+                          // Need to know if it *should* be a wall or floor currently. Use levelState?
+                          // Let's keep it super simple: 'M' toggles to '.' when triggered. Trigger 'T' activates this.
+                          // Let's tie 'M' toggling to the level update timer instead of 'T' for simplicity now.
+                          // When timer fires, find all 'M' and toggle them to '.' and vice versa.
+                          // Problem: Need to remember the *original* M positions.
+                          // Alternative: Store 'M' positions in levelState.init
+                          if (levelState.movingWallOriginals && levelState.movingWallOriginals.some(p => p.x === x && p.y === y)) {
+                             map[y][x] = '.'; // It was originally M, make it floor
+                          }
+                     }
+                 }
+             }
+             // Second pass to restore/place walls
+             if (levelState.movingWallOriginals) {
+                 const shouldBeWall = (levelState.movingWallTimer > levelState.movingWallInterval / 2); // Simple on/off based on timer phase
+                 levelState.movingWallOriginals.forEach(pos => {
+                     map[pos.y][pos.x] = shouldBeWall ? 'M' : '.';
+                 });
+             }
+              // Okay, the above is getting complex. Let's revert to the simpler idea:
+              // Global toggle: All 'M' become '.' and all '.' that WERE 'M' become 'M'.
+              // Need to store original positions. Let's do that in init.
+
+               if (!levelState.originalMPositions) { // Store on first toggle if not done in init
+                 levelState.originalMPositions = [];
+                  for (let y = 0; y < mapHeight; y++) {
+                     for (let x = 0; x < mapWidth; x++) {
+                         if (levels[currentLevel].mapString[y][x] === 'M') {
+                            levelState.originalMPositions.push({x, y});
+                         }
+                     }
+                 }
+               }
+
+               levelState.wallsActive = !levelState.wallsActive; // Toggle state
+
+                levelState.originalMPositions.forEach(pos => {
+                     map[pos.y][pos.x] = levelState.wallsActive ? 'M' : '.';
+                 });
+        }
+
+        function updateUI() {
+            uiHealth.textContent = player.health;
+            uiAmmo.textContent = player.ammo === Infinity ? "Inf" : player.ammo;
+            uiKeys.textContent = player.keys.length > 0 ? player.keys.map(k => '🔑').join(' ') : "None";
+
+            // Dim screen slightly if health is low
+            canvas.style.filter = player.health < 30 ? `brightness(0.7) sepia(0.3)` : `brightness(1)`;
+        }
+
+        function showMessage(text, permanent = false, duration = 2000) {
+            messageDiv.textContent = text;
+            messageDiv.style.display = 'block';
+            if (!permanent) {
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, duration);
+            }
+        }
+
+        function playerShoot() {
+            if (player.ammo === Infinity || player.ammo > 0) {
+                 if (player.ammo !== Infinity) {
+                    player.ammo--;
+                 }
+                updateUI();
+
+                 // Add a projectile
+                 projectiles.push({
+                     x: player.x + Math.cos(player.angle) * 0.1, // Start slightly ahead
+                     y: player.y + Math.sin(player.angle) * 0.1,
+                     angle: player.angle,
+                     owner: 'player',
+                     speed: 0.2,
+                     damage: 25
+                 });
+
+                 // Check if hit a sprite directly in front (simple check)
+                 const rayAngle = player.angle;
+                 let hit = false;
+                 let dist = 0;
+                 const step = 0.1;
+                 while (!hit && dist < 20) {
+                     dist += step;
+                     const testX = player.x + Math.cos(rayAngle) * dist;
+                     const testY = player.y + Math.sin(rayAngle) * dist;
+                     const mapX = Math.floor(testX);
+                     const mapY = Math.floor(testY);
+
+                      if (mapX < 0 || mapX >= mapWidth || mapY < 0 || mapY >= mapHeight) {
+                         hit = true; // Hit edge of map
+                         break;
+                      }
+
+                     const wallChar = map[mapY][mapX];
+                      if (wallChar !== '.' && wallChar !== ' ') { // Hit wall
+                         hit = true;
+                         break;
+                      }
+
+                     // Check for sprite hit at this distance
+                     for (let i = sprites.length - 1; i >= 0; i--) {
+                         const sprite = sprites[i];
+                         if (sprite.type === 'enemy') {
+                             const dx = sprite.x - testX;
+                             const dy = sprite.y - testY;
+                             const spriteDistSq = dx * dx + dy * dy;
+                             if (spriteDistSq < 0.3 * 0.3) { // Hit radius
+                                 // Hit enemy!
+                                 sprite.health -= 25; // Damage
+                                 if (sprite.health <= 0) {
+                                     // map[Math.floor(sprite.y)][Math.floor(sprite.x)] = '.'; // Remove from map logic if needed
+                                     sprites.splice(i, 1); // Remove dead enemy
+                                 }
+                                 hit = true; // Stop ray
+                                 break; // Exit sprite loop
+                             }
+                         }
+                     }
+                 }
+
+
+            } else {
+                showMessage("Out of Ammo!", false, 1000);
+            }
+        }
+
+         function playerInteract() {
+             const interactDist = 1.5;
+             const targetX = player.x + Math.cos(player.angle) * interactDist;
+             const targetY = player.y + Math.sin(player.angle) * interactDist;
+             const targetMapX = Math.floor(targetX);
+             const targetMapY = Math.floor(targetY);
+
+              // Check map cell interaction first (Doors, Triggers in map)
+             if (targetMapX >= 0 && targetMapX < mapWidth && targetMapY >= 0 && targetMapY < mapHeight) {
+                 const cellChar = map[targetMapY][targetMapX];
+                 if (cellChar === 'D') { // Interact with Door
+                    if (player.keys.includes('standard')) {
+                         map[targetMapY][targetMapX] = '.'; // Open the door
+                         player.keys.splice(player.keys.indexOf('standard'), 1); // Use the key
+                         showMessage("Door Unlocked!", false, 1500);
+                         updateUI();
+                     } else {
+                         showMessage("Locked! Requires Key (🔑)", false, 1500);
+                     }
+                     return; // Interaction handled
+                 }
+                  if (cellChar === 'F') { // Interact with Final Door (Level 6/7 Puzzle)
+                     if (levelState.switches && levelState.requiredSequence) {
+                          const required = levelState.requiredSequence.length;
+                          if (levelState.currentSequenceIndex === required) {
+                             map[targetMapY][targetMapX] = '.'; // Open the door
+                             showMessage("Sequence Correct! Door Unlocked!", false, 1500);
+                         } else {
+                             showMessage(`Locked! Requires correct switch sequence (${levelState.currentSequenceIndex}/${required})`, false, 2000);
+                         }
+                     } else {
+                          showMessage("Locked!", false, 1500);
+                     }
+                      return; // Interaction handled
+                 }
+                  if (cellChar === 'T') { // Interact with Trigger (Level 3) - Simplified: Toggle ALL 'M' walls
+                      toggleWalls('M');
+                      showMessage("Toggled moving walls!", false, 1500);
+                      return;
+                 }
+             }
+
+             // Check sprite interaction (Keys, Switches, Health, Ammo)
+             let closestSprite = null;
+             let minDistSq = interactDist * interactDist;
+
+             sprites.forEach(sprite => {
+                 const dx = sprite.x - player.x;
+                 const dy = sprite.y - player.y;
+                 const distSq = dx * dx + dy * dy;
+                 if (distSq < minDistSq) {
+                     minDistSq = distSq;
+                     closestSprite = sprite;
+                 }
+             });
+
+             if (closestSprite) {
+                 // Check if the player is roughly facing the sprite
+                 const angleToSprite = Math.atan2(closestSprite.y - player.y, closestSprite.x - player.x);
+                 let angleDiff = angleToSprite - player.angle;
+                 // Normalize angle difference to [-PI, PI]
+                 while (angleDiff <= -Math.PI) angleDiff += 2 * Math.PI;
+                 while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+
+                 if (Math.abs(angleDiff) < FOV / 2) { // Must be roughly looking at it
+                    if (closestSprite.type === 'key') {
+                         player.keys.push(closestSprite.keyId);
+                         sprites.splice(sprites.indexOf(closestSprite), 1);
+                         showMessage("Picked up Key (🔑)!", false, 1500);
+                         updateUI();
+                     } else if (closestSprite.type === 'health') {
+                         player.health = Math.min(100, player.health + closestSprite.amount);
+                         sprites.splice(sprites.indexOf(closestSprite), 1);
+                         showMessage(`Picked up Health (+${closestSprite.amount})!`, false, 1500);
+                         updateUI();
+                     } else if (closestSprite.type === 'ammo') {
+                         if (player.ammo !== Infinity) {
+                             player.ammo += closestSprite.amount;
+                             showMessage(`Picked up Ammo (+${closestSprite.amount})!`, false, 1500);
+                         } else {
+                             showMessage("Ammo Full (Infinite)", false, 1500);
+                         }
+                         sprites.splice(sprites.indexOf(closestSprite), 1);
+                         updateUI();
+                     } else if (closestSprite.type === 'switch' && !closestSprite.active) {
+                         if (levelState.switches && levelState.requiredSequence) {
+                             const expectedSwitch = levelState.requiredSequence[levelState.currentSequenceIndex];
+                             if (closestSprite.switchId === expectedSwitch) {
+                                 closestSprite.active = true;
+                                 closestSprite.texture = closestSprite.activeTexture; // Change appearance
+                                 levelState.switches[closestSprite.switchId] = true;
+                                 levelState.currentSequenceIndex++;
+                                 showMessage(`Switch ${closestSprite.switchId} activated! (${levelState.currentSequenceIndex}/${levelState.requiredSequence.length})`, false, 2000);
+                             } else {
+                                 // Incorrect sequence - reset? Or just notify?
+                                 showMessage(`Incorrect sequence! Expected S${levelState.currentSequenceIndex + 1}`, false, 2000);
+                                 // Optional: Reset sequence on error
+                                 // levelState.currentSequenceIndex = 0;
+                                 // sprites.forEach(s => { if(s.type === 'switch') { s.active = false; s.texture = textures[s.originalChar].texture; } });
+                                 // showMessage(`Sequence reset!`, false, 1500);
+                             }
+                         } else {
+                            // Standard trigger behavior if not part of a sequence?
+                             closestSprite.active = true;
+                             closestSprite.texture = closestSprite.activeTexture;
+                            showMessage(`Switch ${closestSprite.switchId} activated!`, false, 1500);
+                             // Potentially link 'T' behavior here instead of map interaction
+                             // toggleWalls('M');
+                         }
+                     } else if (closestSprite.type === 'exit') {
+                         // Reaching exit is handled by collision check, not interaction key
+                     }
+                 }
+             }
+         }
+
+
+        function updateGame() {
+            if (!gameRunning) return;
+
+            const prevPlayerX = player.x;
+            const prevPlayerY = player.y;
+
+            // --- Handle Input ---
+            let dx = 0;
+            let dy = 0;
+            if (keysPressed['w']) {
+                dx += Math.cos(player.angle);
+                dy += Math.sin(player.angle);
+            }
+            if (keysPressed['s']) {
+                dx -= Math.cos(player.angle);
+                dy -= Math.sin(player.angle);
+            }
+             if (keysPressed['a']) { // Strafe Left
+                 dx += Math.sin(player.angle); // Add perpendicular vector component
+                 dy -= Math.cos(player.angle);
+             }
+             if (keysPressed['d']) { // Strafe Right
+                 dx -= Math.sin(player.angle);
+                 dy += Math.cos(player.angle);
+             }
+
+            // Normalize movement vector if moving diagonally
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len > 0) {
+                dx = (dx / len) * moveSpeed;
+                dy = (dy / len) * moveSpeed;
+            }
+
+            // Update potential position
+            const nextX = player.x + dx;
+            const nextY = player.y + dy;
+
+            // --- Collision Detection ---
+            const playerMapX = Math.floor(player.x);
+            const playerMapY = Math.floor(player.y);
+            const nextMapX = Math.floor(nextX);
+            const nextMapY = Math.floor(nextY);
+
+            // Check collision with walls based on where the player is trying to move
+            if (isWall(nextMapX, playerMapY)) {
+                 player.x = playerMapX + (dx > 0 ? (1 - 0.1) : 0.1); // Adjust slightly away from wall
+                 // Don't fully stop y-movement if only x is blocked
+                 // dx = 0; // Stop x movement component
+            } else {
+                player.x = nextX;
+            }
+
+             if (isWall(playerMapX, nextMapY)) {
+                 player.y = playerMapY + (dy > 0 ? (1 - 0.1) : 0.1);
+                  // dy = 0; // Stop y movement component
+             } else {
+                 player.y = nextY;
+             }
+
+             // Boundary check (redundant if map has outer walls)
+             player.x = Math.max(0.1, Math.min(mapWidth - 0.1, player.x));
+             player.y = Math.max(0.1, Math.min(mapHeight - 0.1, player.y));
+
+
+            // Rotation
+            if (keysPressed['ArrowLeft']) {
+                player.angle -= rotSpeed;
+            }
+            if (keysPressed['ArrowRight']) {
+                player.angle += rotSpeed;
+            }
+             // Normalize angle
+             player.angle = player.angle % (2 * Math.PI);
+              if (player.angle < 0) player.angle += 2 * Math.PI;
+
+             // --- Update Sprites (Enemies) ---
+             sprites.forEach(sprite => {
+                 if (sprite.type === 'enemy') {
+                      // Simple AI: Move towards player if visible, shoot periodically
+                     const dxSprite = player.x - sprite.x;
+                     const dySprite = player.y - sprite.y;
+                     const distSprite = Math.sqrt(dxSprite * dxSprite + dySprite * dySprite);
+                     const angleToPlayer = Math.atan2(dySprite, dxSprite);
+
+                      // Check Line of Sight (basic raycast from enemy to player)
+                     let los = true;
+                     const step = 0.2;
+                     let testDist = step;
+                      while(testDist < distSprite) {
+                          const testX = sprite.x + Math.cos(angleToPlayer) * testDist;
+                          const testY = sprite.y + Math.sin(angleToPlayer) * testDist;
+                          if (isWall(Math.floor(testX), Math.floor(testY))) {
+                              los = false;
+                              break;
+                          }
+                          testDist += step;
+                      }
+
+
+                      if (los && distSprite < 10) { // If player is visible and within range
+                         // Move towards player
+                          const moveX = Math.cos(angleToPlayer) * sprite.speed;
+                          const moveY = Math.sin(angleToPlayer) * sprite.speed;
+                          const nextSpriteX = sprite.x + moveX;
+                          const nextSpriteY = sprite.y + moveY;
+
+                          // Basic collision for sprite movement (prevent walking through walls)
+                          if (!isWall(Math.floor(nextSpriteX), Math.floor(sprite.y))) {
+                              sprite.x = nextSpriteX;
+                          }
+                           if (!isWall(Math.floor(sprite.x), Math.floor(nextSpriteY))) {
+                               sprite.y = nextSpriteY;
+                           }
+
+
+                          // Shooting logic
+                          sprite.currentCooldown--;
+                          if (sprite.currentCooldown <= 0) {
+                              projectiles.push({
+                                  x: sprite.x,
+                                  y: sprite.y,
+                                  angle: angleToPlayer,
+                                  owner: 'enemy',
+                                  speed: 0.1,
+                                  damage: sprite.damage || 10
+                              });
+                              sprite.currentCooldown = sprite.shootCooldown + (Math.random() * 60 - 30); // Reset cooldown with some variance
+                          }
+                      } else {
+                           // Patrol or idle behavior could go here
+                           sprite.currentCooldown = Math.max(0, sprite.currentCooldown -1); // Cooldown even if not shooting
+                      }
+                 }
+             });
+
+             // --- Update Projectiles ---
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const proj = projectiles[i];
+                const moveX = Math.cos(proj.angle) * proj.speed;
+                const moveY = Math.sin(proj.angle) * proj.speed;
+                proj.x += moveX;
+                proj.y += moveY;
+
+                 const projMapX = Math.floor(proj.x);
+                 const projMapY = Math.floor(proj.y);
+
+                 // Check wall collision
+                 if (isWall(projMapX, projMapY)) {
+                     projectiles.splice(i, 1);
+                     continue;
+                 }
+
+                 // Check boundary collision
+                  if (proj.x < 0 || proj.x >= mapWidth || proj.y < 0 || proj.y >= mapHeight) {
+                     projectiles.splice(i, 1);
+                     continue;
+                 }
+
+
+                 // Check collision with player (if enemy projectile)
+                 if (proj.owner === 'enemy') {
+                     const dx = player.x - proj.x;
+                     const dy = player.y - proj.y;
+                     if (dx * dx + dy * dy < 0.3 * 0.3) { // Hit radius
+                         player.health -= proj.damage;
+                         updateUI();
+                         projectiles.splice(i, 1);
+                         if (player.health <= 0) {
+                             gameOver("You were defeated!");
+                         }
+                         continue;
+                     }
+                 }
+
+                 // Check collision with enemies (if player projectile)
+                 if (proj.owner === 'player') {
+                      for (let j = sprites.length - 1; j >= 0; j--) {
+                          const sprite = sprites[j];
+                          if (sprite.type === 'enemy') {
+                              const dx = sprite.x - proj.x;
+                              const dy = sprite.y - proj.y;
+                              if (dx * dx + dy * dy < 0.4 * 0.4) { // Hit radius
+                                 sprite.health -= proj.damage;
+                                  projectiles.splice(i, 1); // Remove projectile
+                                 if (sprite.health <= 0) {
+                                     sprites.splice(j, 1); // Remove dead enemy
+                                 }
+                                  break; // Projectile can only hit one enemy
+                              }
+                          }
+                      }
+                 }
+            }
+
+             // --- Check Exit Condition ---
+             const playerCurrentMapX = Math.floor(player.x);
+             const playerCurrentMapY = Math.floor(player.y);
+             if (levels[currentLevel].mapString[playerCurrentMapY] && levels[currentLevel].mapString[playerCurrentMapY][playerCurrentMapX] === 'E') {
+                 levelComplete();
+             }
+
+
+             // --- Level Specific Updates ---
+             if (levels[currentLevel].update) {
+                 levels[currentLevel].update();
+             }
+        }
+
+        function isWall(x, y) {
+             if (x < 0 || x >= mapWidth || y < 0 || y >= mapHeight) return true; // Treat map edges as walls
+             const cell = map[y][x];
+             // Define what constitutes a wall for movement/raycasting
+             return cell === '#' || cell === 'D' || cell === 'F' || cell === 'M';
+        }
+
+         function gameOver(reason) {
+             gameRunning = false;
+             showMessage(`GAME OVER: ${reason}`, true);
+             // Maybe offer a restart button?
+         }
+
+         function levelComplete() {
+             gameRunning = false; // Pause briefly
+             showMessage(`Level ${currentLevel + 1} Complete!`, false, 2500);
+             setTimeout(() => {
+                 currentLevel++;
+                 loadLevel(currentLevel);
+                 // Ensure game resumes if not the final level
+                 if (currentLevel < levels.length) {
+                    gameRunning = true;
+                 }
+             }, 2600); // Load next level after message fades
+         }
+
+
+        function draw() {
+            // Clear screen
+            ctx.fillStyle = '#000'; // Black ceiling
+            ctx.fillRect(0, 0, screenWidth, screenHeight / 2);
+             ctx.fillStyle = '#666'; // Gray floor
+            ctx.fillRect(0, screenHeight / 2, screenWidth, screenHeight / 2);
+
+
+            const angleStep = FOV / rayCount;
+            let currentAngle = player.angle - FOV / 2;
+            const wallDistances = []; // Store distance for each ray for sprite depth calculation
+
+            // --- Raycasting Walls ---
+            for (let i = 0; i < rayCount; i++) {
+                let rayAngle = currentAngle;
+                 // Normalize angle
+                 rayAngle %= (2 * Math.PI);
+                 if (rayAngle < 0) rayAngle += 2 * Math.PI;
+
+                let dist = 0;
+                let hit = false;
+                const eyeX = Math.cos(rayAngle); // Unit vector for ray direction
+                const eyeY = Math.sin(rayAngle);
+                let wallType = '#'; // Default wall type
+
+                while (!hit && dist < 30) { // Max render distance
+                    dist += 0.05; // Step size (smaller = more accurate but slower)
+                    const testX = Math.floor(player.x + eyeX * dist);
+                    const testY = Math.floor(player.y + eyeY * dist);
+
+                     // Check map boundaries
+                     if (testX < 0 || testX >= mapWidth || testY < 0 || testY >= mapHeight) {
+                         hit = true;
+                         dist = 30; // Hit boundary, treat as distant wall
+                     } else {
+                         // Check if ray hit a wall cell
+                         const cell = map[testY][testX];
+                         if (isWall(testX, testY)) {
+                            hit = true;
+                            wallType = cell; // Record the type of wall hit
+
+                             // Optional: Calculate intersection point more precisely for less fisheye
+                         }
+                     }
+                }
+
+                 // Store distance for Z-buffering sprites
+                 wallDistances[i] = dist;
+
+                 // --- Draw Walls ---
+                 // Fish-eye correction: Multiply distance by cos of angle relative to player view center
+                 const correctedDist = dist * Math.cos(rayAngle - player.angle);
+
+                 // Calculate wall height based on distance
+                 const wallHeight = Math.min(screenHeight, screenHeight / correctedDist);
+
+                 // Calculate top and bottom of wall slice
+                 const wallTop = (screenHeight / 2) - (wallHeight / 2);
+                 const wallBottom = wallTop + wallHeight;
+
+                 // Get wall texture/color based on type
+                 const wallTexture = textures[wallType] || textures['#']; // Default to '#' if unknown
+                 ctx.fillStyle = wallTexture.color;
+
+                 // Optional: Darken walls based on distance
+                 const brightness = Math.max(0.1, 1 - (correctedDist / 15)); // Dim further walls
+                 ctx.filter = `brightness(${brightness})`;
+
+                 // Draw the vertical slice
+                 ctx.fillRect(i * (screenWidth / rayCount), wallTop, (screenWidth / rayCount) + 1, wallHeight); // +1 to avoid gaps
+                 ctx.filter = 'none'; // Reset filter
+
+                currentAngle += angleStep;
+            }
+
+            // --- Draw Sprites ---
+            // Sort sprites by distance to player (far to near for correct overlap)
+            sprites.sort((a, b) => {
+                 const distA = (player.x - a.x)**2 + (player.y - a.y)**2;
+                 const distB = (player.x - b.x)**2 + (player.y - b.y)**2;
+                 return distB - distA; // Sort descending distance (draw furthest first)
+             });
+
+
+             sprites.forEach(sprite => {
+                 // Calculate vector from player to sprite
+                 const dx = sprite.x - player.x;
+                 const dy = sprite.y - player.y;
+                 const spriteDist = Math.sqrt(dx * dx + dy * dy);
+
+                 // Calculate angle from player to sprite
+                 let spriteAngle = Math.atan2(dy, dx);
+
+                 // Adjust angle relative to player's view angle
+                 let viewAngle = spriteAngle - player.angle;
+                 // Normalize angle to [-PI, PI]
+                 while (viewAngle <= -Math.PI) viewAngle += 2 * Math.PI;
+                 while (viewAngle > Math.PI) viewAngle -= 2 * Math.PI;
+
+
+                 // Check if sprite is within FOV
+                 if (Math.abs(viewAngle) < FOV / 1.8) { // Slightly wider check than wall FOV helps rendering edges
+                     const spriteScreenX = (viewAngle / (FOV / 2)) * (screenWidth / 2) + (screenWidth / 2); // Calculate screen X position
+
+
+                     // Calculate sprite height and width based on distance
+                     const spriteScreenHeight = Math.min(screenHeight * 1.5, screenHeight / (spriteDist * Math.cos(viewAngle)) * spriteScale); // Use corrected distance
+                     const spriteScreenWidth = spriteScreenHeight * 0.8; // Assume aspect ratio
+
+                     // Calculate top-left corner for drawing
+                     const spriteTopY = (screenHeight / 2) - (spriteScreenHeight / 2);
+                     const spriteLeftX = spriteScreenX - (spriteScreenWidth / 2);
+
+                     // --- Z-Buffer Check ---
+                     // Check if sprite is closer than the wall at its screen position
+                     const startRay = Math.max(0, Math.floor((spriteLeftX / screenWidth) * rayCount));
+                     const endRay = Math.min(rayCount - 1, Math.ceil(((spriteLeftX + spriteScreenWidth) / screenWidth) * rayCount));
+
+                      let blocked = false;
+                      for (let i = startRay; i <= endRay; i++) {
+                          if (wallDistances[i] < spriteDist) {
+                              // Check if the specific vertical point of the sprite is behind the wall slice
+                              // Simplified check: If any part of the wall column is closer, potentially block.
+                              // More accurate would involve checking the sprite's projected slice against the wall slice.
+                              // For simplicity: if *any* wall ray covering the sprite's width is closer, don't draw (or clip).
+                              // Let's just do a basic center check:
+                              const centerRayIndex = Math.floor(spriteScreenX / (screenWidth / rayCount));
+                               if (centerRayIndex >= 0 && centerRayIndex < rayCount && wallDistances[centerRayIndex] < spriteDist) {
+                                  blocked = true;
+                                  break;
+                               }
+                               // A slightly better simple check: if the average wall distance across its width is less
+                               let avgWallDist = 0; let count = 0;
+                               for(let k=startRay; k<=endRay; k++) { avgWallDist += wallDistances[k]; count++; }
+                               if (count > 0 && (avgWallDist / count) < spriteDist) {
+                                   blocked = true;
+                                   break;
+                               }
+
+                          }
+                      }
+
+                      if (!blocked) {
+                         // --- Draw Sprite ---
+                         ctx.font = `${spriteScreenHeight}px sans-serif`; // Size emoji based on height
+                         ctx.textAlign = 'center';
+                         ctx.textBaseline = 'middle';
+                          // Optional: Dim sprites further away
+                          const brightness = Math.max(0.3, 1 - (spriteDist / 15));
+                          ctx.filter = `brightness(${brightness})`;
+                          ctx.globalAlpha = 0.9; // Make slightly transparent?
+
+                          // Use the current texture (could be active state for switches)
+                          const textureToDraw = sprite.active ? (sprite.activeTexture || sprite.texture) : sprite.texture;
+                          ctx.fillText(textureToDraw, spriteLeftX + spriteScreenWidth / 2, spriteTopY + spriteScreenHeight / 2);
+
+                          ctx.filter = 'none';
+                          ctx.globalAlpha = 1.0;
+
+
+                          // Optional: Draw health bar above enemies
+                          if (sprite.type === 'enemy' && sprite.health < textures['X'].health) { // Only if damaged
+                             const healthBarWidth = spriteScreenWidth * 0.8;
+                             const healthBarHeight = 5;
+                             const healthBarX = spriteLeftX + (spriteScreenWidth - healthBarWidth) / 2;
+                             const healthBarY = spriteTopY - healthBarHeight - 2;
+                             const healthRatio = Math.max(0, sprite.health / textures['X'].health);
+                              ctx.fillStyle = '#f00'; // Red background
+                              ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+                              ctx.fillStyle = '#0f0'; // Green health
+                              ctx.fillRect(healthBarX, healthBarY, healthBarWidth * healthRatio, healthBarHeight);
+                          }
+                      }
+                 }
+             });
+
+
+            // --- Draw Projectiles (as simple dots/circles for now) ---
+            projectiles.forEach(proj => {
+                 // Similar calculation to sprites to find screen position
+                 const dx = proj.x - player.x;
+                 const dy = proj.y - player.y;
+                 const projDist = Math.sqrt(dx * dx + dy * dy);
+                 let projAngle = Math.atan2(dy, dx);
+                 let viewAngle = projAngle - player.angle;
+                 while (viewAngle <= -Math.PI) viewAngle += 2 * Math.PI;
+                 while (viewAngle > Math.PI) viewAngle -= 2 * Math.PI;
+
+                  if (Math.abs(viewAngle) < FOV / 1.8 && projDist > 0.1) { // Check FOV and not too close
+                      const projScreenX = (viewAngle / (FOV / 2)) * (screenWidth / 2) + (screenWidth / 2);
+                      const projSize = Math.max(2, (screenHeight / projDist) * 0.05); // Size based on distance
+                     const projScreenY = screenHeight / 2; // Assume mid-screen vertically for simplicity
+
+                      // Z-Buffer Check
+                      const rayIndex = Math.floor(projScreenX / (screenWidth / rayCount));
+                       if (rayIndex >= 0 && rayIndex < rayCount && wallDistances[rayIndex] > projDist) {
+                           const projTexture = textures[proj.owner === 'player' ? 'bullet' : 'enemy_bullet'];
+                           ctx.fillStyle = projTexture.color;
+                           ctx.beginPath();
+                           ctx.arc(projScreenX, projScreenY, projSize, 0, 2 * Math.PI);
+                           ctx.fill();
+                       }
+                  }
+            });
+
+             // --- Draw Weapon (Simple Shape) ---
+             const weaponBaseX = screenWidth * 0.7;
+             const weaponBaseY = screenHeight * 0.95;
+             ctx.fillStyle = '#444';
+             ctx.fillRect(weaponBaseX, weaponBaseY - 50, 30, 50); // Handle
+             ctx.fillRect(weaponBaseX - 40, weaponBaseY - 50, 80, 15); // Barrel
+        }
+
+
+        function gameLoop() {
+            updateGame();
+            draw();
+             if (gameRunning) { // Continue loop only if game is active
+                requestAnimationFrame(gameLoop);
+             }
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+             keysPressed[e.key.toLowerCase()] = true;
+             // Prevent default scrolling behavior for arrow keys and space
+              if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(e.key.toLowerCase())) {
+                  e.preventDefault();
+              }
+
+             // Handle single press actions immediately
+             if (e.key.toLowerCase() === ' ' && gameRunning) { // Space bar for shooting
+                 playerShoot();
+             }
+             if (e.key.toLowerCase() === 'e' && gameRunning) { // E key for interaction
+                 playerInteract();
+             }
+         });
+
+        window.addEventListener('keyup', (e) => {
+             keysPressed[e.key.toLowerCase()] = false;
+         });
+
+        // --- Start Game ---
+        loadLevel(0);
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>

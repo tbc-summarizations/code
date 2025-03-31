@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Album Platformer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #222;
+            color: #fff;
+            font-family: sans-serif;
+            overflow: hidden; /* Prevent scrolling */
+        }
+        canvas {
+            border: 1px solid #fff;
+            background-color: #333;
+            display: block; /* Prevent extra space below canvas */
+            max-width: 100%;
+            max-height: 80vh; /* Limit canvas height */
+            aspect-ratio: 16 / 9; /* Maintain aspect ratio */
+        }
+        #controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        #skipButton {
+            padding: 10px 15px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #555;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+        }
+        #skipButton:hover {
+            background-color: #777;
+        }
+        #levelInfo {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+            text-align: center;
+        }
+        #mobileControls {
+            display: none; /* Hidden by default */
+            position: fixed;
+            bottom: 10px;
+            left: 0;
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            justify-content: space-between;
+            z-index: 10;
+        }
+        #mobileControls button {
+            padding: 15px;
+            font-size: 1.5em;
+            background-color: rgba(85, 85, 85, 0.7);
+            color: #fff;
+            border: 1px solid #aaa;
+            border-radius: 50%; /* Make them round */
+            cursor: pointer;
+            touch-action: manipulation; /* Improve responsiveness */
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #mobileControls .left-group, #mobileControls .right-group {
+            display: flex;
+            gap: 20px; /* Space between left/right buttons */
+        }
+        #mobileControls .right-group {
+            margin-left: auto; /* Push jump button to the right */
+             margin-right: 20px; /* Add some margin */
+        }
+
+        /* Show mobile controls only on touch devices (simple check) */
+        @media (hover: none) and (pointer: coarse) {
+            #mobileControls {
+                display: flex;
+            }
+             body { /* Allow some vertical scroll if needed on small mobile */
+                overflow-y: auto;
+            }
+             canvas {
+                 max-height: 65vh; /* Reduce canvas height further on mobile */
+             }
+             #controls {
+                 flex-direction: column; /* Stack controls vertically */
+             }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="levelInfo">Level 1: Loading...</div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="controls">
+        <div>Use WASD or Arrow Keys to move and jump.</div>
+        <button id="skipButton">Skip Level</button>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobileControls">
+        <div class="left-group">
+            <button id="btnLeft">◀</button>
+            <button id="btnRight">▶</button>
+        </div>
+         <div class="right-group">
+            <button id="btnUp">▲</button>
+            <button id="btnAction">⭐</button> <!-- Contextual action -->
+         </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelInfoDiv = document.getElementById('levelInfo');
+        const skipButton = document.getElementById('skipButton');
+
+        // --- Game Settings ---
+        const GRAVITY = 0.6;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = 12;
+        const WALL_JUMP_FORCE_X = 7;
+        const WALL_JUMP_FORCE_Y = 10;
+        const DASH_SPEED = 10;
+        const DASH_DURATION = 150; // ms
+        const GLIDE_FACTOR = 0.2;
+        const STICKY_WALL_FACTOR = 0.1;
+        const JETPACK_FORCE = 0.8;
+        const JETPACK_FUEL_MAX = 100;
+        const BOUNCE_FACTOR = 1.1;
+        const PHASING_DURATION = 500; // ms
+        const TELEPORT_DISTANCE = 100;
+        const SHRINK_FACTOR = 0.6;
+        const GROW_FACTOR = 1.5;
+
+        let currentLevel = 0;
+        let player;
+        let platforms = [];
+        let goals = [];
+        let hazards = []; // For things like lasers, rising lava
+        let switches = [];
+        let collectibles = [];
+        let specialZones = []; // For gravity switch, speed boost, etc.
+        let levelMechanics = {}; // Holds active mechanics for the current level
+        let levelComplete = false;
+        let keys = {}; // Keyboard state
+
+        // Mobile button state
+        let mobileLeft = false;
+        let mobileRight = false;
+        let mobileUp = false;
+        let mobileAction = false; // For dash, phase, etc. based on context
+
+        // --- Player Object ---
+        function createPlayer(x, y) {
+            return {
+                x: x,
+                y: y,
+                width: 20,
+                height: 30,
+                velocityX: 0,
+                velocityY: 0,
+                speed: PLAYER_SPEED,
+                jumpForce: JUMP_FORCE,
+                grounded: false,
+                onWall: null, // 'left' or 'right'
+                canDoubleJump: false,
+                hasDoubleJumped: false,
+                isDashing: false,
+                dashTimeout: null,
+                dashDirection: 1,
+                isGliding: false,
+                isOnSlippery: false,
+                isOnConveyor: 0, // Speed of conveyor
+                isPhasing: false,
+                phaseTimeout: null,
+                canTeleport: true,
+                teleportCooldown: 500, // ms
+                lastTeleportTime: 0,
+                isVisible: true, // For darkness mechanic
+                lightRadius: 150, // For darkness mechanic
+                jetpackFuel: JETPACK_FUEL_MAX,
+                jetpackActive: false,
+                originalWidth: 20,
+                originalHeight: 30,
+                color: '#00f', // Blue square emoji placeholder 🟦
+
+                update(dt) { // dt for potential frame-independent physics (simplified here)
+                    // --- Handle Input ---
+                    let moveLeft = keys['a'] || keys['A'] || keys['ArrowLeft'] || mobileLeft;
+                    let moveRight = keys['d'] || keys['D'] || keys['ArrowRight'] || mobileRight;
+                    let jumpPressed = keys['w'] || keys['W'] || keys['ArrowUp'] || mobileUp;
+                    let actionPressed = keys['Shift'] || keys[' '] || mobileAction; // Space or Shift for Action
+
+                    // Horizontal Movement
+                    if (!this.isDashing) {
+                        if (moveLeft) {
+                            this.velocityX = -this.speed;
+                        } else if (moveRight) {
+                            this.velocityX = this.speed;
+                        } else {
+                            this.velocityX = 0;
+                        }
+                         // Conveyor Belt
+                         if (this.isOnConveyor !== 0) {
+                            this.velocityX += this.isOnConveyor;
+                         }
+
+                         // Slippery Surface adjustment (apply friction later)
+                         if (!this.isOnSlippery && !moveLeft && !moveRight && this.grounded) {
+                            // Apply friction only if not slippery and not actively moving
+                            this.velocityX *= 0.8; // Friction
+                            if (Math.abs(this.velocityX) < 0.1) this.velocityX = 0;
+                         } else if (this.isOnSlippery && this.grounded) {
+                             // Reduced friction on slippery surfaces
+                             this.velocityX *= 0.98;
+                         } else if (!this.grounded) {
+                             // Less air control, slightly less friction
+                             this.velocityX *= 0.95;
+                         }
+
+                    }
+
+                    // --- Apply Mechanics based on Input/State ---
+
+                    // Basic Jump
+                    if (jumpPressed && this.grounded) {
+                        this.velocityY = -this.jumpForce;
+                        this.grounded = false;
+                        keys['w'] = keys['W'] = keys['ArrowUp'] = false; // Consume jump press
+                        mobileUp = false;
+                    }
+
+                    // Double Jump (Mechanic 5: Ziggy Stardust)
+                    if (levelMechanics.doubleJump && jumpPressed && !this.grounded && !this.hasDoubleJumped && this.canDoubleJump) {
+                        this.velocityY = -this.jumpForce * 0.9; // Slightly weaker double jump
+                        this.hasDoubleJumped = true;
+                        keys['w'] = keys['W'] = keys['ArrowUp'] = false; // Consume jump press
+                         mobileUp = false;
+                    }
+
+                    // Wall Jump (Mechanic 3: Toxicity)
+                    if (levelMechanics.wallJump && jumpPressed && this.onWall && !this.grounded) {
+                        this.velocityY = -WALL_JUMP_FORCE_Y;
+                        this.velocityX = this.onWall === 'left' ? WALL_JUMP_FORCE_X : -WALL_JUMP_FORCE_X;
+                        this.onWall = null; // Detach from wall
+                         keys['w'] = keys['W'] = keys['ArrowUp'] = false; // Consume jump press
+                         mobileUp = false;
+                    }
+
+                    // Dash (Mechanic 11: 36 Chambers)
+                    if (levelMechanics.dash && actionPressed && !this.isDashing) {
+                         this.isDashing = true;
+                         this.dashDirection = (moveRight ? 1 : (moveLeft ? -1 : (this.velocityX >= 0 ? 1 : -1))); // Use current direction if not moving
+                         if (this.dashDirection === 0) this.dashDirection = 1; // Default right if standing still
+                         this.velocityX = DASH_SPEED * this.dashDirection;
+                         this.velocityY = 0; // Dash horizontally
+                         this.dashTimeout = setTimeout(() => {
+                             this.isDashing = false;
+                             this.velocityX = 0; // Stop abruptly after dash
+                         }, DASH_DURATION);
+                         keys['Shift'] = keys[' '] = false; // Consume action press
+                         mobileAction = false;
+                    }
+
+                    // Glide (Mechanic 12: Grace)
+                    this.isGliding = (levelMechanics.glide && jumpPressed && this.velocityY > 0 && !this.grounded);
+                    if (this.isGliding) {
+                        this.velocityY *= GLIDE_FACTOR; // Slow down fall speed
+                    }
+
+                     // Phase (Mechanic 7: Deathconsciousness)
+                     if (levelMechanics.phasing && actionPressed && !this.isPhasing) {
+                         this.isPhasing = true;
+                         this.color = '#aaa'; // Visual indicator
+                         this.phaseTimeout = setTimeout(() => {
+                             this.isPhasing = false;
+                             this.color = '#00f'; // Reset color
+                         }, PHASING_DURATION);
+                         keys['Shift'] = keys[' '] = false; // Consume action press
+                         mobileAction = false;
+                     }
+
+                     // Teleport (Mechanic 8: Kid A)
+                     if (levelMechanics.teleport && actionPressed && this.canTeleport && (Date.now() - this.lastTeleportTime > this.teleportCooldown)) {
+                         const teleportDir = (moveRight ? 1 : (moveLeft ? -1 : (this.velocityX >= 0 ? 1 : -1)));
+                         this.x += TELEPORT_DISTANCE * teleportDir;
+                         this.lastTeleportTime = Date.now();
+                         // Add visual effect? (simple blink)
+                         this.isVisible = false;
+                         setTimeout(() => { this.isVisible = true; }, 100);
+                         keys['Shift'] = keys[' '] = false; // Consume action press
+                         mobileAction = false;
+                     }
+
+                     // Jetpack (Mechanic 25: To Pimp a Butterfly)
+                     if (levelMechanics.jetpack && (jumpPressed || mobileUp) && this.jetpackFuel > 0) {
+                         this.jetpackActive = true;
+                         this.velocityY -= JETPACK_FORCE;
+                         if (this.velocityY < -this.jumpForce * 0.8) { // Limit upward speed
+                            this.velocityY = -this.jumpForce * 0.8;
+                         }
+                         this.jetpackFuel -= 1;
+                         this.grounded = false; // Ensure not grounded while using jetpack
+                     } else {
+                         this.jetpackActive = false;
+                     }
+                     // Refuel jetpack slowly on ground
+                     if (this.grounded && this.jetpackFuel < JETPACK_FUEL_MAX) {
+                         this.jetpackFuel += 0.5;
+                     }
+
+
+                    // --- Physics ---
+                    // Apply Gravity (unless dashing horizontally, gliding significantly, or using jetpack effectively)
+                    let effectiveGravity = GRAVITY;
+
+                    // Check Gravity Switch Zones (Mechanic 17: Madvillainy)
+                    let inGravityZone = false;
+                     if (levelMechanics.gravitySwitch) {
+                         specialZones.filter(z => z.type === 'gravity').forEach(zone => {
+                             if (this.x < zone.x + zone.width && this.x + this.width > zone.x &&
+                                 this.y < zone.y + zone.height && this.y + this.height > zone.y) {
+                                 effectiveGravity = -GRAVITY * 0.8; // Reverse gravity, slightly weaker maybe
+                                 inGravityZone = true;
+                             }
+                         });
+                     }
+
+
+                    if (!this.isDashing && !this.jetpackActive) {
+                        this.velocityY += effectiveGravity;
+                    } else if (this.isDashing) {
+                        this.velocityY = 0; // No gravity while dashing horizontally
+                    }
+
+                    // Sticky Walls (Mechanic 16: Illmatic) & Normal Wall Slide Check
+                    if (this.onWall && !this.grounded) {
+                        if (levelMechanics.stickyWalls) {
+                            if (this.velocityY > 0) { // Only apply if falling
+                                this.velocityY *= STICKY_WALL_FACTOR;
+                            }
+                        } else if(levelMechanics.wallJump) { // Basic wall slide if wall jump is enabled but not sticky
+                             if (this.velocityY > 0) {
+                                 this.velocityY *= 0.7; // Gentle slide
+                             }
+                        }
+                    }
+
+                    // Apply Velocity
+                    this.x += this.velocityX;
+                    this.y += this.velocityY;
+
+                    // Reset state before collision checks
+                    this.grounded = false;
+                    this.onWall = null;
+                    this.isOnSlippery = false;
+                    this.isOnConveyor = 0;
+                    let onBouncy = false;
+                    let touchingCeiling = false; // For gravity switch
+
+
+                    // --- Collision Detection & Resolution ---
+                    platforms.forEach(platform => {
+                         if (platform.type === 'temporary' && !platform.active) return;
+                         if (platform.type === 'fragile' && platform.broken) return;
+                         if (platform.type === 'rhythm' && !platform.active) return;
+                         if (platform.type === 'invisible' && !platform.visible) {
+                             // Only check collision if player is very close, makes it slightly easier
+                             const dx = (this.x + this.width / 2) - (platform.x + platform.width / 2);
+                             const dy = (this.y + this.height / 2) - (platform.y + platform.height / 2);
+                             const dist = Math.sqrt(dx*dx + dy*dy);
+                             if (dist > Math.max(this.width, this.height) + Math.max(platform.width, platform.height)) return;
+                         }
+
+
+                        // Phasing Check (Mechanic 7: Deathconsciousness)
+                        if (this.isPhasing && platform.phasable) {
+                            return; // Skip collision check for phasable platforms
+                        }
+
+                        const pLeft = platform.x;
+                        const pRight = platform.x + platform.width;
+                        const pTop = platform.y;
+                        const pBottom = platform.y + platform.height;
+                        const plLeft = this.x;
+                        const plRight = this.x + this.width;
+                        const plTop = this.y;
+                        const plBottom = this.y + this.height;
+
+                        // Check for collision
+                        if (plRight > pLeft && plLeft < pRight && plBottom > pTop && plTop < pBottom) {
+                            // Collision occurred, determine side
+
+                            // Vertical collision (hitting top or bottom)
+                            const overlapY = (this.velocityY > 0) ? (plBottom - pTop) : (pBottom - plTop);
+                            // Horizontal collision (hitting sides)
+                            const overlapX = (this.velocityX > 0) ? (plRight - pLeft) : (pRight - plLeft);
+
+                            // Resolve vertically first if falling onto or jumping into
+                            if (overlapY < overlapX || this.velocityX === 0 || platform.passthrough) { // Prioritize vertical collision resolution, ignore for passthrough platforms unless landing
+                                if (this.velocityY > 0 && plBottom - overlapY <= pTop) { // Landed on top
+                                    if (!platform.passthrough) { // Can't land on passthrough from below
+                                        this.y = pTop - this.height;
+                                        this.velocityY = 0;
+                                        this.grounded = true;
+                                        this.hasDoubleJumped = false; // Reset double jump on landing
+                                        this.canDoubleJump = true; // Allow double jump after landing
+                                        this.onWall = null; // Not on wall if grounded
+                                        if (platform.slippery) this.isOnSlippery = true; // Check slippery
+                                        if (platform.conveyor) this.isOnConveyor = platform.conveyor; // Check conveyor
+                                        if (platform.bouncy) onBouncy = true; // Check bouncy
+                                        if (platform.type === 'fragile') platform.broken = true; // Break fragile
+                                        if (platform.type === 'invisible') platform.visible = true; // Make visible on touch
+                                    }
+                                } else if (this.velocityY < 0 && plTop + overlapY >= pBottom) { // Hit bottom
+                                     if (!platform.passthrough && !inGravityZone) { // Can't hit bottom of passthrough, ignore if gravity reversed
+                                        this.y = pBottom;
+                                        this.velocityY = 0;
+                                    } else if (inGravityZone) { // Landed on ceiling due to reversed gravity
+                                         this.y = pBottom;
+                                         this.velocityY = 0;
+                                         this.grounded = true; // Consider "grounded" on ceiling
+                                         this.hasDoubleJumped = false;
+                                         this.canDoubleJump = true;
+                                         touchingCeiling = true; // Flag for inverted controls maybe?
+                                         // Apply ceiling platform effects if needed
+                                    }
+                                }
+                            }
+
+                            // Resolve horizontally if not primarily vertical or if hitting a non-passthrough wall
+                            if (overlapX < overlapY || this.velocityY === 0 || !platform.passthrough) {
+                               if (!this.grounded || overlapX < overlapY) { // Only resolve horizontal if not grounded or horizontal overlap is smaller
+                                  if (this.velocityX > 0 && plRight - overlapX <= pLeft) { // Hit left side of platform
+                                        this.x = pLeft - this.width;
+                                        this.velocityX = 0;
+                                        if(!this.grounded) this.onWall = 'right';
+                                    } else if (this.velocityX < 0 && plLeft + overlapX >= pRight) { // Hit right side of platform
+                                        this.x = pRight;
+                                        this.velocityX = 0;
+                                         if(!this.grounded) this.onWall = 'left';
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+
+                    // --- Special Platform Effects ---
+                    // Bouncy Platform (Mechanic 14: Black Saint)
+                    if (onBouncy && this.grounded) {
+                         this.velocityY = -this.jumpForce * BOUNCE_FACTOR;
+                         this.grounded = false;
+                    }
+
+
+                     // --- Collectibles --- (Mechanic 15: What's Going On)
+                     if (levelMechanics.collect) {
+                        collectibles = collectibles.filter(item => {
+                             if (!item.collected && this.x < item.x + item.size && this.x + this.width > item.x &&
+                                 this.y < item.y + item.size && this.y + this.height > item.y) {
+                                 item.collected = true;
+                                 return false; // Remove from active list
+                             }
+                             return true;
+                        });
+                        // Check if all collected
+                        if (collectibles.length === 0) {
+                            goals.forEach(g => g.active = true); // Activate goal(s)
+                        } else {
+                             goals.forEach(g => g.active = false); // Deactivate if not all collected
+                        }
+                     }
+
+                     // --- Switches --- (Mechanic 4: Miseducation)
+                     if (levelMechanics.switches) {
+                         switches.forEach(sw => {
+                             if (!sw.pressed && this.x < sw.x + sw.width && this.x + this.width > sw.x &&
+                                 this.y < sw.y + sw.height && this.y + this.height > sw.y) {
+
+                                 sw.pressed = true; // Can only press once or toggle? Let's make it toggle
+                                 sw.active = !sw.active;
+                                 sw.color = sw.active ? '#0f0' : '#f00'; // Change color when activated
+
+                                 // Toggle associated platforms
+                                 platforms.forEach(p => {
+                                     if (p.switchId === sw.id) {
+                                         p.active = sw.active; // Activate/deactivate based on switch state
+                                         if (p.type === 'toggle') p.color = sw.active ? '#aaa' : '#555'; // Visual feedback
+                                     }
+                                 });
+                                 // Delay reset so player can move off
+                                 setTimeout(() => { sw.pressed = false; }, 300);
+                             }
+                         });
+                     }
+
+                      // --- Special Zones ---
+                      let isInSpeedZone = false;
+                      let isInSizeZone = null; // null, 'shrink', 'grow'
+                      if (levelMechanics.speedBoost || levelMechanics.sizeChange) {
+                          specialZones.forEach(zone => {
+                              if (this.x < zone.x + zone.width && this.x + this.width > zone.x &&
+                                  this.y < zone.y + zone.height && this.y + this.height > zone.y) {
+                                  if (zone.type === 'speed' && levelMechanics.speedBoost) {
+                                       isInSpeedZone = true;
+                                       // Apply continuous boost while inside? Or just one push? Let's do continuous.
+                                       this.velocityX *= 1.1; // Gentle acceleration
+                                       if (Math.abs(this.velocityX) < this.speed * 1.5) { // Add base speed if slow
+                                            this.velocityX += Math.sign(this.velocityX || 1) * 2;
+                                       }
+                                        // Limit max speed
+                                       const maxSpeed = this.speed * 2.5;
+                                       if (this.velocityX > maxSpeed) this.velocityX = maxSpeed;
+                                       if (this.velocityX < -maxSpeed) this.velocityX = -maxSpeed;
+                                  } else if (zone.type === 'size' && levelMechanics.sizeChange) {
+                                      isInSizeZone = zone.effect; // 'shrink' or 'grow'
+                                  }
+                              }
+                          });
+                      }
+
+                       // Size Change (Mechanic 22: In Rainbows - replaced color)
+                      if (levelMechanics.sizeChange) {
+                          if (isInSizeZone === 'shrink' && this.width !== this.originalWidth * SHRINK_FACTOR) {
+                               this.width = this.originalWidth * SHRINK_FACTOR;
+                               this.height = this.originalHeight * SHRINK_FACTOR;
+                          } else if (isInSizeZone === 'grow' && this.width !== this.originalWidth * GROW_FACTOR) {
+                               this.width = this.originalWidth * GROW_FACTOR;
+                               this.height = this.originalHeight * GROW_FACTOR;
+                          } else if (isInSizeZone === null && this.width !== this.originalWidth) {
+                              // Reset size when leaving zone
+                              this.width = this.originalWidth;
+                              this.height = this.originalHeight;
+                          }
+                      }
+
+
+                    // --- Boundaries ---
+                    if (this.x < 0) {
+                        this.x = 0;
+                        if(!this.grounded) this.onWall = 'left';
+                    }
+                    if (this.x + this.width > canvas.width) {
+                        this.x = canvas.width - this.width;
+                         if(!this.grounded) this.onWall = 'right';
+                    }
+                     // Fall off bottom (reset level?)
+                    if (this.y > canvas.height + 100) { // Allow some leeway before reset
+                         loadLevel(currentLevel); // Reset current level
+                    }
+                     // Hit top boundary (only relevant with reversed gravity)
+                    if (this.y < 0 && !inGravityZone) {
+                        this.y = 0;
+                        this.velocityY = 0;
+                    } else if (this.y + this.height < 0 && inGravityZone) {
+                         loadLevel(currentLevel); // Went off top with reversed gravity
+                    }
+
+
+                    // --- Goal Check ---
+                    goals.forEach(goal => {
+                        if (goal.active && this.x < goal.x + goal.width && this.x + this.width > goal.x &&
+                            this.y < goal.y + goal.height && this.y + this.height > goal.y) {
+                            levelComplete = true;
+                        }
+                    });
+
+                    // --- Hazard Check ---
+                    hazards.forEach(hazard => {
+                        if(hazard.type === 'laser' && !hazard.active) return;
+
+                        const hx = hazard.x;
+                        const hy = hazard.y;
+                        const hw = hazard.width;
+                        const hh = hazard.height;
+
+                        // Simple AABB collision for hazards
+                        if (this.x < hx + hw && this.x + this.width > hx &&
+                            this.y < hy + hh && this.y + this.height > hy) {
+
+                             // Check phasing for specific hazards if applicable
+                             if (this.isPhasing && hazard.phasable) {
+                                 return; // Phase through safe
+                             }
+
+                             // Collision with hazard - reset level
+                             loadLevel(currentLevel);
+                             return; // Exit update early after reset
+                        }
+                    });
+
+                },
+
+                draw(ctx) {
+                    if (!this.isVisible) return;
+
+                    // Darkness effect (Mechanic 9: The Glow, Pt. 2)
+                    if (levelMechanics.darkness) {
+                        // Create a radial gradient centered on the player
+                        const gradient = ctx.createRadialGradient(
+                            this.x + this.width / 2, this.y + this.height / 2, this.lightRadius * 0.2, // Inner bright radius
+                            this.x + this.width / 2, this.y + this.height / 2, this.lightRadius // Outer edge of light
+                        );
+                        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)'); // Transparent center
+                        gradient.addColorStop(1, 'rgba(0, 0, 0, 1)'); // Opaque edges
+
+                        // Draw the darkness overlay everywhere EXCEPT the light radius
+                        ctx.save();
+                        ctx.fillStyle = gradient;
+                        ctx.globalCompositeOperation = 'destination-over'; // Draw darkness behind existing content
+                        ctx.fillRect(0, 0, canvas.width, canvas.height); // Cover canvas first
+                         ctx.globalCompositeOperation = 'destination-in'; // Punch hole for light
+                         ctx.beginPath();
+                         ctx.arc(this.x + this.width/2, this.y + this.height/2, this.lightRadius, 0, Math.PI * 2);
+                         ctx.fillStyle = 'white'; // Color doesn't matter here, it's just the shape
+                         ctx.fill();
+                        ctx.restore();
+
+                         // Re-apply the global darkness AFTER drawing player/platforms within light
+                         ctx.save();
+                         ctx.fillStyle = 'rgba(0, 0, 0, 0.95)'; // Very dark overlay
+                         ctx.globalCompositeOperation = 'destination-over'; // Ensure it's behind everything visible
+                         // Draw darkness using complex path (rect minus circle) - simpler: draw large rect then clear circle
+                         ctx.fillRect(0, 0, canvas.width, canvas.height); // Cover everything
+                         ctx.globalCompositeOperation = 'destination-out'; // Cut out the light area
+                          ctx.beginPath();
+                          ctx.arc(this.x + this.width/2, this.y + this.height/2, this.lightRadius, 0, Math.PI * 2);
+                          ctx.fillStyle = 'white'; // Color doesn't matter
+                          ctx.fill();
+                         ctx.restore();
+
+                    }
+
+                     // Draw the player
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+
+                    // Draw Jetpack flames (Mechanic 25: To Pimp a Butterfly)
+                    if (this.jetpackActive && levelMechanics.jetpack) {
+                        ctx.fillStyle = '#FFA500'; // Orange
+                         const flameHeight = Math.random() * 10 + 10; // Flickering height
+                         const flameWidth = this.width * 0.6;
+                         ctx.fillRect(this.x + this.width * 0.2, this.y + this.height, flameWidth, flameHeight);
+                         ctx.fillStyle = '#FFD700'; // Gold/Yellow
+                         const innerFlameHeight = flameHeight * 0.6;
+                         const innerFlameWidth = flameWidth * 0.5;
+                         ctx.fillRect(this.x + (this.width - innerFlameWidth) / 2, this.y + this.height, innerFlameWidth, innerFlameHeight);
+                    }
+                }
+            };
+        }
+
+        // --- Level Data ---
+        const levels = [
+            // 1: Sufjan Stevens - Illinois (Basic Jump)
+            {
+                name: "Sufjan Stevens - Illinois",
+                backgroundColor: '#aaddff',
+                mechanicIds: [],
+                playerStart: { x: 50, y: 400 },
+                platforms: [
+                    { x: 0, y: 550, width: canvas.width, height: 50, color: '#8B4513' }, // Ground
+                    { x: 150, y: 450, width: 100, height: 20, color: '#008000' },
+                    { x: 300, y: 380, width: 150, height: 20, color: '#008000' },
+                    { x: 550, y: 300, width: 100, height: 20, color: '#008000' },
+                ],
+                goals: [{ x: 600, y: 250, width: 40, height: 40, color: '#FFD700', active: true }], // Goal: Gold square 🏆
+                hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+            // 2: Prince - Purple Rain (Temporary Platforms)
+             {
+                name: "Prince - Purple Rain",
+                backgroundColor: '#4B0082', // Indigo
+                mechanicIds: ['temporaryPlatforms'],
+                playerStart: { x: 50, y: 500 },
+                platforms: [
+                    { x: 0, y: 550, width: 150, height: 50, color: '#6A0DAD' },
+                    { x: 150, y: 480, width: 80, height: 20, color: '#ccc', type: 'temporary', duration: 2000, delay: 500, active: true }, // Temp platform
+                    { x: 300, y: 420, width: 80, height: 20, color: '#ccc', type: 'temporary', duration: 1500, delay: 1000, active: true }, // Temp platform
+                    { x: 450, y: 380, width: 80, height: 20, color: '#ccc', type: 'temporary', duration: 2500, delay: 1500, active: true }, // Temp platform
+                    { x: 600, y: 300, width: 150, height: 20, color: '#6A0DAD' },
+                ],
+                goals: [{ x: 700, y: 250, width: 40, height: 40, color: '#FFD700', active: true }],
+                hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+             // 3: System of a Down - Toxicity (Wall Jump)
+             {
+                 name: "System of a Down - Toxicity",
+                 backgroundColor: '#8B0000', // Dark Red
+                 mechanicIds: ['wallJump'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#A52A2A' }, // Ground
+                     { x: 150, y: 300, width: 30, height: 250, color: '#666' }, // Left Wall
+                     { x: 350, y: 150, width: 30, height: 400, color: '#666' }, // Right Wall
+                     { x: 550, y: 0, width: 30, height: 350, color: '#666' }, // Left top Wall
+                 ],
+                 goals: [{ x: 590, y: 50, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+             // 4: Lauryn Hill - Miseducation (Switches)
+             {
+                 name: "Lauryn Hill - Miseducation",
+                 backgroundColor: '#D2B48C', // Tan
+                 mechanicIds: ['switches'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#8B4513' }, // Ground
+                     { x: 200, y: 450, width: 100, height: 20, color: '#555', type: 'toggle', switchId: 1, active: false }, // Controlled by switch 1
+                     { x: 400, y: 350, width: 100, height: 20, color: '#aaa', type: 'toggle', switchId: 2, active: true }, // Controlled by switch 2
+                     { x: 600, y: 250, width: 100, height: 20, color: '#555', type: 'toggle', switchId: 1, active: false }, // Controlled by switch 1
+                 ],
+                 goals: [{ x: 750, y: 150, width: 40, height: 40, color: '#FFD700', active: true }], // Need to reach top right
+                 hazards: [],
+                 switches: [
+                     { x: 100, y: 520, width: 20, height: 20, color: '#f00', id: 1, active: false, pressed: false }, // Switch 1 (starts inactive)
+                     { x: 300, y: 520, width: 20, height: 20, color: '#0f0', id: 2, active: true, pressed: false }, // Switch 2 (starts active)
+                 ],
+                 collectibles: [], specialZones: []
+            },
+            // 5: David Bowie - Ziggy Stardust (Double Jump)
+             {
+                 name: "David Bowie - Ziggy Stardust",
+                 backgroundColor: '#1E90FF', // Dodger Blue (Spacey)
+                 mechanicIds: ['doubleJump'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#4682B4' }, // Ground
+                     { x: 100, y: 450, width: 80, height: 20, color: '#B0C4DE' },
+                     { x: 300, y: 350, width: 80, height: 20, color: '#B0C4DE' }, // Requires double jump
+                     { x: 500, y: 250, width: 80, height: 20, color: '#B0C4DE' }, // Requires double jump
+                     { x: 700, y: 150, width: 80, height: 20, color: '#B0C4DE' }, // Requires double jump
+                 ],
+                 goals: [{ x: 720, y: 100, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+             // 6: Björk - Homogenic (Slippery Platforms)
+             {
+                 name: "Björk - Homogenic",
+                 backgroundColor: '#ADD8E6', // Light Blue (Icy)
+                 mechanicIds: ['slippery'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 200, height: 50, color: '#F0FFFF', slippery: true }, // Ice ground
+                     { x: 250, y: 520, width: 150, height: 20, color: '#F0FFFF', slippery: true },
+                     { x: 450, y: 480, width: 150, height: 20, color: '#F0FFFF', slippery: true },
+                     { x: 650, y: 440, width: 150, height: 20, color: '#F0FFFF', slippery: true },
+                 ],
+                 goals: [{ x: 750, y: 390, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+            // 7: Have a Nice Life - Deathconsciousness (Phasing)
+            {
+                name: "Have a Nice Life - Deathconsciousness",
+                backgroundColor: '#111', // Very Dark Grey
+                mechanicIds: ['phasing'],
+                playerStart: { x: 50, y: 500 },
+                platforms: [
+                    { x: 0, y: 550, width: canvas.width, height: 50, color: '#333' }, // Ground
+                    { x: 200, y: 400, width: 30, height: 150, color: '#555', phasable: true }, // Phasable Wall
+                    { x: 230, y: 400, width: 100, height: 20, color: '#333' }, // Platform after wall
+                    { x: 400, y: 300, width: 30, height: 250, color: '#555', phasable: true }, // Phasable Wall
+                    { x: 430, y: 300, width: 100, height: 20, color: '#333' },
+                     { x: 600, y: 200, width: 30, height: 350, color: '#444' }, // Normal Wall
+                     { x: 630, y: 200, width: 100, height: 20, color: '#333' },
+                ],
+                goals: [{ x: 680, y: 150, width: 40, height: 40, color: '#FFD700', active: true }],
+                hazards: [], switches: [], collectibles: [], specialZones: [],
+                 actionButtonText: 'Phase'
+            },
+             // 8: Radiohead - Kid A (Teleport)
+             {
+                 name: "Radiohead - Kid A",
+                 backgroundColor: '#E0FFFF', // Light Cyan (Glitchy/Cold)
+                 mechanicIds: ['teleport'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 150, height: 50, color: '#AFEEEE' }, // Start platform
+                     // Gap requires teleport
+                     { x: 300, y: 550, width: 150, height: 50, color: '#AFEEEE' }, // Platform after gap
+                     // Wall requires teleport through
+                     { x: 500, y: 400, width: 50, height: 150, color: '#7FFFD4' }, // Solid Wall
+                     { x: 600, y: 550, width: 150, height: 50, color: '#AFEEEE' }, // Platform after wall
+                 ],
+                 goals: [{ x: 700, y: 490, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: [],
+                  actionButtonText: 'Teleport'
+            },
+             // 9: The Microphones - The Glow, Pt. 2 (Darkness)
+             {
+                 name: "The Microphones - The Glow, Pt. 2",
+                 backgroundColor: '#000', // Black
+                 mechanicIds: ['darkness'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [ // Platforms are invisible until player gets close
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#222' }, // Dim ground
+                     { x: 150, y: 450, width: 100, height: 20, color: '#333' },
+                     { x: 300, y: 380, width: 150, height: 20, color: '#333' },
+                     { x: 550, y: 300, width: 100, height: 20, color: '#333' },
+                 ],
+                 goals: [{ x: 600, y: 250, width: 40, height: 40, color: '#FFFF00', active: true }], // Bright yellow goal
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+             // 10: King Crimson - In the Court of the Crimson King (Moving Platforms)
+             {
+                 name: "King Crimson - ITCOTCK",
+                 backgroundColor: '#FF6347', // Tomato Red
+                 mechanicIds: ['movingPlatforms'],
+                 playerStart: { x: 50, y: 100 },
+                 platforms: [
+                     { x: 0, y: 150, width: 100, height: 20, color: '#CD5C5C' }, // Start platform high up
+                     { x: 200, y: 250, width: 100, height: 20, color: '#F08080', type: 'moving', moveType: 'horizontal', distance: 150, speed: 1.5 }, // Moving platform H
+                     { x: 500, y: 350, width: 100, height: 20, color: '#F08080', type: 'moving', moveType: 'vertical', distance: 100, speed: 1 }, // Moving platform V
+                     { x: 200, y: 500, width: 100, height: 20, color: '#F08080', type: 'moving', moveType: 'horizontal', distance: 200, speed: -1.8 }, // Moving platform H (reverse)
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#8B0000' }, // Ground (optional to reach?)
+                 ],
+                 goals: [{ x: 50, y: 500, width: 40, height: 40, color: '#FFD700', active: true }], // Goal on the ground
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+            // 11: Wu-Tang Clan - Enter the Wu-Tang (Dash)
+             {
+                 name: "Wu-Tang Clan - Enter the Wu-Tang",
+                 backgroundColor: '#FFD700', // Gold
+                 mechanicIds: ['dash'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 200, height: 50, color: '#B8860B' }, // Start
+                     // Long gap requiring dash
+                     { x: 400, y: 550, width: 100, height: 50, color: '#B8860B' }, // Mid platform
+                     // Another dash gap
+                     { x: 650, y: 500, width: 150, height: 100, color: '#B8860B' }, // End platform (higher)
+                 ],
+                 goals: [{ x: 750, y: 450, width: 40, height: 40, color: '#000000', active: true }], // Black goal
+                 hazards: [], switches: [], collectibles: [], specialZones: [],
+                  actionButtonText: 'Dash'
+            },
+            // 12: Jeff Buckley - Grace (Glide)
+             {
+                 name: "Jeff Buckley - Grace",
+                 backgroundColor: '#E6E6FA', // Lavender (Angelic)
+                 mechanicIds: ['glide'],
+                 playerStart: { x: 50, y: 100 },
+                 platforms: [
+                     { x: 0, y: 150, width: 100, height: 20, color: '#D8BFD8' }, // Start platform high
+                     { x: 250, y: 250, width: 100, height: 20, color: '#D8BFD8' }, // Glide target 1
+                     { x: 500, y: 350, width: 100, height: 20, color: '#D8BFD8' }, // Glide target 2
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#B0C4DE' }, // Ground
+                 ],
+                 goals: [{ x: 700, y: 500, width: 40, height: 40, color: '#FFD700', active: true }], // Goal on ground requires careful glide
+                 hazards: [], switches: [], collectibles: [], specialZones: [],
+                 actionButtonText: 'Glide' // Hold Jump/Up to glide
+            },
+             // 13: The Beatles - Abbey Road (Conveyor Belts)
+             {
+                 name: "The Beatles - Abbey Road",
+                 backgroundColor: '#FFFFFF', // White
+                 mechanicIds: ['conveyor'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 150, height: 50, color: '#808080' }, // Start
+                     { x: 150, y: 550, width: 200, height: 20, color: '#A9A9A9', conveyor: 2 }, // Conveyor Right ->
+                     { x: 350, y: 550, width: 100, height: 50, color: '#808080' }, // Safe spot
+                     { x: 450, y: 550, width: 200, height: 20, color: '#A9A9A9', conveyor: -2.5 }, // Conveyor Left <-
+                     { x: 650, y: 550, width: 150, height: 50, color: '#808080' }, // End platform
+                 ],
+                 goals: [{ x: 750, y: 490, width: 40, height: 40, color: '#000000', active: true }], // Black goal (like the suits)
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+            // 14: Mingus - The Black Saint... (Bouncy Platforms)
+             {
+                 name: "Mingus - The Black Saint...",
+                 backgroundColor: '#FF4500', // OrangeRed (Jazzy/Energetic)
+                 mechanicIds: ['bouncy'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#A0522D' }, // Ground
+                     { x: 150, y: 450, width: 80, height: 20, color: '#FFD700', bouncy: true }, // Bouncy 1
+                     { x: 300, y: 400, width: 80, height: 20, color: '#FFD700', bouncy: true }, // Bouncy 2
+                     { x: 450, y: 350, width: 80, height: 20, color: '#FFD700', bouncy: true }, // Bouncy 3
+                     { x: 600, y: 200, width: 100, height: 20, color: '#A0522D' }, // Target platform
+                 ],
+                 goals: [{ x: 630, y: 150, width: 40, height: 40, color: '#000000', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+            // 15: Marvin Gaye - What's Going On (Collectibles)
+            {
+                name: "Marvin Gaye - What's Going On",
+                backgroundColor: '#556B2F', // Dark Olive Green
+                mechanicIds: ['collect'],
+                playerStart: { x: 50, y: 500 },
+                platforms: [
+                    { x: 0, y: 550, width: canvas.width, height: 50, color: '#8FBC8F' }, // Ground
+                    { x: 150, y: 450, width: 100, height: 20, color: '#8FBC8F' },
+                    { x: 350, y: 380, width: 100, height: 20, color: '#8FBC8F' },
+                    { x: 550, y: 300, width: 100, height: 20, color: '#8FBC8F' },
+                ],
+                goals: [{ x: 700, y: 250, width: 40, height: 40, color: '#FFD700', active: false }], // Initially inactive
+                hazards: [], switches: [],
+                collectibles: [
+                     { x: 180, y: 420, size: 15, color: '#ADD8E6', collected: false }, // Light blue collectible (symbolic) 💧
+                     { x: 380, y: 350, size: 15, color: '#ADD8E6', collected: false }, // 💧
+                     { x: 580, y: 270, size: 15, color: '#ADD8E6', collected: false }, // 💧
+                ],
+                specialZones: []
+            },
+            // 16: Nas - Illmatic (Sticky Walls)
+             {
+                 name: "Nas - Illmatic",
+                 backgroundColor: '#696969', // Dim Gray (Urban)
+                 mechanicIds: ['stickyWalls', 'wallJump'], // Needs wall jump too
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 100, height: 50, color: '#A9A9A9' }, // Start
+                     { x: 200, y: 300, width: 30, height: 250, color: '#808080' }, // Sticky Wall 1 (requires jump + slide up/jump off)
+                     { x: 350, y: 150, width: 30, height: 400, color: '#808080' }, // Sticky Wall 2
+                     { x: 500, y: 0, width: 30, height: 300, color: '#808080' }, // Sticky Wall 3
+                     { x: 530, y: 100, width: 100, height: 20, color: '#A9A9A9' }, // Platform near top
+                 ],
+                 goals: [{ x: 560, y: 50, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+             // 17: Madvillainy - Madvillainy (Gravity Switch Zones)
+             {
+                 name: "Madvillainy - Madvillainy",
+                 backgroundColor: '#BDB76B', // Dark Khaki
+                 mechanicIds: ['gravitySwitch'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#F5DEB3' }, // Floor
+                     { x: 0, y: 0, width: canvas.width, height: 50, color: '#F5DEB3' }, // Ceiling (becomes floor in zone)
+                     { x: 250, y: 250, width: 100, height: 100, color: '#FFE4B5' }, // Floating block
+                     { x: 500, y: 100, width: 100, height: 20, color: '#FFE4B5' }, // Ceiling platform
+                 ],
+                 goals: [{ x: 750, y: 500, width: 40, height: 40, color: '#8B4513', active: true }], // Goal on floor
+                 hazards: [], switches: [], collectibles: [],
+                 specialZones: [
+                     // Zone where gravity reverses
+                     { x: 200, y: 0, width: 400, height: canvas.height, type: 'gravity', color: 'rgba(128, 0, 128, 0.2)' } // Purple overlay
+                 ]
+            },
+            // 18: Björk - Vespertine (Fragile Platforms)
+             {
+                 name: "Björk - Vespertine",
+                 backgroundColor: '#FFFAFA', // Snow White
+                 mechanicIds: ['fragile'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 100, height: 50, color: '#E0FFFF' }, // Start
+                     { x: 150, y: 480, width: 80, height: 15, color: '#ADD8E6', type: 'fragile', broken: false }, // Fragile 1
+                     { x: 300, y: 420, width: 80, height: 15, color: '#ADD8E6', type: 'fragile', broken: false }, // Fragile 2
+                     { x: 450, y: 360, width: 80, height: 15, color: '#ADD8E6', type: 'fragile', broken: false }, // Fragile 3
+                     { x: 600, y: 300, width: 100, height: 20, color: '#E0FFFF' }, // End platform
+                 ],
+                 goals: [{ x: 650, y: 250, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+             // 19: Radiohead - OK Computer (Laser Grids)
+             {
+                 name: "Radiohead - OK Computer",
+                 backgroundColor: '#00008B', // Dark Blue
+                 mechanicIds: ['lasers'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#191970' }, // Ground
+                     { x: 200, y: 450, width: 100, height: 20, color: '#4682B4' },
+                     { x: 400, y: 350, width: 100, height: 20, color: '#4682B4' },
+                     { x: 600, y: 250, width: 100, height: 20, color: '#4682B4' },
+                 ],
+                 goals: [{ x: 650, y: 200, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [
+                      // Vertical laser, timed? Or static? Static first.
+                     { x: 300, y: 370, width: 5, height: 180, color: '#FF0000', type: 'laser', active: true }, // Laser 1
+                     // Horizontal laser
+                     { x: 450, y: 300, width: 100, height: 5, color: '#FF0000', type: 'laser', active: true }, // Laser 2
+                      // Timed Laser Example (Add logic later if needed)
+                      //{ x: 100, y: 200, width: canvas.width - 200, height: 5, color: '#FF0000', type: 'laser', active: false, interval: 2000, duration: 1000 },
+                 ],
+                 switches: [], collectibles: [], specialZones: []
+            },
+            // 20: Godspeed You Black Emperor! - LYF... (Rising Floor)
+             {
+                 name: "GY!BE - Lift Your Skinny Fists...",
+                 backgroundColor: '#2F4F4F', // Dark Slate Gray
+                 mechanicIds: ['risingFloor'],
+                 playerStart: { x: canvas.width / 2, y: 100 }, // Start near top
+                 platforms: [
+                      // Need platforms to climb quickly
+                     { x: canvas.width / 2 - 50, y: 150, width: 100, height: 20, color: '#708090' },
+                     { x: 200, y: 250, width: 100, height: 20, color: '#708090' },
+                     { x: 500, y: 350, width: 100, height: 20, color: '#708090' },
+                     { x: 100, y: 450, width: 100, height: 20, color: '#708090' },
+                     { x: 400, y: 550, width: 100, height: 20, color: '#708090' }, // Lowest platform
+                 ],
+                 goals: [{ x: 50, y: 50, width: 40, height: 40, color: '#FFD700', active: true }], // Goal high up
+                 hazards: [
+                      // The rising floor itself
+                     { x: 0, y: canvas.height, width: canvas.width, height: 50, color: '#DC143C', type: 'risingFloor', speed: 0.5 } // Crimson red, slow rise
+                 ],
+                 switches: [], collectibles: [], specialZones: []
+            },
+             // 21: Pink Floyd - Wish You Were Here (Invisible Platforms)
+             {
+                 name: "Pink Floyd - Wish You Were Here",
+                 backgroundColor: '#87CEEB', // Sky Blue
+                 mechanicIds: ['invisiblePlatforms'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 100, height: 50, color: '#B0E0E6' }, // Start
+                     { x: 200, y: 480, width: 80, height: 20, color: '#B0E0E6', type: 'invisible', visible: false, revealTime: 500 }, // Invisible 1
+                     { x: 350, y: 420, width: 80, height: 20, color: '#B0E0E6', type: 'invisible', visible: false, revealTime: 500 }, // Invisible 2
+                     { x: 500, y: 360, width: 80, height: 20, color: '#B0E0E6', type: 'invisible', visible: false, revealTime: 500 }, // Invisible 3
+                     { x: 650, y: 300, width: 100, height: 20, color: '#B0E0E6' }, // End platform
+                 ],
+                 goals: [{ x: 700, y: 250, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+             // 22: Radiohead - In Rainbows (Size Change Zones)
+             {
+                 name: "Radiohead - In Rainbows",
+                 backgroundColor: '#F0E68C', // Khaki (Neutral base for zones)
+                 mechanicIds: ['sizeChange'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#D2B48C' }, // Ground
+                     // Path requiring shrinking
+                     { x: 150, y: 450, width: 200, height: 100, color: '#BC8F8F' }, // Block
+                     { x: 150, y: 430, width: 20, height: 20, color: '#BC8F8F' }, // Small entrance block left
+                     { x: 330, y: 430, width: 20, height: 20, color: '#BC8F8F' }, // Small entrance block right
+                     // Gap requires normal size jump
+                     { x: 450, y: 500, width: 100, height: 50, color: '#D2B48C' },
+                     // High platform requires growing? Or maybe just standard jump. Let's skip grow for now.
+                      { x: 600, y: 350, width: 100, height: 20, color: '#D2B48C' },
+                 ],
+                 goals: [{ x: 650, y: 300, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [],
+                 specialZones: [
+                     { x: 170, y: 430, width: 160, height: 20, type: 'size', effect: 'shrink', color: 'rgba(0, 0, 255, 0.2)' } // Shrink zone in tunnel
+                     //{ x: 500, y: 400, width: 50, height: 100, type: 'size', effect: 'grow', color: 'rgba(255, 0, 0, 0.2)' } // Grow zone
+                 ]
+            },
+             // 23: Stevie Wonder - Songs in the Key of Life (Rhythm Blocks)
+             {
+                 name: "Stevie Wonder - Songs in the Key of Life",
+                 backgroundColor: '#FFDAB9', // Peach Puff (Warm, lively)
+                 mechanicIds: ['rhythmBlocks'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 100, height: 50, color: '#FFA07A' }, // Start
+                     { x: 150, y: 500, width: 80, height: 20, color: '#FA8072', type: 'rhythm', interval: 1000, duration: 500, offset: 0, active: false }, // Rhythm 1
+                     { x: 300, y: 450, width: 80, height: 20, color: '#FA8072', type: 'rhythm', interval: 1000, duration: 500, offset: 500, active: false }, // Rhythm 2 (offset)
+                     { x: 450, y: 400, width: 80, height: 20, color: '#FA8072', type: 'rhythm', interval: 1000, duration: 500, offset: 0, active: false }, // Rhythm 3
+                     { x: 600, y: 350, width: 100, height: 20, color: '#FFA07A' }, // End platform
+                 ],
+                 goals: [{ x: 650, y: 300, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: []
+            },
+            // 24: Kendrick Lamar - good kid, m.A.A.d city (Speed Boost Zones)
+             {
+                 name: "Kendrick Lamar - good kid, m.A.A.d city",
+                 backgroundColor: '#C0C0C0', // Silver (Urban, sleek)
+                 mechanicIds: ['speedBoost'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: canvas.width, height: 50, color: '#778899' }, // Road-like ground
+                     // Long jump requiring speed boost
+                     { x: 150, y: 450, width: 100, height: 20, color: '#778899' }, // Platform before boost
+                     // Gap
+                     { x: 500, y: 400, width: 100, height: 20, color: '#778899' }, // Platform after boost jump
+                     // Another boost section maybe uphill?
+                     { x: 650, y: 350, width: 100, height: 150, color: '#778899' }, // Higher platform
+                 ],
+                 goals: [{ x: 700, y: 300, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [],
+                 specialZones: [
+                     { x: 250, y: 530, width: 150, height: 20, type: 'speed', color: 'rgba(0, 255, 0, 0.3)' } // Speed boost zone on ground
+                 ]
+            },
+             // 25: Kendrick Lamar - To Pimp a Butterfly (Jetpack)
+             {
+                 name: "Kendrick Lamar - To Pimp a Butterfly",
+                 backgroundColor: '#483D8B', // Dark Slate Blue (Complex, jazzy)
+                 mechanicIds: ['jetpack'],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     { x: 0, y: 550, width: 100, height: 50, color: '#6A5ACD' }, // Start
+                     // High platforms requiring jetpack boost
+                     { x: 200, y: 350, width: 80, height: 20, color: '#6A5ACD' },
+                     { x: 400, y: 200, width: 80, height: 20, color: '#6A5ACD' },
+                     { x: 600, y: 100, width: 80, height: 20, color: '#6A5ACD' }, // Highest platform
+                 ],
+                 goals: [{ x: 620, y: 50, width: 40, height: 40, color: '#FFD700', active: true }],
+                 hazards: [], switches: [], collectibles: [], specialZones: [],
+                 actionButtonText: 'Jetpack' // Hold Jump/Up to use
+            },
+            // 26: Final Level - All Mechanics
+            {
+                 name: "Level 26: The Grand Finale",
+                 backgroundColor: '#000', // Black background for final challenge
+                 // Enable ALL implemented mechanics
+                 mechanicIds: [
+                    'temporaryPlatforms', 'wallJump', 'switches', 'doubleJump', 'slippery',
+                    'phasing', 'teleport', 'darkness', 'movingPlatforms', 'dash', 'glide',
+                    'conveyor', 'bouncy', 'collect', 'stickyWalls', 'gravitySwitch', 'fragile',
+                     'lasers', 'risingFloor', 'invisiblePlatforms', 'sizeChange', 'rhythmBlocks',
+                     'speedBoost', 'jetpack'
+                 ],
+                 playerStart: { x: 50, y: 500 },
+                 platforms: [
+                     // A complex mix requiring various skills
+                     { x: 0, y: 550, width: 100, height: 50, color: '#555' }, // Start
+                     { x: 150, y: 450, width: 30, height: 100, color: '#888', stickyWalls: true }, // Sticky wall climb
+                     { x: 220, y: 400, width: 50, height: 15, color: '#ADD8E6', type: 'fragile', broken: false }, // Fragile hop
+                     { x: 300, y: 550, width: 100, height: 20, color: '#A9A9A9', conveyor: 2.5 }, // Conveyor jump
+                     { x: 450, y: 500, width: 50, height: 20, color: '#FA8072', type: 'rhythm', interval: 1200, duration: 600, offset: 0, active: false }, // Rhythm block
+                     { x: 550, y: 450, width: 50, height: 20, color: '#F0FFFF', slippery: true }, // Slippery surface
+                     { x: 650, y: 300, width: 30, height: 150, color: '#666', phasable: true }, // Phasable wall (needs dash/jetpack?)
+                     { x: 720, y: 250, width: 50, height: 20, color: '#FFD700', bouncy: true }, // Bouncy platform
+                     // Ceiling section maybe?
+                     { x: 400, y: 0, width: canvas.width - 400, height: 50, color: '#555' }, // Ceiling
+                     { x: 450, y: 150, width: 80, height: 20, color: '#ccc', type: 'temporary', duration: 1500, delay: 500, active: true }, // Temp near ceiling
+                     { x: 200, y: 100, width: 100, height: 20, color: '#F08080', type: 'moving', moveType: 'horizontal', distance: 100, speed: 1 }, // Moving platform high up
+
+                 ],
+                 goals: [{ x: canvas.width - 80, y: 80, width: 40, height: 40, color: '#0F0', active: false }], // Inactive goal, top right
+                 hazards: [
+                      { x: 0, y: canvas.height, width: canvas.width, height: 30, color: '#DC143C', type: 'risingFloor', speed: 0.3 }, // Slow rising floor
+                      { x: 410, y: 50, width: 5, height: 150, color: '#FF0000', type: 'laser', active: true }, // Laser guarding ceiling area
+                 ],
+                 switches: [
+                     { x: 350, y: 520, width: 20, height: 20, color: '#f00', id: 1, active: false, pressed: false }, // Switch on conveyor
+                 ],
+                 collectibles: [
+                     { x: 165, y: 350, size: 15, color: '#ADD8E6', collected: false }, // Collectible after sticky wall
+                     { x: 740, y: 220, size: 15, color: '#ADD8E6', collected: false }, // Collectible after bouncy
+                     { x: 50, y: 50, size: 15, color: '#ADD8E6', collected: false }, // Collectible top left (needs jetpack/walljump?)
+                 ],
+                 specialZones: [
+                      { x: 400, y: 0, width: 400, height: 200, type: 'gravity', color: 'rgba(128, 0, 128, 0.2)' }, // Gravity zone top right
+                      { x: 0, y: 200, width: 150, height: 100, type: 'speed', color: 'rgba(0, 255, 0, 0.3)' } // Speed boost zone left wall
+                 ],
+                 actionButtonText: 'Action' // Generic as many actions available
+            },
+            // 27: Win Screen
+            {
+                name: "Congratulations!",
+                backgroundColor: '#32CD32', // Lime Green
+                mechanicIds: [],
+                 playerStart: { x: -100, y: -100 }, // Off screen
+                 platforms: [],
+                 goals: [],
+                 hazards: [], switches: [], collectibles: [], specialZones: [],
+                 isWinScreen: true
+            }
+        ];
+
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            if (levels[currentLevel].isWinScreen) {
+                 drawWinScreen();
+                 requestAnimationFrame(gameLoop);
+                 return; // Stop game logic on win screen
+            }
+
+
+            update(deltaTime);
+            draw();
+
+            if (levelComplete) {
+                currentLevel++;
+                if (currentLevel >= levels.length) {
+                    // Handle game completion if needed (though level 27 is the win screen)
+                    currentLevel = levels.length - 1; // Stay on win screen index
+                }
+                loadLevel(currentLevel);
+                levelComplete = false;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Update Function ---
+        function update(dt) {
+            // Update moving platforms
+             platforms.forEach(p => {
+                 if (p.type === 'moving') {
+                     p.timer = (p.timer || 0) + dt * (p.speed / 100);
+                     const move = Math.sin(p.timer) * p.distance;
+                     if (p.moveType === 'horizontal') {
+                         p.x = p.startX + move;
+                     } else {
+                         p.y = p.startY + move;
+                     }
+                 }
+                 // Update temporary platforms
+                 if (p.type === 'temporary') {
+                      p.timer = (p.timer || 0) + dt;
+                      if (p.timer >= p.delay) {
+                          p.active = true;
+                          if (p.timer >= p.delay + p.duration) {
+                              p.active = false;
+                              if (p.timer >= p.delay + p.duration + p.delay) { // Reset after being off for 'delay' duration
+                                  p.timer = 0; // Reset the cycle
+                                  p.active = false; // Start inactive again
+                              }
+                          }
+                      } else {
+                           p.active = false;
+                      }
+                 }
+                  // Update rhythm blocks
+                  if (p.type === 'rhythm') {
+                     const timeInCycle = (Date.now() + p.offset) % p.interval;
+                     p.active = timeInCycle < p.duration;
+                  }
+                   // Update invisible platforms reveal timer
+                   if (p.type === 'invisible' && p.visible) {
+                       p.revealTimer = (p.revealTimer || 0) + dt;
+                       if (p.revealTimer >= p.revealTime) {
+                           p.visible = false;
+                           p.revealTimer = 0;
+                       }
+                   }
+
+             });
+
+             // Update hazards (like rising floor)
+             hazards.forEach(h => {
+                 if (h.type === 'risingFloor') {
+                     h.y -= h.speed;
+                 }
+                 // Add timed laser logic here if implemented
+             });
+
+            player.update(dt);
+
+            // Check if player is inside darkness zone (needs optimization maybe)
+             if(levelMechanics.darkness) {
+                 // Logic is handled within player draw/update for simplicity
+             }
+        }
+
+        // --- Draw Function ---
+        function draw() {
+            // Clear canvas (or draw background)
+            ctx.fillStyle = levels[currentLevel].backgroundColor || '#333';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw darkness overlay first if active (covers background)
+             if (levelMechanics.darkness) {
+                  ctx.fillStyle = '#000'; // Base darkness
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  // The light effect will be drawn relative to the player in its draw call
+             }
+
+
+            // Draw platforms
+            platforms.forEach(p => {
+                if (p.type === 'temporary' && !p.active) return; // Don't draw inactive temp platforms
+                if (p.type === 'fragile' && p.broken) return; // Don't draw broken fragile platforms
+                 if (p.type === 'rhythm' && !p.active) {
+                      ctx.fillStyle = '#666'; // Dim inactive rhythm blocks
+                 } else if (p.type === 'invisible' && !p.visible) {
+                      // Optional: draw faint outline for invisible?
+                      // ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                      // ctx.strokeRect(p.x, p.y, p.width, p.height);
+                      return; // Usually, don't draw them at all
+                 }
+                 else {
+                     ctx.fillStyle = p.color || '#888';
+                 }
+
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+
+                 // Draw conveyor direction arrows
+                if (p.conveyor) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                    const arrowSize = 5;
+                    const numArrows = Math.floor(p.width / 30);
+                    for (let i = 0; i < numArrows; i++) {
+                        const arrowX = p.x + 15 + i * 30;
+                        const arrowY = p.y + p.height / 2 - arrowSize / 2;
+                        ctx.beginPath();
+                        if (p.conveyor > 0) { // Right
+                            ctx.moveTo(arrowX, arrowY);
+                            ctx.lineTo(arrowX + arrowSize * 2, arrowY + arrowSize / 2);
+                            ctx.lineTo(arrowX, arrowY + arrowSize);
+                        } else { // Left
+                            ctx.moveTo(arrowX + arrowSize * 2, arrowY);
+                            ctx.lineTo(arrowX, arrowY + arrowSize / 2);
+                            ctx.lineTo(arrowX + arrowSize * 2, arrowY + arrowSize);
+                        }
+                         ctx.closePath();
+                        ctx.fill();
+                    }
+                }
+            });
+
+            // Draw switches
+            switches.forEach(sw => {
+                ctx.fillStyle = sw.color || '#f00';
+                ctx.fillRect(sw.x, sw.y, sw.width, sw.height);
+                // Draw indicator for target platforms? Maybe too complex visually.
+            });
+
+            // Draw collectibles
+            collectibles.forEach(item => {
+                if (!item.collected) {
+                    ctx.fillStyle = item.color || '#FFFF00';
+                    // Draw as small circle or square
+                    ctx.beginPath();
+                    ctx.arc(item.x + item.size / 2, item.y + item.size / 2, item.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    // ctx.fillRect(item.x, item.y, item.size, item.size);
+                }
+            });
+
+            // Draw special zones (optional, for visual feedback)
+            specialZones.forEach(zone => {
+                ctx.fillStyle = zone.color || 'rgba(0, 0, 255, 0.1)';
+                ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+            });
+
+            // Draw hazards
+            hazards.forEach(h => {
+                if(h.type === 'laser' && !h.active) return;
+                ctx.fillStyle = h.color || '#ff0000';
+                ctx.fillRect(h.x, h.y, h.width, h.height);
+            });
+
+
+            // Draw player (drawn after platforms/hazards)
+            player.draw(ctx);
+
+            // Draw goal(s)
+             goals.forEach(goal => {
+                if (goal.active) {
+                     ctx.fillStyle = goal.color || '#FFD700'; // Gold default
+                     ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+                     // Simple sparkle effect
+                     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                     ctx.fillRect(goal.x + goal.width * 0.2 + Math.random() * 4 - 2,
+                                  goal.y + goal.height * 0.2 + Math.random() * 4 - 2,
+                                  goal.width * 0.1, goal.height * 0.1);
+                 } else {
+                     // Draw inactive goal dimmer?
+                     ctx.fillStyle = 'rgba(150, 150, 150, 0.5)';
+                     ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+                     ctx.strokeStyle = '#aaa';
+                     ctx.strokeRect(goal.x, goal.y, goal.width, goal.height);
+                 }
+             });
+
+
+             // Draw Jetpack Fuel Gauge
+            if (levelMechanics.jetpack) {
+                const fuelBarWidth = 50;
+                const fuelBarHeight = 8;
+                const fuelX = player.x + player.width / 2 - fuelBarWidth / 2;
+                const fuelY = player.y - fuelBarHeight - 5; // Above player head
+                const currentFuelWidth = (player.jetpackFuel / JETPACK_FUEL_MAX) * fuelBarWidth;
+
+                ctx.fillStyle = '#555'; // Background of gauge
+                ctx.fillRect(fuelX, fuelY, fuelBarWidth, fuelBarHeight);
+                ctx.fillStyle = '#00FF00'; // Fuel color (green)
+                ctx.fillRect(fuelX, fuelY, currentFuelWidth, fuelBarHeight);
+            }
+        }
+
+         function drawWinScreen() {
+            const levelData = levels[currentLevel];
+            ctx.fillStyle = levelData.backgroundColor || '#32CD32';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#fff';
+            ctx.font = '48px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(levelData.name, canvas.width / 2, canvas.height / 2 - 40);
+
+             ctx.font = '24px sans-serif';
+             ctx.fillText("You beat all the albums!", canvas.width / 2, canvas.height / 2 + 20);
+              ctx.font = '18px sans-serif';
+              ctx.fillText("Refresh to play again.", canvas.width / 2, canvas.height / 2 + 60);
+        }
+
+        // --- Level Loading ---
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                 console.error("Attempted to load invalid level index:", levelIndex);
+                 return;
+            }
+
+            const levelData = levels[levelIndex];
+            currentLevel = levelIndex; // Ensure currentLevel is updated
+
+            // Update Level Info display
+            levelInfoDiv.textContent = `Level ${levelIndex + 1}: ${levelData.name}`;
+            if(levelData.isWinScreen) {
+                 levelInfoDiv.textContent = levelData.name;
+                 skipButton.style.display = 'none'; // Hide skip on win screen
+            } else {
+                 skipButton.style.display = 'block';
+            }
+
+
+            // Reset game state
+            platforms = [];
+            goals = [];
+            hazards = [];
+            switches = [];
+            collectibles = [];
+            specialZones = [];
+            levelMechanics = {}; // Reset active mechanics
+
+            // Setup player
+            player = createPlayer(levelData.playerStart.x, levelData.playerStart.y);
+
+            // Load platforms deep copy to allow modifications (like moving platforms start position)
+             levelData.platforms.forEach(p => {
+                const newPlatform = {...p}; // Shallow copy is okay for simple properties
+                 if (newPlatform.type === 'moving') {
+                     newPlatform.startX = newPlatform.x; // Store original position
+                     newPlatform.startY = newPlatform.y;
+                     newPlatform.timer = Math.random() * Math.PI * 2; // Randomize start cycle
+                 }
+                 if (newPlatform.type === 'temporary') {
+                     newPlatform.timer = 0; // Reset timer
+                     newPlatform.active = false; // Start inactive unless delay is 0
+                      if(newPlatform.delay === 0) newPlatform.active = true;
+                 }
+                 if (newPlatform.type === 'fragile') {
+                     newPlatform.broken = false; // Reset fragile platforms
+                 }
+                  if (newPlatform.type === 'rhythm') {
+                      newPlatform.active = false; // Will be set by timer
+                  }
+                  if (newPlatform.type === 'invisible') {
+                      newPlatform.visible = false; // Start invisible
+                      newPlatform.revealTimer = 0;
+                  }
+                 platforms.push(newPlatform);
+             });
+
+            // Load goals deep copy
+            levelData.goals.forEach(g => goals.push({...g}));
+
+            // Load hazards deep copy
+             levelData.hazards.forEach(h => {
+                 const newHazard = {...h};
+                 if (newHazard.type === 'risingFloor') {
+                     newHazard.y = canvas.height; // Reset position
+                 }
+                 hazards.push(newHazard);
+            });
+
+             // Load switches deep copy
+             levelData.switches.forEach(sw => {
+                  const newSwitch = {...sw};
+                  newSwitch.pressed = false; // Ensure switches start unpressed state visually
+                   // Also reset linked platforms to initial state based on switch
+                   platforms.forEach(p => {
+                       if(p.switchId === newSwitch.id && p.type === 'toggle') {
+                           p.active = newSwitch.active;
+                           p.color = newSwitch.active ? '#aaa' : '#555';
+                       }
+                   });
+                  switches.push(newSwitch);
+             });
+
+
+             // Load collectibles deep copy
+             levelData.collectibles.forEach(c => {
+                  const newCollectible = {...c};
+                  newCollectible.collected = false; // Ensure collectibles start uncollected
+                 collectibles.push(newCollectible);
+             });
+
+            // Load special zones deep copy
+            levelData.specialZones.forEach(z => specialZones.push({...z}));
+
+            // Activate mechanics for the level
+            levelData.mechanicIds.forEach(mechId => {
+                levelMechanics[mechId] = true;
+            });
+
+             // Special case for Level 26 - ensure all implemented mechanics are active
+            if (levelIndex === 25) { // Level 26 is index 25
+                const allMechanics = [
+                    'temporaryPlatforms', 'wallJump', 'switches', 'doubleJump', 'slippery',
+                    'phasing', 'teleport', 'darkness', 'movingPlatforms', 'dash', 'glide',
+                    'conveyor', 'bouncy', 'collect', 'stickyWalls', 'gravitySwitch', 'fragile',
+                     'lasers', 'risingFloor', 'invisiblePlatforms', 'sizeChange', 'rhythmBlocks',
+                     'speedBoost', 'jetpack'
+                 ];
+                allMechanics.forEach(mechId => levelMechanics[mechId] = true);
+            }
+
+
+             // Update mobile action button text if specified
+             const actionButton = document.getElementById('btnAction');
+             if (levelData.actionButtonText) {
+                actionButton.textContent = levelData.actionButtonText.substring(0, 3); // Shorten text for button
+                actionButton.style.display = 'inline-block'; // Show button
+             } else if (levelMechanics.dash || levelMechanics.phasing || levelMechanics.teleport) {
+                 actionButton.textContent = 'Act'; // Generic action
+                 actionButton.style.display = 'inline-block';
+             } else {
+                 actionButton.style.display = 'none'; // Hide if no primary action
+             }
+
+
+            console.log(`Loaded Level ${currentLevel + 1}: ${levelData.name}`);
+            console.log("Active Mechanics:", levelMechanics);
+        }
+
+        // --- Input Handling ---
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            // Prevent page scroll on arrow keys or space
+             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                 e.preventDefault();
+             }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+             if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') {
+                 if (player && player.isGliding) player.isGliding = false; // Stop glide on key up
+                 if (player && player.jetpackActive) player.jetpackActive = false; // Stop jetpack on key up
+            }
+        });
+
+        // Mobile Input
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+        const btnUp = document.getElementById('btnUp');
+        const btnAction = document.getElementById('btnAction');
+
+        btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); mobileLeft = true; }, { passive: false });
+        btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); mobileLeft = false; }, { passive: false });
+        btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); mobileRight = true; }, { passive: false });
+        btnRight.addEventListener('touchend', (e) => { e.preventDefault(); mobileRight = false; }, { passive: false });
+        btnUp.addEventListener('touchstart', (e) => { e.preventDefault(); mobileUp = true; }, { passive: false });
+        btnUp.addEventListener('touchend', (e) => {
+             e.preventDefault();
+             mobileUp = false;
+              if (player && player.isGliding) player.isGliding = false; // Stop glide on touch end
+              if (player && player.jetpackActive) player.jetpackActive = false; // Stop jetpack on touch end
+        }, { passive: false });
+        btnAction.addEventListener('touchstart', (e) => { e.preventDefault(); mobileAction = true; }, { passive: false });
+        btnAction.addEventListener('touchend', (e) => { e.preventDefault(); mobileAction = false; }, { passive: false });
+
+
+        // Skip Level Button
+        skipButton.addEventListener('click', () => {
+            currentLevel++;
+            if (currentLevel >= levels.length) {
+                currentLevel = levels.length - 1; // Go to win screen index
+            }
+            loadLevel(currentLevel);
+            levelComplete = false; // Ensure flag is reset
+        });
+
+        // --- Initialization ---
+        function init() {
+            // Set canvas size (adjust as needed)
+            canvas.width = 800;
+            canvas.height = 600;
+
+            // Initial level load
+            loadLevel(currentLevel);
+
+            // Start the game loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Adjust canvas size on window resize
+        function resizeCanvas() {
+            // Simple resize - match parent container width, maintain aspect ratio
+            const containerWidth = canvas.parentElement.clientWidth * 0.9; // Use 90% of container width
+             const aspectRatio = 16 / 9;
+             let newWidth = containerWidth;
+             let newHeight = containerWidth / aspectRatio;
+
+             // Check if height exceeds viewport limit
+             const maxHeight = window.innerHeight * (window.matchMedia("(hover: none) and (pointer: coarse)").matches ? 0.65 : 0.8); // 65% mobile, 80% desktop
+             if (newHeight > maxHeight) {
+                 newHeight = maxHeight;
+                 newWidth = newHeight * aspectRatio;
+             }
+
+             canvas.width = Math.max(320, newWidth); // Minimum width
+             canvas.height = Math.max(180, newHeight); // Minimum height
+
+             // Reload level to reset elements based on new size (simple approach)
+             // More complex games might reposition elements instead
+             if(player) { // Only reload if game has started
+                loadLevel(currentLevel);
+             }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // Initial setup call
+        resizeCanvas(); // Set initial size correctly
+        init();
+
+    </script>
+
+</body>
+</html>

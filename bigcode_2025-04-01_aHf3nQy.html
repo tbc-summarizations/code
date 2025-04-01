@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer 3500</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #87ceeb; /* Sky blue */
+        }
+        #controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #levelInfo {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        #mechanicInfo {
+            font-size: 14px;
+            color: #333;
+            min-height: 20px; /* Reserve space */
+        }
+    </style>
+</head>
+<body>
+    <div id="levelInfo">Level: 1 / 3500</div>
+    <div id="mechanicInfo">New Mechanic: Basic Jumping</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <button id="skipButton">Skip Level</button>
+        <span>Controls: Arrow Keys (Move/Jump)</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelInfoDiv = document.getElementById('levelInfo');
+        const mechanicInfoDiv = document.getElementById('mechanicInfo');
+        const skipButton = document.getElementById('skipButton');
+
+        const GRAVITY = 0.6;
+        const PLAYER_MOVE_SPEED = 5;
+        const PLAYER_JUMP_FORCE = 12;
+        const MAX_LEVELS = 3500;
+
+        let currentLevel = 1;
+        let levelData = null;
+        let keysPressed = {};
+        let gameRunning = true;
+        let levelComplete = false;
+
+        const player = {
+            x: 100,
+            y: 500,
+            width: 30,
+            height: 30,
+            vx: 0,
+            vy: 0,
+            color: 'red', // Player is a red square
+            onGround: false,
+            canDoubleJump: false,
+            hasDoubleJumped: false,
+            canWallJump: false,
+            wallJumpSide: null, // 'left' or 'right'
+            canDash: false,
+            dashCooldown: 0,
+            maxDashCooldown: 60, // 1 second cooldown
+            hasKey: false
+        };
+
+        const MECHANICS = [
+            { level: 1, name: "Basic Jumping", enable: () => {} },
+            { level: 10, name: "Moving Platforms", enable: () => {} }, // Logic handled in level generation/update
+            { level: 20, name: "Lava Blocks (Hazard)", enable: () => {} }, // Logic handled in level generation/collision
+            { level: 30, name: "Double Jump", enable: (mechanics) => mechanics.doubleJump = true },
+            { level: 40, name: "Trampolines", enable: () => {} }, // Logic handled in level generation/collision
+            { level: 50, name: "Keys and Locks", enable: (mechanics) => mechanics.keys = true },
+            { level: 60, name: "Wall Jump", enable: (mechanics) => mechanics.wallJump = true },
+            { level: 70, name: "Temporary Platforms", enable: () => {} }, // Logic handled in level generation/update
+            { level: 80, name: "Low Gravity Zones", enable: () => {} }, // Logic handled in level generation/collision
+            { level: 90, name: "Dash Ability", enable: (mechanics) => mechanics.dash = true },
+            { level: 100, name: "Conveyor Belts", enable: () => {} },
+            { level: 120, name: "Basic Enemies (Patrolling Squares)", enable: (mechanics) => mechanics.enemies = true },
+            { level: 140, name: "Gravity Flip Zones", enable: () => {} },
+            { level: 160, name: "Shrink/Grow Zones", enable: () => {} },
+            { level: 180, name: "Timed Gates", enable: () => {} },
+            // Add more mechanics up to level 3500 / 10 = 350... this is a lot!
+            // Further mechanics would likely be combinations or variations.
+            // The generator will handle complexity increase even without explicit new named mechanics.
+        ];
+
+        function getActiveMechanics(level) {
+            const active = {
+                doubleJump: false,
+                wallJump: false,
+                keys: false,
+                dash: false,
+                enemies: false,
+                // Add flags for all mechanics here
+            };
+            let lastMechanicName = "Basic Jumping";
+            MECHANICS.forEach(m => {
+                if (level >= m.level) {
+                    m.enable(active);
+                    lastMechanicName = m.name;
+                }
+            });
+            return { activeMechanics: active, currentMechanicName: `Mechanic: ${lastMechanicName}` };
+        }
+
+        // Basic Pseudo-Random Number Generator (PRNG) for deterministic levels
+        function mulberry32(seed) {
+            return function() {
+                var t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
+        function generateLevel(levelIndex) {
+            console.log(`Generating level ${levelIndex}`);
+            const { activeMechanics, currentMechanicName } = getActiveMechanics(levelIndex);
+            mechanicInfoDiv.textContent = currentMechanicName; // Update mechanic info display
+
+            const rng = mulberry32(levelIndex * 999); // Seed PRNG with level index
+            const platforms = [];
+            const hazards = []; // Lava blocks, etc.
+            const movingPlatforms = [];
+            const trampolines = [];
+            const tempPlatforms = [];
+            const lowGravityZones = [];
+            const conveyorBelts = [];
+            const enemies = [];
+            const gravityFlipZones = [];
+            const shrinkGrowZones = [];
+            const timedGates = [];
+
+            let goal = { x: canvas.width - 80, y: 50, width: 50, height: 50, color: 'gold' }; // Gold square
+            let startPos = { x: 60, y: canvas.height - 60 };
+            let key = null;
+            let lock = null;
+
+            const difficulty = Math.min(1.0, levelIndex / MAX_LEVELS); // 0.0 to 1.0
+
+            // --- Base Platform ---
+            platforms.push({ x: 0, y: canvas.height - 20, width: 200, height: 20, color: 'green' });
+
+            // --- Procedural Generation Logic ---
+            let currentX = 150 + rng() * 100;
+            let currentY = canvas.height - 20 - (rng() * 100 + 20);
+            let platformsToGenerate = 10 + Math.floor(difficulty * 30); // More platforms for harder levels
+
+            for (let i = 0; i < platformsToGenerate; i++) {
+                const platWidth = 80 + rng() * (120 - difficulty * 80); // Shorter platforms harder
+                const platHeight = 20;
+                const gapX = 50 + rng() * (150 + difficulty * 100); // Wider gaps harder
+                const gapY = -100 + rng() * (200 - difficulty * 50); // More vertical variation
+
+                currentX += gapX;
+                currentY += gapY;
+
+                // Clamp Y position
+                currentY = Math.max(50, Math.min(canvas.height - 50, currentY));
+                // Ensure X progresses generally rightward, but allow some backtracking possibility later if needed
+                if (currentX > canvas.width - platWidth - 100) { // Avoid going too far right too soon
+                    currentX = 100 + rng()*200; // Reset X further left if hitting edge
+                     currentY = canvas.height - 20 - (rng() * 150 + 50); // Reset Y as well
+                }
+
+
+                platforms.push({ x: currentX, y: currentY, width: platWidth, height: platHeight, color: 'green' });
+
+                 // --- Introduce Mechanics based on level and RNG ---
+
+                // Moving Platforms (Level 10+)
+                if (levelIndex >= 10 && rng() < (0.1 + difficulty * 0.2)) {
+                    movingPlatforms.push({
+                        x: currentX, y: currentY - 50 - rng() * 50, width: 80, height: 20, color: 'cyan',
+                        startX: currentX, endX: currentX + 100 + rng() * 100, speed: 1 + rng() * (1 + difficulty * 2), direction: 1
+                    });
+                }
+
+                // Lava (Level 20+)
+                if (levelIndex >= 20 && rng() < (0.05 + difficulty * 0.15)) {
+                     hazards.push({ x: currentX + platWidth / 4, y: currentY + platHeight, width: platWidth/2, height: 15, color: 'orange', type: 'lava' });
+                }
+
+                // Trampolines (Level 40+)
+                 if (levelIndex >= 40 && rng() < (0.05 + difficulty * 0.1)) {
+                     trampolines.push({ x: currentX + platWidth / 2 - 15, y: currentY - 10, width: 30, height: 10, color: 'purple', bounceForce: 18 + rng() * 5 });
+                 }
+
+                // Temporary Platforms (Level 70+)
+                if (levelIndex >= 70 && rng() < (0.05 + difficulty * 0.1)) {
+                     tempPlatforms.push({ x: currentX + gapX/2, y: currentY - 50 - rng() * 50, width: 60, height: 15, color: '#ddd', duration: 60 + rng()*60, timer: 60 + rng()*60, touched: false }); // 1-2 seconds
+                 }
+
+                // Low Gravity Zones (Level 80+)
+                if (levelIndex >= 80 && rng() < (0.03 + difficulty * 0.07)) {
+                     lowGravityZones.push({ x: currentX - 50, y: currentY - 150, width: 150 + rng()*100, height: 100, color: 'rgba(200, 200, 255, 0.3)', gravityFactor: 0.5 });
+                 }
+
+                // Conveyor Belts (Level 100+)
+                 if (levelIndex >= 100 && rng() < (0.05 + difficulty * 0.1)) {
+                     conveyorBelts.push({ x: currentX, y: currentY - 10, width: platWidth, height: 10, color: 'gray', speed: (rng() > 0.5 ? 1 : -1) * (1 + rng() * difficulty * 2) });
+                 }
+
+                 // Basic Enemies (Level 120+) - Simple patrolling squares
+                if (activeMechanics.enemies && rng() < (0.05 + difficulty * 0.15)) {
+                    const enemyStartX = currentX + platWidth + 30 + rng() * 50;
+                    enemies.push({
+                        x: enemyStartX, y: currentY - 25, width: 25, height: 25, color: 'black',
+                        startX: enemyStartX, endX: enemyStartX + 50 + rng() * 100, speed: 0.5 + rng() * (1 + difficulty), direction: 1, type: 'patrol'
+                    });
+                }
+                 // Gravity Flip Zones (Level 140+)
+                if (levelIndex >= 140 && rng() < (0.02 + difficulty * 0.05)) {
+                     gravityFlipZones.push({ x: currentX - 50, y: currentY - 150, width: 150 + rng()*100, height: 100, color: 'rgba(255, 200, 200, 0.3)'});
+                 }
+
+                 // Shrink/Grow Zones (Level 160+)
+                if (levelIndex >= 160 && rng() < (0.03 + difficulty * 0.07)) {
+                    const shrink = rng() > 0.5;
+                     shrinkGrowZones.push({ x: currentX - 50, y: currentY - 150, width: 100 + rng()*50, height: 100, color: shrink ? 'rgba(150, 150, 255, 0.3)' : 'rgba(255, 150, 150, 0.3)', effect: shrink ? 'shrink' : 'grow' });
+                }
+
+                 // Timed Gates (Level 180+)
+                 // Example: A gate blocking path, opens for short time
+                 // This requires more complex state management (timers, triggers) - simplified here
+                 if (levelIndex >= 180 && rng() < (0.04 + difficulty * 0.08)) {
+                     // Placeholder - Needs more logic for triggers/timers
+                     // hazards.push({ x: currentX + platWidth + 20, y: currentY - 60, width: 10, height: 80, color: 'silver', type: 'gate', open: false, timer: 120 }); // Example
+                 }
+
+
+            }
+
+
+            // Keys and Locks (Level 50+)
+            if (activeMechanics.keys) {
+                // Place key somewhere - find a platform
+                const keyPlatIndex = Math.floor(rng() * (platforms.length -1)); // Avoid first platform
+                 if(keyPlatIndex > 0 && platforms[keyPlatIndex]){
+                     key = { x: platforms[keyPlatIndex].x + platforms[keyPlatIndex].width / 2 - 10, y: platforms[keyPlatIndex].y - 25, width: 20, height: 20, color: 'yellow', emoji: '🔑' };
+                    // Place lock near goal
+                    lock = { x: canvas.width - 150, y: 0, width: 30, height: canvas.height, color: 'rgba(100, 100, 100, 0.7)', type: 'lock' }; // Wall blocking goal
+                 }
+            }
+
+
+            // Place Goal - ensure it's reachable eventually
+            const lastPlat = platforms[platforms.length - 1];
+             if (lastPlat) {
+                 goal.x = lastPlat.x + lastPlat.width + 50 + rng() * 100;
+                 goal.y = lastPlat.y - 50 - rng() * 100; // Place above last plat generally
+                  // Clamp goal pos
+                 goal.x = Math.min(canvas.width - goal.width - 20, Math.max(200, goal.x));
+                 goal.y = Math.min(canvas.height - goal.height - 20, Math.max(20, goal.y));
+
+                 // Add a platform near the goal for safety if needed
+                 platforms.push({x: goal.x - 30, y: goal.y + goal.height + rng()*20 , width: goal.width + 60, height: 20, color: 'green'});
+             } else { // Failsafe if no platforms generated
+                 goal.x = canvas.width - 80;
+                 goal.y = canvas.height - 80;
+             }
+
+             // Ensure goal isn't blocked by lock if no key exists
+             if (!activeMechanics.keys) lock = null;
+
+
+            return {
+                platforms,
+                hazards,
+                movingPlatforms,
+                trampolines,
+                tempPlatforms,
+                lowGravityZones,
+                conveyorBelts,
+                enemies,
+                gravityFlipZones,
+                shrinkGrowZones,
+                timedGates,
+                goal,
+                startPos,
+                key,
+                lock,
+                activeMechanics,
+                currentGravity: GRAVITY, // Base gravity
+                originalPlayerSize: { width: player.width, height: player.height }
+            };
+        }
+
+        function resetPlayer(startPos) {
+            player.x = startPos.x;
+            player.y = startPos.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            player.hasDoubleJumped = false;
+            player.wallJumpSide = null;
+            player.dashCooldown = 0;
+            player.hasKey = false;
+            player.color = 'red'; // Reset color/effects
+            player.width = levelData.originalPlayerSize.width;
+            player.height = levelData.originalPlayerSize.height;
+            levelData.currentGravity = GRAVITY; // Reset gravity
+            // Reset temporary platforms
+            levelData.tempPlatforms.forEach(p => {
+                p.timer = p.duration;
+                p.touched = false;
+            });
+             // Reset enemies
+            levelData.enemies.forEach(e => {
+                e.x = e.startX;
+                e.direction = 1;
+            });
+            levelComplete = false;
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex > MAX_LEVELS) {
+                winGame();
+                return;
+            }
+            currentLevel = levelIndex;
+            levelData = generateLevel(currentLevel);
+            levelInfoDiv.textContent = `Level: ${currentLevel} / ${MAX_LEVELS}`;
+            resetPlayer(levelData.startPos);
+            gameRunning = true;
+             levelComplete = false;
+        }
+
+        function nextLevel() {
+             if (!levelComplete) return; // Prevent skipping ahead accidentally during win animation/delay
+            loadLevel(currentLevel + 1);
+        }
+
+        function skipLevel() {
+            console.log("Skipping level");
+             levelComplete = true; // Mark as complete to allow nextLevel logic if needed
+            loadLevel(currentLevel + 1);
+        }
+
+        function die() {
+            console.log("Player died");
+            // Could add a small delay or animation here
+            resetPlayer(levelData.startPos);
+        }
+
+        function winGame() {
+            gameRunning = false;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '48px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('You Completed All Levels!', canvas.width / 2, canvas.height / 2 - 30);
+             ctx.font = '24px sans-serif';
+            ctx.fillText('Congratulations!', canvas.width / 2, canvas.height / 2 + 20);
+            mechanicInfoDiv.textContent = "Game Complete!";
+        }
+
+         function completeLevel() {
+             if (levelComplete) return; // Prevent multiple triggers
+             levelComplete = true;
+             gameRunning = false; // Pause briefly
+             console.log(`Level ${currentLevel} complete!`);
+
+             // Simple win indicator
+             ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
+             ctx.fillRect(player.x - 10, player.y - 10, player.width + 20, player.height + 20);
+             ctx.fillStyle = 'white';
+             ctx.font = '24px sans-serif';
+             ctx.textAlign = 'center';
+             ctx.fillText('Level Clear!', player.x + player.width / 2, player.y - 20);
+
+
+             // Proceed to next level after a short delay
+             setTimeout(() => {
+                  if (levelComplete) { // Check again in case skip was pressed during timeout
+                     loadLevel(currentLevel + 1);
+                 }
+             }, 1000); // 1 second delay
+         }
+
+
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function handleCollisions() {
+            player.onGround = false;
+            let onWall = null; // null, 'left', 'right'
+            let touchingCeiling = false;
+            let currentPlatform = null; // For moving platforms/conveyors
+            let effectiveGravity = levelData.currentGravity;
+            let onConveyor = null;
+            let shouldDie = false;
+            let targetPlayerSize = { width: levelData.originalPlayerSize.width, height: levelData.originalPlayerSize.height };
+            let inLowGravZone = false;
+            let inGravityFlipZone = false;
+
+
+             // Check Environment Zones first (Gravity, Size)
+             levelData.lowGravityZones.forEach(zone => {
+                 if (checkCollision(player, zone)) {
+                     effectiveGravity = levelData.currentGravity * zone.gravityFactor;
+                     inLowGravZone = true;
+                 }
+             });
+             levelData.gravityFlipZones.forEach(zone => {
+                 if (checkCollision(player, zone)) {
+                     inGravityFlipZone = true;
+                 }
+             });
+             levelData.shrinkGrowZones.forEach(zone => {
+                 if (checkCollision(player, zone)) {
+                     if (zone.effect === 'shrink') {
+                         targetPlayerSize = { width: levelData.originalPlayerSize.width * 0.6, height: levelData.originalPlayerSize.height * 0.6 };
+                     } else { // grow
+                         targetPlayerSize = { width: levelData.originalPlayerSize.width * 1.4, height: levelData.originalPlayerSize.height * 1.4 };
+                     }
+                 }
+             });
+
+             // Apply Gravity Flip - reverse effective gravity and jump force
+             if (inGravityFlipZone) {
+                 effectiveGravity = -GRAVITY; // Reverse base gravity
+                 if (inLowGravZone) effectiveGravity *= 0.5; // Combine effects if overlapping
+             } else {
+                 // effectiveGravity remains as set by low grav or default
+             }
+             levelData.currentGravity = effectiveGravity; // Store for use in update
+
+             // Smoothly adjust player size
+             const sizeAdjustSpeed = 0.1;
+             player.width += (targetPlayerSize.width - player.width) * sizeAdjustSpeed;
+             player.height += (targetPlayerSize.height - player.height) * sizeAdjustSpeed;
+
+
+            // --- Collision with solid platforms ---
+            [...levelData.platforms, ...levelData.movingPlatforms, ...levelData.tempPlatforms.filter(p => p.timer > 0)].forEach(platform => {
+                if (!checkCollision(player, platform)) return;
+
+                 // Check vertical collision (landing or hitting head)
+                let overlapY = (player.y + player.height) - platform.y;
+                let prevOverlapY = (player.y - player.vy + player.height) - platform.y;
+
+                // Check horizontal collision
+                 let overlapX = (player.x + player.width) - platform.x;
+                 let prevOverlapX = (player.x - player.vx + player.width) - platform.x;
+
+
+                // Vertical Collision (Landing on top)
+                 // Condition: Was above or barely touching in previous frame, now significantly overlapping vertically
+                 // And horizontal overlap exists significantly
+                 if (player.vy >= 0 && prevOverlapY <= 1 && overlapY > 1 && overlapY < player.height * 0.8) { // Landed
+                     // Check if horizontal overlap is sufficient
+                     const horizCenterPlayer = player.x + player.width / 2;
+                     const horizCenterPlatform = platform.x + platform.width / 2;
+                     const maxAllowedHorizontalDist = (player.width + platform.width) / 2;
+                     if (Math.abs(horizCenterPlayer - horizCenterPlatform) < maxAllowedHorizontalDist - Math.abs(player.vx)) {
+                         player.y = platform.y - player.height;
+                         player.vy = 0;
+                         player.onGround = true;
+                         player.hasDoubleJumped = false; // Reset double jump on landing
+                         player.wallJumpSide = null; // Reset wall jump state
+                         currentPlatform = platform; // Store platform for moving/conveyor effects
+
+                          // Handle Temporary Platforms
+                         if (platform.duration) { // Check if it's a temp platform
+                             platform.touched = true;
+                         }
+                         return; // Prioritize landing collision
+                     }
+                 }
+
+                // Vertical Collision (Hitting underside)
+                 // Condition: Was below in previous frame, now overlapping vertically upwards
+                 if (player.vy < 0 && (player.y - player.vy) >= (platform.y + platform.height -1) && player.y < (platform.y + platform.height)) {
+                       // Check if horizontal overlap is sufficient
+                     const horizCenterPlayer = player.x + player.width / 2;
+                     const horizCenterPlatform = platform.x + platform.width / 2;
+                     const maxAllowedHorizontalDist = (player.width + platform.width) / 2;
+                      if (Math.abs(horizCenterPlayer - horizCenterPlatform) < maxAllowedHorizontalDist - Math.abs(player.vx)) {
+                         player.y = platform.y + platform.height;
+                         player.vy = 0; // Stop upward movement
+                         touchingCeiling = true;
+                         return; // Prioritize ceiling collision
+                      }
+                 }
+
+                 // Horizontal Collision (Hitting side) - only if not primarily vertical
+                 // Check X overlap and ensure Y overlap is significant enough to be a wall hit
+                  if( Math.abs((player.y + player.height / 2) - (platform.y + platform.height / 2)) < (player.height + platform.height) / 2 - Math.abs(player.vy) - 5 // Generous Y overlap check, adjusted for velocity
+                  ){
+                     // Hit right side of platform (player moving left)
+                     if (player.vx < 0 && (player.x - player.vx) >= (platform.x + platform.width -1) && player.x < (platform.x + platform.width)) {
+                             player.x = platform.x + platform.width;
+                             player.vx = 0;
+                             onWall = 'right'; // Touched wall on player's right
+                     }
+                     // Hit left side of platform (player moving right)
+                     else if (player.vx > 0 && (player.x + player.width - player.vx) <= (platform.x + 1) && (player.x + player.width) > platform.x) {
+                             player.x = platform.x - player.width;
+                             player.vx = 0;
+                             onWall = 'left'; // Touched wall on player's left
+                     }
+                  }
+            });
+
+            // --- Moving Platform / Conveyor Belt Interaction ---
+            if (player.onGround && currentPlatform) {
+                if (currentPlatform.speed && currentPlatform.direction !== undefined) { // Moving Platform
+                    player.x += currentPlatform.speed * currentPlatform.direction;
+                }
+            }
+             levelData.conveyorBelts.forEach(belt => {
+                // Check if player's bottom center is on the belt
+                 const playerBottomCenterX = player.x + player.width / 2;
+                 const playerBottomY = player.y + player.height;
+                 if (playerBottomCenterX > belt.x && playerBottomCenterX < belt.x + belt.width &&
+                     playerBottomY >= belt.y && playerBottomY < belt.y + belt.height + 5) // Small tolerance
+                 {
+                      onConveyor = belt; // Player is likely on this conveyor
+                 }
+             });
+             if (onConveyor && player.onGround) {
+                 player.x += onConveyor.speed; // Apply conveyor speed
+             }
+
+
+            // --- Wall Jump Logic ---
+            player.canWallJump = false;
+            if (levelData.activeMechanics.wallJump && !player.onGround && onWall) {
+                player.canWallJump = true;
+                player.wallJumpSide = onWall; // Remember which wall was touched
+                 // Optional: Add slight downward slide friction on wall
+                 if (player.vy > 1 && !inGravityFlipZone) { // Don't apply if moving up or gravity flipped
+                      player.vy = 1; // Slow descent
+                 } else if (player.vy < -1 && inGravityFlipZone){
+                      player.vy = -1; // Slow ascent (flipped)
+                 }
+            } else {
+                player.wallJumpSide = null;
+            }
+
+             // --- Hazard Collision ---
+             levelData.hazards.forEach(hazard => {
+                 if (checkCollision(player, hazard)) {
+                     if (hazard.type === 'lava') {
+                         shouldDie = true;
+                     }
+                     // Add other hazard types here
+                 }
+             });
+
+            // --- Enemy Collision ---
+            levelData.enemies.forEach(enemy => {
+                if (checkCollision(player, enemy)) {
+                     // Simple collision = death. Could add stomp mechanic later.
+                     shouldDie = true;
+                }
+            });
+
+             // --- Trampoline Collision ---
+             levelData.trampolines.forEach(trampoline => {
+                 // Check collision specifically with top surface when player is falling
+                 if (player.vy >= 0 && checkCollision(player, { ...trampoline, height: 5 })) { // Check thin top rect
+                     const prevPlayerBottom = player.y - player.vy + player.height;
+                     if (prevPlayerBottom <= trampoline.y + 1) { // Was above or level before this frame
+                         player.y = trampoline.y - player.height; // Place on top
+                         player.vy = -(trampoline.bounceForce * (inGravityFlipZone ? -1 : 1)); // Bounce! Reverse if gravity flipped
+                         player.onGround = false; // Ensure not grounded after bounce
+                         player.hasDoubleJumped = false; // Reset double jump on bounce
+                     }
+                 }
+             });
+
+             // --- Key Collection ---
+             if (levelData.key && !player.hasKey && checkCollision(player, levelData.key)) {
+                 player.hasKey = true;
+                 levelData.key = null; // Remove key from level
+                 console.log("Key collected!");
+             }
+
+             // --- Lock Interaction ---
+             if (levelData.lock && checkCollision(player, levelData.lock)) {
+                 if (player.hasKey) {
+                     levelData.lock = null; // Remove lock
+                     console.log("Lock opened!");
+                 } else {
+                      // Hit the lock wall - treat as solid collision (horizontally)
+                     // Hit right side of lock (player moving left)
+                     if (player.vx < 0 && (player.x - player.vx) >= (levelData.lock.x + levelData.lock.width -1)) {
+                             player.x = levelData.lock.x + levelData.lock.width;
+                             player.vx = 0;
+                     }
+                     // Hit left side of lock (player moving right)
+                     else if (player.vx > 0 && (player.x + player.width - player.vx) <= (levelData.lock.x + 1)) {
+                             player.x = levelData.lock.x - player.width;
+                             player.vx = 0;
+                     }
+                 }
+             }
+
+
+            // --- Goal Collision ---
+            if (checkCollision(player, levelData.goal)) {
+                 completeLevel();
+            }
+
+            // --- Boundary Collision ---
+            if (player.x < 0) {
+                player.x = 0;
+                player.vx = 0;
+                 onWall = 'left'; // Hit left boundary wall
+            } else if (player.x + player.width > canvas.width) {
+                player.x = canvas.width - player.width;
+                player.vx = 0;
+                 onWall = 'right'; // Hit right boundary wall
+            }
+
+             // Apply death AFTER all collisions checked for the frame
+             if (shouldDie) {
+                 die();
+                 return; // Stop further processing for this frame after death
+             }
+
+             // Check OOB death (falling out)
+             if (player.y > canvas.height + 100 || player.y < -100 - player.height) { // Generous boundary
+                 die();
+             }
+        }
+
+
+        function update() {
+            if (!gameRunning || !levelData) return;
+
+            const effectiveGravity = levelData.currentGravity; // Use gravity potentially modified by zones
+            const jumpForce = PLAYER_JUMP_FORCE * (effectiveGravity < 0 ? -1 : 1); // Reverse jump if gravity flipped
+
+             // --- Handle Input ---
+             // Horizontal Movement
+            player.vx = 0;
+            if (keysPressed['ArrowLeft']) {
+                player.vx = -PLAYER_MOVE_SPEED;
+            }
+            if (keysPressed['ArrowRight']) {
+                player.vx = PLAYER_MOVE_SPEED;
+            }
+
+            // Jumping
+            if (keysPressed['ArrowUp']) {
+                if (player.onGround) {
+                    player.vy = -jumpForce;
+                    player.onGround = false;
+                    player.hasDoubleJumped = false; // Can double jump after normal jump
+                } else if (levelData.activeMechanics.doubleJump && player.canDoubleJump && !player.hasDoubleJumped && !player.wallJumpSide) {
+                     player.vy = -jumpForce * 0.9; // Slightly less force for double jump
+                     player.hasDoubleJumped = true;
+                 } else if (levelData.activeMechanics.wallJump && player.canWallJump && player.wallJumpSide) {
+                    // Wall jump: push away from wall and upwards
+                     player.vy = -jumpForce * 1.1; // Stronger jump off wall
+                     player.vx = (player.wallJumpSide === 'left' ? PLAYER_MOVE_SPEED : -PLAYER_MOVE_SPEED) * 1.5; // Push away strongly
+                     player.wallJumpSide = null; // Consume wall jump
+                     player.canWallJump = false;
+                      player.hasDoubleJumped = false; // Allow double jump after wall jump
+                 }
+                keysPressed['ArrowUp'] = false; // Consume jump input
+            }
+             // Allow double jump only when enabled and in the air
+             player.canDoubleJump = levelData.activeMechanics.doubleJump && !player.onGround;
+
+             // Dash Ability
+             player.dashCooldown = Math.max(0, player.dashCooldown - 1);
+             if (keysPressed['KeyX'] && levelData.activeMechanics.dash && player.dashCooldown <= 0) {
+                 const dashSpeed = 15;
+                 const dashDurationFrames = 8; // Short burst
+
+                 // Determine dash direction based on movement keys or default right
+                 let dashVX = (keysPressed['ArrowRight'] ? 1 : (keysPressed['ArrowLeft'] ? -1 : 1)) * dashSpeed;
+                 let dashVY = 0; // Basic horizontal dash - could add diagonal later
+
+                 // Apply dash velocity (override normal vx temporarily)
+                 // Need a way to handle dash state/duration - simplified here by applying strong impulse
+                 player.vx = dashVX;
+                 // Optional: Give slight vertical boost/control during dash if needed
+                 // player.vy = dashVY;
+
+                 player.dashCooldown = player.maxDashCooldown; // Start cooldown
+                 keysPressed['KeyX'] = false; // Consume dash input
+
+                 // We might need a 'dashing' state flag for better control/visuals
+             }
+
+
+            // Apply gravity
+            player.vy += effectiveGravity;
+
+            // Apply velocity
+            player.x += player.vx;
+            player.y += player.vy;
+
+
+             // Update Moving Platforms
+            levelData.movingPlatforms.forEach(p => {
+                p.x += p.speed * p.direction;
+                if (p.direction === 1 && p.x + p.width > p.endX) {
+                    p.x = p.endX - p.width;
+                    p.direction = -1;
+                } else if (p.direction === -1 && p.x < p.startX) {
+                    p.x = p.startX;
+                    p.direction = 1;
+                }
+            });
+
+            // Update Temporary Platforms
+            levelData.tempPlatforms.forEach(p => {
+                if (p.touched && p.timer > 0) {
+                    p.timer--;
+                    // Fade out effect
+                    const alpha = Math.max(0, p.timer / p.duration);
+                    p.color = `rgba(221, 221, 221, ${alpha})`; // Assuming base #ddd
+                } else if (p.timer <= 0) {
+                     // Platform disappears (or becomes non-collidable)
+                     // Handled in collision check by filtering timer > 0
+                }
+            });
+
+             // Update Enemies
+             levelData.enemies.forEach(e => {
+                 if (e.type === 'patrol') {
+                     e.x += e.speed * e.direction;
+                     if (e.direction === 1 && e.x + e.width > e.endX) {
+                         e.x = e.endX - e.width;
+                         e.direction = -1;
+                     } else if (e.direction === -1 && e.x < e.startX) {
+                         e.x = e.startX;
+                         e.direction = 1;
+                     }
+                 }
+                 // Add other enemy AI types here
+             });
+
+
+            // Handle collisions and adjust position/velocity
+            handleCollisions();
+
+        }
+
+        function render() {
+            if (!levelData) return; // Don't render if level not loaded
+
+            // Clear canvas
+            ctx.fillStyle = '#87ceeb'; // Sky blue
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Background Elements (like zones) first
+             levelData.lowGravityZones.forEach(zone => {
+                 ctx.fillStyle = zone.color;
+                 ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+             });
+             levelData.gravityFlipZones.forEach(zone => {
+                 ctx.fillStyle = zone.color;
+                 ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+             });
+             levelData.shrinkGrowZones.forEach(zone => {
+                 ctx.fillStyle = zone.color;
+                 ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+             });
+
+
+            // Draw Platforms
+            levelData.platforms.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+            });
+            levelData.movingPlatforms.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+            });
+            levelData.tempPlatforms.forEach(p => {
+                 if (p.timer > 0) { // Only draw if visible
+                     ctx.fillStyle = p.color;
+                     ctx.fillRect(p.x, p.y, p.width, p.height);
+                 }
+            });
+            levelData.conveyorBelts.forEach(p => {
+                 ctx.fillStyle = p.color;
+                 ctx.fillRect(p.x, p.y, p.width, p.height);
+                 // Add visual indicator for direction
+                 ctx.fillStyle = '#555';
+                 ctx.font = '10px sans-serif';
+                 ctx.textAlign = 'center';
+                 const arrows = p.speed > 0 ? '>>>>>' : '<<<<<';
+                 ctx.fillText(arrows, p.x + p.width/2, p.y + p.height - 2);
+            });
+
+
+            // Draw Hazards
+            levelData.hazards.forEach(h => {
+                ctx.fillStyle = h.color;
+                 if(h.type === 'lava'){
+                     // Simple flickering effect
+                     const flicker = Math.random() > 0.5 ? 2 : 0;
+                     ctx.fillRect(h.x, h.y - flicker, h.width, h.height + flicker);
+                 } else {
+                     ctx.fillRect(h.x, h.y, h.width, h.height);
+                 }
+            });
+
+            // Draw Trampolines
+             levelData.trampolines.forEach(t => {
+                 ctx.fillStyle = t.color;
+                 ctx.fillRect(t.x, t.y, t.width, t.height);
+                 // Simple triangle shape on top
+                 ctx.beginPath();
+                 ctx.moveTo(t.x, t.y);
+                 ctx.lineTo(t.x + t.width, t.y);
+                 ctx.lineTo(t.x + t.width / 2, t.y - 8);
+                 ctx.closePath();
+                 ctx.fill();
+             });
+
+
+             // Draw Enemies
+             levelData.enemies.forEach(e => {
+                 ctx.fillStyle = e.color;
+                 ctx.fillRect(e.x, e.y, e.width, e.height);
+                  // Simple eye indicator for direction
+                  ctx.fillStyle = 'white';
+                  const eyeX = e.direction > 0 ? e.x + e.width * 0.7 : e.x + e.width * 0.3;
+                  ctx.fillRect(eyeX - 2, e.y + 5, 4, 4); // Square eye
+             });
+
+            // Draw Key
+            if (levelData.key) {
+                ctx.fillStyle = levelData.key.color;
+                // ctx.fillRect(levelData.key.x, levelData.key.y, levelData.key.width, levelData.key.height);
+                ctx.font = `${levelData.key.height}px sans-serif`;
+                 ctx.textAlign = 'center';
+                ctx.fillText(levelData.key.emoji, levelData.key.x + levelData.key.width/2, levelData.key.y + levelData.key.height * 0.8);
+            }
+
+            // Draw Lock
+            if (levelData.lock) {
+                ctx.fillStyle = levelData.lock.color;
+                ctx.fillRect(levelData.lock.x, levelData.lock.y, levelData.lock.width, levelData.lock.height);
+                 // Draw lock symbol 🔒
+                 ctx.fillStyle = 'black';
+                 ctx.font = `40px sans-serif`;
+                 ctx.textAlign = 'center';
+                 ctx.fillText('🔒', levelData.lock.x + levelData.lock.width/2, levelData.goal.y + levelData.goal.height/2 + 15); // Position near goal vertically
+            }
+
+            // Draw Goal
+            ctx.fillStyle = levelData.goal.color;
+            ctx.fillRect(levelData.goal.x, levelData.goal.y, levelData.goal.width, levelData.goal.height);
+            // Simple flag/star on goal '🏁' or '⭐'
+             ctx.fillStyle = 'black';
+             ctx.font = `${levelData.goal.height * 0.6}px sans-serif`;
+             ctx.textAlign = 'center';
+             ctx.fillText('🏁', levelData.goal.x + levelData.goal.width/2, levelData.goal.y + levelData.goal.height * 0.7);
+
+
+            // Draw Player
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+             // Draw UI elements like key indicator if needed
+             if (player.hasKey && levelData.activeMechanics.keys) {
+                 ctx.font = '24px sans-serif';
+                 ctx.fillStyle = 'black';
+                 ctx.textAlign = 'left';
+                 ctx.fillText('🔑', 10, 30);
+             }
+              // Draw Dash Cooldown indicator
+             if(levelData.activeMechanics.dash){
+                  ctx.fillStyle = 'rgba(0, 0, 255, 0.5)';
+                  const cooldownBarWidth = 50;
+                  const cooldownRatio = player.dashCooldown / player.maxDashCooldown;
+                  ctx.fillRect(canvas.width - 60, 10, cooldownBarWidth * (1-cooldownRatio) , 10); // Fill up as ready
+                  ctx.strokeStyle = 'blue';
+                  ctx.strokeRect(canvas.width - 60, 10, cooldownBarWidth, 10);
+             }
+
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            keysPressed[e.code] = true;
+
+             // Prevent default browser behavior for arrow keys and space
+             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyX'].includes(e.code)) {
+                e.preventDefault();
+            }
+
+             // Allow jump key to repeat slightly if held, but not infinitely maybe?
+             // Current logic requires releasing and pressing again for double jump/wall jump.
+             // Simple jump allows holding, but update logic consumes it via keysPressed['ArrowUp'] = false;
+             // Let's remove the explicit false setting to allow holding jump button
+              // if (e.code === 'ArrowUp') { /* Don't set to false here */ }
+             // if (e.code === 'KeyX') { /* Don't set to false here, handle cooldown */ }
+
+
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keysPressed[e.code] = false;
+        });
+
+        skipButton.addEventListener('click', skipLevel);
+
+        // Start Game
+        loadLevel(currentLevel);
+        gameLoop();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Simple Platformer</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #lightblue; }
+  canvas { display: block; background-color: #87CEFA; }
+  #skipButton {
+    position: absolute; top: 10px; right: 10px; padding: 10px 15px;
+    background-color: #f0f0f0; border: 1px solid #ccc; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <button id="skipButton">Skip Level</button>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const skipButton = document.getElementById('skipButton');
+
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let player = {
+      x: 50,
+      y: canvas.height - 50,
+      width: 20,
+      height: 20,
+      velocityY: 0,
+      isJumping: false,
+      color: 'red'
+    };
+
+    let platforms = [
+      { x: 0, y: canvas.height - 20, width: canvas.width, height: 20, color: 'green' }, // Ground
+      { x: 200, y: canvas.height - 150, width: 150, height: 20, color: 'green' },
+      { x: 450, y: canvas.height - 250, width: 150, height: 20, color: 'green' }
+    ];
+
+    let gravity = 0.5;
+    let jumpStrength = -10;
+    let moveSpeed = 5;
+
+    let keys = {};
+
+    document.addEventListener('keydown', function(e) {
+      keys[e.key] = true;
+    });
+
+    document.addEventListener('keyup', function(e) {
+      keys[e.key] = false;
+    });
+
+    skipButton.addEventListener('click', function() {
+      resetLevel();
+    });
+
+    function resetLevel() {
+      player.x = 50;
+      player.y = canvas.height - 50;
+      player.velocityY = 0;
+      player.isJumping = false;
+    }
+
+    function gameLoop() {
+      // Update
+      player.velocityY += gravity;
+      player.y += player.velocityY;
+
+      if (keys['ArrowLeft']) {
+        player.x -= moveSpeed;
+      }
+      if (keys['ArrowRight']) {
+        player.x += moveSpeed;
+      }
+      if (keys['ArrowUp'] && !player.isJumping) {
+        player.velocityY = jumpStrength;
+        player.isJumping = true;
+      }
+
+      // Collision detection
+      let onGround = false;
+      platforms.forEach(platform => {
+        if (player.x < platform.x + platform.width &&
+            player.x + player.width > platform.x &&
+            player.y < platform.y + platform.height &&
+            player.y + player.height > platform.y) {
+          if (player.velocityY > 0 && player.y + player.height <= platform.y + platform.height/2) { // Approaching from top
+            player.y = platform.y - player.height;
+            player.velocityY = 0;
+            player.isJumping = false;
+            onGround = true;
+          } else if (player.velocityY < 0 && player.y >= platform.y + platform.height/2) { // Approaching from bottom (optional - for ceiling collision if needed)
+             player.velocityY = 0;
+             player.y = platform.y + platform.height;
+          } else if (player.x + player.width > platform.x && player.x < platform.x + platform.width/2 && keys['ArrowLeft']) { // Left collision
+              player.x = platform.x - player.width;
+          } else if (player.x < platform.x + platform.width && player.x + player.width > platform.x + platform.width/2 && keys['ArrowRight']) { // Right collision
+              player.x = platform.x + platform.width;
+          }
+        }
+      });
+      if (!onGround && !player.isJumping && player.y > canvas.height - player.height -20) {
+          player.isJumping = true; // to prevent sticking to ground visually if falling off edge
+      }
+      if (player.y > canvas.height - player.height) {
+        player.y = canvas.height - player.height;
+        player.velocityY = 0;
+        player.isJumping = false;
+      }
+
+
+      // Keep player within bounds (optional, but prevents falling off screen)
+      if (player.x < 0) player.x = 0;
+      if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+
+      // Draw
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw platforms
+      platforms.forEach(platform => {
+        ctx.fillStyle = platform.color;
+        ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+      });
+
+      // Draw player
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>

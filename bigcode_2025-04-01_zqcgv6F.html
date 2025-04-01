@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rotatable Slider</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+            user-select: none; /* Prevent text selection during drag */
+        }
+
+        #slider-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background-color: #ddd;
+            cursor: grab;
+        }
+
+        #slider-container:active {
+            cursor: grabbing;
+        }
+
+        #slider-track {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            border: 4px solid #aaa;
+            box-sizing: border-box;
+        }
+
+        #slider-thumb {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            background-color: #3498db;
+            border-radius: 50%;
+            pointer-events: none; /* Make thumb non-interactive */
+        }
+
+        #value-display {
+            margin-top: 20px;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="slider-container">
+        <div id="slider-track"></div>
+        <div id="slider-thumb"></div>
+    </div>
+    <div id="value-display">Value: 50</div>
+
+    <script>
+        const sliderContainer = document.getElementById('slider-container');
+        const sliderThumb = document.getElementById('slider-thumb');
+        const valueDisplay = document.getElementById('value-display');
+
+        let isDragging = false;
+        let containerRect;
+        let centerX, centerY;
+
+        let currentValue = 50;
+        const minValue = 0;
+        const maxValue = 100;
+
+        function updateThumbPosition(angle) {
+            const radius = (sliderContainer.offsetWidth / 2) * 0.8; // Radius based on track size
+            const thumbX = centerX + radius * Math.cos(angle);
+            const thumbY = centerY + radius * Math.sin(angle);
+
+            sliderThumb.style.left = `${thumbX}px`;
+            sliderThumb.style.top = `${thumbY}px`;
+        }
+
+        function updateValueFromAngle(angle) {
+            let normalizedAngle = (angle + Math.PI/2) % (2 * Math.PI); // Start from top, clockwise
+            if (normalizedAngle < 0) {
+                normalizedAngle += 2 * Math.PI;
+            }
+
+            let value = Math.round((normalizedAngle / (2 * Math.PI)) * (maxValue - minValue) + minValue);
+            if (value > maxValue) value = maxValue;
+            if (value < minValue) value = minValue;
+            currentValue = value;
+            valueDisplay.textContent = `Value: ${currentValue}`;
+        }
+
+
+        function handleMouseMove(e) {
+            if (!isDragging) return;
+
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
+
+            const deltaX = mouseX - centerX;
+            const deltaY = mouseY - centerY;
+
+            let angle = Math.atan2(deltaY, deltaX);
+            updateThumbPosition(angle);
+            updateValueFromAngle(angle);
+
+        }
+
+        function handleMouseDown(e) {
+            isDragging = true;
+            containerRect = sliderContainer.getBoundingClientRect();
+            centerX = containerRect.width / 2;
+            centerY = containerRect.height / 2;
+
+             // Initial angle calculation on mouse down to "snap" thumb to click position
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
+            const deltaX = mouseX - centerX;
+            const deltaY = mouseY - centerY;
+            let initialAngle = Math.atan2(deltaY, deltaX);
+            updateThumbPosition(initialAngle);
+            updateValueFromAngle(initialAngle);
+
+
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        }
+
+        function handleMouseUp() {
+            isDragging = false;
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        }
+
+
+        sliderContainer.addEventListener('mousedown', handleMouseDown);
+
+
+         // Initialize thumb position to default value (50)
+        const initialAngle = ((currentValue - minValue) / (maxValue - minValue)) * 2 * Math.PI - Math.PI/2; // Calculate angle for initial value
+        updateThumbPosition(initialAngle);
+        updateValueFromAngle(initialAngle);
+
+
+    </script>
+
+</body>
+</html>

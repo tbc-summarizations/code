@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Rotation Slider Game</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #e0e0e0;
+    color: #333;
+    margin: 0;
+    /* Prevent pull-to-refresh or other default touch actions */
+    touch-action: none;
+    overflow: hidden; /* Prevent scrollbars during rotation */
+  }
+  #game-container {
+    text-align: center;
+    padding: 25px;
+    background-color: #ffffff;
+    border-radius: 15px;
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    position: relative;
+    max-width: 90%;
+    box-sizing: border-box;
+  }
+  h1 {
+    color: #2c3e50;
+    margin-bottom: 10px;
+  }
+  p {
+    color: #555;
+    margin-bottom: 20px;
+    font-size: 0.9em;
+  }
+
+  /* Wrapper holds the rotatable container and the static target marker */
+  #slider-wrapper {
+    position: relative;
+    width: 300px; /* Fixed width for positioning calculations */
+    max-width: 100%;
+    height: 70px; /* Increased height for visual clearance */
+    margin: 40px auto 30px auto; /* Top margin for info, bottom for button */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* background-color: rgba(0,0,255,0.05); /* Uncomment to visualize wrapper */
+  }
+
+  /* This container rotates and detects drag */
+  #slider-container {
+    width: 280px; /* Slightly smaller than wrapper */
+    height: 50px;
+    position: relative; /* For absolute positioning of slider inside */
+    cursor: grab;
+    border: 2px dashed #bdc3c7;
+    border-radius: 5px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #f8f9f9;
+    /* Will be rotated by JS */
+    transform-origin: center center;
+  }
+
+  /* The actual slider element, positioned inside the container */
+  #rotation-slider {
+    width: 85%; /* Slider width relative to its container */
+    height: 12px;
+    margin: 0;
+    position: absolute; /* Center within slider-container */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Precise centering */
+    transform-origin: center center; /* Rotation origin for the slider itself if needed */
+    /* Reset Appearance */
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(to right, #3498db, #e74c3c); /* Blue to Red gradient track */
+    border-radius: 6px;
+    outline: none;
+    cursor: default; /* Indicate it's not directly draggable */
+    pointer-events: none; /* Prevent any direct interaction */
+  }
+
+  /* Thumb Styling (Chrome, Edge, Safari) */
+  #rotation-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    background: #2c3e50; /* Dark thumb */
+    border-radius: 50%;
+    border: 2px solid #ffffff; /* White border for contrast */
+    box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    cursor: default; /* Override potential inherited cursor */
+  }
+
+  /* Thumb Styling (Firefox) */
+  #rotation-slider::-moz-range-thumb {
+    width: 20px; /* FF requires slightly different sizing sometimes */
+    height: 20px;
+    background: #2c3e50;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    cursor: default;
+  }
+
+  /* Target Marker - positioned relative to the static wrapper */
+   #target-marker {
+      position: absolute;
+      bottom: 0px; /* Position just below the dashed container */
+      left: 50%; /* Adjusted by JS */
+      width: 0;
+      height: 0;
+      border-left: 9px solid transparent;
+      border-right: 9px solid transparent;
+      border-top: 18px solid #2ecc71; /* Green downward pointing triangle */
+      /* Center the triangle's base point */
+      transform: translateX(-50%);
+      transition: left 0.3s ease-out; /* Smooth movement */
+      z-index: 10; /* Ensure it's visible */
+   }
+
+
+  #controls button {
+    padding: 12px 25px;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 20px;
+    border: none;
+    border-radius: 8px;
+    background-color: #3498db;
+    color: white;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 4px 6px rgba(52, 152, 219, 0.3);
+  }
+  #controls button:hover:not(:disabled) {
+    background-color: #2980b9;
+  }
+  #controls button:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: 0 2px 3px rgba(52, 152, 219, 0.3);
+  }
+   #controls button:disabled {
+      background-color: #bdc3c7;
+      cursor: not-allowed;
+      box-shadow: none;
+   }
+  #restart-button {
+      background-color: #e67e22; /* Orange for restart */
+      box-shadow: 0 4px 6px rgba(230, 126, 34, 0.3);
+  }
+   #restart-button:hover:not(:disabled) {
+      background-color: #d35400;
+   }
+    #restart-button:active:not(:disabled) {
+        transform: translateY(1px);
+        box-shadow: 0 2px 3px rgba(230, 126, 34, 0.3);
+    }
+
+  #info div {
+    margin: 8px 0;
+    font-size: 1.1em;
+    font-weight: 500;
+  }
+  #target-display span,
+  #score-display span,
+  #attempts-display span {
+    display: inline-block;
+    min-width: 30px; /* Ensure space for numbers */
+    text-align: center;
+    background-color: #ecf0f1;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: 5px;
+    color: #2c3e50;
+  }
+  #message {
+    min-height: 1.4em; /* Reserve space */
+    margin-top: 15px;
+    font-weight: bold;
+    font-size: 1.1em;
+    transition: color 0.3s ease;
+  }
+  .grabbing {
+    cursor: grabbing;
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <h1>Balance the Dot!</h1>
+  <p>Grab &amp; Rotate the dashed box. The dot inside will fall with gravity. Match the target value (▼) and lock it in!</p>
+
+  <div id="info">
+    <div id="target-display">Target: <span>--</span></div>
+    <div id="score-display">Score: <span>0</span></div>
+    <div id="attempts-display">Attempts: <span>5</span> ❤️</div>
+    <div id="message" style="color: #3498db;">Let's begin!</div>
+  </div>
+
+  <!-- Wrapper contains the rotating container and the static marker -->
+  <div id="slider-wrapper">
+      <div id="slider-container">
+          <!-- Slider is visually inside, but functionally separate -->
+          <input type="range" id="rotation-slider" min="0" max="100" value="50">
+      </div>
+      <div id="target-marker"></div>
+  </div>
+
+
+  <div id="controls">
+    <button id="lock-button">Lock Position</button>
+    <button id="restart-button" style="display: none;">Restart Game</button>
+  </div>
+
+</div>
+
+<script>
+  // DOM Elements
+  const sliderContainer = document.getElementById('slider-container');
+  const slider = document.getElementById('rotation-slider');
+  const lockButton = document.getElementById('lock-button');
+  const restartButton = document.getElementById('restart-button');
+  const targetDisplaySpan = document.getElementById('target-display').querySelector('span');
+  const scoreDisplaySpan = document.getElementById('score-display').querySelector('span');
+  const attemptsDisplay = document.getElementById('attempts-display'); // Reference the whole div for emoji update
+  const messageDisplay = document.getElementById('message');
+  const targetMarker = document.getElementById('target-marker');
+  const sliderWrapper = document.getElementById('slider-wrapper'); // Parent for marker positioning
+
+  // Game State
+  let isDragging = false;
+  let currentAngle = 0; // Current rotation angle of the container
+  let startDragAngle = 0; // Angle of the mouse/touch relative to center at drag start
+  let initialContainerAngle = 0; // Angle of the container itself at drag start
+  let rotationCenter = { x: 0, y: 0 };
+
+  let targetValue = 0;
+  let score = 0;
+  let attemptsLeft = 5;
+  const maxAttempts = 5;
+  const tolerance = 3; // Max allowed difference from target
+  let gameActive = false; // Controls interaction
+
+  // Constants
+  const SLIDER_MIN = parseFloat(slider.min);
+  const SLIDER_MAX = parseFloat(slider.max);
+  const SLIDER_RANGE = SLIDER_MAX - SLIDER_MIN;
+
+  // --- Utility Functions ---
+
+  function getElementCenter(element) {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  }
+
+  // Updates the slider's value based on the container's angle
+  function updateSliderValueFromAngle(angle) {
+    // Map angle to slider value using sine wave for gravity effect
+    // -90 degrees (left side down) -> min value
+    //   0 degrees (horizontal)   -> middle value
+    // +90 degrees (right side down) -> max value
+    const angleRad = angle * Math.PI / 180;
+    // Use Math.sin which ranges from -1 (-90deg) to 1 (+90deg)
+    // Normalize sine output (-1 to 1) to a 0 to 1 range
+    const normalizedValue = (Math.sin(angleRad) + 1) / 2;
+
+    let value = SLIDER_MIN + normalizedValue * SLIDER_RANGE;
+
+    // Clamp value strictly within min/max bounds
+    value = Math.max(SLIDER_MIN, Math.min(SLIDER_MAX, value));
+    slider.value = value;
+    // console.log(`Angle: ${angle.toFixed(1)}, Value: ${slider.value}`); // Debugging
+  }
+
+  // Positions the target marker below the slider based on target value
+  function updateTargetMarkerPosition() {
+      const percent = (targetValue - SLIDER_MIN) / SLIDER_RANGE;
+      // Position relative to the slider-wrapper width
+      const wrapperWidth = sliderWrapper.offsetWidth;
+      // Calculate the pixel offset within the wrapper
+      // Let's assume the slider container takes up most of the wrapper width used for calculation
+      const markerLeftPercent = percent * 100;
+      targetMarker.style.left = `${markerLeftPercent}%`;
+  }
+
+  // Generates a new random target value
+  function generateNewTarget() {
+    // Generate slightly away from the absolute edges for better gameplay
+    const margin = 5; // e.g., don't generate 0 or 100
+    const range = SLIDER_MAX - SLIDER_MIN - (2 * margin);
+    targetValue = Math.floor(Math.random() * (range + 1)) + SLIDER_MIN + margin;
+    targetDisplaySpan.textContent = targetValue;
+    updateTargetMarkerPosition();
+  }
+
+  // Updates Score and Attempts display
+  function updateDisplay() {
+    scoreDisplaySpan.textContent = score;
+    // Generate heart emojis for attempts
+    let hearts = ' ❤️'.repeat(attemptsLeft);
+    attemptsDisplay.innerHTML = `Attempts: <span style="color: #e74c3c;">${attemptsLeft}</span>${hearts}`;
+     if (attemptsLeft <= 0) {
+         attemptsDisplay.innerHTML = `Attempts: <span style="color: #e74c3c;">0</span>`;
+     }
+  }
+
+  // Shows messages to the player
+  function showMessage(msg, color = '#3498db') {
+    messageDisplay.textContent = msg;
+    messageDisplay.style.color = color;
+  }
+
+  // --- Game Logic Functions ---
+
+  function startGame() {
+    score = 0;
+    attemptsLeft = maxAttempts;
+    gameActive = true;
+    currentAngle = 0; // Reset container rotation
+    sliderContainer.style.transform = `rotate(0deg)`;
+    updateSliderValueFromAngle(0); // Reset slider value based on 0 angle (middle)
+
+    generateNewTarget();
+    updateDisplay();
+    showMessage("Rotate the box to match the target!", '#3498db');
+
+    lockButton.disabled = false;
+    lockButton.style.display = 'inline-block';
+    restartButton.style.display = 'none';
+    sliderContainer.classList.remove('grabbing');
+    isDragging = false; // Ensure state reset
+  }
+
+  function endGame(isWin = false) { // Optional win condition? Currently just runs out of attempts.
+    gameActive = false;
+    if (attemptsLeft <= 0) {
+        showMessage(`Game Over! Final Score: ${score}`, '#c0392b'); // Red for game over
+    }
+    // Maybe add a win message if a certain score is reached?
+    // else if (isWin) { showMessage(`You Win! Score: ${score}`, '#27ae60'); }
+
+    lockButton.disabled = true;
+    lockButton.style.display = 'none'; // Hide lock button
+    restartButton.style.display = 'inline-block'; // Show restart
+    sliderContainer.classList.remove('grabbing');
+    isDragging = false;
+  }
+
+  function checkAttempt() {
+    if (!gameActive) return;
+
+    const currentValue = parseFloat(slider.value);
+    const difference = Math.abs(currentValue - targetValue);
+
+    if (difference <= tolerance) {
+      score++;
+      showMessage(`Nailed it! (+1 Score)`, '#2ecc71'); // Green for success
+      // Optional: Add a small celebratory animation/effect here
+    } else {
+      attemptsLeft--;
+      showMessage(`Missed! Off by ${difference.toFixed(1)}. Try again!`, '#e67e22'); // Orange for miss
+       // Optional: Add a small shake effect here
+    }
+
+    updateDisplay();
+
+    if (attemptsLeft <= 0) {
+      endGame();
+    } else {
+      // Pause briefly, then set up next round
+      gameActive = false; // Disable rotation during pause
+      lockButton.disabled = true;
+      setTimeout(() => {
+        if (attemptsLeft > 0) { // Double check in case something changed
+            generateNewTarget();
+            showMessage("New target! Ready?", '#3498db');
+            gameActive = true; // Re-enable rotation
+            lockButton.disabled = false;
+        }
+      }, 1800); // 1.8 second pause
+    }
+  }
+
+
+  // --- Event Handlers ---
+
+  function onPointerDown(event) {
+    if (!gameActive) return;
+    // event.preventDefault(); // Prevent default only if needed, might interfere with button clicks if listener is too broad
+    isDragging = true;
+    sliderContainer.classList.add('grabbing');
+    rotationCenter = getElementCenter(sliderContainer);
+
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+    // Calculate the angle of the pointer relative to the rotation center
+    const dx = clientX - rotationCenter.x;
+    const dy = clientY - rotationCenter.y;
+    startDragAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+    initialContainerAngle = currentAngle; // Store the container's angle when drag starts
+  }
+
+  function onPointerMove(event) {
+    if (!isDragging || !gameActive) return;
+    event.preventDefault(); // Prevent scrolling/selection during drag
+
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+    const dx = clientX - rotationCenter.x;
+    const dy = clientY - rotationCenter.y;
+    let currentPointerAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    // Calculate the change in angle from the start of the drag
+    let angleDelta = currentPointerAngle - startDragAngle;
+
+    // Update the container's angle: initial angle + change
+    currentAngle = initialContainerAngle + angleDelta;
+
+    // Optional: Normalize angle to keep it within +/- 180 or 0-360 if desired
+    // currentAngle = ((currentAngle % 360) + 360) % 360; // Normalize to 0-360
+
+    // Apply rotation to the visual container
+    sliderContainer.style.transform = `rotate(${currentAngle}deg)`;
+
+    // Update the slider value based on the new container angle
+    updateSliderValueFromAngle(currentAngle);
+  }
+
+  function onPointerUp(event) {
+    if (!isDragging) return;
+    isDragging = false;
+    sliderContainer.classList.remove('grabbing');
+  }
+
+  // --- Attach Event Listeners ---
+
+  // Use pointer events for unified mouse/touch handling
+  sliderContainer.addEventListener('pointerdown', onPointerDown);
+  // Listen on the whole window for move and up events to handle dragging outside the element
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+   // Handle pointer cancellation (e.g., system takes over touch)
+  window.addEventListener('pointercancel', onPointerUp);
+
+
+  // Button Listeners
+  lockButton.addEventListener('click', checkAttempt);
+  restartButton.addEventListener('click', startGame);
+
+  // Prevent context menu on the draggable container
+   sliderContainer.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // --- Initial Setup ---
+  window.addEventListener('load', () => {
+      // Initial setup after load (e.g., if marker needs exact dimensions)
+       updateTargetMarkerPosition(); // Initial marker position based on first target
+       startGame(); // Start the game logic
+  });
+
+</script>
+
+</body>
+</html>

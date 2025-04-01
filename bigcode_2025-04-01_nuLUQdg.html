@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Epic Platformer 3500</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #282c34; /* Dark background */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ffffff;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        #gameCanvas {
+            border: 2px solid #61dafb; /* Light blue border */
+            background-color: #f0f8ff; /* Alice blue background for contrast */
+            box-shadow: 0 0 20px rgba(97, 218, 251, 0.5);
+        }
+        #controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #61dafb;
+            color: #282c34;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        button:hover {
+            background-color: #21a1f1;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        #levelInfo {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffd700; /* Gold color for level */
+        }
+         #mechanicInfo {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #98fb98; /* Pale green for mechanic info */
+            min-height: 20px; /* Reserve space */
+         }
+         #instructions {
+             margin-top: 15px;
+             font-size: 14px;
+             color: #cccccc;
+         }
+    </style>
+</head>
+<body>
+
+    <h1>Epic Platformer 3500</h1>
+    <div id="levelInfo">Level: 1 / 3500</div>
+    <div id="mechanicInfo">Current Mechanic: Basic Movement</div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="controls">
+        <button id="skipButton">Skip Level</button>
+    </div>
+    <div id="instructions">Controls: WASD to Move, Space to Jump</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelInfo = document.getElementById('levelInfo');
+        const mechanicInfo = document.getElementById('mechanicInfo');
+        const skipButton = document.getElementById('skipButton');
+
+        // Game Configuration
+        const GAME_WIDTH = canvas.width;
+        const GAME_HEIGHT = canvas.height;
+        const MAX_LEVELS = 3500;
+
+        // Player properties
+        const player = {
+            x: 50,
+            y: GAME_HEIGHT - 50,
+            width: 30,
+            height: 30,
+            dx: 0, // velocity x
+            dy: 0, // velocity y
+            speed: 4,
+            jumpPower: 12,
+            gravity: 0.5,
+            onGround: false,
+            color: '😀', // Using emoji for player
+            canDoubleJump: false,
+            hasDoubleJumped: false,
+            canWallJump: false,
+            isTouchingWall: 0, // -1 for left, 1 for right, 0 for none
+            wallJumpCooldown: 0,
+            wallJumpPowerX: 6,
+            wallJumpPowerY: 10
+        };
+
+        // Game state
+        let currentLevel = 1;
+        let keys = {};
+        let levelObjects = []; // platforms, hazards, goals, mechanic items
+        let activeMechanics = [];
+
+        // Pseudo-Random Number Generator (simple one for deterministic levels)
+        function mulberry32(seed) {
+            return function() {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+        let rng; // Will be initialized per level
+
+        // Mechanic Definitions
+        const MECHANICS = [
+            { name: "Basic Movement", levelStart: 1 },
+            { name: "Moving Platforms", levelStart: 10 },
+            { name: "Double Jump", levelStart: 20 },
+            { name: "Wall Jump", levelStart: 30 },
+            { name: "Low Gravity Zones", levelStart: 40 },
+            { name: "Speed Boost Pads", levelStart: 50 },
+            { name: "Timed Crumbling Platforms", levelStart: 60 },
+            { name: "Simple Enemies (Avoid)", levelStart: 70 },
+            { name: "Keys and Locks", levelStart: 80 },
+            { name: "Temporary Invincibility", levelStart: 90 },
+            // Add more mechanic ideas here... cycled or combined for higher levels
+            // NOTE: Implementing 350 truly unique mechanics is beyond the scope of this format.
+            // We will introduce these 10 and then potentially combine/vary them.
+        ];
+
+        function getActiveMechanics(level) {
+            const mechanics = [];
+            // Base mechanics always active
+            mechanics.push(MECHANICS[0]); // Basic Movement
+
+            // Determine based on level number
+            const mechanicIndex = Math.floor((level - 1) / 10);
+
+            if (mechanicIndex >= 1) mechanics.push(MECHANICS[1]); // Moving Platforms
+            if (mechanicIndex >= 2) mechanics.push(MECHANICS[2]); // Double Jump
+            if (mechanicIndex >= 3) mechanics.push(MECHANICS[3]); // Wall Jump
+            if (mechanicIndex >= 4) mechanics.push(MECHANICS[4]); // Low Gravity
+            if (mechanicIndex >= 5) mechanics.push(MECHANICS[5]); // Speed Boost
+            if (mechanicIndex >= 6) mechanics.push(MECHANICS[6]); // Crumbling Platforms
+            if (mechanicIndex >= 7) mechanics.push(MECHANICS[7]); // Enemies
+            if (mechanicIndex >= 8) mechanics.push(MECHANICS[8]); // Keys/Locks
+            if (mechanicIndex >= 9) mechanics.push(MECHANICS[9]); // Invincibility
+
+            // For levels > 100, we might start combining or reusing mechanics with increased difficulty
+            if (level > 100) {
+                // Example: Combine Double Jump and Wall Jump more often
+                // Example: Increase enemy count/speed
+                // Example: More complex moving platform patterns
+                // This part requires more sophisticated generation logic based on level
+            }
+
+            // Update mechanic info display
+            const latestMechanic = mechanics[mechanics.length - 1];
+            mechanicInfo.textContent = `Current Mechanic Focus: ${latestMechanic.name} (Introduced Level ${latestMechanic.levelStart})`;
+
+            return mechanics.map(m => m.name); // Return array of names
+        }
+
+
+        // Level Generation
+        function generateLevel(level) {
+            rng = mulberry32(level); // Seed RNG with level number
+            levelObjects = [];
+            activeMechanics = getActiveMechanics(level);
+            player.canDoubleJump = activeMechanics.includes("Double Jump");
+            player.canWallJump = activeMechanics.includes("Wall Jump");
+
+            // Reset player state for new level
+            player.x = 50;
+            player.y = GAME_HEIGHT - 50;
+            player.dx = 0;
+            player.dy = 0;
+            player.onGround = false;
+            player.hasDoubleJumped = false;
+            player.isTouchingWall = 0;
+            player.wallJumpCooldown = 0;
+            // Reset other mechanic-related states if needed (keys, invincibility etc.)
+
+            // Base platform
+            levelObjects.push({ type: 'platform', x: 0, y: GAME_HEIGHT - 20, width: 150, height: 20, color: '#666' });
+
+            let currentX = 150;
+            let currentY = GAME_HEIGHT - 20;
+            const minGap = 50 + Math.min(level * 0.1, 50); // Gap increases slightly with level
+            const maxGap = 100 + Math.min(level * 0.2, 100);
+            const minWidth = 50;
+            const maxWidth = 150 - Math.min(level * 0.1, 50); // Width decreases slightly
+            const maxPlatformHeightDiff = 50 + Math.min(level * 0.5, 150);
+
+            let platformCount = 10 + Math.floor(level / 10); // More platforms for higher levels
+
+            for (let i = 0; i < platformCount && currentX < GAME_WIDTH - 150; i++) {
+                const gap = minGap + rng() * (maxGap - minGap);
+                currentX += gap;
+
+                const width = minWidth + rng() * (maxWidth - minWidth);
+                const height = 20;
+
+                // Introduce verticality
+                const yChange = (rng() - 0.5) * 2 * maxPlatformHeightDiff; // -maxDiff to +maxDiff
+                currentY = Math.max(100, Math.min(GAME_HEIGHT - 20, currentY + yChange));
+
+                let platformType = 'platform';
+                let extraProps = {};
+
+                 // Introduce mechanics based on activeMechanics and randomness
+                 const mechanicChance = rng();
+                 if (activeMechanics.includes("Moving Platforms") && mechanicChance < 0.15 + level * 0.001) {
+                     platformType = 'moving_platform';
+                     extraProps.speed = 1 + rng() * (1 + level * 0.01);
+                     extraProps.range = 50 + rng() * 100;
+                     extraProps.direction = rng() < 0.5 ? 1 : -1; // 1 for horizontal, -1 for vertical (example)
+                     extraProps.startX = currentX;
+                     extraProps.startY = currentY;
+                     extraProps.moveAxis = rng() < 0.7 ? 'x' : 'y'; // 70% horizontal
+                     extraProps.color = '#ff9933'; // Orange moving platform
+                 } else if (activeMechanics.includes("Timed Crumbling Platforms") && mechanicChance < 0.25 + level * 0.001) {
+                     platformType = 'crumbling_platform';
+                     extraProps.timer = 0;
+                     extraProps.crumbleTime = 60 + rng() * 60; // 1-2 seconds approx
+                     extraProps.respawnTime = 180; // 3 seconds approx
+                     extraProps.originalY = currentY;
+                     extraProps.isCrumbling = false;
+                     extraProps.isGone = false;
+                     extraProps.color = '#cc6600'; // Brown crumbling platform
+                 } else if (activeMechanics.includes("Speed Boost Pads") && mechanicChance < 0.35 + level * 0.001) {
+                    // Add boost pads ON TOP of regular platforms sometimes
+                    if (rng() < 0.2) { // 20% chance to place a boost pad on a normal platform
+                        levelObjects.push({
+                             type: 'boost_pad',
+                             x: currentX + width / 2 - 15, // Center it
+                             y: currentY - 10,
+                             width: 30,
+                             height: 10,
+                             boostPower: 8 + level * 0.02,
+                             color: '#00ff00' // Green boost pad
+                         });
+                    }
+                 }
+
+                levelObjects.push({
+                    type: platformType,
+                    x: currentX,
+                    y: currentY,
+                    width: width,
+                    height: height,
+                    color: extraProps.color || '#666', // Default color or specific color
+                    ...extraProps // Add mechanic-specific properties
+                });
+
+                 // Add low gravity zones
+                if (activeMechanics.includes("Low Gravity Zones") && rng() < 0.05 + level * 0.0005) {
+                    levelObjects.push({
+                        type: 'low_gravity_zone',
+                        x: currentX - gap / 2, // Place in the gap before the platform
+                        y: currentY - 100 - rng() * 100, // Above the platform
+                        width: gap + width + (minGap + rng() * (maxGap - minGap)), // Span multiple gaps/platforms sometimes
+                        height: 100 + rng() * 100,
+                        gravityFactor: 0.4 + rng() * 0.2, // Reduce gravity effect
+                        color: 'rgba(173, 216, 230, 0.3)' // Light blue transparent
+                    });
+                }
+
+                 // Add simple enemies
+                if (activeMechanics.includes("Simple Enemies (Avoid)") && rng() < 0.1 + level * 0.001) {
+                     levelObjects.push({
+                         type: 'enemy',
+                         x: currentX + width / 2,
+                         y: currentY - 25,
+                         width: 20,
+                         height: 20,
+                         speed: 0.5 + rng() * (0.5 + level * 0.005),
+                         range: width > 0 ? width : 50, // Patrol on platform width or default
+                         direction: 1,
+                         startX: currentX,
+                         color: '😈' // Enemy emoji
+                     });
+                 }
+
+                currentX += width; // Move past the platform width for the next gap calculation
+            }
+
+            // Ensure there's a final platform near the end
+             if (currentX < GAME_WIDTH - 150) {
+                 currentX = GAME_WIDTH - 150;
+                 currentY = GAME_HEIGHT - 20 - rng() * 100; // Random height for final platform
+                 levelObjects.push({ type: 'platform', x: currentX, y: currentY, width: 100, height: 20, color: '#666' });
+             }
+
+
+            // Place Goal
+            const lastPlatform = levelObjects.filter(obj => obj.type.includes('platform')).pop();
+            if (lastPlatform) {
+                levelObjects.push({
+                    type: 'goal',
+                    x: lastPlatform.x + lastPlatform.width / 2 - 15,
+                    y: lastPlatform.y - 40,
+                    width: 30,
+                    height: 30,
+                    color: '⭐' // Goal emoji
+                });
+            } else { // Fallback if no platforms generated somehow
+                 levelObjects.push({
+                    type: 'goal',
+                    x: GAME_WIDTH - 80,
+                    y: GAME_HEIGHT - 60,
+                    width: 30,
+                    height: 30,
+                    color: '⭐'
+                });
+            }
+
+            // Add Keys and Locks (simplified)
+            if (activeMechanics.includes("Keys and Locks")) {
+                // Place a lock near the goal
+                 const goal = levelObjects.find(o => o.type === 'goal');
+                 if (goal) {
+                    levelObjects.push({
+                        type: 'lock',
+                        x: goal.x - 40, // Position near goal
+                        y: goal.y,
+                        width: 10,
+                        height: 30,
+                        color: '#aaa', // Grey lock
+                        isLocked: true
+                    });
+                    // Place a key somewhere earlier
+                    const keyPlatformIndex = Math.floor(rng() * (levelObjects.length / 2)); // Place in first half
+                    const keyPlatform = levelObjects.filter(o => o.type.includes('platform'))[keyPlatformIndex];
+                    if (keyPlatform) {
+                         levelObjects.push({
+                            type: 'key',
+                            x: keyPlatform.x + keyPlatform.width / 2 - 10,
+                            y: keyPlatform.y - 30,
+                            width: 20,
+                            height: 20,
+                            color: '🔑', // Key emoji
+                            isCollected: false
+                        });
+                    }
+                     player.hasKey = false; // Reset key status
+                 }
+            }
+             // Add Invincibility Powerup
+            if (activeMechanics.includes("Temporary Invincibility")) {
+                 if (rng() < 0.3 + level * 0.001) { // Chance to spawn powerup
+                    const powerupPlatformIndex = Math.floor(rng() * (levelObjects.length -1));
+                    const powerupPlatform = levelObjects.filter(o => o.type.includes('platform'))[powerupPlatformIndex];
+                     if (powerupPlatform) {
+                          levelObjects.push({
+                             type: 'invincibility_powerup',
+                             x: powerupPlatform.x + powerupPlatform.width / 2 - 10,
+                             y: powerupPlatform.y - 30,
+                             width: 20,
+                             height: 20,
+                             color: '✨', // Sparkles emoji
+                             isCollected: false,
+                             duration: 300 // 5 seconds approx
+                         });
+                     }
+                 }
+                 player.isInvincible = false;
+                 player.invincibilityTimer = 0;
+            }
+
+
+            levelInfo.textContent = `Level: ${level} / ${MAX_LEVELS}`;
+        }
+
+        // Collision Detection (Axis-Aligned Bounding Box)
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // Player Update Logic
+        function updatePlayer() {
+             let currentGravity = player.gravity;
+             let onSpeedBoost = false;
+             player.isTouchingWall = 0; // Reset wall touch check
+
+             // Check for low gravity zones
+             let inLowGravityZone = false;
+              levelObjects.filter(obj => obj.type === 'low_gravity_zone').forEach(zone => {
+                 if (checkCollision(player, zone)) {
+                     currentGravity *= zone.gravityFactor;
+                     inLowGravityZone = true;
+                 }
+             });
+
+             // Handle Invincibility Timer
+             if (player.isInvincible) {
+                 player.invincibilityTimer--;
+                 if (player.invincibilityTimer <= 0) {
+                     player.isInvincible = false;
+                 }
+             }
+
+
+            // Horizontal Movement
+            if (keys['a'] || keys['A']) {
+                player.dx = -player.speed;
+            } else if (keys['d'] || keys['D']) {
+                player.dx = player.speed;
+            } else {
+                player.dx = 0;
+            }
+
+            // Apply Velocity
+            player.x += player.dx;
+            player.dy += currentGravity; // Apply gravity
+            player.y += player.dy;
+
+            player.onGround = false; // Assume not on ground until collision check proves otherwise
+
+             // Wall Jump Cooldown
+             if(player.wallJumpCooldown > 0) {
+                 player.wallJumpCooldown--;
+             }
+
+            // Collision with level objects
+            levelObjects.forEach(obj => {
+                if (obj.isGone) return; // Skip gone crumbling platforms
+
+                if (obj.type === 'platform' || obj.type === 'moving_platform' || (obj.type === 'crumbling_platform' && !obj.isGone) || obj.type === 'lock' && obj.isLocked) {
+                    if (checkCollision(player, obj)) {
+                        // Resolve collision - simplified resolution
+                        const overlapX = (player.x + player.width / 2) - (obj.x + obj.width / 2);
+                        const overlapY = (player.y + player.height / 2) - (obj.y + obj.height / 2);
+                        const combinedHalfWidths = player.width / 2 + obj.width / 2;
+                        const combinedHalfHeights = player.height / 2 + obj.height / 2;
+
+                        if (Math.abs(overlapX) < combinedHalfWidths) {
+                            // Check vertical collision (hitting top/bottom)
+                            if (Math.abs(overlapY) < combinedHalfHeights) {
+                                const overlapYAmount = combinedHalfHeights - Math.abs(overlapY);
+                                if (overlapY > 0) { // Player is below platform center - hit head
+                                    player.y += overlapYAmount; // Move down
+                                    player.dy = 0; // Stop upward movement
+                                } else { // Player is above platform center - landed on top
+                                    player.y -= overlapYAmount; // Move up
+                                    player.dy = 0; // Stop downward movement
+                                    player.onGround = true;
+                                    player.hasDoubleJumped = false; // Reset double jump on ground
+
+                                     // Handle crumbling platform logic
+                                    if (obj.type === 'crumbling_platform' && !obj.isCrumbling && !obj.isGone) {
+                                         obj.isCrumbling = true;
+                                         obj.timer = obj.crumbleTime;
+                                     }
+                                }
+                            }
+                        }
+                        // Check horizontal collision after vertical resolution attempt
+                        // Re-check collision after potential vertical move
+                         if (checkCollision(player, obj)) {
+                             if (Math.abs(overlapX) < combinedHalfWidths) { // Should only trigger if still overlapping after Y correction
+                                 const overlapXAmount = combinedHalfWidths - Math.abs(overlapX);
+                                if (overlapX > 0) { // Player is to the right of platform center - hit left side
+                                    player.x += overlapXAmount; // Move right
+                                    if (player.canWallJump && player.wallJumpCooldown <= 0) player.isTouchingWall = -1; // Touched left wall
+                                } else { // Player is to the left of platform center - hit right side
+                                    player.x -= overlapXAmount; // Move left
+                                     if (player.canWallJump && player.wallJumpCooldown <= 0) player.isTouchingWall = 1; // Touched right wall
+                                }
+                                player.dx = 0; // Stop horizontal movement if hitting a wall horizontally
+                             }
+                         }
+                    }
+                } else if (obj.type === 'goal') {
+                    if (checkCollision(player, obj)) {
+                        // Check if locked
+                        const lock = levelObjects.find(o => o.type === 'lock');
+                        if (!lock || !lock.isLocked) {
+                            levelComplete();
+                        }
+                    }
+                } else if (obj.type === 'enemy') {
+                     if (checkCollision(player, obj) && !player.isInvincible) {
+                         resetLevel(); // Player hit enemy
+                     }
+                 } else if (obj.type === 'key' && !obj.isCollected) {
+                     if (checkCollision(player, obj)) {
+                         obj.isCollected = true;
+                         player.hasKey = true;
+                         // Unlock associated lock
+                         const lock = levelObjects.find(o => o.type === 'lock');
+                         if (lock) {
+                             lock.isLocked = false;
+                         }
+                     }
+                 } else if (obj.type === 'invincibility_powerup' && !obj.isCollected) {
+                     if (checkCollision(player, obj)) {
+                         obj.isCollected = true;
+                         player.isInvincible = true;
+                         player.invincibilityTimer = obj.duration;
+                     }
+                 } else if (obj.type === 'boost_pad') {
+                     // Check collision slightly below player feet for activation
+                     const feetCollider = { x: player.x, y: player.y + player.height - 5, width: player.width, height: 10 };
+                     if (checkCollision(feetCollider, obj)) {
+                         player.dy = -obj.boostPower; // Apply strong upward boost
+                         player.onGround = false; // Player is launched
+                         onSpeedBoost = true; // Could potentially use this flag for visual effects
+                     }
+                 }
+            });
+
+             // Prevent falling out of bounds (bottom)
+            if (player.y + player.height > GAME_HEIGHT) {
+                // If very high level, maybe this is insta-death? For now, just reset.
+                if (currentLevel > 50) {
+                     resetLevel();
+                 } else {
+                    // For early levels, just put back on ground roughly
+                    player.y = GAME_HEIGHT - player.height;
+                    player.dy = 0;
+                    player.onGround = true;
+                    player.hasDoubleJumped = false;
+                 }
+            }
+             // Prevent going out left/right bounds
+             if (player.x < 0) {
+                 player.x = 0;
+                 if (player.canWallJump && player.wallJumpCooldown <= 0) player.isTouchingWall = -1;
+             }
+             if (player.x + player.width > GAME_WIDTH) {
+                 player.x = GAME_WIDTH - player.width;
+                  if (player.canWallJump && player.wallJumpCooldown <= 0) player.isTouchingWall = 1;
+             }
+        }
+
+         // Update Moving Platforms, Enemies, Crumbling Platforms, etc.
+         function updateObjects() {
+             levelObjects.forEach(obj => {
+                 if (obj.type === 'moving_platform') {
+                     if (obj.moveAxis === 'x') {
+                         obj.x += obj.speed * obj.direction;
+                         if (obj.x > obj.startX + obj.range || obj.x < obj.startX) {
+                             obj.direction *= -1;
+                             // Clamp position to avoid overshooting due to variable framerates
+                             obj.x = Math.max(obj.startX, Math.min(obj.startX + obj.range, obj.x));
+                         }
+                     } else { // moveAxis === 'y'
+                         obj.y += obj.speed * obj.direction;
+                         if (obj.y > obj.startY + obj.range || obj.y < obj.startY) {
+                             obj.direction *= -1;
+                             obj.y = Math.max(obj.startY, Math.min(obj.startY + obj.range, obj.y));
+                         }
+                     }
+                 } else if (obj.type === 'enemy') {
+                     obj.x += obj.speed * obj.direction;
+                      // Basic patrol logic (turn around at edges of range)
+                     if (obj.x > obj.startX + obj.range || obj.x < obj.startX) {
+                         obj.direction *= -1;
+                         obj.x = Math.max(obj.startX, Math.min(obj.startX + obj.range, obj.x));
+                     }
+                 } else if (obj.type === 'crumbling_platform') {
+                     if (obj.isCrumbling && !obj.isGone) {
+                         obj.timer--;
+                         // Visual cue: shake? change color?
+                         obj.color = `rgb(204, 102, 0, ${obj.timer / obj.crumbleTime})`; // Fade out
+                         if (obj.timer <= 0) {
+                             obj.isGone = true;
+                             obj.isCrumbling = false;
+                             obj.timer = obj.respawnTime; // Start respawn timer
+                         }
+                     } else if (obj.isGone) {
+                         obj.timer--;
+                         if (obj.timer <= 0) {
+                             obj.isGone = false;
+                             obj.y = obj.originalY; // Restore original position
+                             obj.color = '#cc6600'; // Restore color
+                         }
+                     }
+                 }
+             });
+         }
+
+        // Drawing Logic
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Draw background (maybe dynamic based on level?)
+            ctx.fillStyle = '#f0f8ff'; // Alice Blue
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Draw level objects
+            levelObjects.forEach(obj => {
+                if (obj.isGone) return; // Don't draw gone crumbling platforms
+
+                 ctx.fillStyle = obj.color;
+                 if (obj.type === 'platform' || obj.type === 'moving_platform' || obj.type === 'crumbling_platform' || obj.type === 'lock' || obj.type === 'boost_pad') {
+                     ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+                 } else if (obj.type === 'goal' || obj.type === 'enemy' || obj.type === 'key' || obj.type === 'invincibility_powerup') {
+                     // Draw emojis - requires setting font
+                      ctx.font = `${obj.height}px Arial`; // Use height for size
+                      ctx.textAlign = 'center';
+                      ctx.textBaseline = 'middle';
+                      // Skip drawing collected items
+                     if ((obj.type === 'key' || obj.type === 'invincibility_powerup') && obj.isCollected) {
+                        // do nothing
+                     } else {
+                        ctx.fillText(obj.color, obj.x + obj.width / 2, obj.y + obj.height / 2);
+                     }
+
+                 } else if (obj.type === 'low_gravity_zone') {
+                      ctx.fillStyle = obj.color; // Use the rgba color defined
+                      ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+                 }
+            });
+
+             // Draw Player
+             // Add visual effect for invincibility
+             if (player.isInvincible && Math.floor(Date.now() / 100) % 2 === 0) { // Blink effect
+                 // Don't draw player to make it blink
+             } else {
+                ctx.font = `${player.height}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(player.color, player.x + player.width / 2, player.y + player.height / 2);
+
+                // Optional: Draw collision box for debugging
+                // ctx.strokeStyle = 'red';
+                // ctx.strokeRect(player.x, player.y, player.width, player.height);
+             }
+
+
+              // Draw collected key indicator (optional)
+             if (player.hasKey) {
+                 ctx.font = `20px Arial`;
+                 ctx.fillStyle = '#ffd700';
+                 ctx.textAlign = 'left';
+                 ctx.fillText('🔑', 10, 30);
+             }
+        }
+
+        // Game Loop
+        function gameLoop() {
+            updatePlayer();
+            updateObjects();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+
+            // Handle Jump
+            if ((e.key === ' ' || e.key === 'w' || e.key === 'W') ) {
+                if (player.onGround) {
+                    player.dy = -player.jumpPower;
+                    player.onGround = false;
+                } else if (player.canDoubleJump && !player.hasDoubleJumped) {
+                    player.dy = -player.jumpPower * 0.8; // Double jump might be slightly weaker
+                    player.hasDoubleJumped = true;
+                } else if (player.canWallJump && player.isTouchingWall !== 0 && player.wallJumpCooldown <= 0) {
+                    player.dy = -player.wallJumpPowerY; // Vertical boost
+                    player.dx = -player.isTouchingWall * player.wallJumpPowerX; // Horizontal boost away from wall
+                    player.hasDoubleJumped = false; // Wall jump often resets double jump
+                    player.wallJumpCooldown = 20; // Prevent instant re-walljump
+                    player.isTouchingWall = 0; // Consume wall touch
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        skipButton.addEventListener('click', () => {
+            if (currentLevel < MAX_LEVELS) {
+                currentLevel++;
+                generateLevel(currentLevel);
+            } else {
+                 alert("Congratulations! You've skipped through all 3500 levels!");
+                 // Optionally reset to level 1 or show a final screen
+                 currentLevel = 1;
+                 generateLevel(currentLevel);
+            }
+        });
+
+        // Helper functions
+        function levelComplete() {
+            console.log(`Level ${currentLevel} complete!`);
+            if (currentLevel < MAX_LEVELS) {
+                currentLevel++;
+                generateLevel(currentLevel);
+            } else {
+                alert("Congratulations! You've beaten all 3500 levels!");
+                // Optionally reset to level 1 or show a final screen
+                currentLevel = 1; // Restart for now
+                generateLevel(currentLevel);
+            }
+        }
+
+        function resetLevel() {
+            console.log(`Level ${currentLevel} reset.`);
+            // Regenerate the same level to reset positions and states
+            generateLevel(currentLevel);
+        }
+
+        // Initial Setup
+        generateLevel(currentLevel);
+        gameLoop();
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flush The Toilet</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Arial', sans-serif; /* Using Arial as a placeholder for pixel font */
+            overflow: hidden;
+            background-color: #00BFFF; /* DeepSkyBlue - close to turquoise */
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+            user-select: none; /* Prevent text selection */
+        }
+
+        #game-container {
+            width: 800px;
+            height: 600px;
+            background-color: #00BFFF;
+            position: relative;
+            overflow: hidden;
+            border: 2px solid black;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: inherit;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            padding: 20px;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        /* Start Screen */
+        #start-screen h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+
+        #start-screen .toilet-emoji {
+            font-size: 100px;
+            position: absolute;
+            left: 50px;
+            bottom: 100px;
+        }
+
+        .start-button {
+            padding: 15px 30px;
+            font-size: 36px;
+            font-weight: bold;
+            color: white;
+            background-color: #32CD32; /* LimeGreen */
+            border: 2px solid black;
+            cursor: pointer;
+            margin: 10px;
+            min-width: 250px;
+        }
+
+        .speedrun-button {
+            padding: 10px 20px;
+            font-size: 24px;
+            color: red;
+            background-color: #FF00FF; /* Magenta */
+            border: 2px solid black;
+            cursor: pointer;
+            margin: 10px;
+            min-width: 250px;
+        }
+        .speedrun-button span {
+            color: white;
+            font-size: 18px;
+            display: block;
+        }
+
+        .version-button {
+            padding: 5px 10px;
+            font-size: 20px;
+            color: white;
+            background-color: #00FF00; /* Lime */
+            border: 2px solid black;
+            cursor: pointer;
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: calc(100% - 20px);
+            box-sizing: border-box;
+        }
+
+        /* Game Screen */
+        #game-screen .toilet-emoji {
+             font-size: 100px;
+            position: absolute;
+            left: 50px;
+            bottom: 100px;
+        }
+         #game-screen .toilet-water {
+            position: absolute;
+            left: 70px; /* Adjust position relative to toilet */
+            bottom: 125px; /* Adjust position relative to toilet */
+            width: 60px;
+            height: 20px;
+            background-color: transparent; /* Initially no water */
+            border-radius: 50% / 100%;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+         }
+        #game-screen .flush-button {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            width: 80px;
+            height: 80px;
+            background-color: #808080; /* Gray */
+            border: 2px solid black;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #game-screen .flush-text {
+            position: absolute;
+            top: 80px;
+            left: 140px;
+            font-size: 24px;
+            color: white;
+        }
+        #game-screen .objective-text {
+            position: absolute;
+            top: 50px;
+            right: 50px;
+            font-size: 24px;
+            color: red;
+            text-align: right;
+        }
+        #game-screen .pause-button {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 80px;
+            height: 40px;
+            display: flex;
+            gap: 5px;
+            cursor: pointer;
+        }
+        #game-screen .pause-square {
+            width: 35px;
+            height: 35px;
+            background-color: blue;
+            border: 1px solid black;
+        }
+         #game-screen .bottom-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60px; /* Approximate height */
+            background-color: #32CD32; /* LimeGreen */
+            z-index: -1; /* Behind other elements */
+         }
+         #game-screen .explosion-graphic {
+             position: absolute;
+             font-size: 150px;
+             left: 50px;
+             bottom: 100px;
+             display: none; /* Hidden initially */
+         }
+         #game-screen .explosion-text {
+            font-size: 40px;
+            color: red;
+            font-weight: bold;
+            line-height: 1.2;
+            display: none; /* Hidden initially */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+         }
+
+
+        /* Overlay Menus */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent black */
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        .overlay.active {
+            display: flex;
+        }
+        .overlay-content {
+            background-color: #008080; /* Teal */
+            padding: 30px;
+            border: 3px solid white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 400px;
+        }
+        .overlay h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+        .overlay-button {
+            padding: 10px 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: black;
+            background-color: #FFFF00; /* Yellow */
+            border: 2px solid black;
+            cursor: pointer;
+            margin: 10px;
+            min-width: 200px;
+        }
+         .overlay-button.blue { background-color: #0000FF; color: white;}
+         .overlay-button.purple { background-color: #800080; color: white;}
+         .overlay-button.orange { background-color: #FFA500; color: white; }
+         .overlay-button.red { background-color: #FF0000; color: white; }
+         .overlay-button.magenta { background-color: #FF00FF; color: white; }
+         .overlay-button.gray { background-color: #808080; color: white; }
+
+
+        /* Speedrun Menu */
+        #speedrun-menu .overlay-content { background-color: #00008B; } /* DarkBlue */
+        #speedrun-menu .toggle-buttons { display: flex; margin-bottom: 15px; }
+        #speedrun-menu .toggle-buttons .overlay-button { min-width: 80px; margin: 0 5px; }
+
+        /* Leaderboards Screen */
+        #leaderboards-screen .overlay-content { background-color: #2F4F4F; } /* DarkSlateGray */
+        #leaderboards-screen .leaderboard-entry {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 90%;
+            padding: 8px 15px;
+            margin: 5px 0;
+            border: 1px solid black;
+            font-size: 18px;
+        }
+        #leaderboards-screen .rank { font-weight: bold; margin-right: 10px; }
+        #leaderboards-screen .name { flex-grow: 1; text-align: left; }
+        #leaderboards-screen .score { margin-left: 10px; }
+        #leaderboards-screen .l1 { background-color: #FFFF00; color: black; } /* Yellow */
+        #leaderboards-screen .l2 { background-color: #C0C0C0; color: black; } /* Silver */
+        #leaderboards-screen .l3 { background-color: #CD7F32; color: white; } /* Bronze */
+        #leaderboards-screen .l4, #leaderboards-screen .l5 { background-color: #FFFFFF; color: black; } /* White */
+
+        /* Version Screen */
+        #version-screen .overlay-content { background-color: #A0522D; } /* Sienna (Brownish) */
+        #version-screen p { font-size: 18px; max-width: 80%; margin-bottom: 20px; line-height: 1.4;}
+
+        /* Ending Screens */
+        #good-ending-screen { background-color: #32CD32; } /* LimeGreen */
+        #bad-ending-screen { background-color: #DC143C; } /* Crimson (Red) */
+        #secret-ending-screen { background-color: #696969; } /* DimGray */
+        .ending-screen h2 { font-size: 48px; margin-bottom: 15px; }
+        .ending-screen p { font-size: 24px; margin-bottom: 30px; }
+
+        /* Undertale Style Screens */
+        .undertale-screen {
+            background-color: black;
+            justify-content: flex-start; /* Align content to top */
+        }
+        .sprite-area {
+            height: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 100px; /* Placeholder size */
+             padding-top: 20px;
+        }
+        .sprite-area .skeleton { /* Simple skeleton representation */
+             color: white;
+             border: 5px solid white;
+             padding: 10px;
+             border-radius: 5px;
+             position: relative;
+        }
+         .sprite-area .skeleton::before { /* Head */
+             content: '💀';
+             position: absolute;
+             top: -40px;
+             left: 50%;
+             transform: translateX(-50%);
+             font-size: 50px;
+         }
+         .sprite-area .skeleton::after { /* Body lines */
+             content: '| |\A---';
+             white-space: pre;
+             position: absolute;
+             top: 20px;
+             left: 50%;
+             transform: translateX(-50%);
+             font-size: 20px;
+         }
+        .sprite-area .robot { /* Simple robot representation */
+            color: #D3D3D3; /* LightGray */
+            border: 5px solid #808080; /* Gray */
+            padding: 20px;
+            width: 80px;
+            height: 120px;
+            position: relative;
+            background: linear-gradient(to bottom, #A9A9A9, #696969); /* DarkGray gradient */
+            box-shadow: 0 0 10px white;
+        }
+         .sprite-area .robot::before { /* Head - simplified Mettaton look */
+             content: '★';
+             position: absolute;
+             top: -30px;
+             left: 50%;
+             transform: translateX(-50%);
+             font-size: 40px;
+             color: #FF69B4; /* HotPink */
+         }
+         .sprite-area .robot::after { /* Arms out */
+             content: '<------>';
+             position: absolute;
+             top: 40px;
+             left: 50%;
+             transform: translateX(-50%);
+             font-size: 20px;
+             color: white;
+         }
+
+
+        .text-box {
+            width: 80%;
+            height: 150px;
+            border: 4px solid white;
+            margin-top: 20px;
+            padding: 15px;
+            box-sizing: border-box;
+            position: relative;
+            font-family: 'Courier New', monospace; /* Closer to pixel font */
+            font-size: 24px;
+            line-height: 1.4;
+            text-align: left;
+            display: flex;
+            align-items: flex-start; /* Align text to top */
+             white-space: pre-wrap; /* Handle newlines */
+        }
+        .text-box .speaker-icon {
+             font-size: 40px;
+             margin-right: 15px;
+             min-width: 40px;
+             text-align: center;
+        }
+        .text-content {
+            flex-grow: 1;
+        }
+        .text-box .next-arrow {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            font-size: 30px;
+            animation: blink 1s step-start infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        .dialogue-button {
+            padding: 10px 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            background-color: #0000FF; /* Blue */
+            border: 2px solid white;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .undertale-options {
+             position: absolute;
+             bottom: 0;
+             left: 0;
+             width: 100%;
+             height: 60px;
+             display: flex;
+             justify-content: space-around;
+             align-items: center;
+             padding: 0 10%;
+             box-sizing: border-box;
+        }
+         .undertale-option {
+             padding: 5px 15px;
+             font-size: 28px;
+             font-weight: bold;
+             cursor: pointer;
+             border: 4px solid transparent;
+             display: flex;
+             align-items: center;
+             gap: 5px;
+         }
+         .undertale-option.fight { color: red; border-color: red;}
+         .undertale-option.act { color: orange; border-color: orange; }
+         .undertale-option.mercy { color: lime; border-color: lime; }
+
+         /* Sans Fight Specifics */
+        .attack-animation {
+             position: absolute;
+             top: 45%;
+             left: 0;
+             width: 100%;
+             height: 20px;
+             display: none;
+             align-items: center;
+             z-index: 5;
+        }
+         .attack-line {
+             height: 100%;
+             width: 5px;
+             background-color: red;
+             position: absolute;
+             left: 0;
+             animation: attack-sweep 0.5s linear forwards;
+         }
+         @keyframes attack-sweep {
+             from { left: 10%; }
+             to { left: 90%; }
+         }
+         .miss-text {
+             position: absolute;
+             top: 40%;
+             left: 50%;
+             transform: translateX(-50%);
+             font-size: 40px;
+             color: white;
+             font-weight: bold;
+             display: none;
+             z-index: 6;
+         }
+        .soul-box {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 100px;
+            border: 3px solid white;
+            display: none; /* Hidden initially */
+            justify-content: center;
+            align-items: center;
+            background-color: black;
+            z-index: 5;
+        }
+        .soul-heart {
+            color: red;
+            font-size: 40px;
+            animation: shake 0.5s linear infinite;
+        }
+        .soul-broken {
+            color: red;
+            font-size: 40px;
+            /* Replace with broken heart emoji or graphic if needed */
+        }
+         @keyframes shake {
+           0%, 100% { transform: translateX(0); }
+           25% { transform: translateX(-3px); }
+           75% { transform: translateX(3px); }
+         }
+         .bones { /* Simple representation */
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            font-size: 30px;
+            color: white;
+            opacity: 0.8;
+         }
+
+        /* Mettaton Fight Specifics */
+        .act-options {
+             position: absolute;
+             top: 55%; /* Position below sprite */
+             left: 50%;
+             transform: translateX(-50%);
+             background-color: black;
+             border: 4px solid white;
+             padding: 10px;
+             display: none; /* Hidden initially */
+             flex-direction: column;
+             gap: 10px;
+             z-index: 6;
+        }
+        .act-option {
+             font-family: 'Courier New', monospace;
+             font-size: 24px;
+             color: white;
+             cursor: pointer;
+        }
+         .act-option:hover { color: yellow; }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="screen active">
+            <h1>Flush<br>The<br>Toilet</h1>
+            <div class="toilet-emoji">🚽</div>
+            <button id="start-button" class="start-button">START</button>
+            <button id="speedrun-button" class="speedrun-button">
+                Speedrun Mode
+                <span id="speedrun-status">Off</span>
+            </button>
+            <button id="version-button" class="version-button">Version 0.8</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <div class="toilet-emoji">🚽
+                 <div class="toilet-water"></div>
+            </div>
+            <div id="flush-button" class="flush-button"></div>
+            <div class="flush-text">&lt;-- press to flush</div>
+            <div id="objective-text" class="objective-text">Objective:<br>Flush the toilet.</div>
+            <div id="pause-button" class="pause-button">
+                <div class="pause-square"></div>
+                <div class="pause-square"></div>
+            </div>
+            <div class="bottom-bar"></div>
+            <div class="explosion-graphic">💥</div>
+            <div class="explosion-text"></div>
+        </div>
+
+        <!-- Pause Menu -->
+        <div id="pause-menu" class="overlay">
+            <div class="overlay-content">
+                <h2>Game Paused</h2>
+                <button id="resume-button" class="overlay-button">Resume</button>
+                <button id="quit-button-pause" class="overlay-button">Quit</button>
+                <button id="papyrus-button" class="overlay-button" style="display: none;">PAPYRUS</button> <!-- Hidden initially -->
+                <button id="hell-button" class="overlay-button" style="display: none;">HELL.</button> <!-- Hidden initially -->
+            </div>
+        </div>
+
+        <!-- Speedrun Menu -->
+        <div id="speedrun-menu" class="overlay">
+            <div class="overlay-content">
+                <h2>Speedrun Mode</h2>
+                <div class="toggle-buttons">
+                    <button id="speedrun-on-button" class="overlay-button magenta">ON</button>
+                    <button id="speedrun-off-button" class="overlay-button red">OFF</button>
+                </div>
+                <button id="leaderboards-button" class="overlay-button orange">Leaderboards</button>
+                <button id="back-to-start-button" class="overlay-button orange">Back</button>
+            </div>
+        </div>
+
+        <!-- Leaderboards Screen -->
+        <div id="leaderboards-screen" class="overlay">
+            <div class="overlay-content">
+                <h2>Top Speedrunners</h2>
+                <p style="font-size: 16px;">G = Good Ending B = Bad Ending</p>
+                <div class="leaderboard-entry l1">
+                    <span class="rank">1</span>
+                    <span class="name">Meethexep [Game Dev]</span>
+                    <span class="score">G 2.94</span>
+                    <span class="score">B 3.58</span>
+                </div>
+                <div class="leaderboard-entry l2">
+                    <span class="rank">2</span>
+                    <span class="name">None</span>
+                </div>
+                <div class="leaderboard-entry l3">
+                    <span class="rank">3</span>
+                    <span class="name">None</span>
+                </div>
+                <div class="leaderboard-entry l4">
+                    <span class="rank">4</span>
+                    <span class="name">None</span>
+                </div>
+                <div class="leaderboard-entry l5">
+                    <span class="rank">5</span>
+                    <span class="name">None</span>
+                </div>
+                <button id="back-to-speedrun-button" class="overlay-button purple">Back</button>
+            </div>
+        </div>
+
+         <!-- Version Screen -->
+         <div id="version-screen" class="overlay">
+            <div class="overlay-content">
+                <h2>Update version 0.8 (last update)</h2>
+                <p>Hello toilet flushers, i have not made an update for this game in a while and it seems like im running out of ideas for this game. as a last update i decided to make version 0.8</p>
+                <button id="back-to-start-from-version-button" class="overlay-button purple">Back</button>
+            </div>
+        </div>
+
+        <!-- Good Ending Screens (Papyrus) -->
+        <div id="papyrus-screen-1" class="screen undertale-screen">
+            <div class="sprite-area"><div class="skeleton"></div></div>
+            <div class="text-box">
+                <span class="text-content">* THE GREAT PAPYRUS OFFERS YOU SOME SPAGHETTI!</span>
+            </div>
+            <button id="accept-spaghetti-button" class="dialogue-button">Accept</button>
+        </div>
+        <div id="papyrus-screen-2" class="screen undertale-screen">
+             <div class="sprite-area"><div class="skeleton"></div></div>
+             <div class="text-box">
+                <span id="papyrus-text-2" class="text-content"></span>
+                <span class="next-arrow" style="display: none;">&gt;</span>
+             </div>
+        </div>
+         <div id="papyrus-screen-3" class="screen undertale-screen">
+             <div class="sprite-area"><div class="skeleton"></div></div>
+             <div class="text-box">
+                 <span class="speaker-icon">💀</span>
+                <span id="papyrus-text-3" class="text-content"></span>
+                <span class="next-arrow" style="display: none;">&gt;</span>
+             </div>
+        </div>
+         <div id="papyrus-screen-4" class="screen undertale-screen">
+             <div class="sprite-area"><div class="skeleton"></div></div>
+             <div class="text-box">
+                 <span class="speaker-icon">💀</span>
+                 <span id="papyrus-text-4" class="text-content"></span>
+                 <span class="next-arrow" style="display: none;">&gt;</span>
+             </div>
+        </div>
+        <div id="good-ending-screen" class="screen ending-screen">
+            <h2>Good Ending</h2>
+            <p>Ate papyrus's spaghetti</p>
+            <button class="overlay-button blue restart-button">Restart game</button>
+        </div>
+
+         <!-- Escape/Hell Screens -->
+         <div id="escape-screen-1" class="screen undertale-screen">
+             <div class="text-box" style="height: auto; margin-top: 100px;">
+                 <span id="escape-text-1" class="text-content"></span>
+                 <span class="next-arrow" style="display: none;">&gt;</span>
+             </div>
+         </div>
+          <div id="escape-screen-2" class="screen undertale-screen">
+             <div class="text-box" style="height: auto; margin-top: 100px;">
+                 <span id="escape-text-2" class="text-content"></span>
+                  <span class="next-arrow" style="display: none;">&gt;</span>
+             </div>
+         </div>
+          <div id="escape-screen-3" class="screen undertale-screen">
+             <div class="text-box" style="height: auto; margin-top: 100px;">
+                 <span id="escape-text-3" class="text-content"></span>
+                  <span class="next-arrow" style="display: none;">&gt;</span>
+             </div>
+         </div>
+         <div id="escape-options-screen" class="screen undertale-screen">
+              <button id="option-a-button" class="overlay-button gray" style="margin-top: 200px;">Option A</button>
+              <button id="option-b-button" class="overlay-button gray">Option B</button>
+         </div>
+
+        <!-- Bad Ending Screens (Sans) -->
+        <div id="sans-fight-screen" class="screen undertale-screen">
+            <div class="sprite-area"><div class="skeleton"></div></div>
+            <div class="text-box">
+                <span id="sans-dialogue" class="text-content">* YOU SHOULDN'T HAVE EXPLODED THAT TOILET.</span>
+            </div>
+            <div class="attack-animation"> <div class="attack-line"></div> </div>
+            <div class="miss-text">MISS</div>
+            <div class="soul-box">
+                 <div class="bones">🦴&nbsp;&nbsp;&nbsp;🦴&nbsp;&nbsp;&nbsp;🦴</div>
+                 <span id="soul" class="soul-heart">❤️</span>
+            </div>
+            <div class="undertale-options">
+                <div id="sans-fight-button" class="undertale-option fight">⚔️ FIGHT</div>
+                <div id="sans-mercy-button" class="undertale-option mercy">💖 MERCY</div>
+            </div>
+        </div>
+        <div id="bad-ending-screen" class="screen ending-screen">
+            <h2>Bad Ending</h2>
+            <p>Exploded the toilet.</p>
+            <button class="overlay-button blue restart-button">Restart game</button>
+        </div>
+
+        <!-- Secret Ending Screens (Mettaton/Coom Guy) -->
+        <div id="coom-guy-fight-screen" class="screen undertale-screen">
+            <div class="sprite-area"><div class="robot"></div></div>
+            <div class="text-box">
+                 <span class="speaker-icon" style="font-size: 30px; transform: rotate(-15deg);">★</span>
+                 <span id="coom-guy-dialogue" class="text-content"></span>
+                 <span class="next-arrow" style="display: none;">&gt;</span>
+            </div>
+             <div class="act-options">
+                 <div id="act-check" class="act-option">* CHECK</div>
+                 <div id="act-ask" class="act-option">* ASK FOR COOM</div>
+            </div>
+            <div class="undertale-options" style="display: none;">
+                <div id="coom-fight-button" class="undertale-option fight" style="border-color: orange; color: orange;">⚔️ FIGHT</div>
+                <div id="coom-act-button" class="undertale-option act">🔊 ACT</div>
+            </div>
+        </div>
+        <div id="secret-ending-screen" class="screen ending-screen">
+             <h2>Secret Ending</h2>
+             <p>Fucked coom guy and ate his coom</p>
+             <button class="overlay-button blue restart-button">Restart game</button>
+        </div>
+
+    </div>
+
+    <script>
+        const screens = document.querySelectorAll('.screen');
+        const overlays = document.querySelectorAll('.overlay');
+        const gameContainer = document.getElementById('game-container');
+
+        // Buttons
+        const startButton = document.getElementById('start-button');
+        const speedrunButton = document.getElementById('speedrun-button');
+        const versionButton = document.getElementById('version-button');
+        const resumeButton = document.getElementById('resume-button');
+        const quitButtonPause = document.getElementById('quit-button-pause');
+        const papyrusButton = document.getElementById('papyrus-button');
+        const hellButton = document.getElementById('hell-button');
+        const speedrunOnButton = document.getElementById('speedrun-on-button');
+        const speedrunOffButton = document.getElementById('speedrun-off-button');
+        const leaderboardsButton = document.getElementById('leaderboards-button');
+        const backToStartButton = document.getElementById('back-to-start-button');
+        const backToSpeedrunButton = document.getElementById('back-to-speedrun-button');
+        const backToStartFromVersionButton = document.getElementById('back-to-start-from-version-button');
+        const restartButtons = document.querySelectorAll('.restart-button');
+        const flushButton = document.getElementById('flush-button');
+        const pauseButton = document.getElementById('pause-button');
+        const acceptSpaghettiButton = document.getElementById('accept-spaghetti-button');
+        const sansFightButton = document.getElementById('sans-fight-button');
+        const sansMercyButton = document.getElementById('sans-mercy-button');
+        const optionAButton = document.getElementById('option-a-button');
+        const optionBButton = document.getElementById('option-b-button');
+        const coomFightButton = document.getElementById('coom-fight-button');
+        const coomActButton = document.getElementById('coom-act-button');
+        const actCheck = document.getElementById('act-check');
+        const actAsk = document.getElementById('act-ask');
+
+
+        // Screen Elements
+        const startScreen = document.getElementById('start-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const pauseMenu = document.getElementById('pause-menu');
+        const speedrunMenu = document.getElementById('speedrun-menu');
+        const leaderboardsScreen = document.getElementById('leaderboards-screen');
+        const versionScreen = document.getElementById('version-screen');
+        const goodEndingScreen = document.getElementById('good-ending-screen');
+        const badEndingScreen = document.getElementById('bad-ending-screen');
+        const secretEndingScreen = document.getElementById('secret-ending-screen');
+        const papyrusScreen1 = document.getElementById('papyrus-screen-1');
+        const papyrusScreen2 = document.getElementById('papyrus-screen-2');
+        const papyrusScreen3 = document.getElementById('papyrus-screen-3');
+        const papyrusScreen4 = document.getElementById('papyrus-screen-4');
+        const sansFightScreen = document.getElementById('sans-fight-screen');
+        const coomGuyFightScreen = document.getElementById('coom-guy-fight-screen');
+        const escapeScreen1 = document.getElementById('escape-screen-1');
+        const escapeScreen2 = document.getElementById('escape-screen-2');
+        const escapeScreen3 = document.getElementById('escape-screen-3');
+        const escapeOptionsScreen = document.getElementById('escape-options-screen');
+
+
+        // Game State
+        let isPaused = false;
+        let speedrunMode = false;
+        let flushCount = 0;
+        let objective = 'flush'; // 'flush' or 'explode'
+        let currentTimeout = null; // For managing timeouts like text display
+
+        // Utility Functions
+        function showScreen(screenToShow) {
+            clearAllTimeouts();
+            screens.forEach(screen => screen.classList.remove('active'));
+            overlays.forEach(overlay => overlay.classList.remove('active'));
+            screenToShow.classList.add('active');
+            isPaused = false; // Reset pause state when changing main screens
+        }
+
+        function showOverlay(overlayToShow) {
+           overlays.forEach(overlay => overlay.classList.remove('active'));
+           overlayToShow.classList.add('active');
+        }
+
+        function hideOverlays() {
+            overlays.forEach(overlay => overlay.classList.remove('active'));
+        }
+
+        function updateSpeedrunStatus() {
+            document.getElementById('speedrun-status').textContent = speedrunMode ? 'On' : 'Off';
+        }
+
+         function typeWriter(elementId, text, speed, callback) {
+            clearAllTimeouts(); // Clear previous typing if any
+            const element = document.getElementById(elementId);
+            const nextArrow = element.nextElementSibling; // Assumes arrow is next sibling
+            element.innerHTML = ''; // Clear previous text
+            if (nextArrow && nextArrow.classList.contains('next-arrow')) {
+                nextArrow.style.display = 'none';
+            }
+
+            let i = 0;
+            function type() {
+                if (i < text.length) {
+                    element.innerHTML += text.charAt(i);
+                    i++;
+                    currentTimeout = setTimeout(type, speed);
+                } else {
+                    if (nextArrow && nextArrow.classList.contains('next-arrow')) {
+                        nextArrow.style.display = 'inline'; // Show arrow when done
+                    }
+                    if (callback) callback();
+                }
+            }
+            type();
+        }
+
+        function clearAllTimeouts() {
+            // Clear the main timeout variable
+            if (currentTimeout) {
+                clearTimeout(currentTimeout);
+                currentTimeout = null;
+            }
+            // Additionally, find and clear any other potential stray timeouts
+            let id = window.setTimeout(function() {}, 0);
+            while (id--) {
+                window.clearTimeout(id);
+            }
+         }
+
+        function resetGame() {
+            flushCount = 0;
+            objective = 'flush';
+            isPaused = false;
+            document.getElementById('objective-text').innerHTML = 'Objective:<br>Flush the toilet.';
+            document.getElementById('objective-text').style.color = 'red';
+            flushButton.style.backgroundColor = '#808080'; // Gray
+            gameScreen.querySelector('.toilet-water').style.backgroundColor = 'transparent';
+            gameScreen.querySelector('.explosion-graphic').style.display = 'none';
+            gameScreen.querySelector('.explosion-text').style.display = 'none';
+            document.getElementById('sans-dialogue').textContent = "* YOU SHOULDN'T HAVE EXPLODED THAT TOILET.";
+            document.getElementById('soul').className = 'soul-heart';
+            document.getElementById('soul').textContent = '❤️';
+            document.querySelector('.attack-animation').style.display = 'none';
+            document.querySelector('.miss-text').style.display = 'none';
+            document.querySelector('.soul-box').style.display = 'none';
+            document.querySelector('#sans-fight-screen .undertale-options').style.display = 'flex';
+             document.querySelector('#coom-guy-fight-screen .undertale-options').style.display = 'none';
+             document.querySelector('.act-options').style.display = 'none';
+
+            showScreen(startScreen);
+        }
+
+        // Event Listeners
+        startButton.addEventListener('click', () => {
+            resetGame(); // Ensure clean state before starting
+            showScreen(gameScreen);
+        });
+
+        speedrunButton.addEventListener('click', () => {
+             showOverlay(speedrunMenu);
+        });
+
+        versionButton.addEventListener('click', () => {
+             showOverlay(versionScreen);
+        });
+
+        // Speedrun Menu Logic
+        speedrunOnButton.addEventListener('click', () => {
+             speedrunMode = true;
+             updateSpeedrunStatus();
+        });
+         speedrunOffButton.addEventListener('click', () => {
+             speedrunMode = false;
+             updateSpeedrunStatus();
+         });
+        leaderboardsButton.addEventListener('click', () => {
+             showOverlay(leaderboardsScreen);
+        });
+        backToStartButton.addEventListener('click', () => {
+             hideOverlays();
+        });
+
+        // Leaderboards Logic
+        backToSpeedrunButton.addEventListener('click', () => {
+            showOverlay(speedrunMenu);
+        });
+
+         // Version Logic
+        backToStartFromVersionButton.addEventListener('click', () => {
+            hideOverlays();
+        });
+
+
+        // Pause Menu Logic
+        pauseButton.addEventListener('click', () => {
+            if (gameScreen.classList.contains('active') && !isPaused) {
+                isPaused = true;
+                papyrusButton.style.display = (objective === 'flush') ? 'block' : 'none';
+                hellButton.style.display = (objective === 'explode') ? 'block' : 'none';
+                showOverlay(pauseMenu);
+            }
+        });
+
+        resumeButton.addEventListener('click', () => {
+            if (isPaused) {
+                isPaused = false;
+                hideOverlays();
+            }
+        });
+
+        quitButtonPause.addEventListener('click', () => {
+            if (objective === 'explode') {
+                 // Trigger Escape sequence
+                 showScreen(escapeScreen1);
+                 typeWriter('escape-text-1', 'It seems like you tried to escape when the toilet was about to explode.', 50, () => {
+                     escapeScreen1.onclick = () => {
+                        escapeScreen1.onclick = null; // Prevent multiple triggers
+                        showScreen(escapeScreen2);
+                        typeWriter('escape-text-2', 'You managed to escape from "HELL."', 50, () => {
+                            escapeScreen2.onclick = () => {
+                                escapeScreen2.onclick = null;
+                                showScreen(escapeScreen3);
+                                typeWriter('escape-text-3', 'Now choose, enough of talking', 50, () => {
+                                     escapeScreen3.onclick = () => {
+                                         escapeScreen3.onclick = null;
+                                         showScreen(escapeOptionsScreen);
+                                     }
+                                });
+                            };
+                        });
+                     };
+                 });
+            } else {
+                 resetGame();
+                 showScreen(startScreen);
+            }
+        });
+
+        // Escape Options
+        optionAButton.addEventListener('click', () => {
+            // Leads to Sans (Bad Ending)
+             gameContainer.style.backgroundColor = 'black'; // Flash effect?
+             currentTimeout = setTimeout(() => {
+                gameContainer.style.backgroundColor = '#00BFFF';
+                showScreen(sansFightScreen);
+             }, 300); // Short delay for effect
+        });
+
+        optionBButton.addEventListener('click', () => {
+            // Leads to Mettaton (Secret Ending)
+             showScreen(coomGuyFightScreen);
+             const coomDialogue = [
+                 "* OH, HELLO THERE",
+                 "* SO YOU DECIDED TO COME INTO THE COOMING PARTY?",
+                 "* WELL, GREAT THEN!",
+                 "* LETS BEGIN."
+             ];
+             let coomIndex = 0;
+             function nextCoomDialogue() {
+                  if (coomIndex < coomDialogue.length) {
+                       typeWriter('coom-guy-dialogue', coomDialogue[coomIndex], 40, () => {
+                             coomGuyFightScreen.onclick = () => {
+                                coomGuyFightScreen.onclick = null;
+                                coomIndex++;
+                                nextCoomDialogue();
+                            };
+                       });
+                  } else {
+                       // Dialogue finished, show battle options
+                       typeWriter('coom-guy-dialogue', '* COOM GUY STANDS.', 40);
+                       document.querySelector('#coom-guy-fight-screen .undertale-options').style.display = 'flex';
+                       document.querySelector('#coom-guy-fight-screen .next-arrow').style.display = 'none'; // Hide arrow
+                       coomGuyFightScreen.onclick = null; // Disable screen click
+                  }
+             }
+             nextCoomDialogue();
+        });
+
+        // Papyrus Ending Logic
+        papyrusButton.addEventListener('click', () => {
+            showScreen(papyrusScreen1);
+        });
+
+        acceptSpaghettiButton.addEventListener('click', () => {
+            showScreen(papyrusScreen2);
+            const text2 = "* YOU EAT PAPYRUS'S SPAGHETTI\nIT TASTES GOOD\nYOU TELL PAPYRUS HE IS VERY GOOD AT COOKING";
+             typeWriter('papyrus-text-2', text2, 50, () => {
+                 papyrusScreen2.onclick = () => { // Click anywhere to advance
+                     papyrusScreen2.onclick = null; // Prevent multiple triggers
+                     showScreen(papyrusScreen3);
+                     typeWriter('papyrus-text-3', "WOW...", 100, () => {
+                         papyrusScreen3.onclick = () => {
+                             papyrusScreen3.onclick = null;
+                              showScreen(papyrusScreen4);
+                              typeWriter('papyrus-text-4', "WOW, I SURE AM THE GREATEST CHEF IN THIS WORLD!", 50, () => {
+                                   papyrusScreen4.onclick = () => {
+                                       papyrusScreen4.onclick = null;
+                                       showScreen(goodEndingScreen);
+                                   }
+                              });
+                         };
+                     });
+                 };
+            });
+        });
+
+        // Hell Ending Logic (Direct explosion or Option A)
+        hellButton.addEventListener('click', () => {
+             // This button appears on the pause menu if objective was 'explode'
+             // It directly triggers the escape sequence leading to Option A/B choice
+             showScreen(escapeScreen1);
+             typeWriter('escape-text-1', 'It seems like you tried to escape when the toilet was about to explode.', 50, () => {
+                 escapeScreen1.onclick = () => {
+                    escapeScreen1.onclick = null;
+                    showScreen(escapeScreen2);
+                    typeWriter('escape-text-2', 'You managed to escape from "HELL."', 50, () => {
+                        escapeScreen2.onclick = () => {
+                            escapeScreen2.onclick = null;
+                            showScreen(escapeScreen3);
+                            typeWriter('escape-text-3', 'Now choose, enough of talking', 50, () => {
+                                 escapeScreen3.onclick = () => {
+                                     escapeScreen3.onclick = null;
+                                     showScreen(escapeOptionsScreen);
+                                 }
+                            });
+                        };
+                    });
+                 };
+             });
+        });
+
+        // Sans Fight Logic
+        sansMercyButton.addEventListener('click', () => {
+            document.getElementById('sans-dialogue').textContent = "* YOU CAN'T SPARE HIM BECAUSE YOU EXPLODED THE TOILET, AND DOING THAT IS AN UNFORGIVABLE SIN";
+        });
+
+        sansFightButton.addEventListener('click', () => {
+            document.querySelector('#sans-fight-screen .undertale-options').style.display = 'none'; // Hide options
+            document.getElementById('sans-dialogue').textContent = ""; // Clear text box
+
+            const attackAnim = document.querySelector('.attack-animation');
+            const missText = document.querySelector('.miss-text');
+            const soulBox = document.querySelector('.soul-box');
+            const soul = document.getElementById('soul');
+
+            missText.style.display = 'block';
+            attackAnim.style.display = 'flex';
+
+            // Clone and replace node to reset animation
+            const newAttackLine = attackAnim.querySelector('.attack-line').cloneNode(true);
+            attackAnim.querySelector('.attack-line').replaceWith(newAttackLine);
+
+            currentTimeout = setTimeout(() => {
+                 missText.style.display = 'none';
+                 attackAnim.style.display = 'none';
+                 soulBox.style.display = 'flex'; // Show soul box
+                 soul.className = 'soul-heart'; // Ensure it's the normal heart
+                 soul.textContent = '❤️';
+
+                 currentTimeout = setTimeout(() => {
+                     // Break the heart
+                     soul.className = 'soul-broken';
+                     soul.textContent = '💔'; // Simple broken heart
+                     // Add sound effect simulation / visual flash?
+                     gameContainer.style.backgroundColor = 'red';
+                      currentTimeout = setTimeout(() => {
+                         gameContainer.style.backgroundColor = 'black';
+                         currentTimeout = setTimeout(() => {
+                            showScreen(badEndingScreen);
+                        }, 500);
+                     }, 100);
+                 }, 1500); // Time player has to 'survive'
+
+            }, 600); // Duration of attack animation + miss text display
+        });
+
+
+         // Coom Guy Fight Logic
+         coomFightButton.addEventListener('click', () => {
+             typeWriter('coom-guy-dialogue', '* YOU ARE NOT ABLE TO KILL COOM GUY AS HE IS TOO STRONG.', 40);
+             document.querySelector('#coom-guy-fight-screen .next-arrow').style.display = 'inline';
+             coomGuyFightScreen.onclick = () => { // Click to return to main dialogue
+                  coomGuyFightScreen.onclick = null;
+                  typeWriter('coom-guy-dialogue', '* COOM GUY STANDS.', 40);
+                   document.querySelector('#coom-guy-fight-screen .next-arrow').style.display = 'none';
+             };
+         });
+
+        coomActButton.addEventListener('click', () => {
+             document.querySelector('.act-options').style.display = 'flex';
+             document.getElementById('coom-guy-dialogue').textContent = ''; // Clear main dialogue
+        });
+
+        actCheck.addEventListener('click', () => {
+             document.querySelector('.act-options').style.display = 'none';
+             typeWriter('coom-guy-dialogue', '* COOM GUY - 120 ATK - 40 DEF', 40, () => {
+                  document.querySelector('#coom-guy-fight-screen .next-arrow').style.display = 'inline';
+                  coomGuyFightScreen.onclick = () => {
+                       coomGuyFightScreen.onclick = null;
+                       typeWriter('coom-guy-dialogue', '* COOM GUY STANDS.', 40);
+                        document.querySelector('#coom-guy-fight-screen .next-arrow').style.display = 'none';
+                  };
+             });
+        });
+
+        actAsk.addEventListener('click', () => {
+             document.querySelector('.act-options').style.display = 'none';
+             const askDialogue = [
+                 '* YOU ASK COOM GUY FOR HIS COOM',
+                 '* YOU WANT MY COOM?',
+                 '* UHHH...',
+                 '* SURE! LETS DO IT-'
+             ];
+             let askIndex = 0;
+
+             function nextAskDialogue() {
+                  if (askIndex < askDialogue.length) {
+                      typeWriter('coom-guy-dialogue', askDialogue[askIndex], 40, () => {
+                          coomGuyFightScreen.onclick = () => {
+                              coomGuyFightScreen.onclick = null;
+                              askIndex++;
+                              // Special handling for last line before transition
+                              if (askIndex === askDialogue.length) {
+                                  currentTimeout = setTimeout(() => {
+                                    showScreen(secretEndingScreen);
+                                  }, 500); // Short delay after "SURE! LETS DO IT-"
+                              } else {
+                                 nextAskDialogue();
+                              }
+                          };
+                      });
+                  }
+             }
+             nextAskDialogue();
+        });
+
+
+        // Game Screen Logic
+        flushButton.addEventListener('click', () => {
+            if (isPaused) return;
+
+            flushCount++;
+            const water = gameScreen.querySelector('.toilet-water');
+            water.style.backgroundColor = '#20B2AA'; // LightSeaGreen (water color)
+            // Simple visual feedback for flushing - maybe reset water after short delay?
+             currentTimeout = setTimeout(() => { water.style.backgroundColor = 'transparent'; }, 200);
+
+
+            if (objective === 'flush') {
+                if (flushCount > 3 && flushCount <= 6) {
+                    flushButton.style.backgroundColor = '#32CD32'; // LimeGreen
+                } else if (flushCount > 6) {
+                    objective = 'explode';
+                    document.getElementById('objective-text').innerHTML = 'Objective:<br>Explode the toilet.';
+                     document.getElementById('objective-text').style.color = '#FF4500'; // OrangeRed
+                    flushButton.style.backgroundColor = '#DC143C'; // Crimson
+                }
+            } else if (objective === 'explode') {
+                // Explode!
+                gameScreen.querySelector('.toilet-emoji').style.display = 'none'; // Hide toilet
+                gameScreen.querySelector('.explosion-graphic').style.display = 'block';
+                const explosionText = gameScreen.querySelector('.explosion-text');
+                explosionText.innerHTML = "YOU EXPLODED THE<br>FUCKING TOILET!!!<br>LOOK WHAT YOU<br>HAVE DONE";
+                explosionText.style.display = 'block';
+                pauseButton.style.display = 'none'; // Can't pause now
+
+                // Play explosion 'sound' (visual flash)
+                gameContainer.style.backgroundColor = 'white';
+                currentTimeout = setTimeout(() => {
+                     gameContainer.style.backgroundColor = 'red';
+                     currentTimeout = setTimeout(() => {
+                         gameContainer.style.backgroundColor = 'black'; // Transition to black for fight
+                         currentTimeout = setTimeout(() => {
+                              // Hide explosion stuff, show Sans fight
+                             gameScreen.querySelector('.explosion-graphic').style.display = 'none';
+                             explosionText.style.display = 'none';
+                             gameScreen.querySelector('.toilet-emoji').style.display = 'block'; // Show toilet again for reset
+                             pauseButton.style.display = 'flex'; // Show pause button again
+                             gameContainer.style.backgroundColor = '#00BFFF'; // Reset background for next screen
+                             showScreen(sansFightScreen);
+                        }, 500);
+                    }, 150);
+                }, 100);
+            }
+        });
+
+        // Restart Buttons
+        restartButtons.forEach(button => {
+            button.addEventListener('click', resetGame);
+        });
+
+        // Initial Setup
+        updateSpeedrunStatus();
+        showScreen(startScreen); // Show start screen initially
+
+    </script>
+</body>
+</html>

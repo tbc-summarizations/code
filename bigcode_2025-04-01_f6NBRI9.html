@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Grand Cheese Quest</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        #game-container {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 30px;
+            width: 90%;
+            max-width: 700px;
+            text-align: center;
+            border: 2px solid #ccc;
+        }
+        h1 {
+            color: #e67e22; /* Cheese orange */
+            margin-bottom: 20px;
+        }
+        #scene-text {
+            margin-bottom: 25px;
+            min-height: 100px;
+            font-size: 1.1em;
+            line-height: 1.6;
+            border-left: 4px solid #e67e22;
+            padding-left: 15px;
+            text-align: left;
+        }
+        #character-display {
+            margin-bottom: 20px;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .character-visual {
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+        }
+        #choices {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            padding: 12px 20px;
+            font-size: 1em;
+            background-color: #3498db; /* Blue */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:active {
+            background-color: #1f618d;
+        }
+        #inventory {
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #555;
+        }
+        #ending-display {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        /* Simple character visuals using shapes/colors */
+        .char-shape-square-red { background-color: #e74c3c; border-radius: 0; }
+        .char-shape-circle-blue { background-color: #3498db; }
+        .char-shape-triangle-green { width: 0; height: 0; border-left: 20px solid transparent; border-right: 20px solid transparent; border-bottom: 35px solid #2ecc71; background-color: transparent !important; border-radius: 0; font-size: 0; }
+        .char-shape-square-yellow { background-color: #f1c40f; border-radius: 0; }
+        .char-shape-circle-purple { background-color: #9b59b6; }
+        .char-emoji { background-color: transparent; border: none; font-size: 30px; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>The Grand Cheese Quest</h1>
+        <div id="character-display">
+            <span id="character-visual"></span>
+            <span id="character-name"></span>
+        </div>
+        <div id="scene-text">Loading...</div>
+        <div id="choices"></div>
+        <div id="inventory">Cheese Eaten: 0 | Encounters: 0</div>
+        <div id="ending-display" style="display: none;"></div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const sceneTextElement = document.getElementById('scene-text');
+        const choicesElement = document.getElementById('choices');
+        const inventoryElement = document.getElementById('inventory');
+        const endingDisplayElement = document.getElementById('ending-display');
+        const characterDisplay = document.getElementById('character-display');
+        const characterVisualElement = document.getElementById('character-visual');
+        const characterNameElement = document.getElementById('character-name');
+
+        let gameState = {
+            currentScene: 'start',
+            cheeseEaten: 0,
+            flags: {}, // For tracking specific choices or events
+            metCharacters: new Set(),
+            pathHistory: [], // Sequence of scene IDs visited
+            karma: 0, // Simple metric affected by choices
+            endingNumber: null
+        };
+
+        const characters = [];
+        const characterVisuals = [
+            { type: 'emoji', value: '🐭' }, { type: 'emoji', value: '🧀' }, { type: 'emoji', value: '👨‍🍳' }, { type: 'emoji', value: '🧙' }, { type: 'emoji', value: '🦊' },
+            { type: 'shape', value: 'char-shape-square-red' }, { type: 'shape', value: 'char-shape-circle-blue' }, { type: 'shape', value: 'char-shape-triangle-green' },
+            { type: 'shape', value: 'char-shape-square-yellow' }, { type: 'shape', value: 'char-shape-circle-purple' },
+            { type: 'emoji', value: '👑' }, { type: 'emoji', value: '👻' }, { type: 'emoji', value: '🤖' }, { type: 'emoji', value: '👽' }, { type: 'emoji', value: '🧐' },
+            { type: 'emoji', value: '😇' }, { type: 'emoji', value: '😈' }, { type: 'emoji', value: '🧑‍🌾' }, { type: 'emoji', value: '🕵️' }, { type: 'emoji', value: '👩‍🔬' }
+        ];
+        const characterAdjectives = ["Grumpy", "Wise", "Sly", "Jolly", "Mysterious", "Ancient", "Tiny", "Giant", "Clumsy", "Elegant"];
+        const characterNouns = ["Gnome", "Merchant", "Oracle", "Guard", "Thief", "Baker", "King", "Queen", "Sorcerer", "Apprentice"];
+        const cheeseTypes = ["Cheddar", "Gouda", "Brie", "Feta", "Mozzarella", "Roquefort", "Parmesan", "Swiss", "Provolone", "Edam"];
+
+        // Generate 40 unique characters
+        let charCount = 0;
+        while (characters.length < 40) {
+            const adj = characterAdjectives[charCount % characterAdjectives.length];
+            const noun = characterNouns[Math.floor(charCount / characterAdjectives.length) % characterNouns.length];
+            const cheese = cheeseTypes[charCount % cheeseTypes.length];
+            const name = `${adj} ${noun} of ${cheese}`;
+            if (!characters.some(c => c.name === name)) { // Ensure unique names
+                 const visual = characterVisuals[charCount % characterVisuals.length];
+                 characters.push({
+                    id: `char${charCount + 1}`,
+                    name: name,
+                    visual: visual,
+                    description: `A peculiar character known as the ${name}.`
+                 });
+            }
+            charCount++;
+             if (charCount > 1000) break; // Safety break
+        }
+
+        // Placeholder for game scenes/data structure
+        // This needs to be vast to support multiple paths and lead to 750 endings
+        // Due to scale, we'll make it somewhat procedural/repetitive
+        const gameData = {
+            'start': {
+                text: "You awaken in a world seemingly made of dairy. A faint scent of cheese tickles your nose. Your quest begins! Which path calls to you?",
+                characterId: null,
+                choices: [
+                    { text: "Follow the scent of Aged Cheddar (Path A)", nextScene: 'path_a_1', effect: () => { gameState.flags.pathA = true; } },
+                    { text: "Investigate the Glistening Brie Cave (Path B)", nextScene: 'path_b_1', effect: () => { gameState.flags.pathB = true; } },
+                    { text: "Ask the nearby Cheese Sprout for directions (Path C)", nextScene: 'path_c_1', effect: () => { gameState.flags.pathC = true; gameState.karma += 1; } },
+                    { text: "Immediately start eating the ground (Gouda Gravel)", nextScene: 'eat_ground', effect: () => { gameState.cheeseEaten += 1; gameState.karma -= 2; } }
+                ]
+            },
+            'eat_ground': {
+                text: "You scoop up a handful of the Gouda Gravel. It's... surprisingly edible, though gritty. Your cheese count increases, but you feel a strange pang of guilt.",
+                 characterId: null,
+                choices: [
+                     { text: "Continue on Path A", nextScene: 'path_a_1', condition: () => !gameState.flags.pathA && !gameState.flags.pathB && !gameState.flags.pathC },
+                     { text: "Continue on Path B", nextScene: 'path_b_1', condition: () => !gameState.flags.pathA && !gameState.flags.pathB && !gameState.flags.pathC },
+                     { text: "Continue on Path C", nextScene: 'path_c_1', condition: () => !gameState.flags.pathA && !gameState.flags.pathB && !gameState.flags.pathC },
+                     { text: "Keep eating the ground", nextScene: 'eat_ground_more', effect: () => { gameState.cheeseEaten += 2; gameState.karma -= 3; } }
+                ]
+            },
+             'eat_ground_more': {
+                text: "More Gouda Gravel! It fills a void, but perhaps not the one you expected. Your stomach rumbles ominously.",
+                 characterId: null,
+                choices: [
+                     { text: "Okay, time to choose a real path (A)", nextScene: 'path_a_1' },
+                     { text: "Okay, time to choose a real path (B)", nextScene: 'path_b_1' },
+                     { text: "Okay, time to choose a real path (C)", nextScene: 'path_c_1' },
+                     { text: "Just one more bite...", nextScene: 'ending_gravel_pit' } // An early ending
+                ]
+            },
+            // Path A - Example Branch
+            'path_a_1': {
+                text: "The Aged Cheddar path leads you through crumbly canyons. You encounter a figure.",
+                characterId: 'char1', // Grumpy Gnome of Cheddar
+                choices: [
+                    { text: "Ask for guidance", nextScene: 'path_a_2_ask', effect: () => { gameState.metCharacters.add('char1'); gameState.karma +=1; } },
+                    { text: "Try to sneak past", nextScene: 'path_a_2_sneak', effect: () => { gameState.karma -=1; } },
+                    { text: "Offer some Gouda Gravel (if you have it)", nextScene: 'path_a_2_offer', condition: () => gameState.cheeseEaten > 0 && gameState.flags.pathA, effect: () => { gameState.cheeseEaten -= 1; gameState.flags.offeredGravel = true; gameState.karma += 2; } }
+                ]
+            },
+            'path_a_2_ask': {
+                text: "The Grumpy Gnome sighs. 'Another traveler? Fine. Beware the Whispering Swiss Holes ahead. And don't touch my cheese!'",
+                characterId: 'char1',
+                choices: [
+                    { text: "Thank him and proceed", nextScene: 'path_a_3' },
+                    { text: "Ask about his cheese", nextScene: 'path_a_gnome_cheese' }
+                ]
+            },
+             'path_a_2_sneak': {
+                text: "You try to sneak, but trip over a loose piece of Parmesan. The Gnome glares. 'Thief! Off with you!' He points down a darker tunnel.",
+                characterId: 'char1',
+                choices: [
+                    { text: "Flee down the dark tunnel", nextScene: 'path_a_dark_tunnel' },
+                     { text: "Apologize profusely", nextScene: 'path_a_apology', effect: () => { gameState.karma +=1; } }
+                ]
+            },
+             'path_a_2_offer': {
+                 text: "You offer the Gouda Gravel. The Gnome's eyes widen slightly. 'Gravel? Haven't had this since the Great Curdling! Unexpected. Here, take this lump of Aged Cheddar.'",
+                 characterId: 'char1',
+                 effect: () => { gameState.cheeseEaten += 5; gameState.flags.gnomeGift = true; }, // Function executed immediately on entering scene
+                 choices: [
+                     { text: "Thank him gratefully and proceed", nextScene: 'path_a_3' }
+                 ]
+             },
+            // Path B - Example Branch
+             'path_b_1': {
+                text: "The Brie Cave drips with creamy potential. Soft light emanates from within. You meet someone.",
+                characterId: 'char2', // Wise Merchant of Gouda
+                choices: [
+                    { text: "Greet the merchant", nextScene: 'path_b_2_greet', effect: () => { gameState.metCharacters.add('char2'); gameState.karma += 1; } },
+                    { text: "Examine the cave walls for cheese", nextScene: 'path_b_2_examine', effect: () => { gameState.cheeseEaten += 1; } },
+                    { text: "Ask about the source of the light", nextScene: 'path_b_2_light' }
+                ]
+             },
+            // Path C - Example Branch
+             'path_c_1': {
+                text: "The Cheese Sprout quivers. 'Directions? Oh my! Follow the Curdled Creek, but watch out for the Fondue Golem!' It points a leafy tendril.",
+                characterId: 'char3', // Sly Oracle of Brie
+                effect: () => { gameState.metCharacters.add('char3'); },
+                choices: [
+                    { text: "Follow the creek", nextScene: 'path_c_2_creek' },
+                    { text: "Ask about the Fondue Golem", nextScene: 'path_c_2_golem' },
+                    { text: "Taste the Cheese Sprout", nextScene: 'ending_sprout_licker', effect: () => { gameState.cheeseEaten += 1; gameState.karma -= 5; } }
+                ]
+             },
+
+            // ... many more scenes needed here ...
+            // We need intermediary scenes that introduce more characters and choices
+            // These choices should set flags, change karma, increase/decrease cheese
+        };
+
+        // Function to generate more scenes procedurally to reach a larger state space
+        function generateProceduralScenes(count) {
+            const basePaths = ['path_a', 'path_b', 'path_c'];
+            let sceneCounter = 10; // Start after manually defined scenes
+            for (let i = 0; i < count; i++) {
+                const basePath = basePaths[i % basePaths.length];
+                const sceneId = `${basePath}_proc_${sceneCounter}`;
+                const charIndex = Math.floor(Math.random() * characters.length);
+                const characterId = characters[charIndex].id;
+                const cheeseGain = Math.floor(Math.random() * 3) + 1;
+                const karmaChange = Math.floor(Math.random() * 5) - 2; // -2 to +2
+
+                gameData[sceneId] = {
+                    text: `You venture deeper into the ${basePath.split('_')[1].toUpperCase()} region. You encounter ${characters[charIndex].name}. They offer a riddle about ${cheeseTypes[i % cheeseTypes.length]}.`,
+                    characterId: characterId,
+                    choices: [
+                        { text: "Attempt the riddle", nextScene: `${basePath}_proc_${sceneCounter + 1}`, effect: () => { gameState.metCharacters.add(characterId); gameState.karma += karmaChange > 0 ? karmaChange : 1; gameState.flags[`riddle_${sceneId}`] = true; } },
+                        { text: "Ignore them and look for cheese", nextScene: `${basePath}_proc_${sceneCounter + 2}`, effect: () => { gameState.cheeseEaten += cheeseGain; gameState.karma += karmaChange < 0 ? karmaChange : -1; } },
+                        { text: `Ask about a different path (${basePaths[(i + 1) % basePaths.length].split('_')[1].toUpperCase()})`, nextScene: `${basePaths[(i + 1) % basePaths.length]}_proc_entry_${sceneCounter}`, effect: () => { gameState.flags[`switch_${sceneId}`] = true; } }
+                    ]
+                };
+
+                // Add simple connecting scenes
+                gameData[`${basePath}_proc_${sceneCounter + 1}`] = { // Riddle success placeholder
+                     text: `You solve the riddle! The ${characters[charIndex].name} seems pleased. You feel enlightened (and find some ${cheeseTypes[(i+1) % cheeseTypes.length]})!`,
+                     characterId: characterId,
+                     effect: () => { gameState.cheeseEaten += 2; gameState.karma += 1; },
+                     choices: [{ text: "Continue...", nextScene: `${basePath}_proc_${sceneCounter + 3}` }]
+                };
+                 gameData[`${basePath}_proc_${sceneCounter + 2}`] = { // Ignored/Found cheese placeholder
+                     text: `You ignore the riddle and find a hidden ${cheeseTypes[(i+2) % cheeseTypes.length]} nugget.`,
+                     characterId: null,
+                     choices: [{ text: "Move onward...", nextScene: `${basePath}_proc_${sceneCounter + 3}` }]
+                 };
+                 gameData[`${basePaths[(i + 1) % basePaths.length]}_proc_entry_${sceneCounter}`] = { // Path switch placeholder
+                     text: `You decide to switch paths, heading towards the ${basePaths[(i + 1) % basePaths.length].split('_')[1].toUpperCase()} region.`,
+                     characterId: null,
+                      choices: [{ text: "Let's go!", nextScene: `${basePaths[(i + 1) % basePaths.length]}_proc_${sceneCounter + 3}` }] // Converge for simplicity
+                 };
+                 gameData[`${basePath}_proc_${sceneCounter + 3}`] = { // Convergence point
+                    text: "The cheesy path winds onward...",
+                     characterId: null,
+                     choices: (sceneCounter < count * 0.8) // Only add more choices if not near the end
+                        ? [{ text: "Press deeper", nextScene: `${basePath}_proc_${sceneCounter + 4}` }]
+                        : [{ text: "Sense the end is near...", nextScene: 'prepare_ending'}]
+                 };
+
+                sceneCounter += 4; // Increment scene counter
+            }
+        }
+
+        // Generate enough procedural scenes to create complexity
+        // Adjust this number for more/less complexity. 50 generates 200+ scene nodes.
+        generateProceduralScenes(100);
+
+
+        // Add a scene to trigger ending calculation
+         gameData['prepare_ending'] = {
+             text: "You feel a culmination of your cheesy journey. The air thickens with fate (and whey). Your choices have led you to this point.",
+             characterId: null,
+             choices: [
+                 { text: "Embrace the cheesy outcome!", nextScene: 'calculate_ending' }
+             ]
+         };
+
+        // Define generic endings - 750 of them!
+        const endings = [];
+        for (let i = 1; i <= 750; i++) {
+            let endingText = `Ending ${i}/750: `;
+            const endingType = i % 15; // Create some variety based on index
+
+            switch (endingType) {
+                case 0: endingText += `You became one with the Great Cheese Wheel. Your consciousness dissolved into pure dairy bliss. Cheese Eaten: ${gameState.cheeseEaten}, Karma: ${gameState.karma}.`; break;
+                case 1: endingText += `Crowned the Cheese Monarch! You rule the land with a scepter of Swiss and a crown of Camembert. Cheese Eaten: ${gameState.cheeseEaten}, Allies: ${gameState.metCharacters.size}.`; break;
+                case 2: endingText += `Lost in the Fondue Abyss. A sticky, delicious, but ultimately final end. Cheese Eaten: ${gameState.cheeseEaten}, Path Depth: ${gameState.pathHistory.length}.`; break;
+                case 3: endingText += `You established a successful cheese shop, renowned across the dairy dimensions! Cheese Eaten: ${gameState.cheeseEaten}, Flags Set: ${Object.keys(gameState.flags).length}.`; break;
+                case 4: endingText += `Mistaken for a giant cheese mite, you were chased out of the dimension by angry cheese guardians. Cheese Eaten: ${gameState.cheeseEaten}, Karma: ${gameState.karma}.`; break;
+                case 5: endingText += `You discovered the secret ingredient: it was friendship (and a little bit of Stilton) all along. Cheese Eaten: ${gameState.cheeseEaten}, Encounters: ${gameState.metCharacters.size}.`; break;
+                case 6: endingText += `You ate SO much cheese you triggered the Lactose Limit Break! Reality warped around your cheesy form. Cheese Eaten: ${gameState.cheeseEaten}.`; break;
+                case 7: endingText += `Turned into a sentient cheese sculpture. A tragic, yet artistic, fate. Cheese Eaten: ${gameState.cheeseEaten}, Karma: ${gameState.karma}.`; break;
+                case 8: endingText += `You simply woke up. Was it all a cheese dream? The lingering taste of Emmental suggests otherwise... Cheese Eaten: ${gameState.cheeseEaten}.`; break;
+                case 9: endingText += `Became the apprentice of the ${characters[i % characters.length].name}. A life of cheesy learning awaits. Encounters: ${gameState.metCharacters.size}.`; break;
+                case 10: endingText += `Built a raft made of hardened Parmesan and sailed away on a river of whey. Adventure continues! Cheese Eaten: ${gameState.cheeseEaten}.`; break;
+                 case 11: endingText += `You tripped, fell into a vat of starter culture, and became the origin of a new legendary cheese. Cheese Eaten: ${gameState.cheeseEaten}, Karma: ${gameState.karma}.`; break;
+                 case 12: endingText += `Your excessive cheese consumption summoned the Gorgon-zola! Petrified, but tasty. Cheese Eaten: ${gameState.cheeseEaten}.`; break;
+                 case 13: endingText += `Published a best-selling travelogue: "My Life Among the Curds". Cheese Eaten: ${gameState.cheeseEaten}, Encounters: ${gameState.metCharacters.size}.`; break;
+                 case 14: endingText += `Just... went home. Had enough cheese for one lifetime. Cheese Eaten: ${gameState.cheeseEaten}.`; break;
+                default: endingText += `A standard cheesy ending. You experienced things. Cheese was involved. The end. Score: ${i}`; break; // Should not happen with % 15
+            }
+             // Add slight variation based on state for "different" endings
+             if (gameState.cheeseEaten > 50) endingText += " Your legendarily high cheese intake is noted.";
+             else if (gameState.cheeseEaten < 5) endingText += " Your meager cheese consumption is noted.";
+             if (gameState.karma > 5) endingText += " Your good deeds echo in the whey.";
+             else if (gameState.karma < -5) endingText += " Your questionable actions curdle the air.";
+             if (gameState.metCharacters.size > 10) endingText += ` You met many (${gameState.metCharacters.size}) faces!`;
+
+             // Ensure text is slightly different per index even within the same template
+             endingText += ` (Variant ${i})`;
+
+            endings.push(endingText);
+        }
+
+        // Add specific, named endings accessible through specific paths/choices
+        gameData['ending_gravel_pit'] = { text: endings[740], isEnding: true }; // Assign a specific ending index
+        gameData['ending_sprout_licker'] = { text: endings[741], isEnding: true };
+        // ... more specific endings can be linked here
+
+
+        function calculateEnding() {
+            // Complex calculation to map game state to one of 750 endings
+            // This is necessarily somewhat arbitrary to hit the target number
+            let score = 0;
+            score += gameState.cheeseEaten * 5; // Max ~50 * 5 = 250
+            score += gameState.metCharacters.size * 10; // Max 40 * 10 = 400
+            score += gameState.karma * 3; // Max ~20*3 = 60, Min ~ -20*3 = -60
+            score += Object.keys(gameState.flags).length * 2; // Max ~30 * 2 = 60
+            score += gameState.pathHistory.length; // Max ~ 100+
+
+             // Normalize score to fit within 0-749 range
+            // Need a hash-like function of multiple state variables
+
+             let flagHash = 0;
+             Object.keys(gameState.flags).forEach((flag, index) => {
+                 flagHash = (flagHash + flag.charCodeAt(0) * (index + 1)) % 100;
+             });
+
+             let pathHash = 0;
+             gameState.pathHistory.forEach((scene, index) => {
+                 pathHash = (pathHash + scene.length * (index + 1)) % 100;
+             });
+
+            // Combine factors - use modulo to ensure distribution across 750 endings
+            // This combination ensures slight changes in state *can* lead to different endings
+            const endingIndex = Math.abs(
+                (gameState.cheeseEaten % 50) +
+                (gameState.metCharacters.size % 40) * 5 +
+                (gameState.karma % 30) * 15 +
+                (Object.keys(gameState.flags).length % 20) * 30 +
+                (gameState.pathHistory.length % 50) * 10 +
+                 flagHash + // Add hash values
+                 pathHash
+            ) % 750; // Ensure result is between 0 and 749
+
+            gameState.endingNumber = endingIndex + 1; // Endings are 1-750
+             renderScene('show_ending'); // Transition to a generic scene that displays the calculated ending
+        }
+
+        // Add the ending calculation trigger scene
+        gameData['calculate_ending'] = {
+            text: "Calculating your cheesy destiny...",
+            isCalculating: true, // Special flag for the render function
+            effect: calculateEnding,
+            choices: []
+        }
+
+        // Add a scene to display the calculated ending
+         gameData['show_ending'] = {
+            text: "This should be replaced by the ending text.",
+            isEnding: true,
+            choices: [
+                 { text: "Play Again?", nextScene: 'start', effect: resetGame }
+             ]
+         };
+
+        function renderScene(sceneId) {
+            const scene = gameData[sceneId];
+            if (!scene) {
+                console.error(`Scene not found: ${sceneId}`);
+                sceneTextElement.textContent = "Error: Lost in the cheese void! Unknown path taken.";
+                choicesElement.innerHTML = '';
+                addRestartButton();
+                return;
+            }
+
+            gameState.currentScene = sceneId;
+            gameState.pathHistory.push(sceneId);
+
+             // Execute scene effect immediately if present
+             if (scene.effect && typeof scene.effect === 'function') {
+                 scene.effect();
+             }
+
+             // Handle special scenes
+             if (scene.isCalculating) {
+                 sceneTextElement.textContent = scene.text;
+                 choicesElement.innerHTML = ''; // No choices while calculating
+                 characterDisplay.style.display = 'none';
+                 // Calculation is done in effect, which transitions to 'show_ending'
+                 return; // Stop rendering here, effect will trigger next render
+             }
+
+             if (scene.isEnding) {
+                 displayEnding(sceneId);
+                 return; // Stop rendering further elements for ending scenes
+             }
+
+             // Update scene text
+             sceneTextElement.textContent = scene.text;
+
+             // Update character display
+             if (scene.characterId) {
+                 const character = characters.find(c => c.id === scene.characterId);
+                 if (character) {
+                    characterDisplay.style.display = 'flex';
+                     characterNameElement.textContent = character.name;
+                     if (character.visual.type === 'emoji') {
+                         characterVisualElement.className = 'character-visual char-emoji';
+                         characterVisualElement.textContent = character.visual.value;
+                         characterVisualElement.style.backgroundColor = 'transparent'; // Reset background for emojis
+                     } else { // shape
+                         characterVisualElement.className = `character-visual ${character.visual.value}`;
+                         characterVisualElement.textContent = ''; // Clear emoji text
+                     }
+                      // Track meeting the character if not already done by choice effect
+                      gameState.metCharacters.add(character.id);
+                 } else {
+                     characterDisplay.style.display = 'none';
+                     characterNameElement.textContent = '';
+                     characterVisualElement.className = 'character-visual';
+                     characterVisualElement.textContent = '';
+                 }
+             } else {
+                 characterDisplay.style.display = 'none';
+                 characterNameElement.textContent = '';
+                 characterVisualElement.className = 'character-visual';
+                 characterVisualElement.textContent = '';
+             }
+
+
+            // Update choices
+            choicesElement.innerHTML = '';
+            scene.choices.forEach(choice => {
+                // Check conditions if they exist
+                if (choice.condition && !choice.condition()) {
+                    return; // Skip this choice if condition not met
+                }
+
+                const button = document.createElement('button');
+                button.textContent = choice.text;
+                button.onclick = () => {
+                    // Execute choice effect if it exists
+                    if (choice.effect && typeof choice.effect === 'function') {
+                        choice.effect();
+                    }
+                    // Transition to the next scene
+                    renderScene(choice.nextScene);
+                };
+                choicesElement.appendChild(button);
+            });
+
+            // Update inventory display
+            updateInventory();
+        }
+
+        function updateInventory() {
+             inventoryElement.textContent = `Cheese Eaten: ${gameState.cheeseEaten} | Encounters: ${gameState.metCharacters.size} | Karma: ${gameState.karma} | Path Length: ${gameState.pathHistory.length}`;
+        }
+
+         function displayEnding(sceneId) {
+             let endingText = "";
+             if (sceneId === 'show_ending') {
+                 // Calculated ending
+                 if (gameState.endingNumber !== null && gameState.endingNumber > 0 && gameState.endingNumber <= endings.length) {
+                     endingText = endings[gameState.endingNumber - 1];
+                     // Inject final stats into the generic ending text dynamically
+                     endingText = endingText.replace(/Cheese Eaten: \d+/, `Cheese Eaten: ${gameState.cheeseEaten}`);
+                     endingText = endingText.replace(/Karma: [-]?\d+/, `Karma: ${gameState.karma}`);
+                     endingText = endingText.replace(/Allies: \d+/, `Allies: ${gameState.metCharacters.size}`);
+                     endingText = endingText.replace(/Encounters: \d+/, `Encounters: ${gameState.metCharacters.size}`);
+                     endingText = endingText.replace(/Path Depth: \d+/, `Path Depth: ${gameState.pathHistory.length}`);
+                     endingText = endingText.replace(/Flags Set: \d+/, `Flags Set: ${Object.keys(gameState.flags).length}`);
+
+                 } else {
+                     endingText = "Ending ??/750: An unknown cheesy fate! The calculation went wrong.";
+                 }
+             } else {
+                 // Specific named ending scene
+                 const scene = gameData[sceneId];
+                 endingText = scene.text; // Use the text directly from the ending scene definition
+             }
+
+
+             sceneTextElement.textContent = "Your quest concludes!";
+             characterDisplay.style.display = 'none';
+             choicesElement.innerHTML = ''; // Clear regular choices
+             endingDisplayElement.innerHTML = endingText;
+             endingDisplayElement.style.display = 'block';
+             inventoryElement.style.fontWeight = 'bold'; // Highlight final inventory
+
+             // Add restart button for endings
+             addRestartButton();
+         }
+
+         function addRestartButton() {
+              // Ensure no duplicate restart buttons
+             if (!choicesElement.querySelector('.restart-button')) {
+                 const restartButton = document.createElement('button');
+                 restartButton.textContent = "Play Again?";
+                 restartButton.className = 'restart-button'; // Add class for identification
+                 restartButton.style.backgroundColor = '#2ecc71'; // Green color for restart
+                 restartButton.onclick = () => {
+                     resetGame();
+                     renderScene('start');
+                 };
+                 choicesElement.appendChild(restartButton);
+             }
+         }
+
+        function resetGame() {
+            gameState = {
+                currentScene: 'start',
+                cheeseEaten: 0,
+                flags: {},
+                metCharacters: new Set(),
+                pathHistory: [],
+                karma: 0,
+                endingNumber: null
+            };
+            endingDisplayElement.style.display = 'none';
+            inventoryElement.style.fontWeight = 'normal';
+            updateInventory();
+        }
+
+        // Initial game start
+        document.addEventListener('DOMContentLoaded', () => {
+            renderScene('start');
+        });
+
+    </script>
+</body>
+</html>

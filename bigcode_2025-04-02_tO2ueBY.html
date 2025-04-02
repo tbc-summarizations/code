@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Screen Editor & Creator</title>
+    <style>
+        :root {
+            --bg-color: #2e2e2e;
+            --panel-bg: #3a3a3a;
+            --toolbar-bg: #4a4a4a;
+            --text-color: #e0e0e0;
+            --highlight-color: #00aaff;
+            --input-bg: #555;
+            --border-color: #666;
+            --button-bg: #5a5a5a;
+            --button-hover-bg: #6a6a6a;
+            --danger-color: #ff4d4d;
+            --accent-color: #4caf50;
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-main);
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #toolbar {
+            background-color: var(--toolbar-bg);
+            padding: 8px 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        #toolbar button, #toolbar select, #toolbar input[type="file"] {
+            padding: 6px 12px;
+            background-color: var(--button-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+         #toolbar input[type="file"] {
+            display: none;
+         }
+        #toolbar label { /* Style label like a button */
+             padding: 6px 12px;
+             background-color: var(--button-bg);
+             border: 1px solid var(--border-color);
+             color: var(--text-color);
+             border-radius: 4px;
+             cursor: pointer;
+             font-size: 14px;
+             transition: background-color 0.2s;
+             display: inline-block;
+        }
+        #toolbar label:hover {
+            background-color: var(--button-hover-bg);
+        }
+
+        #toolbar button:hover {
+            background-color: var(--button-hover-bg);
+        }
+         #toolbar button.play-button {
+             background-color: var(--accent-color);
+             margin-left: auto; /* Pushes play button to the right */
+         }
+         #toolbar button.play-button:hover {
+              background-color: #45a049;
+          }
+        #toolbar .separator {
+            width: 1px;
+            height: 20px;
+            background-color: var(--border-color);
+            margin: 0 5px;
+        }
+
+
+        #main-container {
+            display: flex;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        #left-panel {
+            width: 200px;
+            background-color: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        #left-panel h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+        }
+        #screen-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            flex-grow: 1;
+        }
+        #screen-list li {
+            padding: 8px 5px;
+            margin-bottom: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #screen-list li:hover {
+            background-color: var(--button-bg);
+        }
+        #screen-list li.selected {
+            background-color: var(--highlight-color);
+            color: white;
+            border-color: var(--highlight-color);
+        }
+         #screen-list li button {
+             background: none;
+             border: none;
+             color: var(--danger-color);
+             cursor: pointer;
+             font-size: 12px;
+             padding: 2px;
+             display: none; /* Hidden by default */
+             margin-left: 5px;
+         }
+         #screen-list li:hover button {
+             display: inline-block; /* Show on hover */
+         }
+         #screen-list li.selected button {
+              color: white;
+          }
+         #add-screen-btn {
+             margin-top: 10px;
+             width: 100%;
+         }
+
+
+        #center-panel {
+            flex-grow: 1;
+            background-color: var(--bg-color);
+            position: relative;
+            overflow: auto; /* Add scrollbars if screen content overflows */
+             display: flex;
+             justify-content: center;
+             align-items: center;
+             padding: 20px;
+        }
+
+        #workspace {
+            width: 800px; /* Default game resolution */
+            height: 600px; /* Default game resolution */
+            background-color: #ccc; /* Default screen background */
+            position: relative;
+            overflow: hidden;
+            border: 1px dashed var(--border-color);
+             transform-origin: top left;
+             box-shadow: 0 0 15px rgba(0,0,0,0.3);
+        }
+
+        .workspace-element {
+            position: absolute;
+            border: 1px dashed transparent;
+            cursor: grab;
+            box-sizing: border-box;
+            display: flex; /* For centering text */
+            align-items: center;
+            justify-content: center;
+            overflow: hidden; /* Prevent content spill */
+            white-space: pre-wrap; /* Handle newlines in text */
+            word-wrap: break-word; /* Break long words */
+        }
+
+        .workspace-element:hover {
+            border-color: var(--highlight-color);
+        }
+
+        .workspace-element.selected {
+            border: 2px solid var(--highlight-color);
+            outline: 1px solid white; /* Make selection more visible */
+            z-index: 10;
+        }
+
+        /* Element type styles */
+        .element-text {
+             background: none;
+             border-color: transparent; /* No border unless hovered/selected */
+         }
+        .element-button {
+             border: 2px solid black; /* Default button look */
+             text-align: center;
+             font-weight: bold;
+         }
+         .element-shape { } /* Base style */
+         .element-shape.square { } /* Default is square-ish */
+         .element-shape.circle { border-radius: 50%; }
+         .element-emoji {
+             font-size: 48px; /* Default emoji size */
+             background: none;
+             border-color: transparent;
+         }
+
+
+        #right-panel {
+            width: 300px;
+            background-color: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            padding: 15px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        #right-panel h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+        .prop-group {
+            margin-bottom: 20px;
+        }
+        .prop-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 13px;
+            color: #ccc;
+        }
+        .prop-group input[type="text"],
+        .prop-group input[type="number"],
+        .prop-group input[type="color"],
+        .prop-group select,
+        .prop-group textarea {
+            width: 100%;
+            padding: 6px 8px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 3px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+         .prop-group textarea {
+             min-height: 60px;
+             resize: vertical;
+         }
+        .prop-group input[type="color"] {
+            height: 30px;
+            padding: 2px;
+        }
+        .prop-group button {
+            padding: 6px 10px;
+             background-color: var(--button-bg);
+             border: 1px solid var(--border-color);
+             color: var(--text-color);
+             border-radius: 3px;
+             cursor: pointer;
+             font-size: 13px;
+             margin-top: 5px;
+             transition: background-color 0.2s;
+        }
+         .prop-group button:hover {
+             background-color: var(--button-hover-bg);
+         }
+         .prop-group button.danger-button {
+             background-color: var(--danger-color);
+             border-color: #cc3d3d;
+         }
+          .prop-group button.danger-button:hover {
+              background-color: #e63939;
+          }
+
+        .event-action-item {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 3px;
+        }
+         .event-action-item select, .event-action-item input {
+             margin-bottom: 8px !important;
+         }
+         .event-action-item button {
+            float: right;
+             margin-top: -5px;
+             padding: 3px 6px !important;
+             font-size: 12px !important;
+         }
+         .event-action-item .action-params input,
+         .event-action-item .action-params select {
+             margin-top: 5px;
+         }
+
+
+        /* Game Player Modal */
+        #game-player-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        #game-player-container {
+            width: 800px;
+            height: 600px;
+            background-color: #ccc; /* Will be set by screen data */
+            position: relative;
+            overflow: hidden;
+             border: 3px solid white;
+        }
+        .player-element {
+            position: absolute;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+         .player-element.player-button,
+         .player-element.player-shape,
+         .player-element.player-emoji {
+             cursor: pointer; /* Indicate clickability */
+         }
+         .player-element.player-button {
+            border: 2px solid black;
+            text-align: center;
+            font-weight: bold;
+         }
+        #close-player-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1001;
+            line-height: 28px;
+            text-align: center;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="toolbar">
+        <button id="add-element-btn" title="Add Element (Select Type First)">Add Element</button>
+        <select id="element-type-select">
+            <option value="text">Text</option>
+            <option value="button">Button</option>
+            <option value="shape">Shape</option>
+            <option value="emoji">Emoji</option>
+        </select>
+        <div class="separator"></div>
+        <button id="save-btn">Save Game</button>
+        <input type="file" id="load-file-input" accept=".json">
+        <label for="load-file-input" title="Load Game Data (.json)">Load Game</label>
+        <div class="separator"></div>
+        <button id="play-game-btn" class="play-button">Play Game</button>
+    </div>
+
+    <div id="main-container">
+        <div id="left-panel">
+            <h3>Screens</h3>
+            <ul id="screen-list">
+                <!-- Screen list items will be added here -->
+            </ul>
+            <button id="add-screen-btn">Add New Screen</button>
+        </div>
+
+        <div id="center-panel">
+            <div id="workspace">
+                <!-- Elements for the selected screen will be added here -->
+            </div>
+        </div>
+
+        <div id="right-panel">
+             <div id="properties-placeholder">Select a screen or element to see its properties.</div>
+             <div id="properties-content" style="display: none;">
+                <h3 id="prop-title">Properties</h3>
+
+                <div class="prop-group">
+                    <label for="prop-id">ID</label>
+                    <input type="text" id="prop-id" readonly>
+                </div>
+
+                <div id="screen-properties">
+                     <div class="prop-group">
+                        <label for="prop-screen-name">Screen Name</label>
+                        <input type="text" id="prop-screen-name">
+                    </div>
+                    <div class="prop-group">
+                        <label for="prop-screen-bgcolor">Background Color</label>
+                        <input type="color" id="prop-screen-bgcolor">
+                    </div>
+                     <div class="prop-group">
+                         <input type="checkbox" id="prop-start-screen" style="width:auto; margin-bottom: 0; margin-right: 5px;">
+                         <label for="prop-start-screen" style="display: inline; font-weight: normal;">Is Start Screen</label>
+                     </div>
+                </div>
+
+                <div id="element-properties">
+                     <div class="prop-group">
+                         <label for="prop-el-type">Type</label>
+                         <input type="text" id="prop-el-type" readonly>
+                     </div>
+                     <div class="prop-group" id="prop-group-text">
+                         <label for="prop-el-text">Text / Emoji</label>
+                         <textarea id="prop-el-text"></textarea>
+                     </div>
+                     <div class="prop-group" id="prop-group-shape-type" style="display: none;">
+                          <label for="prop-el-shape-type">Shape Type</label>
+                          <select id="prop-el-shape-type">
+                               <option value="square">Square</option>
+                               <option value="circle">Circle</option>
+                           </select>
+                      </div>
+                     <div class="prop-group">
+                         <label for="prop-el-x">Position X</label>
+                         <input type="number" id="prop-el-x">
+                     </div>
+                     <div class="prop-group">
+                         <label for="prop-el-y">Position Y</label>
+                         <input type="number" id="prop-el-y">
+                     </div>
+                    <div class="prop-group">
+                         <label for="prop-el-width">Width</label>
+                         <input type="number" id="prop-el-width">
+                     </div>
+                     <div class="prop-group">
+                         <label for="prop-el-height">Height</label>
+                         <input type="number" id="prop-el-height">
+                     </div>
+                    <div class="prop-group">
+                         <label for="prop-el-color">Text Color</label>
+                         <input type="color" id="prop-el-color">
+                     </div>
+                     <div class="prop-group">
+                         <label for="prop-el-bgcolor">Background Color</label>
+                         <input type="color" id="prop-el-bgcolor">
+                     </div>
+                     <div class="prop-group">
+                         <label for="prop-el-fontsize">Font Size (px)</label>
+                         <input type="number" id="prop-el-fontsize" min="1">
+                     </div>
+                     <div class="prop-group">
+                         <label for="prop-el-textalign">Text Align</label>
+                          <select id="prop-el-textalign">
+                               <option value="center">Center</option>
+                               <option value="left">Left</option>
+                               <option value="right">Right</option>
+                           </select>
+                      </div>
+                     <div class="prop-group">
+                          <label for="prop-el-zindex">Layer (z-index)</label>
+                          <input type="number" id="prop-el-zindex">
+                      </div>
+                 </div>
+
+                 <!-- Events and Actions -->
+                 <div class="prop-group">
+                     <h4>Events & Actions</h4>
+                     <div id="event-action-list">
+                         <!-- Event/action items will be added here -->
+                     </div>
+                     <button id="add-event-action-btn">Add Event/Action</button>
+                 </div>
+
+                <div class="prop-group" id="delete-element-prop-group">
+                    <button id="delete-element-btn" class="danger-button">Delete Element</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Player Modal -->
+    <div id="game-player-modal">
+        <button id="close-player-btn">&times;</button>
+        <div id="game-player-container">
+            <!-- Game content rendered here -->
+        </div>
+    </div>
+
+
+    <script>
+        // --- Global State ---
+        let gameData = {
+            screens: [],
+            variables: {}, // For potential future use with complex logic
+            startScreenId: null
+        };
+        let selectedScreenId = null;
+        let selectedElementId = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let isDragging = false;
+        let currentlyDraggedElement = null;
+
+        // --- DOM Elements ---
+        const toolbar = document.getElementById('toolbar');
+        const addElementBtn = document.getElementById('add-element-btn');
+        const elementTypeSelect = document.getElementById('element-type-select');
+        const saveBtn = document.getElementById('save-btn');
+        const loadFileInput = document.getElementById('load-file-input');
+        const loadFileLabel = document.querySelector('label[for="load-file-input"]');
+        const playGameBtn = document.getElementById('play-game-btn');
+
+        const leftPanel = document.getElementById('left-panel');
+        const screenList = document.getElementById('screen-list');
+        const addScreenBtn = document.getElementById('add-screen-btn');
+
+        const centerPanel = document.getElementById('center-panel');
+        const workspace = document.getElementById('workspace');
+
+        const rightPanel = document.getElementById('right-panel');
+        const propertiesPlaceholder = document.getElementById('properties-placeholder');
+        const propertiesContent = document.getElementById('properties-content');
+        const propTitle = document.getElementById('prop-title');
+        const propId = document.getElementById('prop-id');
+        const screenProperties = document.getElementById('screen-properties');
+        const propScreenName = document.getElementById('prop-screen-name');
+        const propScreenBgcolor = document.getElementById('prop-screen-bgcolor');
+        const propStartScreen = document.getElementById('prop-start-screen');
+        const elementProperties = document.getElementById('element-properties');
+        const propElType = document.getElementById('prop-el-type');
+        const propElText = document.getElementById('prop-el-text');
+        const propGroupText = document.getElementById('prop-group-text');
+        const propGroupShapeType = document.getElementById('prop-group-shape-type');
+        const propElShapeType = document.getElementById('prop-el-shape-type');
+        const propElX = document.getElementById('prop-el-x');
+        const propElY = document.getElementById('prop-el-y');
+        const propElWidth = document.getElementById('prop-el-width');
+        const propElHeight = document.getElementById('prop-el-height');
+        const propElColor = document.getElementById('prop-el-color');
+        const propElBgcolor = document.getElementById('prop-el-bgcolor');
+        const propElFontsize = document.getElementById('prop-el-fontsize');
+        const propElTextalign = document.getElementById('prop-el-textalign');
+        const propElZindex = document.getElementById('prop-el-zindex');
+        const eventActionList = document.getElementById('event-action-list');
+        const addEventActionBtn = document.getElementById('add-event-action-btn');
+        const deleteElementBtn = document.getElementById('delete-element-btn');
+        const deleteElementPropGroup = document.getElementById('delete-element-prop-group');
+
+        const gamePlayerModal = document.getElementById('game-player-modal');
+        const gamePlayerContainer = document.getElementById('game-player-container');
+        const closePlayerBtn = document.getElementById('close-player-btn');
+
+
+        // --- Utility Functions ---
+        function generateId(prefix = 'id_') {
+            return prefix + Date.now() + Math.random().toString(16).substring(2, 8);
+        }
+
+        function getScreenById(id) {
+            return gameData.screens.find(s => s.id === id);
+        }
+
+        function getElementById(screenId, elementId) {
+            const screen = getScreenById(screenId);
+            return screen ? screen.elements.find(e => e.id === elementId) : null;
+        }
+
+         function sanitizeHTML(str) {
+             const temp = document.createElement('div');
+             temp.textContent = str;
+             return temp.innerHTML;
+         }
+
+        // --- Rendering Functions ---
+
+        function renderScreenList() {
+            screenList.innerHTML = '';
+            gameData.screens.forEach(screen => {
+                const li = document.createElement('li');
+                li.textContent = screen.name || screen.id;
+                li.dataset.screenId = screen.id;
+                if (screen.id === selectedScreenId) {
+                    li.classList.add('selected');
+                }
+                 if (screen.id === gameData.startScreenId) {
+                     li.textContent += ' (Start)';
+                     li.style.fontWeight = 'bold';
+                 }
+
+                li.addEventListener('click', () => {
+                    selectScreen(screen.id);
+                });
+
+                // Delete button for screen
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = '✕';
+                deleteBtn.title = `Delete Screen '${screen.name || screen.id}'`;
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation(); // Prevent li click event
+                    if (confirm(`Are you sure you want to delete screen "${screen.name || screen.id}"? This cannot be undone.`)) {
+                        deleteScreen(screen.id);
+                    }
+                };
+                li.appendChild(deleteBtn);
+
+                screenList.appendChild(li);
+            });
+        }
+
+        function renderWorkspace() {
+            workspace.innerHTML = ''; // Clear previous elements
+            const screen = getScreenById(selectedScreenId);
+
+            if (!screen) {
+                workspace.style.backgroundColor = '#ccc'; // Default bg if no screen selected
+                return;
+            }
+
+            workspace.style.backgroundColor = screen.backgroundColor || '#ccc';
+
+            screen.elements.forEach(element => {
+                const elDiv = document.createElement('div');
+                elDiv.id = `ws_${element.id}`;
+                elDiv.dataset.elementId = element.id;
+                elDiv.classList.add('workspace-element', `element-${element.type}`);
+                if (element.id === selectedElementId) {
+                    elDiv.classList.add('selected');
+                }
+
+                // Apply common styles
+                elDiv.style.left = `${element.x || 0}px`;
+                elDiv.style.top = `${element.y || 0}px`;
+                elDiv.style.width = `${element.width || 100}px`;
+                elDiv.style.height = `${element.height || 50}px`;
+                elDiv.style.color = element.color || '#000000';
+                elDiv.style.backgroundColor = element.backgroundColor || 'transparent';
+                elDiv.style.fontSize = `${element.fontSize || 16}px`;
+                elDiv.style.textAlign = element.textAlign || 'center';
+                elDiv.style.zIndex = element.zIndex || 0;
+
+                // Apply type-specific styles/content
+                switch (element.type) {
+                    case 'text':
+                        elDiv.textContent = element.text || '';
+                        elDiv.style.borderStyle = 'none'; // Text elements usually don't have visible borders
+                        break;
+                    case 'button':
+                        elDiv.textContent = element.text || 'Button';
+                        elDiv.style.border = element.border || '2px solid black'; // Keep default button border
+                        break;
+                    case 'shape':
+                        elDiv.style.backgroundColor = element.backgroundColor || '#808080'; // Default shape color
+                         if(element.shapeType === 'circle') {
+                             elDiv.classList.add('circle');
+                         } else {
+                             elDiv.classList.add('square'); // Default shape
+                         }
+                         // Ensure border is visible for shapes if bg is transparent?
+                         if (element.backgroundColor === 'transparent' || !element.backgroundColor) {
+                              elDiv.style.border = '1px solid black';
+                         } else {
+                              elDiv.style.border = 'none';
+                         }
+                        break;
+                    case 'emoji':
+                        elDiv.textContent = element.text || '❓';
+                        elDiv.style.fontSize = `${element.fontSize || 48}px`; // Larger default for emoji
+                        elDiv.style.backgroundColor = 'transparent'; // Emojis usually transparent bg
+                         elDiv.style.borderStyle = 'none';
+                        break;
+                }
+
+
+                // --- Drag and Drop ---
+                elDiv.addEventListener('mousedown', (e) => {
+                    e.stopPropagation(); // Prevent selecting workspace
+                    selectElement(element.id);
+                    isDragging = true;
+                    currentlyDraggedElement = elDiv;
+                    const rect = elDiv.getBoundingClientRect();
+                    const workspaceRect = workspace.getBoundingClientRect();
+                    // Calculate offset relative to the element's top-left corner
+                    dragOffsetX = e.clientX - rect.left;
+                    dragOffsetY = e.clientY - rect.top;
+                    elDiv.style.cursor = 'grabbing';
+                    elDiv.style.opacity = '0.7'; // Visual feedback for dragging
+                });
+
+                workspace.appendChild(elDiv);
+            });
+        }
+
+        // Mouse move and up listeners for dragging (added to document for wider capture)
+         document.addEventListener('mousemove', (e) => {
+            if (!isDragging || !currentlyDraggedElement) return;
+
+            const elementId = currentlyDraggedElement.dataset.elementId;
+            const elementData = getElementById(selectedScreenId, elementId);
+            if (!elementData) return;
+
+            const workspaceRect = workspace.getBoundingClientRect();
+            // Calculate new position relative to the workspace top-left
+             let newX = e.clientX - workspaceRect.left - dragOffsetX;
+             let newY = e.clientY - workspaceRect.top - dragOffsetY;
+
+             // Clamp position within workspace boundaries (optional, but good practice)
+             newX = Math.max(0, Math.min(newX, workspace.clientWidth - elementData.width));
+             newY = Math.max(0, Math.min(newY, workspace.clientHeight - elementData.height));
+
+            // Update element data
+            elementData.x = Math.round(newX);
+            elementData.y = Math.round(newY);
+
+            // Update visual position immediately
+            currentlyDraggedElement.style.left = `${elementData.x}px`;
+            currentlyDraggedElement.style.top = `${elementData.y}px`;
+
+             // Update properties panel if the dragged element is selected
+             if (selectedElementId === elementId) {
+                 propElX.value = elementData.x;
+                 propElY.value = elementData.y;
+             }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging && currentlyDraggedElement) {
+                currentlyDraggedElement.style.cursor = 'grab';
+                 currentlyDraggedElement.style.opacity = '1';
+            }
+            isDragging = false;
+            currentlyDraggedElement = null;
+        });
+
+         // Click on workspace to deselect elements
+         workspace.addEventListener('click', (e) => {
+             if (e.target === workspace) { // Clicked directly on the workspace background
+                 selectElement(null); // Deselect any element
+             }
+         });
+
+
+        function renderPropertiesPanel() {
+            propertiesPlaceholder.style.display = 'none';
+            propertiesContent.style.display = 'block';
+             eventActionList.innerHTML = ''; // Clear previous event actions
+
+            if (selectedElementId) {
+                // --- Element Properties ---
+                const element = getElementById(selectedScreenId, selectedElementId);
+                if (!element) return; // Should not happen if selection is correct
+
+                propTitle.textContent = `Element: ${element.id}`;
+                screenProperties.style.display = 'none';
+                elementProperties.style.display = 'block';
+                deleteElementPropGroup.style.display = 'block';
+
+                propId.value = element.id;
+                propElType.value = element.type;
+                propElText.value = element.text || '';
+                propElX.value = element.x || 0;
+                propElY.value = element.y || 0;
+                propElWidth.value = element.width || 100;
+                propElHeight.value = element.height || 50;
+                propElColor.value = element.color || '#000000';
+                propElBgcolor.value = element.backgroundColor || '#ffffff'; // Use white default for color picker
+                propElFontsize.value = element.fontSize || 16;
+                propElTextalign.value = element.textAlign || 'center';
+                propElZindex.value = element.zIndex || 0;
+
+                 // Show/hide type-specific fields
+                 propGroupText.style.display = (element.type === 'text' || element.type === 'button' || element.type === 'emoji') ? 'block' : 'none';
+                 propGroupShapeType.style.display = (element.type === 'shape') ? 'block' : 'none';
+                 propElShapeType.value = element.shapeType || 'square';
+
+                // Render event actions for the element
+                (element.events || []).forEach((eventAction, index) => {
+                    renderEventActionItem(eventAction, index, 'element');
+                });
+
+
+            } else if (selectedScreenId) {
+                // --- Screen Properties ---
+                const screen = getScreenById(selectedScreenId);
+                if (!screen) return; // Should not happen
+
+                propTitle.textContent = `Screen: ${screen.name || screen.id}`;
+                screenProperties.style.display = 'block';
+                elementProperties.style.display = 'none';
+                deleteElementPropGroup.style.display = 'none'; // Cannot delete screen from here
+
+                propId.value = screen.id;
+                propScreenName.value = screen.name || '';
+                propScreenBgcolor.value = screen.backgroundColor || '#cccccc';
+                 propStartScreen.checked = (gameData.startScreenId === screen.id);
+
+                 // Render event actions for the screen (e.g., onLoad)
+                 (screen.events || []).forEach((eventAction, index) => {
+                     renderEventActionItem(eventAction, index, 'screen');
+                 });
+
+            } else {
+                // --- Nothing Selected ---
+                propertiesPlaceholder.style.display = 'block';
+                propertiesContent.style.display = 'none';
+            }
+        }
+
+         function renderEventActionItem(eventAction, index, ownerType) {
+             const itemDiv = document.createElement('div');
+             itemDiv.classList.add('event-action-item');
+
+             const deleteBtn = document.createElement('button');
+             deleteBtn.textContent = '✕';
+             deleteBtn.title = 'Delete Event/Action';
+              deleteBtn.classList.add('danger-button');
+             deleteBtn.onclick = () => {
+                 deleteEventAction(index, ownerType);
+             };
+             itemDiv.appendChild(deleteBtn);
+
+             // Trigger Type Dropdown
+             const triggerSelect = document.createElement('select');
+             triggerSelect.innerHTML = `
+                 <option value="onClick" ${eventAction.trigger === 'onClick' ? 'selected' : ''}>On Click</option>
+                 <option value="onLoad" ${eventAction.trigger === 'onLoad' ? 'selected' : ''}>On Screen Load</option>
+                 <option value="onHover" ${eventAction.trigger === 'onHover' ? 'selected' : ''}>On Hover (Player Only)</option>
+                 <option value="onMouseLeave" ${eventAction.trigger === 'onMouseLeave' ? 'selected' : ''}>On Mouse Leave (Player Only)</option>
+                 `;
+             if (ownerType === 'screen') {
+                  triggerSelect.querySelector('option[value="onClick"]').disabled = true; // Screens can't be clicked directly
+                 triggerSelect.querySelector('option[value="onHover"]').disabled = true;
+                 triggerSelect.querySelector('option[value="onMouseLeave"]').disabled = true;
+                  if (eventAction.trigger === 'onClick') eventAction.trigger = 'onLoad'; // Default screen trigger
+             } else { // Element
+                  triggerSelect.querySelector('option[value="onLoad"]').disabled = true; // Elements don't have onLoad
+                  if (eventAction.trigger === 'onLoad') eventAction.trigger = 'onClick'; // Default element trigger
+             }
+             triggerSelect.value = eventAction.trigger; // Ensure correct value is set
+             triggerSelect.onchange = (e) => {
+                  eventAction.trigger = e.target.value;
+                  // Optionally clear/reset actions if trigger type changes significantly?
+             };
+             itemDiv.appendChild(document.createTextNode('Trigger: '));
+             itemDiv.appendChild(triggerSelect);
+
+             // Action Type Dropdown
+             const actionSelect = document.createElement('select');
+             actionSelect.innerHTML = `
+                 <option value="goToScreen" ${eventAction.action?.type === 'goToScreen' ? 'selected' : ''}>Go To Screen</option>
+                 <option value="setText" ${eventAction.action?.type === 'setText' ? 'selected' : ''}>Set Element Text</option>
+                 <option value="setProperty" ${eventAction.action?.type === 'setProperty' ? 'selected' : ''}>Set Element Property</option>
+                 <option value="triggerEnding" ${eventAction.action?.type === 'triggerEnding' ? 'selected' : ''}>Trigger Ending</option>
+                 `;
+             // Add more actions: changeVariable, ifCondition etc. later if needed
+             actionSelect.onchange = (e) => {
+                 eventAction.action = { type: e.target.value }; // Reset action params on type change
+                 renderPropertiesPanel(); // Re-render to show correct params fields
+             };
+             itemDiv.appendChild(document.createElement('br'));
+             itemDiv.appendChild(document.createTextNode('Action: '));
+             itemDiv.appendChild(actionSelect);
+
+             // Action Parameters Area
+             const paramsDiv = document.createElement('div');
+             paramsDiv.classList.add('action-params');
+             itemDiv.appendChild(paramsDiv);
+
+             // Render parameters based on selected action type
+             if (eventAction.action) {
+                 actionSelect.value = eventAction.action.type; // Ensure dropdown matches data
+
+                 switch (eventAction.action.type) {
+                     case 'goToScreen':
+                         const screenDropdown = document.createElement('select');
+                         screenDropdown.innerHTML = '<option value="">-- Select Screen --</option>';
+                         gameData.screens.forEach(s => {
+                             screenDropdown.innerHTML += `<option value="${s.id}" ${eventAction.action.targetId === s.id ? 'selected' : ''}>${s.name || s.id}</option>`;
+                         });
+                         screenDropdown.onchange = (e) => eventAction.action.targetId = e.target.value;
+                         paramsDiv.appendChild(document.createTextNode('Target Screen: '));
+                         paramsDiv.appendChild(screenDropdown);
+                         break;
+
+                     case 'setText':
+                          const elementDropdownText = document.createElement('select');
+                          elementDropdownText.innerHTML = '<option value="">-- Select Element --</option>';
+                          getScreenById(selectedScreenId)?.elements.forEach(el => {
+                               elementDropdownText.innerHTML += `<option value="${el.id}" ${eventAction.action.targetElementId === el.id ? 'selected' : ''}>${el.id}</option>`;
+                           });
+                           // Allow setting text of elements on OTHER screens? Might be complex. Keep it to current screen for now.
+                           elementDropdownText.onchange = (e) => eventAction.action.targetElementId = e.target.value;
+                           paramsDiv.appendChild(document.createTextNode('Target Element: '));
+                           paramsDiv.appendChild(elementDropdownText);
+
+                           const textInput = document.createElement('textarea');
+                           textInput.placeholder = 'Enter new text...';
+                           textInput.value = eventAction.action.newText || '';
+                           textInput.oninput = (e) => eventAction.action.newText = e.target.value;
+                            paramsDiv.appendChild(document.createElement('br'));
+                           paramsDiv.appendChild(document.createTextNode('New Text: '));
+                           paramsDiv.appendChild(textInput);
+                           break;
+
+                      case 'setProperty':
+                          const elementDropdownProp = document.createElement('select');
+                           elementDropdownProp.innerHTML = '<option value="">-- Select Element --</option>';
+                           getScreenById(selectedScreenId)?.elements.forEach(el => {
+                               elementDropdownProp.innerHTML += `<option value="${el.id}" ${eventAction.action.targetElementId === el.id ? 'selected' : ''}>${el.id}</option>`;
+                           });
+                           elementDropdownProp.onchange = (e) => eventAction.action.targetElementId = e.target.value;
+                           paramsDiv.appendChild(document.createTextNode('Target Element: '));
+                           paramsDiv.appendChild(elementDropdownProp);
+
+                           const propNameInput = document.createElement('input');
+                           propNameInput.type = 'text';
+                           propNameInput.placeholder = 'e.g., x, y, text, backgroundColor';
+                           propNameInput.value = eventAction.action.propertyName || '';
+                            propNameInput.oninput = (e) => eventAction.action.propertyName = e.target.value.trim();
+                            paramsDiv.appendChild(document.createElement('br'));
+                            paramsDiv.appendChild(document.createTextNode('Property Name: '));
+                            paramsDiv.appendChild(propNameInput);
+
+                           const propValueInput = document.createElement('input');
+                           propValueInput.type = 'text';
+                           propValueInput.placeholder = 'Enter new value';
+                           propValueInput.value = eventAction.action.newValue || '';
+                            propValueInput.oninput = (e) => eventAction.action.newValue = e.target.value;
+                             paramsDiv.appendChild(document.createElement('br'));
+                            paramsDiv.appendChild(document.createTextNode('New Value: '));
+                            paramsDiv.appendChild(propValueInput);
+                           break;
+
+                     case 'triggerEnding':
+                         const endingInput = document.createElement('input');
+                         endingInput.type = 'text';
+                         endingInput.placeholder = 'Enter Ending Name/Message';
+                         endingInput.value = eventAction.action.endingMessage || '';
+                         endingInput.oninput = (e) => eventAction.action.endingMessage = e.target.value;
+                          paramsDiv.appendChild(document.createTextNode('Ending Message: '));
+                         paramsDiv.appendChild(endingInput);
+                         break;
+                 }
+             }
+
+             eventActionList.appendChild(itemDiv);
+         }
+
+
+        // --- Action Functions ---
+
+        function addScreen() {
+            const newScreenId = generateId('screen_');
+            const newScreenName = `Screen ${gameData.screens.length + 1}`;
+            const newScreen = {
+                id: newScreenId,
+                name: newScreenName,
+                backgroundColor: '#cccccc',
+                elements: [],
+                events: [] // Add events array
+            };
+            gameData.screens.push(newScreen);
+            if (!gameData.startScreenId) { // Set first screen as start screen automatically
+                 gameData.startScreenId = newScreenId;
+            }
+            selectScreen(newScreenId); // Select the newly added screen
+            renderScreenList();
+        }
+
+        function deleteScreen(screenId) {
+            gameData.screens = gameData.screens.filter(s => s.id !== screenId);
+
+             // Reset start screen if the deleted one was the start screen
+            if (gameData.startScreenId === screenId) {
+                 gameData.startScreenId = gameData.screens.length > 0 ? gameData.screens[0].id : null;
+            }
+
+            // Also remove references to this screen in goToScreen actions (optional cleanup)
+            gameData.screens.forEach(screen => {
+                (screen.elements || []).forEach(el => {
+                    el.events = (el.events || []).filter(ev => !(ev.action?.type === 'goToScreen' && ev.action.targetId === screenId));
+                });
+                 screen.events = (screen.events || []).filter(ev => !(ev.action?.type === 'goToScreen' && ev.action.targetId === screenId));
+            });
+
+
+            if (selectedScreenId === screenId) {
+                selectedScreenId = null;
+                selectedElementId = null;
+                 // Select first screen if available, otherwise clear workspace/props
+                 if (gameData.screens.length > 0) {
+                    selectScreen(gameData.screens[0].id);
+                 } else {
+                    renderWorkspace();
+                    renderPropertiesPanel();
+                 }
+            }
+            renderScreenList(); // Update list after potential start screen change or selection change
+        }
+
+        function selectScreen(screenId) {
+            selectedScreenId = screenId;
+            selectedElementId = null; // Deselect any element when changing screens
+            renderScreenList();
+            renderWorkspace();
+            renderPropertiesPanel();
+        }
+
+        function addElement() {
+            if (!selectedScreenId) {
+                alert("Please select a screen first!");
+                return;
+            }
+            const screen = getScreenById(selectedScreenId);
+            if (!screen) return;
+
+            const elementType = elementTypeSelect.value;
+            const elementId = generateId(`${elementType}_`);
+            const newElement = {
+                id: elementId,
+                type: elementType,
+                x: 50,
+                y: 50,
+                width: (elementType === 'emoji' || elementType === 'shape') ? 50 : 150,
+                height: 50,
+                text: elementType === 'emoji' ? '😀' : `New ${elementType}`,
+                color: '#000000',
+                backgroundColor: elementType === 'button' ? '#e0e0e0' : (elementType === 'shape' ? '#808080' : 'transparent'),
+                 fontSize: elementType === 'emoji' ? 48 : 16,
+                 textAlign: 'center',
+                 zIndex: screen.elements.length, // Basic layering
+                 events: [], // Add events array
+                 shapeType: elementType === 'shape' ? 'square' : undefined // Add shapeType for shapes
+            };
+
+            screen.elements.push(newElement);
+            selectElement(elementId); // Select the new element
+            renderWorkspace();
+            // renderPropertiesPanel(); // Already called by selectElement
+        }
+
+        function selectElement(elementId) {
+             if (elementId !== selectedElementId) { // Only re-render if selection changes
+                 selectedElementId = elementId;
+                 renderWorkspace(); // Update visual selection highlight
+                 renderPropertiesPanel();
+             }
+         }
+
+        function deleteElement() {
+            if (!selectedScreenId || !selectedElementId) return;
+             const screen = getScreenById(selectedScreenId);
+             if (!screen) return;
+
+             if (confirm(`Are you sure you want to delete element "${selectedElementId}"?`)) {
+                 screen.elements = screen.elements.filter(el => el.id !== selectedElementId);
+                 selectedElementId = null;
+                 renderWorkspace();
+                 renderPropertiesPanel(); // Show screen properties or placeholder
+             }
+        }
+
+         function updateScreenProperty(prop, value) {
+             if (!selectedScreenId) return;
+             const screen = getScreenById(selectedScreenId);
+             if (!screen) return;
+
+             screen[prop] = value;
+
+             if (prop === 'name') {
+                 renderScreenList(); // Update name in the list
+                 propTitle.textContent = `Screen: ${screen.name || screen.id}`; // Update prop panel title
+             }
+             if (prop === 'backgroundColor') {
+                 workspace.style.backgroundColor = value; // Update workspace immediately
+             }
+         }
+
+         function updateElementProperty(prop, value) {
+             if (!selectedScreenId || !selectedElementId) return;
+             const element = getElementById(selectedScreenId, selectedElementId);
+             if (!element) return;
+
+             // Convert numeric properties
+             if (['x', 'y', 'width', 'height', 'fontSize', 'zIndex'].includes(prop)) {
+                 value = parseInt(value, 10) || 0;
+             }
+
+             element[prop] = value;
+
+             // Update workspace view immediately
+             const wsElement = document.getElementById(`ws_${selectedElementId}`);
+             if (wsElement) {
+                  try { // Wrap style updates in try-catch for safety
+                      switch (prop) {
+                          case 'x': wsElement.style.left = `${value}px`; break;
+                          case 'y': wsElement.style.top = `${value}px`; break;
+                          case 'width': wsElement.style.width = `${value}px`; break;
+                          case 'height': wsElement.style.height = `${value}px`; break;
+                          case 'color': wsElement.style.color = value; break;
+                          case 'backgroundColor': wsElement.style.backgroundColor = value;
+                              // Special handling for shape borders if bg becomes transparent
+                              if(element.type === 'shape' && (value === 'transparent' || !value)) {
+                                  wsElement.style.border = '1px solid black';
+                              } else if (element.type === 'shape') {
+                                  wsElement.style.border = 'none';
+                              }
+                              break;
+                          case 'fontSize': wsElement.style.fontSize = `${value}px`; break;
+                          case 'textAlign': wsElement.style.textAlign = value; break;
+                          case 'zIndex': wsElement.style.zIndex = value; break;
+                          case 'text': wsElement.textContent = value; break;
+                           case 'shapeType':
+                               wsElement.classList.remove('square', 'circle');
+                               wsElement.classList.add(value);
+                               break;
+                      }
+                  } catch (e) {
+                      console.error(`Error updating style for property ${prop}:`, e);
+                  }
+             }
+         }
+
+         function addEventAction() {
+             const newEventAction = {
+                 trigger: 'onClick', // Default trigger
+                 action: { type: 'goToScreen' } // Default action
+             };
+
+             if (selectedElementId) {
+                 const element = getElementById(selectedScreenId, selectedElementId);
+                 if (!element.events) element.events = [];
+                 element.events.push(newEventAction);
+                 newEventAction.trigger = 'onClick'; // Default for element
+                 renderEventActionItem(newEventAction, element.events.length - 1, 'element');
+             } else if (selectedScreenId) {
+                 const screen = getScreenById(selectedScreenId);
+                 if (!screen.events) screen.events = [];
+                  screen.events.push(newEventAction);
+                  newEventAction.trigger = 'onLoad'; // Default for screen
+                 renderEventActionItem(newEventAction, screen.events.length - 1, 'screen');
+             }
+         }
+
+        function deleteEventAction(index, ownerType) {
+             if (ownerType === 'element' && selectedElementId) {
+                  const element = getElementById(selectedScreenId, selectedElementId);
+                  if (element && element.events) {
+                      element.events.splice(index, 1);
+                  }
+              } else if (ownerType === 'screen' && selectedScreenId) {
+                  const screen = getScreenById(selectedScreenId);
+                  if (screen && screen.events) {
+                      screen.events.splice(index, 1);
+                  }
+              }
+             renderPropertiesPanel(); // Re-render to remove the item visually
+         }
+
+
+         function saveGameData() {
+             try {
+                 const jsonData = JSON.stringify(gameData, null, 2); // Pretty print JSON
+                 const blob = new Blob([jsonData], { type: 'application/json' });
+                 const url = URL.createObjectURL(blob);
+                 const a = document.createElement('a');
+                 a.href = url;
+                 a.download = 'game_data.json';
+                 document.body.appendChild(a);
+                 a.click();
+                 document.body.removeChild(a);
+                 URL.revokeObjectURL(url);
+                 console.log("Game data saved.");
+             } catch (error) {
+                 console.error("Error saving game data:", error);
+                 alert("Failed to save game data. See console for details.");
+             }
+         }
+
+         function loadGameData(event) {
+             const file = event.target.files[0];
+             if (!file) {
+                 return;
+             }
+             const reader = new FileReader();
+             reader.onload = function(e) {
+                 try {
+                     const loadedData = JSON.parse(e.target.result);
+                     // Basic validation (can be extended)
+                     if (loadedData && Array.isArray(loadedData.screens)) {
+                         gameData = loadedData;
+                         // Ensure essential structure exists
+                         if (!gameData.variables) gameData.variables = {};
+                         gameData.screens.forEach(s => {
+                            if (!s.elements) s.elements = [];
+                            if (!s.events) s.events = [];
+                             s.elements.forEach(el => {
+                                 if(!el.events) el.events = [];
+                             })
+                         });
+
+                         selectedScreenId = gameData.startScreenId || (gameData.screens.length > 0 ? gameData.screens[0].id : null);
+                         selectedElementId = null;
+                         renderScreenList();
+                         selectScreen(selectedScreenId); // Render the loaded start/first screen
+                         console.log("Game data loaded.");
+                     } else {
+                         throw new Error("Invalid game data format.");
+                     }
+                 } catch (error) {
+                     console.error("Error loading game data:", error);
+                     alert(`Failed to load game data: ${error.message}`);
+                 } finally {
+                      // Reset file input value to allow loading the same file again
+                      loadFileInput.value = null;
+                  }
+             };
+             reader.onerror = function() {
+                 alert(`Error reading file: ${reader.error}`);
+                  loadFileInput.value = null;
+             };
+             reader.readAsText(file);
+         }
+
+
+        // --- Game Player Logic ---
+        let currentPlayerScreenId = null;
+
+        function startGamePlayer() {
+            if (!gameData.startScreenId) {
+                 alert("No start screen defined!");
+                 return;
+            }
+            const startScreen = getScreenById(gameData.startScreenId);
+            if (!startScreen) {
+                 alert(`Start screen with ID "${gameData.startScreenId}" not found!`);
+                 return;
+            }
+            currentPlayerScreenId = gameData.startScreenId;
+            renderPlayerScreen(currentPlayerScreenId);
+            gamePlayerModal.style.display = 'flex';
+            // Trigger onLoad events for the first screen
+            handlePlayerEvent(null, 'onLoad', startScreen);
+        }
+
+        function stopGamePlayer() {
+            gamePlayerModal.style.display = 'none';
+            gamePlayerContainer.innerHTML = ''; // Clear content
+            currentPlayerScreenId = null;
+        }
+
+        function renderPlayerScreen(screenId) {
+            const screen = getScreenById(screenId);
+            if (!screen) {
+                console.error(`Player Error: Screen with ID ${screenId} not found.`);
+                 gamePlayerContainer.innerHTML = `<div style="color: red; padding: 20px; text-align: center;">Error: Screen not found (${screenId})</div>`;
+                gamePlayerContainer.style.backgroundColor = '#000';
+                 return;
+            }
+
+            gamePlayerContainer.innerHTML = ''; // Clear previous
+            gamePlayerContainer.style.backgroundColor = screen.backgroundColor || '#ccc';
+
+            screen.elements.forEach(element => {
+                const elDiv = document.createElement('div');
+                elDiv.id = `player_${element.id}`;
+                elDiv.dataset.elementId = element.id; // Store original ID
+                elDiv.classList.add('player-element', `player-${element.type}`);
+
+                // Apply styles from element data
+                elDiv.style.left = `${element.x || 0}px`;
+                elDiv.style.top = `${element.y || 0}px`;
+                elDiv.style.width = `${element.width || 100}px`;
+                elDiv.style.height = `${element.height || 50}px`;
+                elDiv.style.color = element.color || '#000000';
+                elDiv.style.backgroundColor = element.backgroundColor || 'transparent';
+                elDiv.style.fontSize = `${element.fontSize || 16}px`;
+                elDiv.style.textAlign = element.textAlign || 'center';
+                elDiv.style.zIndex = element.zIndex || 0;
+                elDiv.textContent = element.text || '';
+
+                 // Apply type-specific player styles
+                 switch (element.type) {
+                     case 'button':
+                         elDiv.style.border = element.border || '2px solid black';
+                         break;
+                     case 'shape':
+                          if(element.shapeType === 'circle') {
+                              elDiv.style.borderRadius = '50%';
+                          } else {
+                              elDiv.style.borderRadius = '0';
+                          }
+                          // Border for transparent shapes in player
+                          if (element.backgroundColor === 'transparent' || !element.backgroundColor) {
+                               elDiv.style.border = '1px solid black';
+                          } else {
+                               elDiv.style.border = 'none';
+                          }
+                         break;
+                     case 'emoji':
+                         elDiv.style.fontSize = `${element.fontSize || 48}px`;
+                         elDiv.style.backgroundColor = 'transparent';
+                         break;
+                      case 'text':
+                          // Text elements usually aren't interactive by default
+                          break;
+                 }
+
+
+                // --- Attach Player Event Listeners ---
+                (element.events || []).forEach(eventAction => {
+                     switch(eventAction.trigger) {
+                         case 'onClick':
+                              elDiv.addEventListener('click', (e) => {
+                                  e.stopPropagation();
+                                  handlePlayerEvent(element.id, 'onClick');
+                              });
+                              break;
+                          case 'onHover':
+                               elDiv.addEventListener('mouseenter', (e) => {
+                                   e.stopPropagation();
+                                   handlePlayerEvent(element.id, 'onHover');
+                               });
+                               break;
+                          case 'onMouseLeave':
+                               elDiv.addEventListener('mouseleave', (e) => {
+                                   e.stopPropagation();
+                                   handlePlayerEvent(element.id, 'onMouseLeave');
+                               });
+                               break;
+                     }
+                 });
+
+                gamePlayerContainer.appendChild(elDiv);
+            });
+        }
+
+         function handlePlayerEvent(elementId, eventType, targetObject = null) {
+             // targetObject is used for onLoad where the screen itself is the source
+             let eventsToExecute = [];
+
+             if (eventType === 'onLoad' && targetObject && targetObject.events) {
+                  // Screen onLoad events
+                 eventsToExecute = targetObject.events.filter(ev => ev.trigger === 'onLoad');
+             } else if (elementId) {
+                  // Element events (onClick, onHover, etc.)
+                  const element = getElementById(currentPlayerScreenId, elementId);
+                  if (element && element.events) {
+                       eventsToExecute = element.events.filter(ev => ev.trigger === eventType);
+                  }
+             }
+
+             // Execute the actions associated with the triggered events
+             eventsToExecute.forEach(eventAction => {
+                 if (eventAction.action) {
+                     executePlayerAction(eventAction.action);
+                 }
+             });
+         }
+
+         function executePlayerAction(action) {
+             if (!action || !action.type) return;
+
+             // Add small delay for goToScreen to allow other actions first?
+              if (action.type === 'goToScreen') {
+                  setTimeout(() => processAction(action), 10);
+              } else {
+                  processAction(action);
+              }
+         }
+
+         function processAction(action) {
+              console.log("Executing action:", action);
+              switch (action.type) {
+                 case 'goToScreen':
+                     if (action.targetId && getScreenById(action.targetId)) {
+                          currentPlayerScreenId = action.targetId;
+                          renderPlayerScreen(currentPlayerScreenId);
+                          // Trigger onLoad for the new screen
+                          handlePlayerEvent(null, 'onLoad', getScreenById(currentPlayerScreenId));
+                     } else {
+                          console.warn(`goToScreen: Target screen ID "${action.targetId}" not found or invalid.`);
+                     }
+                     break;
+
+                  case 'setText':
+                     if (action.targetElementId && typeof action.newText !== 'undefined') {
+                         const targetElement = document.getElementById(`player_${action.targetElementId}`);
+                         // Also update the underlying gameData element for persistence if needed? No, player changes are transient.
+                         // const targetElementData = getElementById(currentPlayerScreenId, action.targetElementId);
+                          if (targetElement) {
+                              targetElement.textContent = action.newText;
+                          } else {
+                               console.warn(`setText: Target element ID "${action.targetElementId}" not found on current player screen.`);
+                          }
+                     } else {
+                           console.warn(`setText: Missing targetElementId or newText.`);
+                      }
+                     break;
+
+                  case 'setProperty':
+                       if (action.targetElementId && action.propertyName && typeof action.newValue !== 'undefined') {
+                           const targetElement = document.getElementById(`player_${action.targetElementId}`);
+                           if (targetElement) {
+                                try {
+                                    // Basic property setting - more complex ones might need specific handling
+                                     if (action.propertyName === 'text') {
+                                         targetElement.textContent = action.newValue;
+                                     } else {
+                                         // Directly setting style - potentially unsafe if propertyName is weird
+                                         // Sanitize propertyName? For now, trust editor input.
+                                         targetElement.style[action.propertyName] = action.newValue;
+                                     }
+                                 } catch (e) {
+                                     console.error(`setProperty: Error setting property "${action.propertyName}" on element "${action.targetElementId}":`, e);
+                                 }
+                            } else {
+                                console.warn(`setProperty: Target element ID "${action.targetElementId}" not found on current player screen.`);
+                            }
+                        } else {
+                             console.warn(`setProperty: Missing targetElementId, propertyName, or newValue.`);
+                         }
+                       break;
+
+                 case 'triggerEnding':
+                     stopGamePlayer(); // Stop the game
+                     alert(`--- Game Over ---\n${action.endingMessage || 'The End.'}`);
+                     break;
+
+                 default:
+                     console.warn(`Unknown action type: ${action.type}`);
+             }
+         }
+
+        // --- Initialization and Event Listeners ---
+
+        function initEditor() {
+            addScreenBtn.addEventListener('click', addScreen);
+            addElementBtn.addEventListener('click', addElement);
+            saveBtn.addEventListener('click', saveGameData);
+            loadFileInput.addEventListener('change', loadGameData);
+             playGameBtn.addEventListener('click', startGamePlayer);
+             closePlayerBtn.addEventListener('click', stopGamePlayer);
+             deleteElementBtn.addEventListener('click', deleteElement);
+             addEventActionBtn.addEventListener('click', addEventAction);
+
+             // Properties Panel Listeners
+            propScreenName.addEventListener('input', (e) => updateScreenProperty('name', e.target.value));
+            propScreenBgcolor.addEventListener('input', (e) => updateScreenProperty('backgroundColor', e.target.value));
+            propStartScreen.addEventListener('change', (e) => {
+                 if (selectedScreenId) {
+                     gameData.startScreenId = e.target.checked ? selectedScreenId : (gameData.startScreenId === selectedScreenId ? null : gameData.startScreenId);
+                     // If unchecking the only start screen, maybe set the first screen as default?
+                      if (!gameData.startScreenId && gameData.screens.length > 0) {
+                           gameData.startScreenId = gameData.screens[0].id;
+                      }
+                     renderScreenList(); // Update list to show (Start) indicator
+                      renderPropertiesPanel(); // Ensure checkbox state is correct if default is reapplied
+                 }
+            });
+
+
+             propElText.addEventListener('input', (e) => updateElementProperty('text', e.target.value));
+             propElX.addEventListener('input', (e) => updateElementProperty('x', e.target.value));
+             propElY.addEventListener('input', (e) => updateElementProperty('y', e.target.value));
+             propElWidth.addEventListener('input', (e) => updateElementProperty('width', e.target.value));
+             propElHeight.addEventListener('input', (e) => updateElementProperty('height', e.target.value));
+             propElColor.addEventListener('input', (e) => updateElementProperty('color', e.target.value));
+             propElBgcolor.addEventListener('input', (e) => updateElementProperty('backgroundColor', e.target.value));
+             propElFontsize.addEventListener('input', (e) => updateElementProperty('fontSize', e.target.value));
+             propElTextalign.addEventListener('change', (e) => updateElementProperty('textAlign', e.target.value));
+             propElZindex.addEventListener('input', (e) => updateElementProperty('zIndex', e.target.value));
+             propElShapeType.addEventListener('change', (e) => updateElementProperty('shapeType', e.target.value));
+
+
+             // Initial state
+             renderScreenList();
+             renderWorkspace();
+             renderPropertiesPanel(); // Show placeholder initially
+        }
+
+        document.addEventListener('DOMContentLoaded', initEditor);
+
+    </script>
+
+</body>
+</html>

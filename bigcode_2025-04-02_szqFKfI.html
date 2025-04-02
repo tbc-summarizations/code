@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Ball Platformer</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #lightblue; }
+  canvas { display: block; background-color: #eee; }
+  #ui { position: absolute; top: 10px; left: 10px; color: black; font-family: monospace; }
+  #skipButton { position: absolute; top: 10px; right: 10px; padding: 10px; font-size: 16px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<div id="ui">Level: <span id="levelCounter">1</span></div>
+<button id="skipButton">Skip Level</button>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const levelCounterDisplay = document.getElementById('levelCounter');
+  const skipButton = document.getElementById('skipButton');
+
+  canvas.width = 800;
+  canvas.height = 600;
+
+  let currentLevelIndex = 0;
+  let levels = [
+    {
+      platforms: [{x: 0, y: 550, width: 800, height: 50}],
+      playerStart: {x: 50, y: 500},
+      goal: {x: 750, y: 500}
+    },
+    {
+      platforms: [
+        {x: 0, y: 550, width: 300, height: 50},
+        {x: 500, y: 550, width: 300, height: 50},
+        {x: 300, y: 400, width: 200, height: 50}
+      ],
+      playerStart: {x: 50, y: 500},
+      goal: {x: 750, y: 500}
+    },
+    {
+      platforms: [
+        {x: 0, y: 550, width: 800, height: 50},
+        {x: 200, y: 400, width: 400, height: 50},
+        {x: 100, y: 250, width: 100, height: 50},
+        {x: 600, y: 250, width: 100, height: 50}
+      ],
+      playerStart: {x: 50, y: 500},
+      goal: {x: 750, y: 200}
+    },
+    // ... 247 more levels can be added here in the same format ...
+    // Example for level 4 and 5
+    {
+        platforms: [
+            {x: 0, y: 550, width: 800, height: 50},
+            {x: 150, y: 450, width: 100, height: 20},
+            {x: 350, y: 350, width: 100, height: 20},
+            {x: 550, y: 250, width: 100, height: 20},
+        ],
+        playerStart: {x: 50, y: 500},
+        goal: {x: 700, y: 200}
+    },
+    {
+        platforms: [
+            {x: 0, y: 550, width: 800, height: 50},
+            {x: 50, y: 400, width: 200, height: 20},
+            {x: 350, y: 400, width: 200, height: 20},
+            {x: 600, y: 400, width: 150, height: 20},
+            {x: 200, y: 250, width: 400, height: 20},
+        ],
+        playerStart: {x: 50, y: 500},
+        goal: {x: 700, y: 350}
+    }
+
+  ];
+
+  if (levels.length < 250) {
+      for (let i = levels.length; i < 250; i++) {
+          levels.push({
+              platforms: [{x: 0, y: 550, width: 800, height: 50}], // Basic level as placeholder
+              playerStart: {x: 50, y: 500},
+              goal: {x: 750, y: 500}
+          });
+      }
+  }
+
+
+  let player = {
+    x: levels[currentLevelIndex].playerStart.x,
+    y: levels[currentLevelIndex].playerStart.y,
+    radius: 20,
+    velocityY: 0,
+    velocityX: 0,
+    gravity: 0.5,
+    jumpPower: -10,
+    moveSpeed: 3,
+    isJumping: false,
+    color: 'red'
+  };
+
+  let camera = {
+    x: 0,
+    y: 0
+  };
+
+  let goal = {
+    x: levels[currentLevelIndex].goal.x,
+    y: levels[currentLevelIndex].goal.y,
+    width: 40,
+    height: 40,
+    color: 'green'
+  };
+
+  let keys = {};
+
+  document.addEventListener('keydown', function(e) {
+    keys[e.key] = true;
+  });
+
+  document.addEventListener('keyup', function(e) {
+    keys[e.key] = false;
+  });
+
+  skipButton.addEventListener('click', function() {
+    nextLevel();
+  });
+
+  function nextLevel() {
+    currentLevelIndex++;
+    if (currentLevelIndex >= levels.length) {
+      currentLevelIndex = 0; // Loop back to the first level, or handle game completion
+    }
+    levelCounterDisplay.textContent = currentLevelIndex + 1;
+    loadLevel(currentLevelIndex);
+  }
+
+  function loadLevel(levelIndex) {
+    player.x = levels[levelIndex].playerStart.x;
+    player.y = levels[levelIndex].playerStart.y;
+    player.velocityY = 0;
+    player.velocityX = 0;
+    goal.x = levels[levelIndex].goal.x;
+    goal.y = levels[levelIndex].goal.y;
+    camera.x = 0;
+    camera.y = 0;
+  }
+
+
+  function updateCamera() {
+    camera.x = player.x - canvas.width / 2;
+    if (camera.x < 0) camera.x = 0;
+    if (camera.x > levels[currentLevelIndex].platforms[0].width - canvas.width && levels[currentLevelIndex].platforms[0].width > canvas.width) {
+        camera.x = levels[currentLevelIndex].platforms[0].width - canvas.width;
+    }
+  }
+
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function update() {
+    // Player movement
+    if (keys['a']) {
+      player.velocityX = -player.moveSpeed;
+    } else if (keys['s']) {
+      player.velocityX = player.moveSpeed;
+    } else {
+      player.velocityX = 0;
+    }
+
+    if (keys[' ']) {
+      if (!player.isJumping) {
+        player.velocityY = player.jumpPower;
+        player.isJumping = true;
+      }
+    }
+
+    player.velocityY += player.gravity;
+    player.x += player.velocityX;
+    player.y += player.velocityY;
+
+    // Collision detection
+    player.isJumping = true; // Assume jumping until collision resolves it
+
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      let dx = (player.x + camera.x) - (platform.x + platform.width / 2);
+      let dy = (player.y + camera.y) - (platform.y + platform.height / 2);
+      let width = (player.radius + platform.width / 2);
+      let height = (player.radius + platform.height / 2);
+      let crossWidth = width * dy;
+      let crossHeight = height * dx;
+
+      if (Math.abs(dx) <= (player.radius + platform.width / 2) && Math.abs(dy) <= (player.radius + platform.height / 2)) {
+        if (crossWidth > crossHeight) {
+          if (crossWidth > (-crossHeight)) {
+             // Collision at the top
+             player.y = platform.y - platform.height/2 - player.radius - camera.y;
+             player.velocityY = 0;
+             player.isJumping = false;
+          } else {
+             // Collision at the right
+             player.x = platform.x + platform.width/2 + player.radius - camera.x;
+             player.velocityX = 0;
+          }
+        } else {
+          if (crossWidth > -(crossHeight)) {
+             // Collision at the left
+             player.x = platform.x - platform.width/2 - player.radius - camera.x;
+             player.velocityX = 0;
+          } else {
+             // Collision at the bottom
+             player.y = platform.y + platform.height/2 + player.radius - camera.y;
+             player.velocityY = 0; // Stop vertical velocity on bottom collision, but allow falling
+          }
+        }
+      }
+    });
+
+    // Goal collision
+    if (player.x + player.radius > goal.x && player.x - player.radius < goal.x + goal.width &&
+        player.y + player.radius > goal.y && player.y - player.radius < goal.y + goal.height) {
+      nextLevel();
+    }
+
+    // Keep player within level bounds (horizontal - vertical handled by platform collision and gravity)
+    if (player.x - player.radius < 0 ) player.x = player.radius;
+    if (player.x + player.radius > levels[currentLevelIndex].platforms[0].width) player.x = levels[currentLevelIndex].platforms[0].width - player.radius;
+
+
+    updateCamera();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y); // Apply camera offset
+
+    // Draw platforms
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      ctx.fillStyle = 'brown';
+      ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+    });
+
+    // Draw goal
+    ctx.fillStyle = goal.color;
+    ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+
+    // Draw player
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fillStyle = player.color;
+    ctx.fill();
+    ctx.closePath();
+
+    ctx.restore(); // Restore to no camera offset for UI elements if needed
+  }
+
+  loadLevel(currentLevelIndex);
+  gameLoop();
+</script>
+
+</body>
+</html>

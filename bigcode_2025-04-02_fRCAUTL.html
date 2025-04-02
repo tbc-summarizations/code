@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Easy Platformer 100 Levels</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #lightblue; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+  #gameCanvas { background-color: #eee; border: 2px solid black; }
+  #controls { display: flex; justify-content: center; margin-top: 10px; }
+  button { padding: 10px 20px; font-size: 16px; margin: 5px; cursor: pointer; }
+  #levelDisplay { margin-top: 10px; font-size: 20px; }
+</style>
+</head>
+<body>
+  <h1>Easy Platformer 100 Levels</h1>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="levelDisplay">Level: 1</div>
+  <div id="controls">
+    <button id="skipButton">Skip Level</button>
+  </div>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const levelDisplay = document.getElementById('levelDisplay');
+  const skipButton = document.getElementById('skipButton');
+
+  let currentLevelIndex = 0;
+  let levels = [];
+
+  // Level design (all levels are very easy)
+  for (let i = 0; i < 100; i++) {
+    levels.push({
+      platforms: [
+        { x: 50, y: 500, width: 700, height: 50 }, // ground
+        { x: 200, y: 350, width: 150, height: 20 }, // platform 1
+        { x: 500, y: 200, width: 150, height: 20 }, // platform 2
+      ],
+      goal: { x: 720, y: 450, size: 30 }
+    });
+  }
+
+  levels[1] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }], goal: { x: 720, y: 450, size: 30 } };
+  levels[2] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 300, y: 400, width: 100, height: 20 }], goal: { x: 620, y: 450, size: 30 } };
+  levels[3] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 150, y: 400, width: 500, height: 20 }], goal: { x: 650, y: 350, size: 30 } };
+  levels[4] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 100, y: 400, width: 50, height: 20 }, { x: 250, y: 300, width: 50, height: 20 }], goal: { x: 650, y: 450, size: 30 } };
+  levels[5] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 600, y: 400, width: 100, height: 20 }], goal: { x: 650, y: 350, size: 30 } };
+  levels[6] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 150, y: 300, width: 50, height: 20 }, { x: 500, y: 400, width: 50, height: 20 }], goal: { x: 520, y: 350, size: 30 } };
+  levels[7] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 300, y: 300, width: 200, height: 20 }], goal: { x: 450, y: 250, size: 30 } };
+  levels[8] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 100, y: 400, width: 100, height: 20 }, { x: 500, y: 400, width: 100, height: 20 }], goal: { x: 550, y: 350, size: 30 } };
+  levels[9] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 400, y: 400, width: 300, height: 20 }], goal: { x: 650, y: 350, size: 30 } };
+  levels[10] = { platforms: [{ x: 50, y: 500, width: 700, height: 50 }, { x: 200, y: 400, width: 50, height: 20 }, { x: 400, y: 300, width: 50, height: 20 }, { x: 600, y: 200, width: 50, height: 20 }], goal: { x: 620, y: 150, size: 30 } };
+
+  for (let i = 11; i < 100; i++) {
+      let baseLevel = levels[i % 10]; // Repeat pattern for simplicity after level 10
+      levels[i] = JSON.parse(JSON.stringify(baseLevel)); // Deep copy to avoid modifying originals
+      levels[i].goal.x += (i % 10) * 10; // Slightly shift goal position for variation
+      levels[i].platforms.forEach(p => p.x += (i % 5) * 5); // Slightly shift platforms
+  }
+
+
+  let player = {
+    x: 100,
+    y: 450,
+    width: 20,
+    height: 40,
+    velocityY: 0,
+    isOnGround: false
+  };
+
+  let gravity = 0.5;
+  let jumpStrength = -10;
+  let moveSpeed = 5;
+  let keys = {};
+
+  function drawPlayer() {
+    ctx.fillStyle = 'red';
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+  }
+
+  function drawPlatforms() {
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      ctx.fillStyle = 'brown';
+      ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+    });
+  }
+
+  function drawGoal() {
+    ctx.fillStyle = 'gold';
+    const goal = levels[currentLevelIndex].goal;
+    ctx.beginPath();
+    ctx.moveTo(goal.x, goal.y);
+    ctx.lineTo(goal.x + goal.size, goal.y + goal.size);
+    ctx.lineTo(goal.x, goal.y + 2 * goal.size);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+
+  function checkCollision(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.height > rect2.y;
+  }
+
+  function handleCollisions() {
+    player.isOnGround = false;
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      if (checkCollision(player, platform)) {
+        if (player.velocityY >= 0 && player.y + player.height <= platform.y + 10) { // Landed on top
+          player.y = platform.y - player.height;
+          player.velocityY = 0;
+          player.isOnGround = true;
+        } else if (player.velocityY < 0 && player.y >= platform.y + platform.height -10) { // Hit bottom of platform from below
+          player.y = platform.y + platform.height;
+          player.velocityY = 0;
+        } else if (player.x + player.width > platform.x && player.x < platform.x + platform.width) { // Side collision - basic, just stop movement
+          if (player.x < platform.x) {
+            player.x = platform.x - player.width;
+          } else {
+            player.x = platform.x + platform.width;
+          }
+        }
+      }
+    });
+
+    if (checkCollision(player, levels[currentLevelIndex].goal)) {
+      nextLevel();
+    }
+  }
+
+  function nextLevel() {
+    currentLevelIndex++;
+    if (currentLevelIndex >= levels.length) {
+      currentLevelIndex = 0; // Loop back to level 1 or handle game completion
+      alert("You completed all levels! 🎉");
+    }
+    levelDisplay.textContent = `Level: ${currentLevelIndex + 1}`;
+    player.x = 100;
+    player.y = 450;
+  }
+
+  function updatePlayer() {
+    if (keys['ArrowLeft']) {
+      player.x -= moveSpeed;
+    }
+    if (keys['ArrowRight']) {
+      player.x += moveSpeed;
+    }
+    if (keys['Space'] && player.isOnGround) {
+      player.velocityY = jumpStrength;
+      player.isOnGround = false;
+    }
+
+    player.velocityY += gravity;
+    player.y += player.velocityY;
+
+    if (player.y > canvas.height) {
+      player.y = canvas.height - player.height;
+      player.velocityY = 0;
+      player.isOnGround = true; // Fall reset to ground (optional, for falling off screen)
+      player.x = 100; // Reset position too
+      player.y = 450;
+    }
+  }
+
+  function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawPlatforms();
+    drawGoal();
+    drawPlayer();
+    updatePlayer();
+    handleCollisions();
+    requestAnimationFrame(gameLoop);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+  });
+
+  document.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+  });
+
+  skipButton.addEventListener('click', nextLevel);
+
+  gameLoop();
+</script>
+
+</body>
+</html>

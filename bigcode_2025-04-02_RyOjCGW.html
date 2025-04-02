@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Platformer 101002 Levels</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #lightblue; }
+  canvas { display: block; background-color: #666; }
+  #level-display { position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; }
+</style>
+</head>
+<body>
+  <div id="level-display">Level: 1</div>
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const levelDisplay = document.getElementById('level-display');
+
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let currentLevel = 1;
+    const totalLevels = 101002;
+
+    let player = {
+      x: 50,
+      y: canvas.height - 50,
+      width: 20,
+      height: 20,
+      velocityY: 0,
+      isJumping: false,
+      color: 'red'
+    };
+
+    let platforms = [];
+    let levelData = {};
+
+    function generateLevel(levelNumber) {
+      platforms = [];
+      levelData = {};
+
+      if (levelNumber === 1) {
+        platforms.push({ x: 0, y: canvas.height - 20, width: canvas.width, height: 20, color: 'green' }); // Ground
+        platforms.push({ x: 200, y: canvas.height - 100, width: 100, height: 20, color: 'green' });
+        platforms.push({ x: 500, y: canvas.height - 150, width: 150, height: 20, color: 'green' });
+      } else if (levelNumber === 2) {
+        platforms.push({ x: 0, y: canvas.height - 20, width: canvas.width, height: 20, color: 'green' }); // Ground
+        platforms.push({ x: 100, y: canvas.height - 200, width: 80, height: 20, color: 'green' });
+        platforms.push({ x: 600, y: canvas.height - 100, width: 120, height: 20, color: 'green' });
+      }
+      // ... more level generation logic for different level numbers, potentially procedural for a large number of levels
+      else { // Example procedural level generation - very basic
+        platforms.push({ x: 0, y: canvas.height - 20, width: canvas.width, height: 20, color: 'green' }); // Ground
+        for (let i = 0; i < levelNumber % 10 + 2; i++) {
+          platforms.push({
+            x: Math.random() * (canvas.width - 100),
+            y: canvas.height - 50 - Math.random() * 300,
+            width: 50 + Math.random() * 50,
+            height: 20,
+            color: 'green'
+          });
+        }
+      }
+
+      levelDisplay.textContent = `Level: ${levelNumber}`;
+    }
+
+
+    function drawPlayer() {
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+    }
+
+    function drawPlatforms() {
+      platforms.forEach(platform => {
+        ctx.fillStyle = platform.color;
+        ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+      });
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      updatePlayer();
+      drawPlatforms();
+      drawPlayer();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function updatePlayer() {
+      const gravity = 0.5;
+      const jumpForce = -10;
+      const moveSpeed = 5;
+
+      player.velocityY += gravity;
+      player.y += player.velocityY;
+
+      let onGround = false;
+      platforms.forEach(platform => {
+        if (player.x < platform.x + platform.width &&
+            player.x + player.width > platform.x &&
+            player.y + player.height > platform.y &&
+            player.y < platform.y + platform.height &&
+            player.velocityY >= 0) {
+          player.y = platform.y - player.height;
+          player.velocityY = 0;
+          player.isJumping = false;
+          onGround = true;
+        }
+      });
+
+      if (!onGround && player.y > canvas.height) {
+        player.y = canvas.height - player.height;
+        player.velocityY = 0;
+        player.isJumping = false;
+      }
+
+
+      if (keys['ArrowLeft']) {
+        player.x -= moveSpeed;
+      }
+      if (keys['ArrowRight']) {
+        player.x += moveSpeed;
+      }
+      if (keys['Space'] && !player.isJumping && onGround) {
+        player.velocityY = jumpForce;
+        player.isJumping = true;
+      }
+
+      if (player.x < 0) player.x = 0;
+      if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
+    }
+
+
+    let keys = {};
+    document.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+    });
+    document.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+
+    function nextLevel() {
+      currentLevel++;
+      if (currentLevel > totalLevels) {
+        currentLevel = 1; // Loop back to level 1, or handle game completion
+      }
+      generateLevel(currentLevel);
+      player.x = 50;
+      player.y = canvas.height - 50;
+      player.velocityY = 0;
+      player.isJumping = false;
+    }
+
+    // Example Level completion - very basic, just reaching the right side of canvas
+    function checkLevelCompletion() {
+        if (player.x > canvas.width - player.width - 20) { // Reached near the right edge
+            nextLevel();
+        }
+    }
+
+    function update() {
+        updatePlayer();
+        checkLevelCompletion(); // Check for level completion each frame
+    }
+
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawPlatforms();
+        drawPlayer();
+    }
+
+    function mainGameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(mainGameLoop);
+    }
+
+
+    generateLevel(currentLevel);
+    mainGameLoop();
+  </script>
+</body>
+</html>

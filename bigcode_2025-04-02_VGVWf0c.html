@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Ball Platformer</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #eee; }
+  canvas { display: block; background-color: #ddd; }
+  #skipButton { position: absolute; top: 10px; right: 10px; padding: 10px 15px; }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<button id="skipButton">Skip Level</button>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const skipButton = document.getElementById('skipButton');
+
+  canvas.width = 800;
+  canvas.height = 600;
+
+  let currentLevelIndex = 0;
+  let levels = [];
+
+  function generateLevels(numberOfLevels) {
+      for (let i = 0; i < numberOfLevels; i++) {
+          levels.push(createLevel(i));
+      }
+  }
+
+  function createLevel(levelIndex) {
+      let level = { platforms: [], enemies: [], goal: {x: 750, y: 100} };
+      let platformY = 550;
+      let platformWidth = 200;
+      let gap = 150 + levelIndex * 5;
+      let startX = 50;
+
+      for (let i = 0; i < 5 + Math.floor(levelIndex / 10); i++) {
+          level.platforms.push({x: startX + i * (platformWidth + gap), y: platformY - i * 20, width: platformWidth, height: 50});
+      }
+      if (levelIndex > 5) {
+        level.platforms.push({x: 300, y: 350, width: 100, height: 20});
+      }
+      if (levelIndex > 15) {
+        level.platforms.push({x: 500, y: 200, width: 150, height: 20});
+      }
+      return level;
+  }
+
+  generateLevels(250);
+
+
+  let player = {
+    x: 100,
+    y: 50,
+    radius: 20,
+    velocityY: 0,
+    velocityX: 0,
+    gravity: 0.5,
+    friction: 0.8,
+    jumpPower: -10,
+    moveSpeed: 3,
+    isOnGround: false
+  };
+
+  let camera = {
+    x: 0,
+    y: 0
+  };
+
+  let keys = {};
+
+  document.addEventListener('keydown', function(e) {
+    keys[e.key] = true;
+    if (e.key === ' ') {
+      keys['Space'] = true;
+    }
+  });
+
+  document.addEventListener('keyup', function(e) {
+    keys[e.key] = false;
+    if (e.key === ' ') {
+      keys['Space'] = false;
+    }
+  });
+
+  skipButton.addEventListener('click', function() {
+    currentLevelIndex = (currentLevelIndex + 1) % levels.length;
+    resetLevel();
+  });
+
+  function resetLevel() {
+    player.x = 100;
+    player.y = 50;
+    player.velocityY = 0;
+    player.velocityX = 0;
+    camera.x = 0;
+  }
+
+  function updateCamera() {
+    camera.x = player.x - canvas.width / 2;
+    if (camera.x < 0) camera.x = 0;
+    if (camera.x > levels[currentLevelIndex].platforms[levels[currentLevelIndex].platforms.length - 1].x + levels[currentLevelIndex].platforms[levels[currentLevelIndex].platforms.length - 1].width - canvas.width && levels[currentLevelIndex].platforms.length > 0) {
+        camera.x = levels[currentLevelIndex].platforms[levels[currentLevelIndex].platforms.length - 1].x + levels[currentLevelIndex].platforms[levels[currentLevelIndex].platforms.length - 1].width - canvas.width;
+        if (camera.x < 0) camera.x = 0;
+    }
+
+  }
+
+
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function update() {
+    player.velocityX *= player.friction;
+    player.isOnGround = false;
+
+    if (keys['w'] || keys['W'] || keys['Space']) {
+      if (player.isOnGround) {
+        player.velocityY = player.jumpPower;
+        player.isOnGround = false;
+      }
+    }
+    if (keys['a'] || keys['A']) {
+      player.velocityX -= player.moveSpeed;
+    }
+    if (keys['d'] || keys['D']) {
+      player.velocityX += player.moveSpeed;
+    }
+
+    player.velocityY += player.gravity;
+    player.x += player.velocityX;
+    player.y += player.velocityY;
+
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      let dx = (player.x) - (platform.x + platform.width / 2 - camera.x);
+      let dy = (player.y) - (platform.y + platform.height / 2);
+      let halfWidths = player.radius + platform.width / 2;
+      let halfHeights = player.radius + platform.height / 2;
+      let vx = dx * 1;
+      let vy = dy * 1;
+
+      if (Math.abs(dx) <= halfWidths && Math.abs(dy) <= halfHeights) {
+          let overlapX = halfWidths - Math.abs(dx);
+          let overlapY = halfHeights - Math.abs(dy);
+
+          if (overlapX >= overlapY) {
+              if (dy > 0) {
+                  player.y += overlapY;
+                  player.velocityY = 0;
+                  player.isOnGround = true;
+              } else {
+                  player.y -= overlapY;
+                  player.velocityY = 0;
+              }
+          } else {
+              if (dx > 0) {
+                  player.x += overlapX;
+                  player.velocityX = 0;
+              } else {
+                  player.x -= overlapX;
+                  player.velocityX = 0;
+              }
+          }
+      }
+    });
+
+
+    if (player.y > canvas.height) {
+        resetLevel();
+    }
+    if (player.x > levels[currentLevelIndex].goal.x && player.y < levels[currentLevelIndex].goal.y + 50 && player.y > levels[currentLevelIndex].goal.y - 50 ) {
+        currentLevelIndex = (currentLevelIndex + 1) % levels.length;
+        resetLevel();
+    }
+
+
+    updateCamera();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = 'lightblue';
+    ctx.fillRect(-camera.x, 0, levels[currentLevelIndex].platforms[levels[currentLevelIndex].platforms.length - 1].x + levels[currentLevelIndex].platforms[levels[currentLevelIndex].platforms.length - 1].width + 200 - camera.x , canvas.height);
+
+
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      ctx.fillStyle = 'brown';
+      ctx.fillRect(platform.x - camera.x, platform.y, platform.width, platform.height);
+    });
+
+    ctx.fillStyle = 'green';
+    ctx.fillRect(levels[currentLevelIndex].goal.x - camera.x, levels[currentLevelIndex].goal.y, 50, 50);
+    ctx.fillText("🏁", levels[currentLevelIndex].goal.x - camera.x + 10, levels[currentLevelIndex].goal.y + 35);
+
+    ctx.beginPath();
+    ctx.arc(player.x - camera.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'red';
+    ctx.fill();
+    ctx.closePath();
+
+    ctx.fillStyle = 'black';
+    ctx.font = '16px Arial';
+    ctx.fillText('Level: ' + (currentLevelIndex + 1), 10, 20);
+  }
+
+  gameLoop();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Level Event Editor</title>
+    <style>
+        :root {
+            --bg-color: #222;
+            --panel-bg: #333;
+            --border-color: #555;
+            --text-color: #eee;
+            --highlight-color: #00aaff;
+            --input-bg: #444;
+            --button-bg: #555;
+            --button-hover: #666;
+            --stage-width: 800px;
+            --stage-height: 600px;
+            --font-main: 'Courier New', monospace; /* Pixel-like font */
+        }
+
+        body {
+            margin: 0;
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            font-size: 14px;
+        }
+
+        #editor-container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Panels */
+        .panel {
+            background-color: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            overflow-y: auto;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .panel h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: var(--highlight-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+            font-size: 16px;
+        }
+
+        /* Left Panel (Hierarchy/Screens) */
+        #left-panel {
+            width: 200px;
+            border-left: none;
+            display: flex;
+            flex-direction: column;
+        }
+        #screens-list, #elements-list {
+            list-style: none;
+            padding: 0;
+            margin: 0 0 15px 0;
+        }
+        #screens-list li, #elements-list li {
+            padding: 5px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin-bottom: 3px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #screens-list li:hover, #elements-list li:hover {
+            background-color: var(--input-bg);
+        }
+        #screens-list li.selected, #elements-list li.selected {
+            background-color: var(--highlight-color);
+            color: var(--bg-color);
+            font-weight: bold;
+            border-color: var(--highlight-color);
+        }
+        #elements-container {
+           flex-grow: 1;
+           overflow-y: auto;
+        }
+
+        /* Center Panel (Stage/Preview) */
+        #center-panel {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            background-color: var(--bg-color);
+        }
+        #stage-toolbar {
+            padding: 5px;
+            background-color: var(--panel-bg);
+            width: 100%;
+            box-sizing: border-box;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+        }
+         #stage-toolbar button, .panel button, .panel select, .panel input {
+             background-color: var(--button-bg);
+             color: var(--text-color);
+             border: 1px solid var(--border-color);
+             padding: 5px 10px;
+             margin: 0 2px;
+             cursor: pointer;
+             border-radius: 3px;
+             font-family: var(--font-main);
+             font-size: 13px;
+         }
+         #stage-toolbar button:hover, .panel button:hover {
+             background-color: var(--button-hover);
+         }
+         .panel input, .panel select, .panel textarea {
+             background-color: var(--input-bg);
+             width: calc(100% - 12px);
+             box-sizing: border-box;
+             margin-bottom: 5px;
+             padding: 6px;
+         }
+         .panel textarea {
+             min-height: 60px;
+             resize: vertical;
+         }
+         .panel label {
+             display: block;
+             margin-bottom: 3px;
+             font-size: 12px;
+             color: #aaa;
+         }
+
+
+        #stage-wrapper {
+            width: var(--stage-width);
+            height: var(--stage-height);
+            overflow: hidden; /* Clip elements outside stage */
+            position: relative; /* For absolute positioning of stage elements */
+            background-color: #fff; /* Default stage background */
+            margin: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            cursor: crosshair;
+        }
+        #stage {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background-color: #00BFFF; /* Default background like video */
+        }
+        .stage-element {
+            position: absolute;
+            border: 1px dashed transparent;
+            cursor: move;
+            user-select: none;
+            box-sizing: border-box;
+            overflow: hidden; /* Prevent content spill */
+            display: flex; /* For centering text etc. */
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-main);
+            white-space: pre-wrap; /* Allow text wrapping */
+            text-align: center;
+            line-height: 1.2;
+        }
+        .stage-element.selected {
+            border: 2px solid var(--highlight-color);
+            z-index: 1000; /* Bring selected to front */
+        }
+        /* Resizer Handle */
+        .resizer {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: var(--highlight-color);
+            border: 1px solid var(--bg-color);
+            right: -6px;
+            bottom: -6px;
+            cursor: nwse-resize;
+        }
+
+        /* Right Panel (Properties/Events) */
+        #right-panel {
+            width: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+        #properties-panel, #events-panel {
+            margin-bottom: 10px;
+            max-height: 50%; /* Limit height */
+            overflow-y: auto;
+            flex-shrink: 0; /* Prevent shrinking */
+        }
+        #events-panel {
+             flex-grow: 1; /* Allow events panel to grow */
+             max-height: none;
+        }
+
+        .prop-grid {
+            display: grid;
+            grid-template-columns: 80px 1fr;
+            gap: 5px;
+            align-items: center;
+        }
+        .prop-grid label {
+            grid-column: 1 / 2;
+            text-align: right;
+            margin-bottom: 0;
+            padding-right: 5px;
+            color: #ccc;
+        }
+        .prop-grid input, .prop-grid select, .prop-grid textarea {
+            grid-column: 2 / 3;
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 0;
+        }
+        .color-input-wrapper {
+             display: flex;
+             align-items: center;
+        }
+        .color-input-wrapper input[type="color"] {
+            width: 30px;
+            height: 25px;
+            padding: 0;
+            margin-left: 5px;
+            border: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+        .color-input-wrapper input[type="text"] {
+            flex-grow: 1;
+        }
+
+
+        #events-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .event-item {
+            background-color: var(--input-bg);
+            padding: 8px;
+            margin-bottom: 5px;
+            border-radius: 3px;
+            border: 1px solid var(--border-color);
+        }
+        .event-item select, .event-item input, .event-item textarea {
+             width: 100%;
+             box-sizing: border-box;
+             margin-top: 5px;
+        }
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: grab;
+        }
+         .event-header:active { cursor: grabbing; }
+        .event-header span { font-weight: bold; color: var(--highlight-color); }
+        .event-controls button {
+             background: none;
+             border: none;
+             color: #aaa;
+             cursor: pointer;
+             font-size: 16px;
+             padding: 0 3px;
+        }
+        .event-controls button:hover { color: #ff6666; }
+        .event-details { margin-top: 5px; }
+        .event-details label { font-size: 11px; }
+
+        /* Specific Element Styles (Placeholders) */
+        .element-shape { background-color: gray; }
+        .element-text { background-color: transparent; border: 1px dashed #888; }
+        .element-button { background-color: limegreen; color: white; font-weight: bold; border: 2px solid black; }
+        .element-emoji { background-color: transparent; font-size: 30px; } /* Default size */
+        .element-undertale-textbox {
+            border: 4px solid white;
+            background-color: black;
+            color: white;
+            text-align: left;
+            padding: 15px;
+            align-items: flex-start;
+        }
+        .element-undertale-sprite {
+             border: 5px solid white;
+             background-color: black;
+             color: white; /* For emoji inside */
+             font-size: 50px; /* For emoji inside */
+        }
+
+
+        /* Preview Mode Overlay */
+        #preview-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            z-index: 10000;
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+        }
+        #preview-stage-wrapper {
+             width: var(--stage-width);
+             height: var(--stage-height);
+             position: relative;
+             background-color: white;
+             box-shadow: 0 0 20px rgba(255,255,255,0.3);
+        }
+         #preview-stage {
+             width: 100%;
+             height: 100%;
+             position: relative;
+             overflow: hidden;
+         }
+        #close-preview {
+             position: absolute;
+             top: 10px;
+             right: 10px;
+             background-color: red;
+             color: white;
+             border: none;
+             padding: 10px 15px;
+             font-size: 18px;
+             cursor: pointer;
+             border-radius: 5px;
+             z-index: 10001;
+        }
+
+         /* Style for preview elements (no editor handles) */
+         .preview-element {
+             position: absolute;
+             box-sizing: border-box;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             font-family: var(--font-main);
+             white-space: pre-wrap;
+             text-align: center;
+             line-height: 1.2;
+             overflow: hidden;
+         }
+        .preview-undertale-textbox {
+             border: 4px solid white;
+             background-color: black;
+             color: white;
+             text-align: left;
+             padding: 15px;
+             align-items: flex-start;
+         }
+         .preview-undertale-sprite {
+             border: 5px solid white;
+             background-color: black;
+             color: white; /* For emoji inside */
+             font-size: 50px; /* For emoji inside */
+         }
+         .preview-element.clickable { cursor: pointer; }
+
+         /* Helper classes */
+        .hidden { display: none !important; }
+
+
+    </style>
+</head>
+<body>
+    <div id="editor-container">
+        <!-- Left Panel: Screens & Elements Hierarchy -->
+        <div id="left-panel" class="panel">
+            <div>
+                <h3>Screens</h3>
+                <button id="add-screen-btn">Add Screen</button>
+                <button id="delete-screen-btn">Delete Screen</button>
+                <ul id="screens-list">
+                    <!-- Screen items will be added here -->
+                </ul>
+            </div>
+            <div id="elements-container">
+                 <h3>Elements</h3>
+                 <select id="add-element-type">
+                     <option value="text">Text Label</option>
+                     <option value="button">Button</option>
+                     <option value="shape">Shape (Rect)</option>
+                     <option value="emoji">Emoji/Symbol</option>
+                     <option value="undertale-textbox">Undertale Textbox</option>
+                     <option value="undertale-sprite">Undertale Sprite (Placeholder)</option>
+                 </select>
+                 <button id="add-element-btn">Add Element</button>
+                 <button id="delete-element-btn">Delete Element</button>
+                 <ul id="elements-list">
+                     <!-- Elements for the selected screen will be listed here -->
+                 </ul>
+            </div>
+        </div>
+
+        <!-- Center Panel: Stage -->
+        <div id="center-panel">
+            <div id="stage-toolbar">
+                <span>Editing Screen: <strong id="current-screen-name">None</strong></span>
+                <button id="preview-btn">Preview</button>
+                <button id="save-btn">Save JSON</button>
+                <label for="load-file-input" style="display: inline-block; margin: 0 5px;">
+                    <button onclick="document.getElementById('load-file-input').click();" style="pointer-events: none;">Load JSON</button>
+                </label>
+                <input type="file" id="load-file-input" accept=".json" style="display: none;">
+            </div>
+            <div id="stage-wrapper">
+                <div id="stage">
+                    <!-- Draggable elements will be added here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Properties & Events -->
+        <div id="right-panel" class="panel">
+            <div id="properties-panel">
+                <h3>Properties</h3>
+                <div id="properties-content">
+                    <!-- Properties for selected screen/element -->
+                    Select an element or screen...
+                </div>
+            </div>
+            <div id="events-panel">
+                <h3>Events</h3>
+                 <label for="event-trigger-select">Trigger:</label>
+                 <select id="event-trigger-select">
+                     <option value="ON_CLICK">On Click</option>
+                     <option value="ON_LOAD">On Screen Load</option>
+                     <!-- Add more triggers as needed -->
+                 </select>
+                 <button id="add-event-btn">Add Event Action</button>
+                 <div id="events-list-container">
+                    <p>Select an element or screen to view/add events.</p>
+                    <ul id="events-list">
+                         <!-- Event items will be added here -->
+                     </ul>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview Overlay -->
+    <div id="preview-overlay">
+         <button id="close-preview">Close Preview (X)</button>
+         <div id="preview-stage-wrapper">
+             <div id="preview-stage">
+                 <!-- Preview content rendered here -->
+             </div>
+         </div>
+    </div>
+
+    <script>
+        // --- Global State ---
+        let gameData = {
+            screens: {},
+            startScreen: null,
+            variables: {} // For potential future use (like flushCount)
+        };
+        let selectedScreenId = null;
+        let selectedElementId = null;
+        let selectedEventTrigger = 'ON_CLICK'; // Default trigger type
+
+        let draggedItem = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+
+        let resizingItem = null;
+        let resizeStartX = 0;
+        let resizeStartY = 0;
+        let resizeStartWidth = 0;
+        let resizeStartHeight = 0;
+
+        // --- DOM References ---
+        const stage = document.getElementById('stage');
+        const stageWrapper = document.getElementById('stage-wrapper');
+        const screensList = document.getElementById('screens-list');
+        const elementsList = document.getElementById('elements-list');
+        const currentScreenName = document.getElementById('current-screen-name');
+        const propertiesContent = document.getElementById('properties-content');
+        const eventsListContainer = document.getElementById('events-list-container');
+        const eventsList = document.getElementById('events-list');
+        const addScreenBtn = document.getElementById('add-screen-btn');
+        const deleteScreenBtn = document.getElementById('delete-screen-btn');
+        const addElementBtn = document.getElementById('add-element-btn');
+        const deleteElementBtn = document.getElementById('delete-element-btn');
+        const addElementTypeSelect = document.getElementById('add-element-type');
+        const eventTriggerSelect = document.getElementById('event-trigger-select');
+        const addEventBtn = document.getElementById('add-event-btn');
+        const previewBtn = document.getElementById('preview-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const loadFileInput = document.getElementById('load-file-input');
+        const previewOverlay = document.getElementById('preview-overlay');
+        const previewStage = document.getElementById('preview-stage');
+        const closePreviewBtn = document.getElementById('close-preview');
+
+
+        // --- Utility Functions ---
+        const generateId = (prefix = 'item') => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        const sanitizeHTML = (str) => {
+            const temp = document.createElement('div');
+            temp.textContent = str;
+            return temp.innerHTML;
+        };
+
+        // --- Core Editor Logic ---
+
+        function selectScreen(screenId) {
+            selectedScreenId = screenId;
+            selectedElementId = null; // Deselect element when changing screen
+
+            // Update UI lists
+            document.querySelectorAll('#screens-list li').forEach(li => {
+                li.classList.toggle('selected', li.dataset.screenId === screenId);
+            });
+            document.querySelectorAll('#elements-list li').forEach(li => li.classList.remove('selected'));
+
+            currentScreenName.textContent = screenId ? gameData.screens[screenId].name : 'None';
+
+            renderStage();
+            renderElementsList();
+            renderProperties();
+            renderEventsList();
+            updateEventPanelVisibility();
+        }
+
+        function selectElement(elementId, stageElement) {
+             // If already selected, deselect
+            if (selectedElementId === elementId) {
+                 selectedElementId = null;
+                 document.querySelectorAll('.stage-element.selected').forEach(el => el.classList.remove('selected'));
+                 document.querySelectorAll('#elements-list li.selected').forEach(li => li.classList.remove('selected'));
+            } else {
+                 selectedElementId = elementId;
+                 // Update stage selection visual
+                 document.querySelectorAll('.stage-element.selected').forEach(el => el.classList.remove('selected'));
+                 if (stageElement) {
+                     stageElement.classList.add('selected');
+                 }
+                 // Update list selection visual
+                 document.querySelectorAll('#elements-list li').forEach(li => {
+                     li.classList.toggle('selected', li.dataset.elementId === elementId);
+                 });
+            }
+
+            renderProperties(); // Render properties for the element or screen
+            renderEventsList();
+            updateEventPanelVisibility();
+        }
+
+        function addScreen() {
+            const screenName = prompt("Enter screen name:", `Screen${Object.keys(gameData.screens).length + 1}`);
+            if (screenName) {
+                const screenId = generateId('screen');
+                gameData.screens[screenId] = {
+                    id: screenId,
+                    name: screenName,
+                    elements: {},
+                    events: { ON_LOAD: [] }, // Add default ON_LOAD trigger
+                    styles: {
+                        backgroundColor: '#00BFFF' // Default background
+                    }
+                };
+                if (!gameData.startScreen) {
+                    gameData.startScreen = screenId; // Set first screen as start screen
+                }
+                renderScreensList();
+                selectScreen(screenId);
+            }
+        }
+
+         function deleteScreen() {
+             if (!selectedScreenId) {
+                 alert("Please select a screen to delete.");
+                 return;
+             }
+             if (Object.keys(gameData.screens).length <= 1) {
+                 alert("Cannot delete the last screen.");
+                 return;
+             }
+             if (confirm(`Are you sure you want to delete screen "${gameData.screens[selectedScreenId].name}" and all its elements/events?`)) {
+                 delete gameData.screens[selectedScreenId];
+                 // If the deleted screen was the start screen, pick another one
+                 if (gameData.startScreen === selectedScreenId) {
+                     gameData.startScreen = Object.keys(gameData.screens)[0] || null;
+                 }
+                 selectedScreenId = null;
+                 selectedElementId = null;
+                 renderScreensList();
+                 selectScreen(gameData.startScreen); // Select the new start screen or null
+             }
+         }
+
+
+        function addElement() {
+            if (!selectedScreenId) {
+                alert("Please select a screen first.");
+                return;
+            }
+            const type = addElementTypeSelect.value;
+            const elementId = generateId(type);
+            const screen = gameData.screens[selectedScreenId];
+
+            const newElement = {
+                id: elementId,
+                type: type,
+                name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${Object.keys(screen.elements).length + 1}`,
+                styles: { // Default styles
+                    left: '50px',
+                    top: '50px',
+                    width: '100px',
+                    height: '50px',
+                    backgroundColor: type === 'shape' ? 'gray' : (type === 'button' ? 'limegreen' : 'transparent'),
+                    color: type === 'button' || type === 'undertale-textbox' ? 'white' : 'black',
+                    border: type === 'button' ? '2px solid black' : (type === 'undertale-textbox' ? '4px solid white' : 'none'),
+                    fontSize: type === 'emoji' || type === 'undertale-sprite' ? '30px' : '14px',
+                    textAlign: 'center',
+                    padding: type === 'undertale-textbox' ? '15px' : '5px',
+                    zIndex: Object.keys(screen.elements).length // Basic stacking
+                },
+                content: type === 'text' ? 'Text Label' : (type === 'button' ? 'Button' : (type === 'emoji' ? '❓' : '')),
+                events: { ON_CLICK: [] } // Add default ON_CLICK trigger
+            };
+
+             // Type-specific adjustments
+            if (type === 'undertale-textbox') {
+                 newElement.styles.width = '400px';
+                 newElement.styles.height = '150px';
+                 newElement.styles.backgroundColor = 'black';
+                 newElement.styles.textAlign = 'left';
+                 newElement.styles.alignItems = 'flex-start'; // For CSS flex alignment
+                 newElement.content = '* Default dialogue text...';
+            } else if (type === 'undertale-sprite') {
+                 newElement.styles.width = '80px';
+                 newElement.styles.height = '120px';
+                 newElement.styles.border = '5px solid white';
+                 newElement.styles.backgroundColor = 'black';
+                 newElement.content = '💀'; // Default placeholder
+            } else if (type === 'emoji') {
+                 newElement.styles.width = '50px'; // Fit emoji better
+                 newElement.styles.height = '50px';
+            } else if (type === 'shape') {
+                 newElement.styles.height = '100px';
+            }
+
+
+            screen.elements[elementId] = newElement;
+            renderElementsList();
+            renderStage();
+            selectElement(elementId, document.getElementById(elementId)); // Select the new element
+        }
+
+         function deleteElement() {
+             if (!selectedElementId) {
+                 alert("Please select an element to delete.");
+                 return;
+             }
+             if (!selectedScreenId || !gameData.screens[selectedScreenId]) return;
+
+             if (confirm(`Are you sure you want to delete element "${gameData.screens[selectedScreenId].elements[selectedElementId].name}"?`)) {
+                 delete gameData.screens[selectedScreenId].elements[selectedElementId];
+                 selectedElementId = null;
+                 renderElementsList();
+                 renderStage();
+                 renderProperties(); // Update properties panel (show screen props)
+                 renderEventsList();
+                 updateEventPanelVisibility();
+             }
+         }
+
+        function updateElementData(elementId, data) {
+            if (!selectedScreenId || !gameData.screens[selectedScreenId]?.elements[elementId]) return;
+            const element = gameData.screens[selectedScreenId].elements[elementId];
+            Object.assign(element, data); // Update top-level properties like name
+             if (data.styles) {
+                 Object.assign(element.styles, data.styles);
+             }
+             if (data.hasOwnProperty('content')) {
+                element.content = data.content;
+             }
+
+            // Re-render the specific element and properties
+            const stageElement = document.getElementById(elementId);
+            if (stageElement) applyStyles(stageElement, element);
+            renderProperties(); // Update the properties panel reflect changes
+            renderElementsList(); // Update name in list if changed
+        }
+
+         function updateScreenData(screenId, data) {
+             if (!gameData.screens[screenId]) return;
+             const screen = gameData.screens[screenId];
+             Object.assign(screen, data); // Update top-level properties like name
+             if (data.styles) {
+                 Object.assign(screen.styles, data.styles);
+             }
+             // Apply background change immediately if it's the current screen
+             if (screenId === selectedScreenId && data.styles?.backgroundColor) {
+                 stage.style.backgroundColor = data.styles.backgroundColor;
+             }
+             if (data.name) {
+                 renderScreensList(); // Update name in list
+                 if(screenId === selectedScreenId) currentScreenName.textContent = data.name;
+             }
+             renderProperties();
+         }
+
+        // --- Rendering Functions ---
+
+        function renderScreensList() {
+            screensList.innerHTML = '';
+            Object.values(gameData.screens).forEach(screen => {
+                const li = document.createElement('li');
+                li.dataset.screenId = screen.id;
+                li.textContent = screen.name + (screen.id === gameData.startScreen ? ' (Start)' : '');
+                li.classList.toggle('selected', screen.id === selectedScreenId);
+                li.addEventListener('click', () => selectScreen(screen.id));
+                screensList.appendChild(li);
+            });
+             // If no screen selected, try selecting start screen
+             if (!selectedScreenId && gameData.startScreen) {
+                 selectScreen(gameData.startScreen);
+             } else if (!selectedScreenId && Object.keys(gameData.screens).length > 0) {
+                 selectScreen(Object.keys(gameData.screens)[0]); // Select first if no start screen
+             }
+        }
+
+        function renderElementsList() {
+            elementsList.innerHTML = '';
+            if (selectedScreenId && gameData.screens[selectedScreenId]) {
+                const screen = gameData.screens[selectedScreenId];
+                Object.values(screen.elements).forEach(element => {
+                    const li = document.createElement('li');
+                    li.dataset.elementId = element.id;
+                    li.textContent = element.name || `${element.type} (${element.id.slice(-4)})`;
+                    li.classList.toggle('selected', element.id === selectedElementId);
+                    li.addEventListener('click', (e) => {
+                         e.stopPropagation(); // Prevent screen selection
+                         selectElement(element.id, document.getElementById(element.id));
+                    });
+                    elementsList.appendChild(li);
+                });
+            }
+        }
+
+        function applyStyles(stageElement, elementData) {
+             // Apply common styles
+             const styles = elementData.styles;
+             stageElement.style.left = styles.left || '0px';
+             stageElement.style.top = styles.top || '0px';
+             stageElement.style.width = styles.width || 'auto';
+             stageElement.style.height = styles.height || 'auto';
+             stageElement.style.backgroundColor = styles.backgroundColor || 'transparent';
+             stageElement.style.color = styles.color || 'black';
+             stageElement.style.border = styles.border || 'none';
+             stageElement.style.fontSize = styles.fontSize || '14px';
+             stageElement.style.textAlign = styles.textAlign || 'center';
+             stageElement.style.padding = styles.padding || '5px';
+             stageElement.style.zIndex = styles.zIndex || 'auto';
+             stageElement.style.fontFamily = styles.fontFamily || 'var(--font-main)';
+             stageElement.style.fontWeight = styles.fontWeight || 'normal';
+             stageElement.style.display = styles.display || 'flex'; // Use flex for alignment
+             stageElement.style.alignItems = styles.alignItems || 'center';
+             stageElement.style.justifyContent = styles.justifyContent || 'center';
+             stageElement.style.opacity = styles.opacity || 1;
+             stageElement.style.borderRadius = styles.borderRadius || '0px';
+
+
+             // Content
+             stageElement.innerHTML = ''; // Clear previous content/resizer
+             stageElement.textContent = elementData.content || ''; // Set text content, handles emojis too
+
+             // Add type-specific classes
+             stageElement.classList.add(`element-${elementData.type}`);
+
+             // Add resizer for selected elements
+             if (elementData.id === selectedElementId) {
+                  const resizer = document.createElement('div');
+                  resizer.className = 'resizer';
+                  resizer.addEventListener('mousedown', startResize);
+                  stageElement.appendChild(resizer);
+             }
+        }
+
+
+        function renderStage() {
+            stage.innerHTML = ''; // Clear stage
+            if (selectedScreenId && gameData.screens[selectedScreenId]) {
+                const screen = gameData.screens[selectedScreenId];
+                // Apply screen background
+                stage.style.backgroundColor = screen.styles?.backgroundColor || '#00BFFF';
+
+                Object.values(screen.elements).forEach(elementData => {
+                    const div = document.createElement('div');
+                    div.id = elementData.id;
+                    div.className = 'stage-element';
+                    if (elementData.id === selectedElementId) {
+                        div.classList.add('selected');
+                    }
+
+                    applyStyles(div, elementData);
+
+                    // Make draggable
+                    div.addEventListener('mousedown', startDrag);
+
+                    // Select on click (within the element itself, not just border)
+                    div.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Prevent stage click from deselecting
+                        selectElement(elementData.id, div);
+                    });
+
+                    stage.appendChild(div);
+                });
+            } else {
+                 stage.style.backgroundColor = '#555'; // Default empty stage color
+            }
+        }
+
+         function renderProperties() {
+             propertiesContent.innerHTML = ''; // Clear previous properties
+             let target = null;
+             let isScreen = false;
+
+             if (selectedElementId && selectedScreenId && gameData.screens[selectedScreenId]?.elements[selectedElementId]) {
+                 target = gameData.screens[selectedScreenId].elements[selectedElementId];
+             } else if (selectedScreenId && gameData.screens[selectedScreenId]) {
+                 target = gameData.screens[selectedScreenId];
+                 isScreen = true;
+             }
+
+             if (!target) {
+                 propertiesContent.textContent = 'Select an element or screen...';
+                 return;
+             }
+
+             const form = document.createElement('div');
+             form.className = 'prop-grid';
+
+             // --- Common Properties ---
+             // Name
+             let label = document.createElement('label'); label.htmlFor = 'prop-name'; label.textContent = 'Name:';
+             let input = document.createElement('input'); input.type = 'text'; input.id = 'prop-name'; input.value = target.name || '';
+             input.oninput = (e) => isScreen ? updateScreenData(target.id, { name: e.target.value }) : updateElementData(target.id, { name: e.target.value });
+             form.appendChild(label); form.appendChild(input);
+
+             // --- Screen Specific Properties ---
+             if (isScreen) {
+                 // Background Color
+                 label = document.createElement('label'); label.htmlFor = 'prop-bg-color'; label.textContent = 'BG Color:';
+                 const colorWrapper = document.createElement('div');
+                 colorWrapper.className = 'color-input-wrapper';
+                 input = document.createElement('input'); input.type = 'text'; input.id = 'prop-bg-color'; input.value = target.styles?.backgroundColor || '#00BFFF';
+                 let colorInput = document.createElement('input'); colorInput.type = 'color'; colorInput.value = target.styles?.backgroundColor || '#00BFFF';
+                 input.oninput = (e) => { colorInput.value = e.target.value; updateScreenData(target.id, { styles: { backgroundColor: e.target.value } }); };
+                 colorInput.oninput = (e) => { input.value = e.target.value; updateScreenData(target.id, { styles: { backgroundColor: e.target.value } }); };
+                 colorWrapper.appendChild(input); colorWrapper.appendChild(colorInput);
+                 form.appendChild(label); form.appendChild(colorWrapper);
+
+                 // Start Screen Toggle
+                 label = document.createElement('label'); label.htmlFor = 'prop-start-screen'; label.textContent = 'Start Screen:';
+                 input = document.createElement('input'); input.type = 'checkbox'; input.id = 'prop-start-screen';
+                 input.checked = (gameData.startScreen === target.id);
+                 input.onchange = (e) => {
+                     gameData.startScreen = e.target.checked ? target.id : (Object.keys(gameData.screens).find(id => id !== target.id) || null); // Find another screen or null
+                     renderScreensList(); // Update "(Start)" labels
+                     renderProperties(); // Re-render to reflect change
+                 };
+                 form.appendChild(label); form.appendChild(input);
+
+             }
+             // --- Element Specific Properties ---
+             else {
+                 // Position & Size
+                 const styleProps = ['left', 'top', 'width', 'height', 'zIndex'];
+                 styleProps.forEach(prop => {
+                     label = document.createElement('label'); label.htmlFor = `prop-${prop}`; label.textContent = `${prop.charAt(0).toUpperCase() + prop.slice(1)}:`;
+                     input = document.createElement('input'); input.type = 'text'; input.id = `prop-${prop}`; input.value = target.styles[prop] || '';
+                     input.oninput = (e) => updateElementData(target.id, { styles: { [prop]: e.target.value } });
+                     form.appendChild(label); form.appendChild(input);
+                 });
+
+                 // Content (Text, Button Label, Emoji)
+                 if (target.type === 'text' || target.type === 'button' || target.type === 'emoji' || target.type === 'undertale-textbox' || target.type === 'undertale-sprite') {
+                     label = document.createElement('label'); label.htmlFor = 'prop-content'; label.textContent = 'Content:';
+                     let contentInput;
+                     if (target.type === 'text' || target.type === 'undertale-textbox') {
+                         contentInput = document.createElement('textarea');
+                     } else {
+                          contentInput = document.createElement('input'); contentInput.type = 'text';
+                     }
+                     contentInput.id = 'prop-content'; contentInput.value = target.content || '';
+                     contentInput.oninput = (e) => updateElementData(target.id, { content: e.target.value });
+                     form.appendChild(label); form.appendChild(contentInput);
+                 }
+
+                 // Style Properties (Color, Background, Font, Border etc.)
+                 const visualStyleProps = [
+                      { name: 'color', type: 'color' },
+                      { name: 'backgroundColor', type: 'color', label: 'BG Color' },
+                      { name: 'fontSize', type: 'text', label: 'Font Size'},
+                      { name: 'fontFamily', type: 'text', label: 'Font Family'},
+                      { name: 'fontWeight', type: 'text', label: 'Font Weight'},
+                      { name: 'textAlign', type: 'select', options: ['left', 'center', 'right', 'justify'], label: 'Text Align'},
+                      { name: 'border', type: 'text' },
+                      { name: 'borderRadius', type: 'text', label: 'Radius'},
+                      { name: 'padding', type: 'text' },
+                      { name: 'opacity', type: 'text' },
+                 ];
+
+                 visualStyleProps.forEach(propInfo => {
+                      label = document.createElement('label'); label.htmlFor = `prop-${propInfo.name}`; label.textContent = `${propInfo.label || propInfo.name.charAt(0).toUpperCase() + propInfo.name.slice(1)}:`;
+                      let inputEl;
+                      let wrapper = null;
+
+                      if (propInfo.type === 'color') {
+                          wrapper = document.createElement('div');
+                          wrapper.className = 'color-input-wrapper';
+                          input = document.createElement('input'); input.type = 'text'; input.id = `prop-${propInfo.name}`; input.value = target.styles[propInfo.name] || '';
+                          let colorInput = document.createElement('input'); colorInput.type = 'color'; colorInput.value = target.styles[propInfo.name] || (propInfo.name === 'backgroundColor' ? '#ffffff' : '#000000'); // Default based on name
+                          input.oninput = (e) => { colorInput.value = e.target.value; updateElementData(target.id, { styles: { [propInfo.name]: e.target.value } }); };
+                          colorInput.oninput = (e) => { input.value = e.target.value; updateElementData(target.id, { styles: { [propInfo.name]: e.target.value } }); };
+                          wrapper.appendChild(input); wrapper.appendChild(colorInput);
+                          inputEl = wrapper;
+                      } else if (propInfo.type === 'select') {
+                           input = document.createElement('select'); input.id = `prop-${propInfo.name}`;
+                           propInfo.options.forEach(opt => {
+                               const option = document.createElement('option');
+                               option.value = opt; option.textContent = opt;
+                               if (target.styles[propInfo.name] === opt) option.selected = true;
+                               input.appendChild(option);
+                           });
+                           input.onchange = (e) => updateElementData(target.id, { styles: { [propInfo.name]: e.target.value } });
+                           inputEl = input;
+                      } else { // Default to text input
+                          input = document.createElement('input'); input.type = 'text'; input.id = `prop-${propInfo.name}`; input.value = target.styles[propInfo.name] || '';
+                          input.oninput = (e) => updateElementData(target.id, { styles: { [propInfo.name]: e.target.value } });
+                          inputEl = input;
+                      }
+
+                      form.appendChild(label);
+                      form.appendChild(inputEl);
+                 });
+             }
+
+             propertiesContent.appendChild(form);
+         }
+
+         // --- Event Handling & Rendering ---
+
+        eventTriggerSelect.addEventListener('change', (e) => {
+            selectedEventTrigger = e.target.value;
+            renderEventsList();
+        });
+
+        function updateEventPanelVisibility() {
+             const canHaveEvents = selectedScreenId || selectedElementId;
+             eventsListContainer.innerHTML = ''; // Clear placeholder/list
+             if (canHaveEvents) {
+                 eventsListContainer.appendChild(eventsList); // Add the list back
+                 renderEventsList(); // Render actual events
+             } else {
+                  eventsListContainer.innerHTML = '<p>Select an element or screen to view/add events.</p>';
+             }
+             // Enable/disable Add Event button
+             addEventBtn.disabled = !canHaveEvents || (selectedEventTrigger === 'ON_LOAD' && selectedElementId); // Disable ON_LOAD for elements
+        }
+
+        function addEventAction() {
+             let targetObject = null;
+             if (selectedElementId && selectedScreenId && gameData.screens[selectedScreenId]?.elements[selectedElementId]) {
+                 targetObject = gameData.screens[selectedScreenId].elements[selectedElementId];
+             } else if (selectedScreenId && gameData.screens[selectedScreenId]) {
+                 targetObject = gameData.screens[selectedScreenId];
+             }
+
+             if (!targetObject) return;
+
+             // Ensure the event trigger array exists
+             if (!targetObject.events) targetObject.events = {};
+             if (!targetObject.events[selectedEventTrigger]) {
+                 targetObject.events[selectedEventTrigger] = [];
+             }
+
+             // Add a default event action
+             const newEvent = {
+                 id: generateId('event'),
+                 type: 'SHOW_DIALOGUE', // Default action type
+                 params: { text: 'Default message', speed: 50 } // Default parameters
+             };
+             targetObject.events[selectedEventTrigger].push(newEvent);
+             renderEventsList();
+         }
+
+
+         function deleteEventAction(eventId) {
+             let eventList = findEventListById(eventId);
+             if (!eventList) return;
+
+             const index = eventList.findIndex(ev => ev.id === eventId);
+             if (index > -1) {
+                 eventList.splice(index, 1);
+                 renderEventsList();
+             }
+         }
+
+         function updateEventAction(eventId, newData) {
+             let eventList = findEventListById(eventId);
+             if (!eventList) return;
+
+             const event = eventList.find(ev => ev.id === eventId);
+             if (event) {
+                 if(newData.type) event.type = newData.type;
+                 if(newData.params) Object.assign(event.params, newData.params);
+                 // Important: If type changes, reset params to default for that type
+                 if (newData.type) {
+                      event.params = getDefaultEventParams(newData.type);
+                 }
+                 renderEventsList(); // Re-render to show updated fields/values
+             }
+         }
+
+        function findEventListById(eventId) {
+            for (const screen of Object.values(gameData.screens)) {
+                for (const triggerEvents of Object.values(screen.events || {})) {
+                    if (triggerEvents.some(ev => ev.id === eventId)) return triggerEvents;
+                }
+                for (const element of Object.values(screen.elements)) {
+                    for (const triggerEvents of Object.values(element.events || {})) {
+                        if (triggerEvents.some(ev => ev.id === eventId)) return triggerEvents;
+                    }
+                }
+            }
+            return null;
+        }
+
+
+         function renderEventsList() {
+             eventsList.innerHTML = ''; // Clear list
+
+             let targetObject = null;
+             if (selectedElementId && selectedScreenId && gameData.screens[selectedScreenId]?.elements[selectedElementId]) {
+                 targetObject = gameData.screens[selectedScreenId].elements[selectedElementId];
+             } else if (selectedScreenId && gameData.screens[selectedScreenId]) {
+                 targetObject = gameData.screens[selectedScreenId];
+             }
+
+             if (!targetObject || !targetObject.events || !targetObject.events[selectedEventTrigger]) {
+                 // eventsList.innerHTML = '<p style="font-size: 12px; color: #888;">No events for this trigger.</p>';
+                 return; // No events for this trigger on this object
+             }
+
+             const currentEvents = targetObject.events[selectedEventTrigger];
+
+             currentEvents.forEach((event, index) => {
+                 const li = document.createElement('li');
+                 li.className = 'event-item';
+                 li.dataset.eventId = event.id;
+                 li.draggable = true;
+                 li.addEventListener('dragstart', handleDragStart);
+                 li.addEventListener('dragover', handleDragOver);
+                 li.addEventListener('drop', handleDrop);
+                 li.addEventListener('dragend', handleDragEnd);
+
+
+                 const header = document.createElement('div');
+                 header.className = 'event-header';
+                 header.innerHTML = `
+                     <span>${index + 1}. ${event.type}</span>
+                     <div class="event-controls">
+                         <button title="Delete" onclick="deleteEventAction('${event.id}')">&times;</button>
+                     </div>
+                 `;
+                 li.appendChild(header);
+
+                 const details = document.createElement('div');
+                 details.className = 'event-details';
+                 renderEventParams(details, event);
+                 li.appendChild(details);
+
+                 eventsList.appendChild(li);
+             });
+         }
+
+        function getDefaultEventParams(eventType) {
+             switch (eventType) {
+                 case 'SHOW_SCREEN': return { screenId: '', transition: 'none' };
+                 case 'SHOW_DIALOGUE': return { text: '* Dialogue...', speed: 50, targetElementId: '' }; // Target optional
+                 case 'CHANGE_ELEMENT_STYLE': return { targetElementId: '', property: 'backgroundColor', value: '#FF0000' };
+                 case 'CHANGE_SCREEN_STYLE': return { property: 'backgroundColor', value: '#000000' };
+                 case 'END_GAME': return { endingType: 'Good', message: 'Game Over!' };
+                 case 'WAIT': return { duration: 1000 }; // milliseconds
+                 case 'PLAY_ANIMATION': return { targetElementId: '', animationName: 'shake', duration: 500 };
+                 case 'SHOW_CHOICE': return { targetElementId: '', options: [{text: 'Option A', events:[]}, {text: 'Option B', events:[]}] }; // Simplified for now
+                 case 'SET_VARIABLE': return { name: 'varName', value: '0' };
+                 case 'CONDITION': return { variable: 'varName', operator: '==', value: '0', trueEvents: [], falseEvents: [] }; // Simplified
+                 default: return {};
+             }
+         }
+
+        function renderEventParams(container, event) {
+             container.innerHTML = ''; // Clear previous params
+
+             const eventTypeSelect = document.createElement('select');
+             const availableEventTypes = [
+                 'SHOW_SCREEN', 'SHOW_DIALOGUE', 'CHANGE_ELEMENT_STYLE', 'CHANGE_SCREEN_STYLE',
+                 'END_GAME', 'WAIT', 'PLAY_ANIMATION', /* 'SHOW_CHOICE', 'SET_VARIABLE', 'CONDITION' */ // More complex - omit for now
+             ];
+             availableEventTypes.forEach(type => {
+                 const option = document.createElement('option');
+                 option.value = type;
+                 option.textContent = type;
+                 if (type === event.type) option.selected = true;
+                 eventTypeSelect.appendChild(option);
+             });
+             eventTypeSelect.onchange = (e) => updateEventAction(event.id, { type: e.target.value });
+             container.appendChild(eventTypeSelect);
+
+             const params = event.params || {};
+             const screenIds = Object.keys(gameData.screens);
+             const elementIds = selectedScreenId ? Object.keys(gameData.screens[selectedScreenId].elements) : [];
+
+             // Helper to create input/select fields
+             const createField = (label, id, type = 'text', options = null) => {
+                 const lbl = document.createElement('label');
+                 lbl.textContent = label;
+                 lbl.style.display = 'block';
+                 lbl.style.marginTop = '5px';
+                 container.appendChild(lbl);
+
+                 let input;
+                 if (type === 'select') {
+                     input = document.createElement('select');
+                     options.forEach(optValue => {
+                         const option = document.createElement('option');
+                         option.value = optValue;
+                         // Try to get a readable name for screen/element IDs
+                         let text = optValue;
+                          if (gameData.screens[optValue]) text = gameData.screens[optValue].name;
+                          else if (selectedScreenId && gameData.screens[selectedScreenId]?.elements[optValue]) text = gameData.screens[selectedScreenId].elements[optValue].name;
+                         option.textContent = text;
+                         if (params[id] === optValue) option.selected = true;
+                         input.appendChild(option);
+                     });
+                 } else if (type === 'textarea') {
+                     input = document.createElement('textarea');
+                     input.value = params[id] || '';
+                 } else {
+                     input = document.createElement('input');
+                     input.type = type;
+                     input.value = params[id] || '';
+                 }
+                 input.onchange = (e) => updateEventAction(event.id, { params: { [id]: e.target.value } });
+                 input.oninput = (e) => { // For text/textarea to update live (optional)
+                     if (type === 'text' || type === 'textarea') {
+                        updateEventAction(event.id, { params: { [id]: e.target.value } });
+                     }
+                 };
+                 container.appendChild(input);
+             };
+
+             // Render fields based on event type
+            switch (event.type) {
+                 case 'SHOW_SCREEN':
+                     createField('Target Screen:', 'screenId', 'select', screenIds);
+                     // createField('Transition:', 'transition', 'select', ['none', 'fade', 'slide']); // Future enhancement
+                     break;
+                 case 'SHOW_DIALOGUE':
+                     createField('Text:', 'text', 'textarea');
+                     createField('Speed (ms/char):', 'speed', 'number');
+                      createField('Target Textbox (Optional):', 'targetElementId', 'select', ['', ...elementIds]); // Allow empty target
+                     break;
+                 case 'CHANGE_ELEMENT_STYLE':
+                      createField('Target Element:', 'targetElementId', 'select', elementIds);
+                      createField('CSS Property:', 'property', 'text'); // Could be a select with common props
+                      createField('New Value:', 'value', 'text');
+                     break;
+                 case 'CHANGE_SCREEN_STYLE':
+                      createField('CSS Property:', 'property', 'text');
+                      createField('New Value:', 'value', 'text');
+                     break;
+                 case 'END_GAME':
+                      createField('Ending Type:', 'endingType', 'select', ['Good', 'Bad', 'Secret', 'Custom']);
+                      createField('Message:', 'message', 'textarea');
+                     break;
+                 case 'WAIT':
+                      createField('Duration (ms):', 'duration', 'number');
+                     break;
+                 case 'PLAY_ANIMATION':
+                      createField('Target Element:', 'targetElementId', 'select', elementIds);
+                      createField('Animation Name (CSS):', 'animationName', 'text');
+                      createField('Duration (ms):', 'duration', 'number');
+                      break;
+                 // Add cases for other event types here...
+            }
+         }
+
+
+        // --- Drag and Drop Logic (Elements on Stage & Events in List) ---
+
+        function startDrag(e) {
+            if (!e.target.classList.contains('stage-element')) return; // Only drag elements themselves
+            draggedItem = e.target;
+            draggedItem.style.pointerEvents = 'none'; // Prevent interference during drag
+
+            // Ensure the clicked element is selected
+            if (!draggedItem.classList.contains('selected')) {
+                selectElement(draggedItem.id, draggedItem);
+            }
+
+            const rect = draggedItem.getBoundingClientRect();
+            const stageRect = stage.getBoundingClientRect();
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('mouseup', stopDrag);
+        }
+
+        function dragMove(e) {
+            if (!draggedItem) return;
+            const stageRect = stage.getBoundingClientRect();
+            let newX = e.clientX - stageRect.left - dragOffsetX;
+            let newY = e.clientY - stageRect.top - dragOffsetY;
+
+             // Snap to grid (optional)
+             // const gridSize = 10;
+             // newX = Math.round(newX / gridSize) * gridSize;
+             // newY = Math.round(newY / gridSize) * gridSize;
+
+             // Keep within bounds (optional)
+             // newX = Math.max(0, Math.min(newX, stageRect.width - draggedItem.offsetWidth));
+             // newY = Math.max(0, Math.min(newY, stageRect.height - draggedItem.offsetHeight));
+
+            draggedItem.style.left = `${newX}px`;
+            draggedItem.style.top = `${newY}px`;
+        }
+
+        function stopDrag(e) {
+            if (!draggedItem) return;
+            document.removeEventListener('mousemove', dragMove);
+            document.removeEventListener('mouseup', stopDrag);
+
+            // Update element data with new position
+            updateElementData(draggedItem.id, {
+                 styles: {
+                     left: draggedItem.style.left,
+                     top: draggedItem.style.top
+                 }
+             });
+
+            draggedItem.style.pointerEvents = 'auto'; // Restore pointer events
+            draggedItem = null;
+        }
+
+        // --- Resizing Logic ---
+         function startResize(e) {
+             e.stopPropagation(); // Prevent starting a drag on the element
+             resizingItem = e.target.parentElement; // The stage element
+             if (!resizingItem) return;
+
+             const rect = resizingItem.getBoundingClientRect();
+             resizeStartX = e.clientX;
+             resizeStartY = e.clientY;
+             resizeStartWidth = resizingItem.offsetWidth;
+             resizeStartHeight = resizingItem.offsetHeight;
+
+             document.addEventListener('mousemove', resizeMove);
+             document.addEventListener('mouseup', stopResize);
+         }
+
+        function resizeMove(e) {
+             if (!resizingItem) return;
+             const dx = e.clientX - resizeStartX;
+             const dy = e.clientY - resizeStartY;
+
+             let newWidth = resizeStartWidth + dx;
+             let newHeight = resizeStartHeight + dy;
+
+             // Minimum size
+             newWidth = Math.max(20, newWidth);
+             newHeight = Math.max(20, newHeight);
+
+             resizingItem.style.width = `${newWidth}px`;
+             resizingItem.style.height = `${newHeight}px`;
+         }
+
+         function stopResize() {
+             if (!resizingItem) return;
+             document.removeEventListener('mousemove', resizeMove);
+             document.removeEventListener('mouseup', stopResize);
+
+             // Update element data with new size
+             updateElementData(resizingItem.id, {
+                 styles: {
+                     width: resizingItem.style.width,
+                     height: resizingItem.style.height
+                 }
+             });
+
+             resizingItem = null;
+         }
+
+        // --- Event List Drag & Drop ---
+        let draggedEvent = null;
+
+        function handleDragStart(e) {
+             if (!e.target.classList.contains('event-item')) return;
+             draggedEvent = e.target;
+             e.dataTransfer.effectAllowed = 'move';
+             e.dataTransfer.setData('text/plain', e.target.dataset.eventId); // Required for FF
+             setTimeout(() => e.target.classList.add('hidden'), 0); // Hide original
+        }
+
+        function handleDragOver(e) {
+             e.preventDefault(); // Allow drop
+             e.dataTransfer.dropEffect = 'move';
+             const targetItem = e.target.closest('.event-item');
+             if (targetItem && targetItem !== draggedEvent) {
+                  // Basic visual cue - could be improved with line indicator
+                  targetItem.style.borderTop = '2px solid var(--highlight-color)';
+             } else {
+                  // Clear cues from other items
+                  Array.from(eventsList.children).forEach(child => child.style.borderTop = '');
+             }
+        }
+
+        function handleDrop(e) {
+             e.preventDefault();
+             e.stopPropagation();
+             const targetItem = e.target.closest('.event-item');
+              Array.from(eventsList.children).forEach(child => child.style.borderTop = ''); // Clear visual cues
+
+             if (!draggedEvent || !targetItem || targetItem === draggedEvent) {
+                 if (draggedEvent) draggedEvent.classList.remove('hidden');
+                 draggedEvent = null;
+                 return;
+             }
+
+             // Find the list of events
+             let eventListSource = findEventListById(draggedEvent.dataset.eventId);
+             if (!eventListSource) {
+                  if (draggedEvent) draggedEvent.classList.remove('hidden');
+                  draggedEvent = null;
+                  return;
+             }
+
+             // Find indices
+             const draggedIndex = eventListSource.findIndex(ev => ev.id === draggedEvent.dataset.eventId);
+             const targetIndex = eventListSource.findIndex(ev => ev.id === targetItem.dataset.eventId);
+
+             if (draggedIndex > -1 && targetIndex > -1) {
+                 // Remove and insert
+                 const [removed] = eventListSource.splice(draggedIndex, 1);
+                 eventListSource.splice(targetIndex, 0, removed);
+             }
+
+             draggedEvent.classList.remove('hidden');
+             draggedEvent = null;
+             renderEventsList(); // Re-render with new order
+         }
+
+         function handleDragEnd(e) {
+             // Clean up visual cues and hidden class if drag cancelled
+              Array.from(eventsList.children).forEach(child => child.style.borderTop = '');
+             if (draggedEvent) { // May be null if drop was successful
+                 draggedEvent.classList.remove('hidden');
+             }
+             draggedEvent = null;
+         }
+
+
+        // --- Save/Load Functionality ---
+
+        saveBtn.addEventListener('click', () => {
+            const jsonString = JSON.stringify(gameData, null, 2); // Pretty print JSON
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'gameLevelData.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        loadFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const loadedData = JSON.parse(e.target.result);
+                    // Basic validation (check if it has a screens object)
+                    if (loadedData && typeof loadedData.screens === 'object') {
+                        gameData = loadedData;
+                        selectedScreenId = null; // Reset selection
+                        selectedElementId = null;
+                        renderScreensList(); // This will also select the start screen
+                        // renderProperties(); // Called by selectScreen
+                        // renderEventsList(); // Called by selectScreen
+                        alert('Game data loaded successfully!');
+                    } else {
+                        alert('Invalid JSON file format.');
+                    }
+                } catch (error) {
+                    alert(`Error loading file: ${error.message}`);
+                    console.error("Error parsing JSON:", error);
+                } finally {
+                     loadFileInput.value = ''; // Reset file input
+                }
+            };
+            reader.onerror = () => {
+                 alert(`Error reading file: ${reader.error}`);
+                 loadFileInput.value = ''; // Reset file input
+            };
+            reader.readAsText(file);
+        });
+
+
+        // --- Preview Functionality ---
+        let eventQueue = [];
+        let isPreviewRunning = false;
+        let previewState = {}; // Store temp state like current dialogue text pos
+
+        previewBtn.addEventListener('click', () => {
+            if (!gameData.startScreen || !gameData.screens[gameData.startScreen]) {
+                alert("Please set a start screen first (select screen -> check 'Start Screen' property).");
+                return;
+            }
+            startPreview(gameData.startScreen);
+        });
+
+        closePreviewBtn.addEventListener('click', () => {
+            stopPreview();
+        });
+
+        function startPreview(screenId) {
+             isPreviewRunning = true;
+             previewState = {}; // Reset state
+             previewOverlay.style.display = 'flex';
+             renderPreviewScreen(screenId);
+             // Trigger ON_LOAD events for the starting screen
+             executeEvents(getEventsFor(screenId, 'ON_LOAD'));
+        }
+
+        function stopPreview() {
+            isPreviewRunning = false;
+            previewOverlay.style.display = 'none';
+            previewStage.innerHTML = '';
+            eventQueue = []; // Clear queue
+            clearTimeout(previewState.currentTimeout); // Clear any pending timeouts
+            previewState = {};
+        }
+
+        function renderPreviewScreen(screenId) {
+             previewStage.innerHTML = ''; // Clear previous screen
+             if (!gameData.screens[screenId]) {
+                 console.error(`Preview Error: Screen "${screenId}" not found.`);
+                 previewStage.innerHTML = `<p style="color:red;">Error: Screen "${screenId}" not found.</p>`;
+                 return;
+             }
+
+             const screenData = gameData.screens[screenId];
+             previewStage.style.backgroundColor = screenData.styles?.backgroundColor || '#00BFFF';
+
+             Object.values(screenData.elements).forEach(elementData => {
+                 const div = document.createElement('div');
+                 div.id = `preview-${elementData.id}`;
+                 div.className = 'preview-element';
+                 // Apply styles directly (consider using CSS classes for cleaner rendering)
+                 const styles = elementData.styles;
+                 div.style.position = 'absolute';
+                 div.style.left = styles.left || '0px';
+                 div.style.top = styles.top || '0px';
+                 div.style.width = styles.width || 'auto';
+                 div.style.height = styles.height || 'auto';
+                 div.style.backgroundColor = styles.backgroundColor || 'transparent';
+                 div.style.color = styles.color || 'black';
+                 div.style.border = styles.border || 'none';
+                 div.style.fontSize = styles.fontSize || '14px';
+                 div.style.textAlign = styles.textAlign || 'center';
+                 div.style.padding = styles.padding || '5px';
+                 div.style.zIndex = styles.zIndex || 'auto';
+                 div.style.fontFamily = styles.fontFamily || 'var(--font-main)';
+                 div.style.fontWeight = styles.fontWeight || 'normal';
+                 div.style.display = styles.display || 'flex';
+                 div.style.alignItems = styles.alignItems || 'center';
+                 div.style.justifyContent = styles.justifyContent || 'center';
+                 div.style.opacity = styles.opacity || 1;
+                 div.style.borderRadius = styles.borderRadius || '0px';
+
+                 div.textContent = elementData.content || ''; // Set content
+
+                 // Add type-specific classes for potential preview-specific styling
+                 div.classList.add(`preview-${elementData.type}`);
+
+                 // Add click listener if element has ON_CLICK events
+                 if (elementData.events?.ON_CLICK?.length > 0) {
+                    div.classList.add('clickable');
+                    div.onclick = () => {
+                        if (!previewState.typing) { // Don't trigger clicks during typing
+                             executeEvents(getEventsFor(elementData.id, 'ON_CLICK', screenId));
+                        }
+                    };
+                 }
+
+                 previewStage.appendChild(div);
+             });
+        }
+
+        function getEventsFor(targetId, trigger, currentScreenId = null) {
+            // Check if targetId is a screen
+            if (gameData.screens[targetId]) {
+                 return gameData.screens[targetId].events?.[trigger] || [];
+            }
+            // Check elements on the *current* preview screen
+            if (currentScreenId && gameData.screens[currentScreenId]?.elements[targetId]) {
+                return gameData.screens[currentScreenId].elements[targetId].events?.[trigger] || [];
+            }
+             // Check elements across all screens (less common, might be needed for global elements)
+             for (const screen of Object.values(gameData.screens)) {
+                 if (screen.elements[targetId]) {
+                     return screen.elements[targetId].events?.[trigger] || [];
+                 }
+             }
+            return [];
+        }
+
+
+        function executeEvents(events) {
+             if (!isPreviewRunning || !events || events.length === 0) return;
+             // Add events to the front of the queue for immediate processing
+             eventQueue.unshift(...events);
+             if (!previewState.processingQueue) { // Avoid re-entry if already processing
+                 processEventQueue();
+             }
+        }
+
+        function processEventQueue() {
+             if (!isPreviewRunning || eventQueue.length === 0) {
+                 previewState.processingQueue = false;
+                 return; // Stop processing
+             }
+
+             previewState.processingQueue = true;
+             const event = eventQueue.shift(); // Get the next event
+
+             console.log("Executing event:", event.type, event.params);
+
+             let delay = 0; // Delay before processing the *next* event
+
+             switch (event.type) {
+                 case 'SHOW_SCREEN':
+                     renderPreviewScreen(event.params.screenId);
+                     // Execute ON_LOAD events for the new screen *after* this queue is processed
+                     setTimeout(() => {
+                          executeEvents(getEventsFor(event.params.screenId, 'ON_LOAD'));
+                     }, 0);
+                     break;
+
+                 case 'SHOW_DIALOGUE':
+                     const targetId = event.params.targetElementId || findFirstTextbox(); // Find default if none specified
+                     const targetEl = document.getElementById(`preview-${targetId}`);
+                     if (targetEl) {
+                         delay = typeWriterEffect(targetEl, event.params.text || '', event.params.speed || 50);
+                     } else {
+                         console.warn("Preview: Dialogue target element not found:", event.params.targetElementId);
+                     }
+                     break;
+
+                 case 'CHANGE_ELEMENT_STYLE':
+                     const elemToChange = document.getElementById(`preview-${event.params.targetElementId}`);
+                     if (elemToChange) {
+                         elemToChange.style[event.params.property] = event.params.value;
+                     } else {
+                          console.warn("Preview: Target element for style change not found:", event.params.targetElementId);
+                     }
+                     break;
+
+                 case 'CHANGE_SCREEN_STYLE':
+                      previewStage.style[event.params.property] = event.params.value;
+                      break;
+
+                 case 'END_GAME':
+                      // Simple alert for now
+                      alert(`Ending: ${event.params.endingType}\n${event.params.message}`);
+                      stopPreview(); // End the preview
+                      return; // Stop processing queue
+
+                 case 'WAIT':
+                      delay = parseInt(event.params.duration || 0, 10);
+                      break;
+
+                 case 'PLAY_ANIMATION':
+                      const animTarget = document.getElementById(`preview-${event.params.targetElementId}`);
+                      if (animTarget) {
+                          const duration = parseInt(event.params.duration || 500, 10);
+                          animTarget.style.animation = `${event.params.animationName} ${duration}ms ease-in-out`;
+                          // Remove animation after it finishes to allow re-triggering
+                          setTimeout(() => { animTarget.style.animation = ''; }, duration);
+                          // Consider adding delay if needed
+                      } else {
+                           console.warn("Preview: Target element for animation not found:", event.params.targetElementId);
+                      }
+                      break;
+
+                 // Add other event type handlers here...
+
+                 default:
+                     console.warn("Preview: Unhandled event type:", event.type);
+             }
+
+             // Schedule the next event processing after any delay
+             if (isPreviewRunning) {
+                 previewState.currentTimeout = setTimeout(processEventQueue, delay);
+             } else {
+                 previewState.processingQueue = false; // Ensure flag is reset if preview stopped mid-delay
+             }
+        }
+
+        function findFirstTextbox() {
+             // Helper to find the ID of the first visible undertale-textbox element
+             const textboxes = previewStage.querySelectorAll('.preview-undertale-textbox');
+             if (textboxes.length > 0) {
+                 const previewId = textboxes[0].id; // e.g., "preview-text-12345"
+                 return previewId.replace('preview-', ''); // Return original ID
+             }
+             return null;
+        }
+
+        function typeWriterEffect(element, text, speed) {
+             if (previewState.typing) { // Don't start new typing if already busy
+                 console.warn("Typing already in progress.");
+                 return 0;
+             }
+             previewState.typing = true;
+             element.textContent = ''; // Clear element
+             let i = 0;
+             const totalDuration = text.length * speed;
+
+             function typeChar() {
+                 if (i < text.length && isPreviewRunning && previewState.typing) {
+                     element.textContent += text.charAt(i);
+                     i++;
+                     previewState.currentTimeout = setTimeout(typeChar, speed);
+                 } else {
+                     // Typing finished or interrupted
+                     previewState.typing = false;
+                     // If interrupted, show full text immediately
+                     if (i < text.length) element.textContent = text;
+                     // Re-enable processing if queue was waiting for typing
+                     if (!previewState.processingQueue) processEventQueue();
+                 }
+             }
+
+             typeChar();
+             return totalDuration + 100; // Return estimated duration + buffer
+        }
+
+        // --- Initial Setup ---
+        addScreenBtn.addEventListener('click', addScreen);
+        deleteScreenBtn.addEventListener('click', deleteScreen);
+        addElementBtn.addEventListener('click', addElement);
+        deleteElementBtn.addEventListener('click', deleteElement);
+        addEventBtn.addEventListener('click', addEventAction);
+
+        // Deselect element if clicking on stage background
+         stageWrapper.addEventListener('mousedown', (e) => {
+             if (e.target === stage) { // Clicked directly on stage, not an element
+                 selectElement(null, null); // Deselect any element
+             }
+         });
+
+
+        // Initialize D&D for Event List
+        eventsList.addEventListener('dragover', handleDragOver); // Need on container too for empty list drops
+
+
+        // Initialize by rendering lists (which might select start screen)
+        renderScreensList();
+        if (!selectedScreenId && Object.keys(gameData.screens).length === 0) {
+            addScreen(); // Add an initial screen if none exist
+        }
+
+
+    </script>
+</body>
+</html>

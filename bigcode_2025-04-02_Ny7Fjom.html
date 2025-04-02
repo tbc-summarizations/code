@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Platformer Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #5c94fc; /* Sky blue background */
+            overflow: hidden; /* Hide scrollbars */
+            font-family: 'Courier New', Courier, monospace;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #5c94fc;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.5);
+            color: white;
+            padding: 5px;
+            border-radius: 3px;
+        }
+         #score {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0,0,0,0.5);
+            color: white;
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 1.2em;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            font-size: 1.5em;
+            text-align: center;
+            display: none; /* Hidden initially */
+        }
+    </style></head>
+<body>
+    <div id="controls">Use Arrow Keys (Left/Right) to Move, Arrow Up to Jump</div>
+    <div id="score">Score: 0</div>
+    <div id="message" onclick="restartGame()"></div>
+    <canvas id="gameCanvas" width="800" height="480"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const messageDisplay = document.getElementById('message');
+
+        // Game Constants
+        const GRAVITY = 0.6;
+        const PLAYER_MOVE_SPEED = 5;
+        const PLAYER_JUMP_FORCE = 12;
+        const TILE_SIZE = 32; // Render size of tiles
+        const CAMERA_LERP_FACTOR = 0.1;
+
+        // Game State
+        let player;
+        let enemies = [];
+        let powerUps = [];
+        let platforms = [];
+        let keys = {};
+        let cameraX = 0;
+        let levelWidth = 0;
+        let score = 0;
+        let gameOver = false;
+        let gameWon = false;
+
+        // Level Data (Simple representation)
+        // 0 = Empty, 1 = Ground, 2 = Brick, 3 = Question Block, 4 = Goomba Start, 5 = Mushroom Start, 6 = Goal
+        const levelMap = [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 2, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        ];
+
+        levelWidth = levelMap[0].length * TILE_SIZE;
+
+        // Player Class
+        class Player {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = TILE_SIZE * 0.8;
+                this.height = TILE_SIZE * 0.9;
+                this.dx = 0;
+                this.dy = 0;
+                this.onGround = false;
+                this.isBig = false;
+                this.emoji = '👨‍🔧'; // Small player
+            }
+
+            jump() {
+                if (this.onGround) {
+                    this.dy = -PLAYER_JUMP_FORCE;
+                    this.onGround = false;
+                }
+            }
+
+            applyGravity() {
+                this.dy += GRAVITY;
+            }
+
+            move(direction) {
+                this.dx = direction * PLAYER_MOVE_SPEED;
+            }
+
+             stomp(enemy) {
+                 enemy.die();
+                 this.dy = -PLAYER_JUMP_FORCE / 2; // Small bounce after stomp
+                 addScore(100);
+             }
+
+             grow() {
+                if (!this.isBig) {
+                    this.isBig = true;
+                    this.y -= TILE_SIZE; // Adjust position when growing
+                    this.height = TILE_SIZE * 1.8;
+                    this.emoji = '🦸'; // Big player
+                    addScore(1000);
+                }
+             }
+
+             shrink() {
+                this.isBig = false;
+                this.height = TILE_SIZE * 0.9;
+                this.emoji = '👨‍🔧';
+                // Add temporary invincibility later if needed
+             }
+
+             hit() {
+                if (this.isBig) {
+                    this.shrink();
+                } else {
+                    this.die();
+                }
+             }
+
+             die() {
+                console.log("Player died!");
+                gameOver = true;
+                showMessage("Game Over! Click to Restart");
+             }
+
+            update(platforms) {
+                 // Horizontal Movement
+                 this.x += this.dx;
+
+                 // Horizontal Collision
+                 platforms.forEach(platform => {
+                     if (this.collidesWith(platform)) {
+                         if (this.dx > 0) { // Moving right
+                             this.x = platform.x - this.width;
+                         } else if (this.dx < 0) { // Moving left
+                             this.x = platform.x + platform.width;
+                         }
+                         this.dx = 0; // Stop horizontal movement on collision
+                     }
+                 });
+
+
+                // Vertical Movement
+                this.applyGravity();
+                this.y += this.dy;
+                this.onGround = false; // Assume not on ground until collision check
+
+                // Vertical Collision
+                platforms.forEach(platform => {
+                    if (this.collidesWith(platform)) {
+                        if (this.dy > 0) { // Moving down
+                            this.y = platform.y - this.height;
+                            this.dy = 0;
+                            this.onGround = true;
+                        } else if (this.dy < 0) { // Moving up (hitting underside)
+                             if (platform.type === 3 || platform.type === 2) { // Question or Brick block
+                                platform.hit(this);
+                             }
+                             this.y = platform.y + platform.height;
+                             this.dy = 0;
+                        }
+                    }
+                });
+
+                 // Reset horizontal velocity if not moving
+                 if (!keys['ArrowLeft'] && !keys['ArrowRight']) {
+                     this.dx = 0;
+                 }
+
+                 // Keep player within level bounds (left side)
+                 if (this.x < 0) {
+                     this.x = 0;
+                 }
+                 // Fall death
+                 if (this.y > canvas.height) {
+                     this.die();
+                 }
+            }
+
+            collidesWith(other) {
+                return this.x < other.x + other.width &&
+                       this.x + this.width > other.x &&
+                       this.y < other.y + other.height &&
+                       this.y + this.height > other.y;
+            }
+
+            draw(offsetX) {
+                ctx.font = `${this.height}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                // Adjust drawing position based on emoji alignment if needed
+                ctx.fillText(this.emoji, this.x - offsetX + this.width / 2, this.y + this.height / 2);
+                 // Optional: Draw bounding box for debugging
+                // ctx.strokeStyle = 'red';
+                // ctx.strokeRect(this.x - offsetX, this.y, this.width, this.height);
+            }
+        }
+
+        // Enemy Class (Simple Goomba)
+        class Enemy {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = TILE_SIZE * 0.9;
+                this.height = TILE_SIZE * 0.9;
+                this.dx = -1; // Move left initially
+                this.type = 'goomba';
+                this.emoji = '🍄'; // Using mushroom emoji for Goomba
+                this.isAlive = true;
+            }
+
+            update(platforms) {
+                 if (!this.isAlive) return;
+
+                this.x += this.dx;
+
+                 // Simple AI: Turn around at edges or walls
+                 let hitWall = false;
+                 platforms.forEach(platform => {
+                    // Check collision slightly ahead
+                    let nextX = this.x + this.dx;
+                    if (nextX < platform.x + platform.width &&
+                        nextX + this.width > platform.x &&
+                        this.y < platform.y + platform.height &&
+                        this.y + this.height > platform.y + 2) { // +2 to prevent sticking slightly above ground
+                        hitWall = true;
+                        // Adjust position to prevent overlap before turning
+                        this.x = (this.dx > 0) ? platform.x - this.width : platform.x + platform.width;
+                    }
+                 });
+
+                // Check if about to fall off a ledge (crude check)
+                 let willFall = true;
+                 platforms.forEach(platform => {
+                     let checkX = (this.dx < 0) ? this.x - 1 : this.x + this.width + 1;
+                     if (checkX < platform.x + platform.width &&
+                         checkX > platform.x &&
+                         this.y + this.height + 1 < platform.y + platform.height && // Below enemy
+                         this.y + this.height + 1 > platform.y) {                    // Above platform
+                         willFall = false;
+                     }
+                 });
+
+
+                 if (hitWall || willFall) {
+                    this.dx *= -1; // Reverse direction
+                 }
+
+
+            }
+
+             die() {
+                this.isAlive = false;
+                // Could add a dying animation/timer later
+             }
+
+
+            draw(offsetX) {
+                 if (!this.isAlive) return;
+                ctx.font = `${this.height}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, this.x - offsetX + this.width / 2, this.y + this.height / 2);
+                 // Optional: Draw bounding box for debugging
+                 // ctx.strokeStyle = 'blue';
+                 // ctx.strokeRect(this.x - offsetX, this.y, this.width, this.height);
+            }
+        }
+
+        // Platform Class
+        class Platform {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.width = TILE_SIZE;
+                this.height = TILE_SIZE;
+                this.type = type; // 1: Ground, 2: Brick, 3: Question, 6: Goal
+                this.originalType = type;
+                this.hitCount = 0; // For blocks that change state
+            }
+
+             hit(player) {
+                if (this.type === 3) { // Question block
+                    this.type = 1; // Change to used block (looks like ground for now)
+                    // Spawn a power-up (Mushroom) above the block
+                    powerUps.push(new PowerUp(this.x, this.y - TILE_SIZE, 'mushroom'));
+                    addScore(200); // Score for hitting question block
+                } else if (this.type === 2) { // Brick block
+                    if (player.isBig) {
+                        // Break brick - remove it from platforms array
+                         const index = platforms.indexOf(this);
+                         if (index > -1) {
+                            platforms.splice(index, 1);
+                             addScore(50);
+                         }
+                    } else {
+                        // Small bump animation could be added here
+                        // console.log("Bump brick");
+                    }
+                }
+            }
+
+            draw(offsetX) {
+                 ctx.beginPath();
+                 const drawX = this.x - offsetX;
+                 const drawY = this.y;
+
+                 // Only draw if on screen
+                 if (drawX + this.width > 0 && drawX < canvas.width) {
+                     switch(this.type) {
+                         case 1: // Ground / Used Block
+                             ctx.fillStyle = '#D2691E'; // Brown
+                             ctx.fillRect(drawX, drawY, this.width, this.height);
+                             ctx.strokeStyle = '#8B4513'; // Darker Brown border
+                             ctx.strokeRect(drawX+1, drawY+1, this.width-2, this.height-2);
+                             break;
+                         case 2: // Brick
+                             ctx.fillStyle = '#B22222'; // Firebrick red
+                             ctx.fillRect(drawX, drawY, this.width, this.height);
+                             // Simple brick pattern
+                             ctx.strokeStyle = 'black';
+                             ctx.lineWidth = 1;
+                             ctx.strokeRect(drawX, drawY, this.width, this.height);
+                             ctx.beginPath();
+                             ctx.moveTo(drawX, drawY + this.height / 2);
+                             ctx.lineTo(drawX + this.width, drawY + this.height / 2);
+                             ctx.moveTo(drawX + this.width/4, drawY);
+                             ctx.lineTo(drawX + this.width/4, drawY + this.height/2);
+                             ctx.moveTo(drawX + (this.width*3)/4, drawY);
+                             ctx.lineTo(drawX + (this.width*3)/4, drawY + this.height/2);
+                              ctx.moveTo(drawX + this.width/2, drawY + this.height/2);
+                             ctx.lineTo(drawX + this.width/2, drawY + this.height);
+                             ctx.stroke();
+                             break;
+                         case 3: // Question Block
+                             ctx.fillStyle = '#FFD700'; // Gold
+                             ctx.fillRect(drawX, drawY, this.width, this.height);
+                             ctx.fillStyle = 'black';
+                             ctx.font = `${this.height * 0.7}px Arial`;
+                             ctx.textAlign = 'center';
+                             ctx.textBaseline = 'middle';
+                             ctx.fillText('?', drawX + this.width / 2, drawY + this.height / 2 + 2);
+                             break;
+                          case 6: // Goal
+                             ctx.fillStyle = 'grey'; // Pole color
+                             ctx.fillRect(drawX + this.width * 0.4, drawY - this.height * 2 , this.width * 0.2, this.height * 3); // Tall pole
+                             ctx.fillStyle = 'white';
+                             ctx.font = `${this.height * 0.8}px Arial`;
+                             ctx.fillText('🚩', drawX + this.width * 0.5, drawY - this.height * 1.5); // Flag emoji
+                              // Base ground block
+                             ctx.fillStyle = '#D2691E'; // Brown
+                             ctx.fillRect(drawX, drawY, this.width, this.height);
+                             ctx.strokeStyle = '#8B4513';
+                             ctx.strokeRect(drawX+1, drawY+1, this.width-2, this.height-2);
+
+                             break;
+                         default: // Empty or others - draw nothing or placeholder
+                             break;
+                     }
+                 }
+            }
+        }
+
+        // PowerUp Class
+        class PowerUp {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.width = TILE_SIZE * 0.8;
+                this.height = TILE_SIZE * 0.8;
+                this.type = type; // 'mushroom'
+                this.dx = 1; // Moves right slowly
+                this.dy = 0;
+                this.onGround = false;
+                this.isCollected = false;
+                 this.emoji = '🔺'; // Red triangle for mushroom
+            }
+
+             applyGravity() {
+                 this.dy += GRAVITY * 0.5; // Slower gravity for items
+             }
+
+            update(platforms) {
+                 if (this.isCollected) return;
+
+                 // Horizontal Movement (basic wall collision)
+                 this.x += this.dx;
+                 platforms.forEach(platform => {
+                     if (this.collidesWith(platform)) {
+                         this.x -= this.dx; // Revert move
+                         this.dx *= -1;     // Change direction
+                     }
+                 });
+
+
+                 // Vertical Movement & Collision
+                 this.applyGravity();
+                 this.y += this.dy;
+                 this.onGround = false;
+
+                 platforms.forEach(platform => {
+                     if (this.collidesWith(platform)) {
+                         if (this.dy > 0) { // Moving down
+                             this.y = platform.y - this.height;
+                             this.dy = 0;
+                             this.onGround = true;
+                         } else if (this.dy < 0) { // Moving up (unlikely but possible)
+                             this.y = platform.y + platform.height;
+                             this.dy = 0;
+                         }
+                     }
+                 });
+            }
+
+            collidesWith(other) {
+                return this.x < other.x + other.width &&
+                       this.x + this.width > other.x &&
+                       this.y < other.y + other.height &&
+                       this.y + this.height > other.y;
+            }
+
+            collect() {
+                this.isCollected = true;
+                 // Effect applied in player collision check
+            }
+
+            draw(offsetX) {
+                if (this.isCollected) return;
+                ctx.font = `${this.height}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = 'red'; // For the triangle emoji
+                ctx.fillText(this.emoji, this.x - offsetX + this.width / 2, this.y + this.height / 2);
+                 // Optional: Draw bounding box
+                // ctx.strokeStyle = 'green';
+                // ctx.strokeRect(this.x - offsetX, this.y, this.width, this.height);
+            }
+        }
+
+
+        // Input Handling
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+             if (gameOver && e.key) { // Allow restart on any key after game over msg shown
+                 // restartGame(); // Handled by click now
+             }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        // Game Initialization
+        function init() {
+             gameOver = false;
+             gameWon = false;
+             score = 0;
+             updateScoreDisplay();
+             messageDisplay.style.display = 'none';
+             cameraX = 0;
+             platforms = [];
+             enemies = [];
+             powerUps = [];
+
+             // Create player instance at the start position
+             player = new Player(TILE_SIZE * 2, canvas.height - TILE_SIZE * 4);
+
+             // Populate platforms and enemies from level map
+             for (let y = 0; y < levelMap.length; y++) {
+                 for (let x = 0; x < levelMap[y].length; x++) {
+                     const tileType = levelMap[y][x];
+                     const platformX = x * TILE_SIZE;
+                     const platformY = y * TILE_SIZE + (canvas.height - levelMap.length * TILE_SIZE); // Adjust Y based on canvas height
+
+                     if (tileType === 1 || tileType === 2 || tileType === 3 || tileType === 6) {
+                         platforms.push(new Platform(platformX, platformY, tileType));
+                     } else if (tileType === 4) { // Goomba start position
+                         enemies.push(new Enemy(platformX, platformY));
+                     } else if (tileType === 5) { // Mushroom start (can be spawned by blocks too)
+                          powerUps.push(new PowerUp(platformX, platformY, 'mushroom'));
+                     }
+                 }
+             }
+        }
+
+        // Update Score
+        function addScore(points) {
+            score += points;
+            updateScoreDisplay();
+        }
+
+        function updateScoreDisplay() {
+             scoreDisplay.textContent = `Score: ${score}`;
+        }
+
+        function showMessage(text) {
+            messageDisplay.textContent = text;
+            messageDisplay.style.display = 'block';
+        }
+
+         function restartGame() {
+             init();
+             gameLoop(); // Start the loop again
+         }
+
+        // Game Loop
+        function gameLoop() {
+             if (gameOver || gameWon) {
+                 // Stop the loop if game ended
+                 if(gameWon) showMessage("You Win! Click to Restart");
+                 return;
+             }
+
+            // 1. Handle Input
+            if (keys['ArrowLeft']) {
+                player.move(-1);
+            } else if (keys['ArrowRight']) {
+                player.move(1);
+            }
+            if (keys['ArrowUp']) {
+                player.jump();
+            }
+
+            // 2. Update Game State
+            player.update(platforms);
+
+            enemies.forEach(enemy => {
+                 if (enemy.isAlive) {
+                    enemy.update(platforms);
+                     // Check player collision with enemy
+                     if (player.collidesWith(enemy)) {
+                         // Check for stomp (player falling onto enemy top)
+                         if (player.dy > 0 && player.y + player.height < enemy.y + enemy.height / 2) {
+                              player.stomp(enemy);
+                         } else {
+                             // Player hit by enemy
+                             player.hit();
+                         }
+                     }
+                 }
+            });
+             // Remove dead enemies (optional, could replace with dying state)
+             enemies = enemies.filter(enemy => enemy.isAlive);
+
+            powerUps.forEach(powerUp => {
+                 if (!powerUp.isCollected) {
+                     powerUp.update(platforms);
+                     // Check player collision with powerUp
+                     if (player.collidesWith(powerUp)) {
+                          powerUp.collect();
+                          if (powerUp.type === 'mushroom') {
+                              player.grow();
+                          }
+                     }
+                 }
+            });
+            // Remove collected powerups
+            powerUps = powerUps.filter(powerUp => !powerUp.isCollected);
+
+            // Check for goal collision
+             platforms.forEach(platform => {
+                 if (platform.type === 6 && player.collidesWith(platform)) {
+                     gameWon = true;
+                     addScore(5000); // End level bonus
+                 }
+             });
+
+
+             // Update Camera (Simple Lerp)
+             const targetCameraX = player.x - canvas.width / 3;
+             cameraX += (targetCameraX - cameraX) * CAMERA_LERP_FACTOR;
+             // Clamp camera to level bounds
+             cameraX = Math.max(0, Math.min(cameraX, levelWidth - canvas.width));
+
+
+            // 3. Render Frame
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background elements (optional clouds, hills)
+            // Simple hills
+             ctx.fillStyle = '#228B22'; // Forest Green
+             ctx.beginPath();
+             ctx.moveTo(-cameraX * 0.5, canvas.height); // Slow parallax for background elements
+             ctx.lineTo(-cameraX * 0.5, canvas.height - TILE_SIZE * 2);
+             ctx.quadraticCurveTo(TILE_SIZE * 2 -cameraX * 0.5, canvas.height - TILE_SIZE * 4, TILE_SIZE * 5 - cameraX*0.5, canvas.height - TILE_SIZE * 2);
+             ctx.lineTo(TILE_SIZE * 5 - cameraX * 0.5, canvas.height);
+             ctx.fill();
+
+             ctx.beginPath();
+             ctx.moveTo(TILE_SIZE * 10 -cameraX * 0.5, canvas.height);
+             ctx.lineTo(TILE_SIZE * 10 -cameraX * 0.5, canvas.height - TILE_SIZE * 3);
+             ctx.quadraticCurveTo(TILE_SIZE * 13 -cameraX * 0.5, canvas.height - TILE_SIZE * 5, TILE_SIZE * 16 - cameraX*0.5, canvas.height - TILE_SIZE * 3);
+             ctx.lineTo(TILE_SIZE * 16 - cameraX * 0.5, canvas.height);
+             ctx.fill();
+
+
+            // Draw platforms
+            platforms.forEach(platform => platform.draw(cameraX));
+
+             // Draw PowerUps
+             powerUps.forEach(powerUp => powerUp.draw(cameraX));
+
+            // Draw enemies
+            enemies.forEach(enemy => enemy.draw(cameraX));
+
+            // Draw player
+            player.draw(cameraX);
+
+
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game
+        init();
+        gameLoop();
+
+    </script>
+</body>
+</html>

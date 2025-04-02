@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Red Ball Game</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            margin: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: #87CEEB; /* Sky blue */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 25px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: background-color 0.2s ease;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:active {
+            background-color: #3e8e41;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+        }
+        #levelTitle {
+            margin-bottom: 10px;
+            font-size: 22px;
+            font-weight: bold;
+            color: #333;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <h2 id="levelTitle">Level 1: Loading...</h2>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <button id="skipLevel">Skip Level</button>
+         <button id="restartLevelBtn">Restart Level (R)</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let currentLevel = 0; // Start at level 0 (which corresponds to Level 1)
+        let player = {
+            x: 50, y: 400, width: 25, height: 25, // Size slightly increased for visibility
+            vx: 0, vy: 0,
+            onGround: false,
+            jumpPower: -9.5, // Adjusted jump power
+            speed: 4,       // Adjusted speed
+            color: 'red',
+            checkpoint: null,
+            inVehicle: null // To track if player is in a car/cart
+        };
+        let keys = {};
+        const gravity = 0.45; // Adjusted gravity
+        let gamePaused = false; // Placeholder
+
+        // Game element arrays - cleared/repopulated by loadLevel
+        let platforms = [];
+        let obstacles = [];
+        let goals = [];
+        let movingPlatforms = [];
+        let buttons = [];
+        let specialObjects = [];
+        let texts = [];
+        let checkpoints = [];
+
+        // --- Level Data ---
+        // NOTE: This implements the structure and simplified versions of mechanics.
+        // Complex physics (swinging, precise rolling, catapult trajectory) are approximated.
+        // Visuals use simple shapes and emojis.
+        const levelData = [
+            // Level 1: Move and jump
+            {
+                name: "Move and jump",
+                playerStart: { x: 50, y: 400 },
+                platforms: [ { x: 0, y: 450, width: 250, height: 50 }, { x: 350, y: 400, width: 200, height: 50 }, { x: 600, y: 350, width: 200, height: 150 } ],
+                goals: [{ x: 750, y: 300, width: 20, height: 50, type: 'flag' }],
+                obstacles: [ { x: 600, y: 300, width: 50, height: 50, type: 'block', color: '#A0522D' } ], // Stone block
+                texts: [ { content: "Use Left/Right or A/D keys to move", x: 30, y: 350, font: '16px Arial', color:'black' }, { content: "Use Up or W keys to jump", x: 360, y: 300, font: '16px Arial', color:'black' }, { content: "Reach the goal! 🚩", x: 580, y: 250, font: '16px Arial', color:'black' }],
+                checkpoints: []
+            },
+            // Level 2: Funny ball
+            {
+                name: "Funny ball",
+                playerStart: { x: 50, y: 400 },
+                platforms: [ { x: 0, y: 450, width: 150, height: 50 }, { x: 250, y: 400, width: 200, height: 100, slope: 'left-up' }, // Ramp platform
+                               { x: 500, y: 450, width: 150, height: 50 }, { x: 700, y: 450, width: 100, height: 50 },
+                               { x: 500, y: 300, width: 10, height: 100, type:'invisible'} // Anchor point for swinging ball visual
+                             ],
+                goals: [{ x: 750, y: 400, width: 20, height: 50, type: 'flag' }],
+                obstacles: [
+                    // Swinging ball - simplified hazard, visual attached to anchor
+                    { id:'swing1', x: 550, y: 380, width: 40, height: 40, type: 'hazard_ball', color: 'darkgrey', swingRadius: 80, swingAnchorX: 555, swingAnchorY: 300, angle: Math.PI/4, speed: 0.03 }
+                ],
+                checkpoints: [{ x: 350, y: 400, width: 20, height: 50, type: 'flag' }],
+                texts: [ { content: "Check point 🏁", x: 320, y: 380, font: '16px Arial', color:'black' } ]
+            },
+             // Level 3: Lifts and thorns
+            {
+                name: "Lifts and thorns",
+                playerStart: { x: 50, y: 400 },
+                platforms: [ { x: 0, y: 450, width: 150, height: 50 }, { x: 300, y: 450, width: 200, height: 50 }, { x: 600, y: 300, width: 200, height: 50 }, { x: 300, y: 600, width: 200, height: 50 }, { x: 600, y: 450, width: 200, height: 50 }],
+                goals: [{ x: 750, y: 250, width: 20, height: 50, type: 'flag' }],
+                obstacles: [ { x: 300, y: 430, width: 200, height: 20, type: 'spikes' }, { x: 600, y: 280, width: 200, height: 20, type: 'spikes' }, { x: 300, y: 580, width: 200, height: 20, type: 'spikes' }, { x: 600, y: 430, width: 200, height: 20, type: 'spikes' }],
+                movingPlatforms: [ { id:'lift1', x: 200, y: 450, width: 80, height: 20, type: 'vertical', range: 150, speed: 1.2, startY: 450, color: '#696969' }, { id:'lift2', x: 520, y: 450, width: 80, height: 20, type: 'vertical', range: 150, speed: -1.2, startY: 450, color: '#696969' }],
+                texts: [ { content: "Danger!", x: 400, y: 400, font:'18px Arial', color:'darkred'} ], checkpoints: []
+            },
+            // Level 4: Axes
+            {
+                name: "Axes",
+                playerStart: { x: 50, y: 400 },
+                platforms: [ { x: 0, y: 450, width: 500, height: 50 }, { x: 500, y: 425, width: 50, height: 75 }, { x: 550, y: 400, width: 50, height: 100 }, { x: 600, y: 375, width: 50, height: 125 }, { x: 650, y: 350, width: 50, height: 150 }, { x: 700, y: 350, width: 100, height: 50 }, { x: 850, y: 350, width: 150, height: 50 }, { x: 1050, y: 350, width: 400, height: 50 },
+                              { x: 1100, y: 200, width: 10, height: 100, type:'invisible'}, // Axe anchor 1
+                              { x: 1250, y: 200, width: 10, height: 100, type:'invisible'}  // Axe anchor 2
+                            ],
+                goals: [{ x: 1400, y: 300, width: 20, height: 50, type: 'flag' }],
+                obstacles: [ // Crushers are moving platforms visually styled
+                     { id: 'crush1', x: 200, y: 100, width: 40, height: 80, type: 'crusher', speed: 1.8, range: 250, startY: 100, color: '#A9A9A9' },
+                     { id: 'crush2', x: 300, y: 150, width: 40, height: 80, type: 'crusher', speed: 2.2, range: 200, startY: 150, color: '#A9A9A9' },
+                     { id: 'crush3', x: 400, y: 100, width: 40, height: 80, type: 'crusher', speed: 1.8, range: 250, startY: 100, color: '#A9A9A9' },
+                     // Swinging Axes
+                     { id:'swingAxe1', x: 1150, y: 280, width: 40, height: 40, type: 'hazard_axe', color: '#DC143C', swingRadius: 80, swingAnchorX: 1105, swingAnchorY: 200, angle: Math.PI/4, speed: 0.04 },
+                     { id:'swingAxe2', x: 1300, y: 280, width: 40, height: 40, type: 'hazard_axe', color: '#DC143C', swingRadius: 80, swingAnchorX: 1255, swingAnchorY: 200, angle: -Math.PI/4, speed: -0.04 }
+                ],
+                texts: [ { content: "Axes! =)", x: 900, y: 300, font:'16px Arial', color:'black' } ], checkpoints: []
+            },
+             // Level 5: Jump!
+            {
+                name: "Jump!",
+                playerStart: { x: 50, y: 400 },
+                platforms: [ { x: 0, y: 450, width: 250, height: 50 }, { x: 250, y: 350, width: 400, height: 150, slope: 'left-up' }, { x: 750, y: 450, width: 150, height: 150 } ], // Wall base
+                goals: [{ x: 850, y: 150, width: 20, height: 50, type: 'flag' }],
+                obstacles: [ { id: 'wall1', x: 730, y: 300, width: 20, height: 150, type: 'wall', color: '#A0522D', active: true } ], // Destructible Wall
+                 buttons: [ { x: 300, y: 420, width: 20, height: 20, color: 'blue', action: 'destroy_wall', targetId: 'wall1' } ],
+                 specialObjects: [ // Seesaw and Ball need basic physics interaction
+                     { id: 'seesaw1', x: 450, y: 420, width: 150, height: 10, type: 'seesaw', angle: 0, pivotX: 525, pivotY: 430, color: '#808080', mass:1, inertia: 3000 },
+                     { id: 'ball1', x: 650, y: 350, width: 50, height: 50, type: 'heavy_ball', vx: -0.2, vy: 0, color: '#B0C4DE', mass: 50, onGround:false } // Heavy ball
+                 ],
+                texts: [ { content: "Press 🟦 to destroy wall", x: 280, y: 390, font:'14px Arial', color:'black' }, { content: "Use 'R' to restart", x: 500, y: 200, font:'14px Arial', color:'black' }], checkpoints: []
+            },
+             // Level 6: Springboards
+            {
+                name: "Springboards",
+                playerStart: { x: 50, y: 150 },
+                 platforms: [ { x: 0, y: 200, width: 100, height: 300, slope: 'right-down'}, { x: 100, y: 500, width: 200, height: 50 }, { x: 300, y: 400, width: 100, height: 150, slope: 'left-down'},
+                              { x: 450, y: 480, width: 80, height: 20, type: 'spring', bounce: -14, color: 'orange' }, { x: 600, y: 450, width: 80, height: 20, type: 'spring', bounce: -14, color: 'orange' }, { x: 750, y: 420, width: 80, height: 20, type: 'spring', bounce: -14, color: 'orange' },
+                              { x: 900, y: 500, width: 50, height: 200 }, { x: 1100, y: 500, width: 50, height: 200 }, // Chute sides
+                              { x: 900, y: 700, width: 250, height: 50 }, // Chute bottom
+                              { x: 1200, y: 600, width: 200, height: 150, slope:'left-up' }, // Exit ramp
+                              { x: 1450, y: 550, width: 150, height: 50 }
+                            ],
+                 goals: [{ x: 1550, y: 500, width: 20, height: 50, type: 'flag' }],
+                 obstacles: [ { x: 800, y: 480, width: 100, height: 20, type: 'spikes' }, { x: 1250, y: 580, width: 150, height: 20, type: 'spikes' },
+                              // Rotating hazard
+                              { id:'rotSpike1', x: 1000, y: 300, width: 80, height: 80, type: 'rotating_spikes', color: '#696969', angle:0, speed: 0.05 }
+                            ],
+                 texts: [ { content: "??? =)", x: 450, y: 300, font:'16px Arial', color:'black' } ], checkpoints: []
+            },
+             // Level 7: Box bridge (Simplified boxes)
+            {
+                name: "Box bridge",
+                playerStart: { x: 50, y: 400 },
+                platforms: [ { x: 0, y: 450, width: 200, height: 50 }, { x: 500, y: 450, width: 300, height: 150, slope:'left-up' }, { x: 800, y: 400, width: 200, height: 50 },
+                              { x: 1050, y: 400, width: 150, height: 50 }, { x: 1250, y: 400, width: 80, height: 20, type:'spring', bounce: -12, color:'orange'}, { x: 1400, y: 300, width: 200, height: 50} ], // target plat
+                goals: [{ x: 1550, y: 250, width: 20, height: 50, type: 'flag' }],
+                obstacles: [ { x: 800, y: 380, width: 200, height: 20, type: 'spikes' },
+                              { id:'swingStar1', x: 650, y: 300, width: 40, height: 40, type: 'hazard_star', color: 'red', swingRadius: 100, swingAnchorX: 670, swingAnchorY: 200, angle: Math.PI/2, speed: 0.03 }],
+                specialObjects: [ // Boxes are pushable physics objects
+                    { id: 'box1', x: 280, y: 400, width: 40, height: 40, type: 'box', color: '#DEB887', mass: 5, vx:0, vy:0, onGround:false },
+                    { id: 'box2', x: 330, y: 400, width: 40, height: 40, type: 'box', color: '#DEB887', mass: 5, vx:0, vy:0, onGround:false },
+                    { id: 'box3', x: 380, y: 400, width: 40, height: 40, type: 'box', color: '#DEB887', mass: 5, vx:0, vy:0, onGround:false },
+                ],
+                texts: [], checkpoints: []
+            },
+             // Level 8: Car (Simplified car controls)
+            {
+                name: "Car",
+                playerStart: { x: 50, y: 150 },
+                platforms: [ { x: 0, y: 200, width: 100, height: 300, slope: 'right-down' }, { x: 100, y: 500, width: 200, height: 50}, // half pipe bottom
+                               { x: 300, y: 400, width: 100, height: 150, slope: 'left-down' }, // half pipe right side
+                               { x: 500, y: 450, width: 400, height: 50 }, // Main ground
+                               { x: 900, y: 450, width: 200, height: 50, type:'bridge', color:'#DC143C'}, // Red bridge 1
+                               { x: 1150, y: 500, width: 200, height: 50, type:'bridge', color:'#DC143C'}, // Red bridge 2
+                               { x: 1400, y: 550, width: 300, height: 50 } // Final platform
+                             ],
+                goals: [{ x: 1650, y: 500, width: 20, height: 50, type: 'flag' }],
+                obstacles: [ { x: 1400, y: 530, width: 300, height: 20, type: 'spikes' },
+                              // Falling spikes are moving platforms
+                              { id: 'fallSpike1', x: 600, y: 100, width: 20, height: 60, type: 'falling_spike', speed: 3, startY: 100, triggerX: 580, color: 'grey' },
+                              { id: 'fallSpike2', x: 700, y: 100, width: 20, height: 60, type: 'falling_spike', speed: 3, startY: 100, triggerX: 680, color: 'grey' },
+                              { id: 'fallSpike3', x: 800, y: 100, width: 20, height: 60, type: 'falling_spike', speed: 3, startY: 100, triggerX: 780, color: 'grey' }
+                            ],
+                specialObjects: [
+                    { id:'car1', x: 700, y: 400, width: 60, height: 30, type: 'car', color: 'purple', vx:0, vy:0, onGround: false, speed: 3, jumpPower: -5, hasPlayer: false }
+                ],
+                texts: [], checkpoints: [{ x: 650, y: 400, width: 20, height: 50, type: 'flag' }]
+            },
+             // Levels 9-17 - Simplified Placeholders
+             // Implementations would require significant time & likely external physics library for accuracy.
+            { name: "Ninja on the bridge (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] },
+            { name: "Red ball on the ball (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] },
+            { name: "Train (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] },
+            { name: "Last level (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] },
+            { name: "Pakman (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] },
+            { name: "Catapult (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] },
+            { name: "Shop burglary (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] },
+            { name: "Short cut (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] },
+            { name: "The King (Placeholder)", playerStart: { x: 50, y: 400 }, platforms: [{ x: 0, y: 450, width: 750, height: 50 }], goals: [{ x: 700, y: 400, width: 20, height: 50, type: 'flag' }], obstacles: [], texts: [], checkpoints: [] }
+        ];
+
+
+        // --- Helper Functions ---
+        function drawTriangle(x, y, size, color, direction = 'up') { /* ... */ } // (Implementation Below)
+        function drawStar(cx, cy, spikes, outerRadius, innerRadius, color) { /* ... */ } // (Implementation Below)
+        function drawAxe(x, y, w, h, color) { /* ... */ } // (Implementation Below)
+        function drawCar(x, y, w, h, color) { /* ... */ } // (Implementation Below)
+        function drawPakman(x, y, w, h, color) { /* ... */ } // (Implementation Below)
+        function drawRotatingSpikes(x, y, w, h, color, angle) { /* ... */ } // (Implementation Below)
+        function drawFlag(x, y, h, type='goal', reached=false) { /* ... */ } // (Implementation Below)
+        function drawButton(x, y, w, h, color, pressed) { /* ... */ } // (Implementation Below)
+
+
+        // --- Core Game Logic ---
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levelData.length) {
+                alert("Congratulations! You beat all implemented levels!");
+                currentLevel = 0;
+                levelIndex = 0;
+            }
+            if (levelIndex < 0) levelIndex = 0;
+
+            const level = levelData[levelIndex];
+            // Deep copy to prevent modification of original level data
+            platforms = level.platforms ? JSON.parse(JSON.stringify(level.platforms)) : [];
+            obstacles = level.obstacles ? JSON.parse(JSON.stringify(level.obstacles)) : [];
+            goals = level.goals ? JSON.parse(JSON.stringify(level.goals)) : [];
+            movingPlatforms = level.movingPlatforms ? JSON.parse(JSON.stringify(level.movingPlatforms)) : [];
+            buttons = level.buttons ? JSON.parse(JSON.stringify(level.buttons)) : [];
+            specialObjects = level.specialObjects ? JSON.parse(JSON.stringify(level.specialObjects)) : [];
+            texts = level.texts ? JSON.parse(JSON.stringify(level.texts)) : [];
+            checkpoints = level.checkpoints ? JSON.parse(JSON.stringify(level.checkpoints)) : [];
+
+            // Initialize dynamic properties
+            obstacles.forEach(o => o.active = o.active !== false);
+            specialObjects.forEach(so => so.active = so.active !== false);
+            movingPlatforms.forEach(mp => { mp.currentY = mp.startY; mp.currentX = mp.startX; mp.angle = mp.angle || 0 });
+            obstacles.forEach(o => { if(o.swingRadius){ o.currentX = o.x; o.currentY = o.y; o.angle = o.angle || 0;} });
+
+
+            player.x = level.playerStart.x;
+            player.y = level.playerStart.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            player.checkpoint = null;
+            player.inVehicle = null; // Reset vehicle state
+
+            document.getElementById('levelTitle').innerText = `Level ${levelIndex + 1}: ${level.name}`;
+            console.log(`Loading Level ${levelIndex + 1}: ${level.name}`);
+        }
+
+        function restartLevel() {
+            console.log("Restarting Level", currentLevel);
+            if (player.checkpoint) {
+                player.x = player.checkpoint.x;
+                player.y = player.checkpoint.y - player.height;
+                player.vx = 0;
+                player.vy = 0;
+                player.onGround = false;
+                player.inVehicle = null;
+                // Reset level elements that might have changed state
+                 loadLevelState(currentLevel, true); // Reload state but keep checkpoint
+            } else {
+                loadLevel(currentLevel); // Full reload
+            }
+        }
+
+         // Reloads dynamic parts of level state, optionally preserving checkpoint player pos
+         function loadLevelState(levelIndex, useCheckpointPos = false) {
+             const level = levelData[levelIndex];
+             // Reset obstacles/special objects to initial active state
+             obstacles = level.obstacles ? JSON.parse(JSON.stringify(level.obstacles)) : [];
+             specialObjects = level.specialObjects ? JSON.parse(JSON.stringify(level.specialObjects)) : [];
+              obstacles.forEach(o => o.active = o.active !== false);
+              specialObjects.forEach(so => so.active = so.active !== false);
+              // Reset moving platforms positions
+              movingPlatforms = level.movingPlatforms ? JSON.parse(JSON.stringify(level.movingPlatforms)) : [];
+              movingPlatforms.forEach(mp => { mp.currentY = mp.startY; mp.currentX = mp.startX; mp.angle = mp.angle || 0 });
+              obstacles.forEach(o => { if(o.swingRadius){ o.currentX = o.x; o.currentY = o.y; o.angle = o.angle || 0;} });
+             // Reset buttons
+             buttons = level.buttons ? JSON.parse(JSON.stringify(level.buttons)) : [];
+             // Keep player position if using checkpoint, otherwise reset
+              if (!useCheckpointPos) {
+                  player.x = level.playerStart.x;
+                  player.y = level.playerStart.y;
+                  player.vx = 0; player.vy = 0; player.onGround = false; player.inVehicle = null;
+              }
+         }
+
+
+        window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+            if (e.key.toLowerCase() === 'r') { restartLevel(); }
+            // Simple interaction key (e.g., enter vehicle)
+            if (e.key.toLowerCase() === 'enter' || e.key.toLowerCase() === 'e') {
+                 handleInteraction();
+            }
+        });
+         document.getElementById('restartLevelBtn').addEventListener('click', restartLevel);
+
+
+        function checkCollision(rect1, rect2) { /* ... */ } // (Implementation Below)
+        function handlePhysics(obj) { /* ... */ } // (Implementation Below for obj physics)
+        function handlePlayerMovement() { /* ... */ } // (Implementation Below)
+        function updateMovingObjects() { /* ... */ } // (Implementation Below)
+        function handleCollisions() { /* ... */ } // (Implementation Below)
+        function handleInteraction() { /* ... */ } // (Implementation Below)
+
+
+        function update() {
+            if (gamePaused) return;
+
+            if (player.inVehicle) {
+                 handleVehicleMovement(player.inVehicle);
+                 handlePhysics(player.inVehicle); // Apply gravity etc. to vehicle
+                 handleVehicleCollisions(player.inVehicle);
+                 player.x = player.inVehicle.x + player.inVehicle.width/2 - player.width/2; // Keep player visually inside
+                 player.y = player.inVehicle.y - player.height + 5; // Position slightly above vehicle floor
+                 player.onGround = true; // Assume player is grounded in vehicle
+            } else {
+                 handlePlayerMovement();
+                 handlePhysics(player); // Apply gravity to player
+                 handleCollisions(); // Player collisions with world
+            }
+
+            updateMovingObjects(); // Update lifts, crushers, swinging things etc.
+            updateSpecialObjects(); // Update cars, balls etc. not controlled by player
+
+
+            // --- Falling Off ---
+            const target = player.inVehicle || player;
+            if (target.y > canvas.height + 200) {
+                console.log("Fell off!");
+                restartLevel();
+            }
+        }
+
+        function render() { /* ... */ } // (Implementation Below)
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Skip Level Button
+        document.getElementById('skipLevel').addEventListener('click', () => {
+            console.log("Skip Level button clicked");
+            currentLevel++;
+            if (currentLevel >= levelData.length) { currentLevel = 0; }
+            loadLevel(currentLevel);
+        });
+
+        // --- Implementations of Helper and Core Logic Functions ---
+
+        function drawTriangle(x, y, size, color, direction = 'up') {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            if (direction === 'up') {
+                ctx.moveTo(x, y + size);
+                ctx.lineTo(x + size / 2, y);
+                ctx.lineTo(x + size, y + size);
+            } else { // down
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + size / 2, y + size);
+                ctx.lineTo(x + size, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function drawStar(cx, cy, spikes, outerRadius, innerRadius, color) {
+          let rot = Math.PI / 2 * 3; let x = cx; let y = cy; let step = Math.PI / spikes;
+          ctx.beginPath(); ctx.moveTo(cx, cy - outerRadius)
+          for (let i = 0; i < spikes; i++) {
+            x = cx + Math.cos(rot) * outerRadius; y = cy + Math.sin(rot) * outerRadius; ctx.lineTo(x, y); rot += step;
+            x = cx + Math.cos(rot) * innerRadius; y = cy + Math.sin(rot) * innerRadius; ctx.lineTo(x, y); rot += step;
+          }
+          ctx.lineTo(cx, cy - outerRadius); ctx.closePath(); ctx.fillStyle=color; ctx.fill();
+        }
+
+        function drawAxe(x, y, w, h, color) {
+             ctx.fillStyle = '#A9A9A9'; // Handle
+             ctx.fillRect(x + w*0.4, y, w*0.2, h*0.6);
+             ctx.fillStyle = color || '#DC143C'; // Axe head
+             ctx.beginPath(); ctx.arc(x + w/2, y + h * 0.7, w/1.5, Math.PI * 0.1, Math.PI * 0.9); ctx.fill(); // Top part
+             ctx.beginPath(); ctx.arc(x + w/2, y + h * 0.7, w/1.5, Math.PI * 1.1, Math.PI * 1.9); ctx.fill(); // Bottom part
+             // Sharp edge visual
+             ctx.fillStyle = 'white'; ctx.fillRect(x, y + h * 0.7 - 2, w, 4);
+        }
+
+         function drawCar(x, y, w, h, color) {
+              ctx.fillStyle = color || 'purple';
+              ctx.fillRect(x, y, w, h); // Body
+              ctx.fillRect(x + w*0.1, y - h*0.3, w*0.8, h*0.4); // Upper part/seat area
+              ctx.fillStyle = '#333'; // Wheels
+              ctx.beginPath(); ctx.arc(x + w * 0.25, y + h, h*0.4, 0, Math.PI * 2); ctx.fill();
+              ctx.beginPath(); ctx.arc(x + w * 0.75, y + h, h*0.4, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = 'grey'; // Wheel hubs
+              ctx.beginPath(); ctx.arc(x + w * 0.25, y + h, h*0.2, 0, Math.PI * 2); ctx.fill();
+              ctx.beginPath(); ctx.arc(x + w * 0.75, y + h, h*0.2, 0, Math.PI * 2); ctx.fill();
+         }
+
+         function drawPakman(x, y, w, h, color) {
+             ctx.fillStyle = color || 'darkred';
+             ctx.beginPath();
+             const angleOffset = Math.sin(Date.now() * 0.005) * 0.1; // Simple mouth animation
+             ctx.arc(x + w / 2, y + h / 2, w / 2, (0.2 + angleOffset) * Math.PI, (1.8 - angleOffset) * Math.PI, false);
+             ctx.lineTo(x + w / 2, y + h / 2);
+             ctx.closePath();
+             ctx.fill();
+             ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x + w*0.6, y + h*0.3, w*0.1, 0, Math.PI*2); ctx.fill(); // Eye
+         }
+
+        function drawRotatingSpikes(x, y, w, h, color, angle) {
+             ctx.fillStyle = color || '#696969';
+             ctx.save();
+             ctx.translate(x + w / 2, y + h / 2);
+             ctx.rotate(angle);
+             ctx.fillRect(-w / 2, -h / 2, w, h); // Central block (optional)
+             const spikeSize = 15;
+             const numSpikes = 8;
+             for(let i=0; i<numSpikes; ++i) {
+                 const spokeAngle = (i / numSpikes) * Math.PI * 2;
+                 const sx = Math.cos(spokeAngle) * (w / 2);
+                 const sy = Math.sin(spokeAngle) * (h / 2);
+                 // Draw triangle relative to center
+                 ctx.fillStyle = 'red';
+                 ctx.beginPath();
+                 ctx.moveTo(sx, sy);
+                 ctx.lineTo(sx + Math.cos(spokeAngle + Math.PI/2) * spikeSize/2, sy + Math.sin(spokeAngle + Math.PI/2) * spikeSize/2);
+                 ctx.lineTo(sx + Math.cos(spokeAngle - Math.PI/2) * spikeSize/2, sy + Math.sin(spokeAngle - Math.PI/2) * spikeSize/2);
+                 ctx.closePath();
+                 ctx.fill();
+             }
+             ctx.restore();
+        }
+
+         function drawFlag(x, y, h, type='goal', reached=false) {
+              const poleColor = '#654321'; // Brown
+              const flagColor = (type === 'checkpoint' && reached) ? '#FFA500' : '#FF0000'; // Orange if reached checkpoint, else red
+              const flagChar = (type === 'checkpoint') ? '🏁' : '🚩';
+              ctx.fillStyle = poleColor;
+              ctx.fillRect(x, y, 5, h);
+              ctx.font = '24px Arial';
+              ctx.fillStyle = flagColor;
+               // Draw emoji slightly offset from pole top
+              ctx.fillText(flagChar, x - 5, y + 20);
+         }
+
+         function drawButton(x, y, w, h, color, pressed) {
+             ctx.fillStyle = pressed ? '#AAAAAA' : color || 'blue'; // Grey out if pressed
+             ctx.fillRect(x, y, w, h);
+             ctx.strokeStyle = '#333';
+             ctx.lineWidth = 1;
+             ctx.strokeRect(x, y, w, h);
+             if (pressed) { // Inner shadow effect
+                 ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                 ctx.fillRect(x+1, y+1, w-2, h-2);
+             }
+         }
+
+        function checkCollision(rect1, rect2) {
+             if (!rect1 || !rect2 || rect2.active === false || rect1.active === false) return false;
+             // Add small tolerance to prevent snagging on edges
+             const tolerance = 1;
+            return rect1.x < rect2.x + rect2.width - tolerance &&
+                   rect1.x + rect1.width > rect2.x + tolerance &&
+                   rect1.y < rect2.y + rect2.height - tolerance &&
+                   rect1.y + rect1.height > rect2.y + tolerance;
+        }
+
+        function handlePhysics(obj) {
+            if (!obj.onGround) {
+                obj.vy += gravity;
+                obj.vy = Math.min(obj.vy, 12); // Terminal velocity
+            }
+
+            let proposedX = obj.x + obj.vx;
+            let proposedY = obj.y + obj.vy;
+            obj.onGround = false; // Reset before checking collisions
+
+            const collisionObjects = [...platforms, ...movingPlatforms, ...obstacles.filter(o => o.type === 'wall' || o.type === 'block'), ...specialObjects.filter(so => so !== obj && (so.type === 'box' || so.type === 'heavy_ball' || so.type === 'car'))]; // Objects that provide collision support
+
+             // Ground Check - check slightly below current position + vertical velocity
+            let groundCheckRect = { ...obj, y: obj.y + 1 };
+            for (const p of collisionObjects) {
+                if (checkCollision(groundCheckRect, p)) {
+                     if (obj.vy >= 0) { // Moving down or still
+                         obj.onGround = true;
+                         obj.vy = 0;
+                         proposedY = p.y - obj.height; // Snap to surface
+                         // Apply friction (simple velocity damping)
+                         obj.vx *= 0.95;
+                          if(Math.abs(obj.vx) < 0.1) obj.vx = 0;
+                           // Check if landed on moving platform
+                          if (p.type === 'vertical' || p.type === 'horizontal') {
+                              obj.currentPlatformSpeedX = p.speed * (p.type === 'horizontal' ? 1 : 0);
+                              obj.currentPlatformSpeedY = p.speed * (p.type === 'vertical' ? 1 : 0);
+                          } else {
+                              obj.currentPlatformSpeedX = 0;
+                              obj.currentPlatformSpeedY = 0;
+                          }
+                          // Spring interaction
+                         if (p.type === 'spring') { obj.vy = p.bounce; obj.onGround = false; }
+
+                         break; // Found ground
+                     }
+                }
+            }
+             if (!obj.onGround) { obj.currentPlatformSpeedX = 0; obj.currentPlatformSpeedY = 0;}
+
+            // Apply platform velocity before resolving collisions for the current step
+             proposedX += obj.currentPlatformSpeedX || 0;
+             // proposedY += obj.currentPlatformSpeedY || 0; // Y is usually handled by snapping/gravity
+
+            // Resolve X collision
+            let objRectX = { ...obj, x: proposedX };
+            for (const p of collisionObjects) {
+                if (checkCollision(objRectX, p)) {
+                    if (obj.vx + (obj.currentPlatformSpeedX || 0) > 0) { proposedX = p.x - obj.width; }
+                    else if (obj.vx + (obj.currentPlatformSpeedX || 0) < 0) { proposedX = p.x + p.width; }
+                    obj.vx = 0; // Stop horizontal velocity relative to ground
+                    break;
+                }
+            }
+            obj.x = proposedX;
+
+            // Resolve Y collision
+            let objRectY = { ...obj, x: obj.x, y: proposedY }; // Use the resolved X for Y check
+             for (const p of collisionObjects) {
+                 if (checkCollision(objRectY, p)) {
+                     if (obj.vy > 0) { // Moving down
+                         proposedY = p.y - obj.height;
+                         obj.onGround = true; // Ensure onGround is set if landing this frame
+                         obj.vy = 0;
+                         if (p.type === 'spring') { obj.vy = p.bounce; obj.onGround = false; }
+                     } else if (obj.vy < 0) { // Moving up
+                         proposedY = p.y + p.height;
+                         obj.vy = 0; // Hit ceiling
+                     }
+                      // Check if collided with moving platform vertically
+                      if (p.type === 'vertical' || p.type === 'horizontal') {
+                          obj.currentPlatformSpeedX = p.speed * (p.type === 'horizontal' ? 1 : 0);
+                          obj.currentPlatformSpeedY = p.speed * (p.type === 'vertical' ? 1 : 0);
+                      } else {
+                          obj.currentPlatformSpeedX = 0;
+                           obj.currentPlatformSpeedY = 0;
+                      }
+                     break;
+                 }
+             }
+             obj.y = proposedY;
+
+             // Basic Box/Ball Physics (Pushing/Rolling - simplified)
+             if(obj.type === 'box' || obj.type === 'heavy_ball') {
+                 // Check collision with player
+                 if(checkCollision(obj, player)) {
+                     const overlapX = (player.x + player.width/2) - (obj.x + obj.width/2);
+                     const pushForce = 0.5;
+                     obj.vx += (overlapX > 0 ? -pushForce : pushForce);
+                 }
+                 // Rolling friction/damping
+                  if (obj.onGround) { obj.vx *= 0.98; }
+             }
+        }
+
+
+         function handlePlayerMovement() {
+              if (keys['arrowleft'] || keys['a']) { player.vx = -player.speed; }
+              else if (keys['arrowright'] || keys['d']) { player.vx = player.speed; }
+              else {
+                   // Apply friction only if not actively moving
+                   if(player.onGround) player.vx *= 0.85; else player.vx *= 0.98; // Less friction in air
+                   if (Math.abs(player.vx) < 0.1) player.vx = 0;
+               }
+
+               if ((keys['arrowup'] || keys['w'] || keys[' ']) && player.onGround) {
+                   player.vy = player.jumpPower;
+                   player.onGround = false; // Ensure jump starts
+               }
+         }
+
+         function handleVehicleMovement(vehicle) {
+              if (keys['arrowleft'] || keys['a']) { vehicle.vx = -vehicle.speed; }
+              else if (keys['arrowright'] || keys['d']) { vehicle.vx = vehicle.speed; }
+              else { vehicle.vx *= 0.9; } // Vehicle friction
+
+               if ((keys['arrowup'] || keys['w'] || keys[' ']) && vehicle.onGround) {
+                   vehicle.vy = vehicle.jumpPower || -5; // Allow vehicles to jump slightly if needed
+                   vehicle.onGround = false;
+               }
+         }
+
+         function handleVehicleCollisions(vehicle) {
+              // Vehicle collision with spikes/hazards
+              for (const o of obstacles) {
+                  if (o.active !== false && checkCollision(vehicle, o)) {
+                      if (o.type === 'spikes' || o.type === 'hazard_ball' || o.type === 'crusher' || o.type === 'hazard_axe' || o.type === 'rotating_spikes') {
+                          console.log("Vehicle hit obstacle!");
+                          restartLevel(); // Restart if vehicle hits hazard
+                          return;
+                      }
+                  }
+              }
+               // Collision with moving crushers
+              for (const mp of movingPlatforms) {
+                  if (mp.type === 'crusher' && checkCollision(vehicle, mp)) {
+                       console.log("Vehicle hit crusher!");
+                       restartLevel();
+                       return;
+                  }
+              }
+              // Vehicle collision with goals (maybe allow winning in vehicle?)
+             for (const g of goals) {
+                if (checkCollision(vehicle, g)) {
+                    console.log(`Level ${currentLevel + 1} complete (in vehicle)!`);
+                    currentLevel++; loadLevel(currentLevel); return;
+                }
+             }
+         }
+
+        function updateMovingObjects() {
+             movingPlatforms.forEach(mp => {
+                 if (mp.type === 'vertical') {
+                     mp.y += mp.speed;
+                     if ((mp.speed > 0 && mp.y > mp.startY) || (mp.speed < 0 && mp.y < mp.startY - mp.range)) {
+                         mp.speed *= -1; mp.y = Math.max(mp.startY - mp.range, Math.min(mp.y, mp.startY));
+                     }
+                 } else if (mp.type === 'horizontal') {
+                     mp.x += mp.speed;
+                     if ((mp.speed > 0 && mp.x > mp.startX) || (mp.speed < 0 && mp.x < mp.startX - mp.range)) {
+                        mp.speed *= -1; mp.x = Math.max(mp.startX - mp.range, Math.min(mp.x, mp.startX));
+                     }
+                 } else if (mp.type === 'crusher') {
+                     mp.y += mp.speed;
+                      if ((mp.speed > 0 && mp.y > mp.startY + mp.range) || (mp.speed < 0 && mp.y < mp.startY )) {
+                         mp.speed *= -1; mp.y = Math.max(mp.startY, Math.min(mp.y, mp.startY + mp.range));
+                     }
+                 } else if (mp.type === 'falling_spike') {
+                      if (player.x > mp.triggerX && player.x < mp.triggerX + 50 && mp.y === mp.startY) { // Trigger fall
+                          mp.vy = mp.speed; // Start falling
+                      }
+                      if (mp.vy > 0) { mp.y += mp.vy; } // If falling, keep falling
+                      if (mp.y > canvas.height + 100) { mp.y = mp.startY; mp.vy = 0;} // Reset if off-screen
+                 }
+             });
+             // Update swinging obstacles
+             obstacles.forEach(o => {
+                  if (o.swingRadius) {
+                      o.angle += o.speed;
+                      o.x = o.swingAnchorX + Math.cos(o.angle) * o.swingRadius - o.width / 2;
+                      o.y = o.swingAnchorY + Math.sin(o.angle) * o.swingRadius - o.height / 2;
+                  }
+                   if (o.type === 'rotating_spikes') {
+                       o.angle += o.speed;
+                   }
+                   if (o.type === 'pakman_placeholder') {
+                       // Simple follow behavior
+                       const targetX = player.inVehicle ? player.inVehicle.x : player.x;
+                       if (Math.abs(targetX - o.x) > 10) { // Only move if player is nearby
+                           if (targetX > o.x) o.x += o.speed; else o.x -= o.speed;
+                       }
+                   }
+             });
+
+             // Update physics for special objects (boxes, balls)
+              specialObjects.forEach(so => {
+                  if (so.type === 'box' || so.type === 'heavy_ball' || so.type === 'car') {
+                      if(so !== player.inVehicle) { // Don't apply physics twice if player is in car
+                          handlePhysics(so);
+                      }
+                  }
+                  // Seesaw basic reaction (placeholder - real physics needed)
+                   if (so.type === 'seesaw') {
+                       let torque = 0;
+                       specialObjects.filter(ob => ob.type === 'heavy_ball' || ob.type === 'box' || ob.id === player.id)
+                           .forEach(ball => {
+                               if (checkCollision({ ...so, y: so.y - 5 }, ball)) { // Check if ball is on seesaw
+                                   const dist = (ball.x + ball.width / 2) - so.pivotX;
+                                   torque += dist * (ball.mass || 1) * gravity * 0.01; // Simplified torque calculation
+                               }
+                           });
+                       // Apply torque to angle (very basic)
+                       so.angle += torque * 0.005;
+                       so.angle = Math.max(-Math.PI/8, Math.min(Math.PI/8, so.angle)); // Limit angle
+                   }
+              });
+        }
+
+         function updateSpecialObjects() {
+             // Placeholder for non-physics updates if needed in future
+         }
+
+
+        function handleCollisions() {
+             // Player vs Obstacles
+             for (const o of obstacles) {
+                 if (o.active !== false && checkCollision(player, o)) {
+                     if (o.type === 'spikes' || o.type.startsWith('hazard_') || o.type === 'rotating_spikes' || o.type === 'pakman_placeholder') {
+                         console.log("Player hit obstacle!"); restartLevel(); return;
+                     }
+                 }
+             }
+              // Player vs moving crushers
+              for (const mp of movingPlatforms) {
+                  if (mp.type === 'crusher' && checkCollision(player, mp)) {
+                       console.log("Player hit crusher!"); restartLevel(); return;
+                  }
+                  if (mp.type === 'falling_spike' && mp.vy > 0 && checkCollision(player, mp)) {
+                      console.log("Player hit falling spike!"); restartLevel(); return;
+                  }
+              }
+
+             // Player vs Goals
+             for (const g of goals) { if (checkCollision(player, g)) { console.log(`Level ${currentLevel + 1} complete!`); currentLevel++; loadLevel(currentLevel); return; } }
+
+             // Player vs Checkpoints
+             for (const cp of checkpoints) { if (!cp.reached && checkCollision(player, cp)) { console.log("Checkpoint reached!"); cp.reached = true; player.checkpoint = { x: cp.x, y: cp.y }; } }
+
+             // Player vs Buttons
+             for (const b of buttons) {
+                  if (checkCollision(player, b)) {
+                      if (b.action === 'destroy_wall' && !b.pressed) {
+                           const target = [...obstacles, ...specialObjects].find(o => o.id === b.targetId);
+                           if (target && target.active) { target.active = false; console.log(`Button pressed: Deactivating ${b.targetId}`); b.pressed = true; }
+                      }
+                  } else { b.pressed = false; } // Allow button re-press if player moves off and comes back
+             }
+
+             // Player vs Special Objects (e.g., picking up items - not in this game?)
+             // Player collision with pushable boxes/balls handled in handlePhysics
+        }
+
+
+         function handleInteraction() {
+              if (player.inVehicle) {
+                  // Exit vehicle
+                  const car = player.inVehicle;
+                  player.inVehicle = null;
+                  player.x = car.x - player.width - 5; // Place player beside car
+                  player.y = car.y;
+                   player.vy = -2; // Small hop out
+                  player.onGround = false;
+                  console.log("Exited vehicle");
+              } else {
+                  // Check for nearby vehicles to enter
+                  for(const so of specialObjects) {
+                      if(so.type === 'car' || so.type === 'cart_placeholder') {
+                          // Check proximity
+                          const dx = (player.x + player.width/2) - (so.x + so.width/2);
+                          const dy = (player.y + player.height/2) - (so.y + so.height/2);
+                          if (Math.sqrt(dx*dx + dy*dy) < 50) { // Enter if close enough
+                              player.inVehicle = so;
+                              so.hasPlayer = true; // (optional state for car)
+                              // Reset player velocity relative to car
+                              player.vx = 0;
+                              player.vy = 0;
+                              console.log("Entered vehicle");
+                              break;
+                          }
+                      }
+                  }
+              }
+         }
+
+
+        function render() {
+            // --- Clear Canvas ---
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+             // Simple clouds
+             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+             ctx.beginPath(); ctx.arc(150, 100, 40, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(200, 90, 50, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(250, 110, 45, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(550, 150, 50, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(610, 140, 60, 0, Math.PI*2); ctx.fill();
+             ctx.beginPath(); ctx.arc(670, 160, 55, 0, Math.PI*2); ctx.fill();
+
+            // --- Draw Elements ---
+            const elementsToDraw = [...platforms, ...movingPlatforms, ...obstacles, ...specialObjects, ...goals, ...checkpoints, ...buttons];
+
+             elementsToDraw.forEach(el => {
+                if (el.active === false || el.type === 'invisible') return;
+
+                ctx.save(); // Save context state before drawing element
+
+                // Handle rotation for seesaws
+                if (el.type === 'seesaw' || el.type === 'seesaw_catapult') {
+                    ctx.translate(el.pivotX, el.pivotY);
+                    ctx.rotate(el.angle);
+                    ctx.translate(-el.pivotX, -el.pivotY);
+                }
+
+                 // --- Basic Shape & Color ---
+                 ctx.fillStyle = el.color || '#8B4513'; // Default brown
+                 if (el.type === 'platform' || el.type === 'vertical' || el.type === 'horizontal' || el.type === 'bridge' || el.type === 'seesaw' || el.type === 'seesaw_catapult') {
+                      if (el.type === 'vertical' || el.type === 'horizontal') ctx.fillStyle = el.color || '#696969'; // Lift color
+                      if (el.type === 'bridge') ctx.fillStyle = el.color || '#CD853F'; // Bridge color
+                      if (el.type === 'seesaw' || el.type === 'seesaw_catapult') ctx.fillStyle = el.color || '#808080'; // Seesaw color
+
+                      ctx.fillRect(el.x, el.y, el.width, el.height);
+
+                      // Grass top for regular platforms
+                      if (el.type === 'platform' || !el.type) {
+                         ctx.fillStyle = '#228B22';
+                         ctx.fillRect(el.x, el.y, el.width, Math.min(el.height * 0.2, 8));
+                      }
+                       // Bridge pattern
+                      if (el.type === 'bridge') {
+                           ctx.strokeStyle = '#8B4513'; ctx.lineWidth = 1;
+                           for(let i = 5; i < el.width; i+= 10) { ctx.strokeRect(el.x + i, el.y, 1, el.height); }
+                      }
+                       // Seesaw pivot
+                       if (el.type === 'seesaw' || el.type === 'seesaw_catapult') {
+                           ctx.restore(); // Restore before drawing pivot relative to original coords
+                           drawTriangle(el.pivotX - 10, el.pivotY, 20, '#555');
+                           ctx.save(); // Save again if we rotated
+                           ctx.translate(el.pivotX, el.pivotY); ctx.rotate(el.angle); ctx.translate(-el.pivotX, -el.pivotY); // Re-apply rotation for next elements if needed
+                       }
+
+                 } else if (el.type === 'spikes') {
+                      const spikeSize = Math.min(el.width / Math.max(1, Math.floor(el.width / 15)), el.height * 1.5); // Adjust spike size based on area
+                      const numSpikes = Math.floor(el.width / spikeSize);
+                      for(let i=0; i<numSpikes; i++) { drawTriangle(el.x + i * spikeSize + (el.width % spikeSize)/2, el.y, spikeSize, 'red'); }
+                 } else if (el.type === 'crusher') {
+                      ctx.fillStyle = el.color || '#A9A9A9';
+                      ctx.fillRect(el.x, el.y, el.width, el.height);
+                      drawTriangle(el.x + el.width/2 - 10, el.y + el.height - 10, 20, 'red', 'down'); // Spike tip
+                 } else if (el.type === 'falling_spike') {
+                      ctx.fillStyle = el.color || 'grey';
+                      ctx.fillRect(el.x, el.y, el.width, el.height);
+                       drawTriangle(el.x + el.width/2 - 8, el.y + el.height - 8, 16, 'red', 'down');
+                 } else if (el.type.startsWith('hazard_')) {
+                      if (el.type === 'hazard_ball') { ctx.fillStyle = el.color || 'darkgrey'; ctx.beginPath(); ctx.arc(el.x + el.width / 2, el.y + el.height / 2, el.width / 2, 0, Math.PI * 2); ctx.fill(); }
+                      else if (el.type === 'hazard_axe') { drawAxe(el.x, el.y, el.width, el.height, el.color); }
+                      else if (el.type === 'hazard_star') { drawStar(el.x + el.width/2, el.y + el.height/2, 5, el.width/2, el.width/4, el.color || 'red');}
+                       // Draw line for swinging objects
+                      if(el.swingRadius && el.swingAnchorX) {
+                          ctx.strokeStyle = '#555'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(el.swingAnchorX, el.swingAnchorY); ctx.lineTo(el.x + el.width/2, el.y + el.height/2); ctx.stroke();
+                      }
+                 } else if (el.type === 'rotating_spikes') {
+                      drawRotatingSpikes(el.x, el.y, el.width, el.height, el.color, el.angle);
+                 } else if (el.type === 'wall' || el.type === 'block') {
+                      ctx.fillStyle = el.color || '#A0522D'; // Brick/stone color
+                      ctx.fillRect(el.x, el.y, el.width, el.height);
+                      ctx.strokeStyle = '#654321'; ctx.strokeRect(el.x, el.y, el.width, el.height); // Outline
+                 } else if (el.type === 'spring') {
+                      ctx.fillStyle = '#808080'; ctx.fillRect(el.x, el.y, el.width, el.height); // Base
+                      ctx.fillStyle = el.color || 'orange'; ctx.fillRect(el.x, el.y, el.width, el.height * 0.5); // Top
+                 } else if (el.type === 'star_platform') {
+                      drawStar(el.x + el.width/2, el.y + el.height/2, 5, el.width/2, el.width/4, el.color || 'gold');
+                 } else if (el.type === 'box') {
+                      ctx.fillStyle = el.color || '#DEB887'; ctx.fillRect(el.x, el.y, el.width, el.height);
+                      ctx.strokeStyle = '#8B4513'; ctx.strokeRect(el.x, el.y, el.width, el.height);
+                      ctx.fillStyle = '#8B4513'; ctx.font='12px Arial'; ctx.fillText('📦', el.x + el.width/2 - 6, el.y + el.height/2 + 4);
+                 } else if (el.type === 'heavy_ball') {
+                      ctx.fillStyle = el.color || '#B0C4DE'; ctx.beginPath(); ctx.arc(el.x + el.width / 2, el.y + el.height / 2, el.width / 2, 0, Math.PI * 2); ctx.fill();
+                      ctx.fillStyle='black'; ctx.font = `${el.width * 0.3}px Arial`; ctx.fillText('1T', el.x + el.width/2 - el.width*0.15, el.y + el.height/2 + el.width*0.1);
+                 } else if (el.type === 'car') {
+                      drawCar(el.x, el.y, el.width, el.height, el.color);
+                 } else if (el.type === 'pakman_placeholder') {
+                      drawPakman(el.x, el.y, el.width, el.height, el.color);
+                 } else if (el.type === 'goal' || el.type === 'flag') {
+                      drawFlag(el.x, el.y, el.height, 'goal');
+                 } else if (el.type === 'checkpoint') {
+                      drawFlag(el.x, el.y, el.height, 'checkpoint', el.reached);
+                 } else if (el.type === 'button') {
+                      drawButton(el.x, el.y, el.width, el.height, el.color, el.pressed);
+                 }
+                  // Add other types as needed...
+
+                 ctx.restore(); // Restore context state after drawing element
+            });
+
+
+            // --- Draw Player (if not in vehicle) ---
+             if (!player.inVehicle) {
+                 ctx.fillStyle = player.color;
+                 ctx.beginPath();
+                 ctx.arc(player.x + player.width / 2, player.y + player.height / 2, player.width / 2, 0, Math.PI * 2);
+                 ctx.fill();
+                 // Eyes
+                 ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(player.x + player.width * 0.7, player.y + player.height * 0.35, player.width * 0.15, 0, Math.PI * 2); ctx.fill();
+                 ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(player.x + player.width * 0.73, player.y + player.height * 0.37, player.width * 0.08, 0, Math.PI * 2); ctx.fill();
+             } else {
+                 // Draw player inside vehicle (simple circle on top)
+                 const car = player.inVehicle;
+                 ctx.fillStyle = player.color;
+                 ctx.beginPath();
+                 ctx.arc(car.x + car.width / 2, car.y - player.height/2 + 5, player.width / 2, 0, Math.PI * 2);
+                 ctx.fill();
+                 // Eyes (adjust position slightly)
+                 ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(car.x + car.width * 0.5 + player.width * 0.2, car.y - player.height/2 + 5 + player.height * 0.35 - player.height*0.5, player.width * 0.15, 0, Math.PI * 2); ctx.fill();
+                 ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(car.x + car.width * 0.5 + player.width * 0.23, car.y - player.height/2 + 5 + player.height * 0.37 - player.height*0.5, player.width * 0.08, 0, Math.PI * 2); ctx.fill();
+             }
+
+
+            // --- Draw Texts ---
+            texts.forEach(t => {
+                ctx.fillStyle = t.color || 'black';
+                ctx.font = t.font || '14px Arial';
+                ctx.fillText(t.content, t.x, t.y);
+            });
+        }
+
+        // --- Initialisation ---
+        loadLevel(currentLevel);
+        gameLoop();
+
+    </script>
+</body>
+</html>

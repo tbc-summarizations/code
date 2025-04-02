@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Ball</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #87CEEB; /* Light Sky Blue */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #333;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background: linear-gradient(to bottom, #87CEEB 70%, #ADD8E6 100%);
+            border: 2px solid #555;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            overflow: hidden; /* Important for containing elements */
+        }
+        canvas {
+            display: block;
+            background: transparent; /* Canvas is for game elements, background handled by container */
+        }
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none; /* Allow clicks to pass through initially */
+            z-index: 10;
+        }
+        .main-menu, .level-select, .game-screen, .message-screen {
+            pointer-events: auto; /* Enable interaction for active screens */
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start; /* Align content to the top */
+            position: absolute;
+             background: linear-gradient(to bottom, #87CEEB 70%, #ADD8E6 100%);
+        }
+         .main-menu {
+            padding-top: 50px;
+         }
+        .hidden {
+            display: none !important;
+        }
+        h1 {
+            font-size: 72px;
+            color: red;
+            margin-bottom: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .brand-logo {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 36px;
+            color: #2E8B57; /* SeaGreen */
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+        .brand-logo span { /* Crown */
+            color: gold;
+            display: block;
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: -10px;
+        }
+        .menu-options {
+            list-style: none;
+            padding: 0;
+            margin: 20px 0 0 50px; /* Positioned more to the left */
+            align-self: flex-start; /* Align this specific element */
+            text-align: left;
+        }
+        .menu-options li {
+            margin-bottom: 15px;
+        }
+        .menu-options button {
+            background: none;
+            border: none;
+            color: #FFD700; /* Gold */
+            font-size: 32px;
+            font-weight: bold;
+            cursor: pointer;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            padding: 0;
+             transition: transform 0.1s ease;
+        }
+        .menu-options button:hover {
+             transform: scale(1.1);
+             color: #FFA500; /* Orange on hover */
+        }
+        .menu-character {
+             position: absolute;
+             right: 100px;
+             bottom: 150px; /* Adjusted position */
+             font-size: 80px; /* Emoji size */
+        }
+        .menu-ground {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            background-color: #8B4513; /* SaddleBrown */
+            border-top: 5px solid #542d0a;
+            overflow: hidden; /* Hide parts of elements going outside */
+        }
+         .menu-hill {
+            position: absolute;
+            bottom: 140px; /* Just above the ground */
+            right: 0;
+            width: 300px;
+            height: 150px;
+            background-color: #8B4513;
+            border-radius: 150px 150px 0 0 / 80px 80px 0 0; /* Rounded top */
+             border-top: 5px solid #542d0a;
+             border-left: 5px solid #542d0a;
+             border-right: 5px solid #542d0a;
+        }
+        .menu-hill-grass {
+             position: absolute;
+             top: -10px; /* Overlap slightly */
+             left: 10%;
+             width: 80%;
+             height: 20px;
+             background-color: #228B22; /* ForestGreen */
+             border-radius: 10px 10px 0 0;
+         }
+        .menu-plant {
+             position: absolute;
+             bottom: 150px; /* On the ground */
+             font-size: 40px;
+             color: green;
+         }
+
+        /* Level Select Screen */
+        .level-select h2 {
+            color: #DAA520; /* Goldenrod */
+            font-size: 48px;
+            margin-top: 40px;
+            margin-bottom: 30px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 50px); /* Max 12 per row */
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+         .level-grid-row2 {
+             display: grid;
+             grid-template-columns: repeat(5, 50px); /* 13-17 */
+             gap: 10px;
+             margin-bottom: 20px;
+         }
+        .level-button {
+            width: 50px;
+            height: 50px;
+            background-color: #90EE90; /* LightGreen */
+            border: 2px solid #2E8B57; /* SeaGreen */
+            color: #333;
+            font-size: 24px;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .level-button:hover {
+            background-color: #FFA500; /* Orange */
+        }
+        .level-preview {
+            width: 300px;
+            height: 150px;
+            border: 2px solid black;
+            background-color: rgba(255, 255, 255, 0.5); /* Semi-transparent white */
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            text-align: center;
+            padding: 5px;
+        }
+        .level-select p {
+            font-size: 20px;
+            color: #4682B4; /* SteelBlue */
+            font-weight: bold;
+        }
+
+        /* Game Screen */
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+             width: 100%;
+            height: 100%;
+            z-index: 1; /* Below UI elements */
+        }
+        .game-ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: calc(100% - 20px);
+            z-index: 5;
+            pointer-events: none; /* Let clicks go to canvas unless over a button */
+            color: black;
+            text-shadow: 1px 1px 2px white;
+        }
+         .game-ui span {
+             font-size: 18px;
+             font-weight: bold;
+             background-color: rgba(255, 255, 255, 0.5);
+             padding: 2px 5px;
+             border-radius: 3px;
+         }
+        #skip-level-button {
+             position: absolute;
+             bottom: 10px;
+             right: 10px;
+             padding: 8px 15px;
+             font-size: 16px;
+             background-color: #FFD700;
+             color: #333;
+             border: 1px solid #DAA520;
+             border-radius: 5px;
+             cursor: pointer;
+             z-index: 11; /* Above canvas, below message screens */
+             pointer-events: auto; /* Make sure button is clickable */
+             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+         }
+         #skip-level-button:hover {
+             background-color: #FFA500;
+         }
+         .message-screen {
+             background-color: rgba(0, 0, 0, 0.7);
+             color: white;
+             text-align: center;
+             justify-content: center;
+             z-index: 20;
+             font-size: 36px;
+             text-shadow: 2px 2px 4px black;
+         }
+         .message-screen button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #FFD700;
+             color: #333;
+             border: 1px solid #DAA520;
+             border-radius: 5px;
+         }
+         .ingame-text {
+            position: absolute;
+            color: black;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px white;
+            pointer-events: none;
+            z-index: 6;
+         }
+         .level-title {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            font-weight: bold;
+            color: black;
+            text-shadow: 1px 1px 2px white;
+            z-index: 6;
+            background-color: rgba(255, 255, 255, 0.5);
+             padding: 3px 8px;
+             border-radius: 4px;
+         }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="main-menu" class="ui-overlay">
+             <div class="brand-logo"><span>👑</span>King.com</div>
+             <h1>Red ball</h1>
+             <div class="menu-ground">
+                 <div class="menu-hill">
+                     <div class="menu-hill-grass"></div>
+                 </div>
+                  <span class="menu-plant" style="left: 300px;">🌿</span>
+                  <span class="menu-plant" style="left: 550px;">🌿</span>
+             </div>
+             <div class="menu-character">🔴</div>
+             <ul class="menu-options">
+                 <li><button id="play-button">Play</button></li>
+                 <li><button>More games</button></li>
+                 <li><button>Credits</button></li>
+                 <li><button>Highscore</button></li>
+                 <li><button>Download</button></li>
+                 <li><button>Walkthrough</button></li>
+             </ul>
+             <div style="position: absolute; bottom: 10px; right: 10px; font-size: 12px; color: #eee;">ver.1.5.26</div>
+        </div>
+
+        <div id="level-select" class="ui-overlay hidden">
+             <h2>Select level</h2>
+             <div class="level-grid">
+                 <!-- Levels 1-12 -->
+                 <button class="level-button" data-level="0">1</button>
+                 <button class="level-button" data-level="1">2</button>
+                 <button class="level-button" data-level="2">3</button>
+                 <button class="level-button" data-level="3">4</button>
+                 <button class="level-button" data-level="4">5</button>
+                 <button class="level-button" data-level="5">6</button>
+                 <button class="level-button" data-level="6">7</button>
+                 <button class="level-button" data-level="7">8</button>
+                 <button class="level-button" data-level="8">9</button>
+                 <button class="level-button" data-level="9">10</button>
+                 <button class="level-button" data-level="10">11</button>
+                 <button class="level-button" data-level="11">12</button>
+             </div>
+             <div class="level-grid-row2">
+                 <!-- Levels 13-17 -->
+                 <button class="level-button" data-level="12">13</button>
+                 <button class="level-button" data-level="13">14</button>
+                 <button class="level-button" data-level="14">15</button>
+                 <button class="level-button" data-level="15">16</button>
+                 <button class="level-button" data-level="16">17</button>
+             </div>
+             <div id="level-preview-box" class="level-preview">
+                 Hover over a level to see details.
+             </div>
+             <p>Select the level you want to play!</p>
+             <button id="back-to-menu" style="margin-top: 15px; padding: 5px 10px; font-size: 18px;">Back to Menu</button>
+        </div>
+
+        <div id="game-screen" class="ui-overlay hidden">
+            <div id="level-title-display" class="level-title">Level X: Name</div>
+            <canvas id="game-canvas" width="800" height="600"></canvas>
+             <div class="game-ui">
+                 <!-- In-game text elements will be added dynamically here -->
+             </div>
+             <button id="skip-level-button">Skip Level</button>
+        </div>
+
+        <div id="message-screen" class="ui-overlay message-screen hidden">
+             <p id="message-text">You Win!</p>
+             <button id="next-level-button">Next Level</button>
+             <button id="message-back-button">Level Select</button>
+        </div>
+
+         <div id="final-screen" class="ui-overlay message-screen hidden">
+             <div class="brand-logo" style="position: static; margin-bottom: 20px;"><span>👑</span>King.com</div>
+             <p>Want to play more games?</p>
+             <p>Visit King.com!</p>
+             <button id="final-back-button" style="margin-top: 30px;">Back to Menu</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const gameContainer = document.getElementById('game-container');
+        const mainMenuScreen = document.getElementById('main-menu');
+        const levelSelectScreen = document.getElementById('level-select');
+        const gameScreen = document.getElementById('game-screen');
+        const messageScreen = document.getElementById('message-screen');
+        const finalScreen = document.getElementById('final-screen');
+        const messageText = document.getElementById('message-text');
+        const nextLevelButton = document.getElementById('next-level-button');
+        const skipLevelButton = document.getElementById('skip-level-button');
+        const levelTitleDisplay = document.getElementById('level-title-display');
+        const gameUiContainer = gameScreen.querySelector('.game-ui');
+        const levelPreviewBox = document.getElementById('level-preview-box');
+
+        const GRAVITY = 0.5;
+        const MOVE_SPEED = 3;
+        const JUMP_POWER = -10;
+        const FRICTION = 0.8;
+        const MAX_FALL_SPEED = 15;
+
+        let player = { x: 100, y: 400, width: 30, height: 30, vx: 0, vy: 0, onGround: false };
+        let currentLevelIndex = 0;
+        let keys = {};
+        let gameActive = false;
+        let camera = { x: 0, y: 0 };
+        let levelObjects = []; // Holds platforms, hazards, flags, etc. for the current level
+        let dynamicObjects = []; // Holds moving platforms, enemies, etc.
+
+        // Level Definitions (simplified representation based on video)
+        // Types: 'platform', 'hazard', 'flag', 'movingPlatform', 'text', 'button', 'box', 'seesaw', 'wreckingBall', 'axe', 'vehicleTrigger', 'enemy', 'lift', 'starPlatform', 'water'
+        const levels = [
+             // Level 1: Move and jump
+            {
+                name: "Move and jump",
+                playerStart: { x: 100, y: 450 },
+                objects: [
+                    { type: 'platform', x: 50, y: 500, width: 300, height: 100, color: '#8B4513', grass: true },
+                    { type: 'platform', x: 500, y: 500, width: 300, height: 100, color: '#8B4513', grass: true },
+                    { type: 'platform', x: 600, y: 450, width: 50, height: 50, color: '#A0A0A0' }, // Stone block
+                    { type: 'flag', x: 700, y: 460 },
+                    { type: 'text', x: 100, y: 400, content: "Use Left/Right or A/D\nkeys to move" },
+                    { type: 'text', x: 450, y: 400, content: "Use Up or W keys\nto jump" },
+                    { type: 'text', x: 600, y: 350, content: "This is the level goal" },
+                ]
+            },
+            // Level 2: Funny ball
+             {
+                name: "Funny ball",
+                playerStart: { x: 100, y: 450 },
+                objects: [
+                    { type: 'platform', x: 50, y: 500, width: 200, height: 100, grass: true },
+                    { type: 'platform', x: 350, y: 500, width: 250, height: 100, grass: true },
+                    { type: 'platform', x: 700, y: 500, width: 200, height: 100, grass: true },
+                    { type: 'platform', x: 1000, y: 500, width: 200, height: 100, grass: true }, // Moving platform (placeholder)
+                    { type: 'platform', x: 1300, y: 500, width: 200, height: 100, grass: true },
+                    { type: 'flag', x: 150, y: 460 }, // Checkpoint 1
+                    { type: 'flag', x: 550, y: 460 }, // Checkpoint 2
+                    { type: 'flag', x: 1400, y: 460 }, // Final goal
+                    { type: 'hazard', shape: 'triangleRamp', x: 400, y: 450, width: 100, height: 50, color: '#8B4513' }, // Ramp
+                    { type: 'wreckingBall', x: 800, y: 300, radius: 40, length: 200 },
+                    { type: 'movingPlatform', x: 1000, y: 500, width: 150, height: 20, color: '#777', moveX: 150, speed: 1 },
+                    { type: 'text', x: 100, y: 350, content: "Use 'R' to restart\nUse 'P' to pause\nUse 'Esc' to quit" },
+                    { type: 'text', x: 480, y: 420, content: "Check point" },
+                    { type: 'text', x: 1050, y: 400, content: "Wait for moving\nplatform" },
+                ]
+            },
+            // Level 3: Lifts and thorns
+             {
+                name: "Lifts and thorns",
+                playerStart: { x: 100, y: 450 },
+                objects: [
+                    { type: 'platform', x: 50, y: 500, width: 200, height: 100, grass: true },
+                    { type: 'platform', x: 400, y: 500, width: 300, height: 100, grass: true },
+                    { type: 'platform', x: 400, y: 300, width: 300, height: 100, grass: true },
+                    { type: 'platform', x: 850, y: 300, width: 200, height: 100, grass: true },
+                     { type: 'movingPlatform', x: 750, y: 400, width: 100, height: 20, color: '#777', moveY: -200, speed: 1.5 }, // Lift 1
+                     { type: 'movingPlatform', x: 250, y: 400, width: 100, height: 20, color: '#777', moveY: -200, speed: 1.5 }, // Lift 2 (visual only)
+                     { type: 'hazard', shape: 'spikes', x: 450, y: 490, width: 200, count: 10 },
+                     { type: 'hazard', shape: 'spikes', x: 450, y: 290, width: 200, count: 10 },
+                     { type: 'flag', x: 150, y: 460 }, // Start Flag
+                     { type: 'flag', x: 650, y: 460 }, // Mid Flag
+                     { type: 'flag', x: 650, y: 260 }, // Upper Mid Flag
+                     { type: 'flag', x: 950, y: 260 }, // End Flag
+                    { type: 'text', x: 500, y: 450, content: "Danger!" },
+                ]
+            },
+             // Level 4: Axes
+            {
+                name: "Axes",
+                playerStart: { x: 100, y: 450 },
+                objects: [
+                    { type: 'platform', x: 50, y: 500, width: 800, height: 50, grass: true },
+                    { type: 'platform', x: 850, y: 500, width: 200, height: 150, shape: 'stairs', steps: 5, stepHeight: 20, stepWidth: 40, color: '#8B4513'},
+                     { type: 'platform', x: 1100, y: 400, width: 200, height: 50, grass: true },
+                    { type: 'platform', x: 1400, y: 400, width: 400, height: 50, grass: true },
+                     { type: 'flag', x: 150, y: 460 },
+                     { type: 'flag', x: 1000, y: 310 },
+                     { type: 'flag', x: 1700, y: 360 },
+                    // Placeholder "Axes" - represented by hazards
+                    { type: 'hazard', shape: 'stomp', x: 300, y: 200, width: 80, height: 50, range: 250, speed: 1.5, color: '#A0522D' },
+                     { type: 'hazard', shape: 'stomp', x: 500, y: 200, width: 80, height: 50, range: 250, speed: 1.5, delay: 0.5, color: '#A0522D' },
+                     { type: 'hazard', shape: 'stomp', x: 700, y: 200, width: 80, height: 50, range: 250, speed: 1.5, delay: 1.0, color: '#A0522D' },
+                    // Swinging Axes
+                     { type: 'axe', x: 1500, y: 200, length: 200, size: 40 },
+                     { type: 'axe', x: 1700, y: 200, length: 200, size: 40, delay: 0.7 },
+                    { type: 'text', x: 1200, y: 300, content: "?" },
+                    { type: 'text', x: 1550, y: 300, content: "Axes! =)" },
+                ]
+            },
+             // Level 5: Jump!
+             {
+                name: "Jump!",
+                playerStart: { x: 100, y: 450 },
+                objects: [
+                    { type: 'platform', x: 50, y: 500, width: 400, height: 100, grass: true },
+                    { type: 'platform', x: 450, y: 500, width: 500, height: 300, shape: 'slopeUp', color: '#8B4513', grass: true },
+                    { type: 'platform', x: 950, y: 480, width: 150, height: 20, color: '#A0A0A0' }, // Wall - maybe make breakable later
+                    { type: 'seesaw', x: 1050, y: 450, width: 200, height: 10 },
+                    { type: 'hazard', shape: 'boulder', x: 1200, y: 400, radius: 40 }, // Large grey ball
+                    { type: 'flag', x: 150, y: 460 },
+                    { type: 'flag', x: 1100, y: 200 }, // High goal
+                    { type: 'button', x: 500, y: 480, size: 20, color: 'blue', action: 'breakWall', targetId: 'wall1' }, // Button
+                     { type: 'platform', id: 'wall1', x: 950, y: 330, width: 20, height: 150, color: '#A0A0A0' }, // Wall segment
+                     { type: 'text', x: 500, y: 440, content: "Press button to\ndestroy wall" },
+                     { type: 'text', x: 1000, y: 350, content: "Use 'R' to restart" },
+                 ]
+             },
+             // Level 6: Springboards (using slopes/physics)
+             {
+                 name: "Springboards",
+                 playerStart: { x: 100, y: 250 },
+                 objects: [
+                     { type: 'platform', x: 50, y: 300, width: 150, height: 300, shape: 'slopeDown', color: '#8B4513' },
+                     { type: 'platform', x: 200, y: 400, width: 200, height: 200, shape: 'quarterPipeRight', color: '#8B4513' },
+                     { type: 'platform', x: 500, y: 350, width: 150, height: 30, grass: true },
+                     { type: 'platform', x: 700, y: 400, width: 100, height: 30 },
+                     { type: 'platform', x: 850, y: 450, width: 100, height: 30 },
+                     // Windmill obstacle
+                     { type: 'windmill', x: 1100, y: 400, radius: 80, numBlades: 8, speed: 0.02 },
+                     { type: 'platform', shape: 'funnel', x: 1050, y: 500, width: 100, height: 100 },
+                     { type: 'platform', x: 1000, y: 700, width: 200, height: 200, shape: 'quarterPipeLeft', color: '#8B4513' },
+                      { type: 'platform', x: 1200, y: 700, width: 150, height: 30, color: '#A52A2A', hazard: 'spikes', spikesOnTop: true }, // Spike platform
+                     { type: 'platform', x: 1400, y: 400, width: 150, height: 30, grass: true },
+                     // Bouncing hazards
+                     { type: 'hazard', shape: 'bounce', x: 1500, y: 300, radius: 20, bounceTarget: 150 },
+                     { type: 'hazard', shape: 'bounce', x: 1700, y: 300, radius: 20, bounceTarget: 150, delay: 0.5 },
+                     { type: 'hazard', shape: 'bounce', x: 1900, y: 300, radius: 20, bounceTarget: 150, delay: 1.0 },
+                     { type: 'platform', x: 2100, y: 450, width: 100, height: 30 },
+                     { type: 'flag', x: 100, y: 260 },
+                     { type: 'flag', x: 1450, y: 360 },
+                     { type: 'flag', x: 2150, y: 410 }, // Final Flag
+                     { type: 'text', x: 600, y: 300, content: "??? =)" },
+                 ]
+             },
+             // Level 7: Box bridge
+              {
+                 name: "Box bridge",
+                 playerStart: { x: 100, y: 450 },
+                 objects: [
+                     { type: 'platform', x: 50, y: 500, width: 200, height: 100, grass: true },
+                     { type: 'platform', x: 350, y: 500, width: 150, height: 30, color: '#ccc', hazard: 'spikes', spikesOnTop: true, spikeType: 'triangle' }, // Box 1
+                     { type: 'platform', x: 600, y: 400, width: 300, height: 400, shape: 'complexCliff', color: '#8B4513', grass: true }, // Large cliff
+                     { type: 'platform', x: 1000, y: 600, width: 300, height: 400, shape: 'complexCliff', color: '#8B4513', grass: true, flipX: true }, // Second cliff part
+                     { type: 'hazard', shape: 'swingStar', x: 800, y: 300, length: 150, size: 30 },
+                     { type: 'hazard', shape: 'spikes', x: 1000, y: 440, width: 100, count: 5 }, // Spikes on stairs
+                      { type: 'platform', x: 1100, y: 450, width: 200, height: 150, shape: 'stairs', steps: 5, stepHeight: 20, stepWidth: 40, color: '#8B4513', flipX: true }, // Stairs down
+                      { type: 'platform', x: 1300, y: 550, width: 200, height: 200, shape: 'quarterPipeRight', color: '#8B4513' }, // Ramp at bottom
+                     { type: 'movingPlatform', x: 1550, y: 500, width: 100, height: 20, color: '#777'}, // Stone platform 1
+                     { type: 'movingPlatform', x: 1750, y: 450, width: 100, height: 20, color: '#777'}, // Stone platform 2
+                      { type: 'platform', x: 1900, y: 450, width: 150, height: 30, color: '#ccc', hazard: 'spikes', spikesOnTop: true, spikeType: 'triangle' }, // Box 2
+                      { type: 'platform', x: 2100, y: 400, width: 200, height: 300, shape: 'slopeUp', color: '#8B4513', grass: true }, // Final slope platform
+                     { type: 'flag', x: 150, y: 460 }, // Start flag
+                     { type: 'flag', x: 2200, y: 360 }, // End flag
+                      // Boxes that fall (placeholder logic)
+                      { type: 'box', x: 1950, y: 150, size: 30, count: 12, stackHeight: 4 }, // Stack of boxes
+                      { type: 'hazard', shape: 'spikes', x: 1900, y: 390, width: 250, count: 15 }, // Spikes below boxes
+                      { type: 'button', x: 1920, y: 370, size: 20, color: 'red', action: 'none'}, // Red square button near boxes
+                 ]
+             },
+            // ... Add definitions for levels 8-17 based on video observation ...
+            // Placeholder for subsequent levels - need detailed observation and simplification
+             { name: "Car", playerStart: { x: 100, y: 250 }, objects: [ { type: 'platform', x: 50, y: 300, width: 2000, height: 300, grass: true }, { type: 'flag', x: 1900, y: 260 }, { type: 'text', x: 100, y: 100, content: "Level 8 WIP"} ] },
+            { name: "Ninja on the bridge", playerStart: { x: 100, y: 250 }, objects: [ { type: 'platform', x: 50, y: 300, width: 2000, height: 300, grass: true }, { type: 'flag', x: 1900, y: 260 }, { type: 'text', x: 100, y: 100, content: "Level 9 WIP"} ] },
+            { name: "Red ball on the ball", playerStart: { x: 100, y: 450 }, objects: [ { type: 'platform', x: 50, y: 500, width: 2000, height: 100, grass: true }, { type: 'flag', x: 1900, y: 460 }, { type: 'text', x: 100, y: 100, content: "Level 10 WIP"} ] },
+            { name: "Train", playerStart: { x: 100, y: 450 }, objects: [ { type: 'platform', x: 50, y: 500, width: 2000, height: 100, grass: true }, { type: 'flag', x: 1900, y: 460 }, { type: 'text', x: 100, y: 100, content: "Level 11 WIP"} ] },
+            { name: "Last level", playerStart: { x: 100, y: 450 }, objects: [ { type: 'platform', x: 50, y: 500, width: 2000, height: 100, grass: true }, { type: 'flag', x: 1900, y: 460 }, { type: 'text', x: 100, y: 100, content: "Level 12 WIP"} ] },
+            { name: "Pakman", playerStart: { x: 100, y: 450 }, objects: [ { type: 'platform', x: 50, y: 500, width: 2000, height: 100, grass: true }, { type: 'flag', x: 1900, y: 460 }, { type: 'text', x: 100, y: 100, content: "Level 13 WIP"} ] },
+            { name: "Catapult", playerStart: { x: 100, y: 450 }, objects: [ { type: 'platform', x: 50, y: 500, width: 2000, height: 100, grass: true }, { type: 'flag', x: 1900, y: 460 }, { type: 'text', x: 100, y: 100, content: "Level 14 WIP"} ] },
+            { name: "Shop burglary", playerStart: { x: 100, y: 450 }, objects: [ { type: 'platform', x: 50, y: 500, width: 2000, height: 100, grass: true }, { type: 'flag', x: 1900, y: 460 }, { type: 'text', x: 100, y: 100, content: "Level 15 WIP"} ] },
+            { name: "Short cut", playerStart: { x: 100, y: 450 }, objects: [ { type: 'platform', x: 50, y: 500, width: 200, height: 300, grass: true }, { type: 'platform', x: 250, y: 600, width: 300, height: 100, color: '#60a3bc' }, { type: 'flag', x: 400, y: 560}, { type: 'text', x: 100, y: 100, content: "Level 16 Shortcut!"} ] }, // Simplified shortcut level
+            { name: "The King", playerStart: { x: 100, y: 350 }, objects: [
+                 { type: 'starPlatform', x: 100, y: 400, size: 100 },
+                 { type: 'starPlatform', x: 400, y: 500, size: 80 },
+                 { type: 'starPlatform', x: 700, y: 450, size: 120 },
+                 { type: 'movingPlatform', x: 350, y: 400, width: 100, height: 20, color: '#ccc', hazard: 'spikes', spikesOnTop: true, spikeType: 'triangle' },
+                 { type: 'movingPlatform', x: 800, y: 600, width: 100, height: 20, color: '#777' },
+                 { type: 'hazard', shape: 'spikes', x: 650, y: 440, width: 50, count: 3, spikeType: 'triangle', color: 'red' },
+                 { type: 'flag', x: 80, y: 360 },
+                 { type: 'flag', x: 720, y: 410 }, // Goal flag on star
+                 { type: 'text', x: 400, y: 450, content: "Use 'R' to restart" },
+                 { type: 'finalFlag', x: 1100, y: 300, size: 150 }, // Final Goal Star
+            ]},
+        ];
+
+        // --- Game State Management ---
+        function showScreen(screenElement) {
+            mainMenuScreen.classList.add('hidden');
+            levelSelectScreen.classList.add('hidden');
+            gameScreen.classList.add('hidden');
+            messageScreen.classList.add('hidden');
+            finalScreen.classList.add('hidden');
+            screenElement.classList.remove('hidden');
+        }
+
+        function showMainMenu() {
+            showScreen(mainMenuScreen);
+            gameActive = false;
+        }
+
+        function showLevelSelect() {
+            populateLevelSelect(); // Update hover previews
+            showScreen(levelSelectScreen);
+            gameActive = false;
+        }
+
+        function showGameScreen() {
+            showScreen(gameScreen);
+            gameActive = true;
+            requestAnimationFrame(gameLoop);
+        }
+
+        function showMessage(message, showNext = true, isFinal = false) {
+            gameActive = false;
+            messageText.textContent = message;
+            nextLevelButton.classList.toggle('hidden', !showNext || isFinal);
+            messageScreen.classList.remove('hidden'); // Show message screen specifically
+            finalScreen.classList.add('hidden'); // Ensure final screen is hidden
+        }
+         function showFinalScreen() {
+             gameActive = false;
+             mainMenuScreen.classList.add('hidden');
+            levelSelectScreen.classList.add('hidden');
+            gameScreen.classList.add('hidden');
+            messageScreen.classList.add('hidden');
+             finalScreen.classList.remove('hidden');
+         }
+
+        // --- Level Loading ---
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                console.log("Attempted to load level beyond bounds:", levelIndex);
+                 showFinalScreen(); // Or handle game completion
+                return;
+            }
+            currentLevelIndex = levelIndex;
+            const level = levels[currentLevelIndex];
+            console.log(`Loading Level ${currentLevelIndex + 1}: ${level.name}`);
+
+            levelTitleDisplay.textContent = `Level ${currentLevelIndex + 1}: ${level.name}`;
+
+            player.x = level.playerStart.x;
+            player.y = level.playerStart.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            camera.x = 0; // Reset camera
+             camera.y = 0;
+
+            levelObjects = JSON.parse(JSON.stringify(level.objects)); // Deep copy level objects
+             dynamicObjects = []; // Clear dynamic objects
+             gameUiContainer.innerHTML = ''; // Clear old UI text
+
+            levelObjects.forEach((obj, index) => {
+                 obj.id = obj.id || `obj-${index}`; // Ensure each object has an ID
+                 if (obj.type === 'movingPlatform' || obj.type === 'wreckingBall' || obj.type === 'axe' || obj.type === 'hazard' && (obj.shape === 'stomp' || obj.shape === 'bounce') || obj.type === 'windmill' || obj.type === 'seesaw' || obj.type === 'lift') {
+                     dynamicObjects.push(obj);
+                     obj.initialX = obj.x;
+                     obj.initialY = obj.y;
+                     obj.moveProgress = 0; // For linear movement
+                     obj.angle = obj.initialAngle || 0; // For rotation/swinging
+                     obj.state = 'moving'; // For stateful objects like stompers
+                 }
+                 if (obj.type === 'text') {
+                     const textElement = document.createElement('span');
+                     textElement.classList.add('ingame-text');
+                     textElement.dataset.objId = obj.id; // Link UI to game object
+                     textElement.style.left = `${obj.x}px`; // Initial position (will be updated)
+                     textElement.style.top = `${obj.y}px`;
+                     textElement.innerText = obj.content.replace(/\\n/g, '\n'); // Handle newlines
+                     gameUiContainer.appendChild(textElement);
+                 }
+                  if (obj.type === 'seesaw') {
+                      obj.angle = 0;
+                      obj.angularVelocity = 0;
+                  }
+             });
+
+            showGameScreen();
+        }
+
+        // --- Input Handling ---
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+             // Prevent default browser scrolling for arrow keys and space
+             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyW', 'KeyA', 'KeyD'].includes(e.code)) {
+                 e.preventDefault();
+             }
+             if (gameActive) {
+                 if (e.code === 'KeyR') { // Restart level
+                     loadLevel(currentLevelIndex);
+                 }
+                 if (e.code === 'KeyP') { // Pause (basic toggle)
+                     gameActive = !gameActive;
+                     if(gameActive) requestAnimationFrame(gameLoop);
+                     else { // Show paused message
+                         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                         ctx.fillRect(0, 0, canvas.width, canvas.height);
+                         ctx.fillStyle = 'white';
+                         ctx.font = '40px Arial';
+                         ctx.textAlign = 'center';
+                         ctx.fillText('Paused', canvas.width / 2, canvas.height / 2);
+                     }
+                 }
+                 if (e.code === 'Escape') { // Quit to main menu
+                     showMainMenu();
+                 }
+            } else if (levelSelectScreen.classList.contains('hidden') === false && e.code === 'Escape') {
+                 showMainMenu(); // Back from level select
+            }
+
+        });
+        window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+        // --- Collision Detection ---
+        function checkCollision(objA, objB) {
+            return objA.x < objB.x + objB.width &&
+                   objA.x + objA.width > objB.x &&
+                   objA.y < objB.y + objB.height &&
+                   objA.y + objA.height > objB.y;
+        }
+
+        // --- Update Functions ---
+        function updatePlayer() {
+            // Horizontal Movement
+            let targetVx = 0;
+            if (keys['ArrowLeft'] || keys['KeyA']) {
+                targetVx = -MOVE_SPEED;
+            }
+            if (keys['ArrowRight'] || keys['KeyD']) {
+                targetVx = MOVE_SPEED;
+            }
+            // Apply friction or acceleration
+             player.vx += (targetVx - player.vx) * 0.3; // Smoothing towards target speed
+             if (Math.abs(player.vx) < 0.1) player.vx = 0; // Stop if slow enough
+
+
+            // Vertical Movement (Jumping)
+            if ((keys['ArrowUp'] || keys['KeyW']) && player.onGround) {
+                player.vy = JUMP_POWER;
+                player.onGround = false;
+            }
+
+            // Gravity
+            player.vy += GRAVITY;
+             if (player.vy > MAX_FALL_SPEED) player.vy = MAX_FALL_SPEED; // Terminal velocity
+
+             // Apply velocity
+             let nextX = player.x + player.vx;
+             let nextY = player.y + player.vy;
+
+            player.onGround = false; // Assume not on ground until collision check proves otherwise
+             let collisionOccurredY = false;
+             let collisionOccurredX = false;
+
+            // Collision Check and Resolution (Simplified)
+             levelObjects.forEach(obj => {
+                 if (obj.type === 'platform' || obj.type === 'movingPlatform' || obj.type === 'seesaw' || obj.type === 'starPlatform' || obj.type.includes('box') || (obj.type === 'hazard' && obj.shape === 'boulder')) { // Include boulders as platforms for now
+                     let platformCollider = { ...obj };
+                     if (obj.type === 'seesaw') {
+                         // Basic AABB collision for seesaw - doesn't account for angle perfectly
+                         // More complex collision needed for accurate tilt interaction
+                     }
+                      if (obj.type === 'starPlatform') {
+                         // Treat star as a rough bounding box for simplicity
+                         platformCollider.width = obj.size;
+                         platformCollider.height = obj.size;
+                          platformCollider.x = obj.x - obj.size / 2;
+                          platformCollider.y = obj.y - obj.size / 2;
+                     }
+
+                     // Check potential Y collision
+                     let playerColliderY = { x: player.x, y: nextY, width: player.width, height: player.height };
+                     if (checkCollision(playerColliderY, platformCollider)) {
+                         if (player.vy > 0 && player.y + player.height <= platformCollider.y + 1) { // Landing on top (+1 buffer)
+                             nextY = platformCollider.y - player.height;
+                             player.vy = 0;
+                             player.onGround = true;
+                             collisionOccurredY = true;
+
+                             // Moving platform interaction
+                              if (obj.type === 'movingPlatform') {
+                                  player.vx += obj.vx || 0; // Carry player horizontally
+                                  // Apply vertical velocity if landing on upward moving platform
+                                  if(obj.vy < 0) {
+                                      // This simple carry might cause issues, real physics needed
+                                      // nextY += obj.vy; // Try carrying vertically too
+                                  }
+                             }
+                              // Seesaw interaction (basic)
+                              if (obj.type === 'seesaw') {
+                                  // Calculate impact position relative to center
+                                  let impactPos = (player.x + player.width / 2) - (obj.x + obj.width / 2);
+                                  let torque = impactPos * 0.01; // Apply torque based on position
+                                  obj.angularVelocity += torque;
+                              }
+
+                         } else if (player.vy < 0 && player.y >= platformCollider.y + platformCollider.height - 1) { // Hitting bottom (-1 buffer)
+                              nextY = platformCollider.y + platformCollider.height;
+                              player.vy = 0;
+                              collisionOccurredY = true;
+                         }
+                     }
+
+                     // Check potential X collision (independent check after Y correction)
+                     let playerColliderX = { x: nextX, y: player.y, width: player.width, height: player.height }; // Use current y for X check
+                      if (checkCollision(playerColliderX, platformCollider)) {
+                           // Ignore X collision if primarily a Y collision just happened (prevents sticking)
+                           if (!collisionOccurredY || Math.abs(player.vy) < 0.5) {
+                               if (player.vx > 0 && player.x + player.width <= platformCollider.x + 1) { // Hitting left side
+                                   nextX = platformCollider.x - player.width;
+                                   player.vx = 0;
+                               } else if (player.vx < 0 && player.x >= platformCollider.x + platformCollider.width -1 ) { // Hitting right side
+                                   nextX = platformCollider.x + platformCollider.width;
+                                   player.vx = 0;
+                               }
+                               collisionOccurredX = true;
+                          }
+                      }
+                 }
+                 // Hazard Collision
+                 else if (obj.type === 'hazard' || obj.hazard === 'spikes') {
+                      let hazardCollider = { ...obj };
+                     if (obj.shape === 'spikes' || obj.hazard === 'spikes') {
+                         // Simple AABB for spike area
+                         hazardCollider.y = obj.spikesOnTop ? obj.y - 10 : obj.y; // Adjust hitbox for spikes
+                         hazardCollider.height = 10;
+                     } else if (obj.shape === 'stomp') {
+                          hazardCollider.height = obj.height;
+                     } else if (obj.shape === 'wreckingBall' || obj.shape === 'boulder' || obj.shape === 'bounce') {
+                          hazardCollider = { x: obj.x - obj.radius, y: obj.y - obj.radius, width: obj.radius * 2, height: obj.radius * 2 };
+                      } else if (obj.shape === 'axe') {
+                           // Approximate hitbox for axe head
+                           hazardCollider = { x: obj.axeHeadPos.x - obj.size/2, y: obj.axeHeadPos.y - obj.size/2, width: obj.size, height: obj.size };
+                      } else if (obj.shape === 'swingStar') {
+                           hazardCollider = { x: obj.starPos.x - obj.size/2, y: obj.starPos.y - obj.size/2, width: obj.size, height: obj.size };
+                      } else if (obj.shape === 'triangleRamp') {
+                           // Simple AABB for ramp, not pixel perfect
+                      }
+
+                     if (checkCollision({ x: nextX, y: nextY, width: player.width, height: player.height }, hazardCollider)) {
+                         console.log("Hit hazard!");
+                         showMessage("Ouch! Try Again?", true);
+                         loadLevel(currentLevelIndex); // Restart level
+                         return; // Stop further processing for this frame
+                     }
+                 }
+                 // Flag Collision
+                 else if (obj.type === 'flag' || obj.type === 'finalFlag') {
+                     let flagCollider = { x: obj.x - 5, y: obj.y - 30, width: 10, height: 30 };
+                     if (checkCollision(player, flagCollider)) {
+                          if (obj.type === 'finalFlag' || currentLevelIndex === levels.length - 1) {
+                              console.log("Game Won!");
+                              showFinalScreen();
+                          } else {
+                              console.log("Level Complete!");
+                              showMessage(`Level ${currentLevelIndex + 1} Complete!`, true);
+                             // Don't load next level immediately, wait for button press
+                          }
+                         return; // Stop further processing
+                     }
+                 }
+                 // Button Collision
+                 else if (obj.type === 'button') {
+                     let buttonCollider = { x: obj.x, y: obj.y, width: obj.size, height: obj.size };
+                     if (checkCollision(player, buttonCollider) && !obj.pressed) {
+                         console.log(`Button ${obj.id} pressed! Action: ${obj.action}`);
+                         obj.color = 'darkblue'; // Visual feedback
+                         obj.pressed = true; // Prevent multiple triggers per touch
+                         // Trigger action (e.g., remove a wall)
+                         if (obj.action === 'breakWall' && obj.targetId) {
+                             levelObjects = levelObjects.filter(wall => wall.id !== obj.targetId);
+                         }
+                         // Reset button after a delay? (optional)
+                         setTimeout(() => {
+                             obj.color = 'blue';
+                             obj.pressed = false;
+                         }, 1000);
+                     }
+                 }
+             });
+
+             // Update player position
+             player.x = nextX;
+             player.y = nextY;
+
+            // Keep player within reasonable bounds (simple floor)
+            if (player.y > canvas.height * 2) { // Fell off screen
+                 showMessage("Fell off! Try Again?", true);
+                loadLevel(currentLevelIndex);
+            }
+        }
+
+         function updateDynamicObjects(deltaTime) {
+             const timeFactor = deltaTime / (1000 / 60); // Normalize speed based on 60fps
+
+             dynamicObjects.forEach(obj => {
+                 if (obj.type === 'movingPlatform' || obj.type === 'lift') {
+                     const moveX = obj.moveX || 0;
+                     const moveY = obj.moveY || 0;
+                     const speed = obj.speed * timeFactor;
+                     obj.moveProgress += speed;
+
+                     const progressRad = (obj.moveProgress / 100) * Math.PI; // Use sine wave for smooth movement
+                     const displacementFactor = Math.sin(progressRad);
+
+                     obj.x = obj.initialX + (moveX / 2) * displacementFactor;
+                     obj.y = obj.initialY + (moveY / 2) * displacementFactor;
+
+                     // Calculate velocity for carrying player (approximate)
+                     obj.vx = ((moveX / 2) * Math.cos(progressRad) * (Math.PI / 100) * speed) / timeFactor;
+                     obj.vy = ((moveY / 2) * Math.cos(progressRad) * (Math.PI / 100) * speed) / timeFactor;
+
+                 } else if (obj.type === 'wreckingBall') {
+                      const swingSpeed = 0.03 * timeFactor;
+                      obj.angle = Math.sin(Date.now() * 0.001 * swingSpeed * 10) * (Math.PI / 4); // Swing +/- 45 degrees
+                      obj.x = obj.initialX + Math.sin(obj.angle) * obj.length;
+                      obj.y = obj.initialY + Math.cos(obj.angle) * obj.length;
+                 } else if (obj.type === 'axe') {
+                     const swingSpeed = 0.05 * timeFactor;
+                     const currentTime = Date.now() * 0.001 + (obj.delay || 0);
+                     obj.angle = (Math.PI / 2) + Math.sin(currentTime * swingSpeed * 10) * (Math.PI / 2.5); // Swing from vertical
+
+                     // Calculate head position
+                      obj.axeHeadPos = {
+                         x: obj.x + Math.sin(obj.angle) * obj.length,
+                         y: obj.y + Math.cos(obj.angle) * obj.length
+                     };
+                 } else if (obj.type === 'hazard' && obj.shape === 'stomp') {
+                     const speed = obj.speed * timeFactor;
+                     const range = obj.range;
+                     const delayTime = (obj.delay || 0) * 1000; // Delay in ms
+
+                     if (obj.state === 'moving') {
+                          obj.y += speed;
+                          if (obj.y >= obj.initialY + range) {
+                              obj.y = obj.initialY + range;
+                              obj.state = 'waiting';
+                              obj.waitTimer = Date.now() + 500 + delayTime; // Wait at bottom + delay
+                          }
+                      } else if (obj.state === 'waiting') {
+                          if (Date.now() > obj.waitTimer) {
+                              obj.state = 'returning';
+                          }
+                      } else if (obj.state === 'returning') {
+                          obj.y -= speed * 0.5; // Return slower
+                          if (obj.y <= obj.initialY) {
+                              obj.y = obj.initialY;
+                              obj.state = 'moving'; // Start cycle again
+                          }
+                      }
+                 } else if (obj.type === 'hazard' && obj.shape === 'bounce') {
+                      // Simple up/down bounce - could be more complex
+                      const bounceSpeed = 0.05 * timeFactor;
+                      const currentTime = Date.now() * 0.001 + (obj.delay || 0);
+                      obj.y = obj.initialY + Math.sin(currentTime * bounceSpeed * 10) * obj.bounceTarget / 2;
+                 } else if (obj.type === 'windmill') {
+                     obj.angle += obj.speed * timeFactor;
+                 } else if (obj.type === 'seesaw') {
+                      // Apply angular friction/damping
+                      obj.angularVelocity *= 0.95;
+                      // Apply gravity effect (tries to return to horizontal)
+                      obj.angularVelocity -= Math.sin(obj.angle) * 0.001 * timeFactor;
+                      // Limit velocity
+                       if (Math.abs(obj.angularVelocity) > 0.1) obj.angularVelocity = Math.sign(obj.angularVelocity) * 0.1;
+
+                      obj.angle += obj.angularVelocity * timeFactor;
+                      // Limit angle
+                      const maxAngle = Math.PI / 6; // 30 degrees
+                      if (obj.angle > maxAngle) obj.angle = maxAngle;
+                      if (obj.angle < -maxAngle) obj.angle = -maxAngle;
+                 }
+                  // Update positions of UI text elements based on camera
+                 if (obj.type === 'text') {
+                      const textElement = gameUiContainer.querySelector(`.ingame-text[data-obj-id="${obj.id}"]`);
+                      if (textElement) {
+                         textElement.style.left = `${obj.x - camera.x}px`;
+                         textElement.style.top = `${obj.y - camera.y}px`;
+                     }
+                 }
+             });
+         }
+
+        function updateCamera() {
+             // Simple follow camera - lerp towards player position
+            const targetCameraX = player.x - canvas.width / 2;
+             const targetCameraY = player.y - canvas.height / 1.5; // Keep player lower on screen
+             camera.x += (targetCameraX - camera.x) * 0.1;
+             camera.y += (targetCameraY - camera.y) * 0.1;
+
+             // Clamp camera (optional - prevent seeing too far out of bounds)
+             // camera.x = Math.max(0, camera.x); // Prevent going left of level start (example)
+        }
+
+
+        // --- Drawing Functions ---
+        function drawPlayer() {
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(player.x + player.width / 2, player.y + player.height / 2, player.width / 2, 0, Math.PI * 2);
+            ctx.fill();
+            // Simple eyes (optional)
+            ctx.fillStyle = 'white';
+             ctx.beginPath();
+             ctx.arc(player.x + player.width * 0.7, player.y + player.height * 0.4, player.width * 0.15, 0, Math.PI * 2);
+             ctx.fill();
+            ctx.fillStyle = 'black';
+             ctx.beginPath();
+             ctx.arc(player.x + player.width * 0.72, player.y + player.height * 0.42, player.width * 0.08, 0, Math.PI * 2);
+             ctx.fill();
+        }
+
+        function drawObjects() {
+            levelObjects.forEach(obj => {
+                 let drawX = obj.x;
+                 let drawY = obj.y;
+                 let drawWidth = obj.width;
+                 let drawHeight = obj.height;
+
+                 if (obj.type === 'platform' || obj.type === 'movingPlatform') {
+                     ctx.fillStyle = obj.color || '#8B4513'; // Default brown
+                      if (obj.shape === 'slopeUp') {
+                          ctx.beginPath();
+                          ctx.moveTo(drawX, drawY + drawHeight);
+                          ctx.lineTo(drawX + drawWidth, drawY);
+                          ctx.lineTo(drawX + drawWidth, drawY + drawHeight);
+                          ctx.closePath();
+                          ctx.fill();
+                      } else if (obj.shape === 'slopeDown') {
+                           ctx.beginPath();
+                           ctx.moveTo(drawX, drawY);
+                           ctx.lineTo(drawX + drawWidth, drawY + drawHeight);
+                           ctx.lineTo(drawX, drawY + drawHeight);
+                           ctx.closePath();
+                           ctx.fill();
+                      } else if (obj.shape === 'quarterPipeRight') {
+                            ctx.beginPath();
+                            ctx.moveTo(drawX, drawY);
+                            ctx.lineTo(drawX + drawWidth, drawY);
+                            ctx.arcTo(drawX + drawWidth, drawY + drawHeight, drawX, drawY + drawHeight, drawWidth); // Bottom right corner curve
+                            ctx.lineTo(drawX, drawY + drawHeight);
+                            ctx.closePath();
+                            ctx.fill();
+                      } else if (obj.shape === 'quarterPipeLeft') {
+                           ctx.beginPath();
+                           ctx.moveTo(drawX + drawWidth, drawY); // Start top right
+                           ctx.lineTo(drawX, drawY); // To top left
+                           ctx.arcTo(drawX, drawY + drawHeight, drawX + drawWidth, drawY + drawHeight, drawWidth); // Bottom left corner curve
+                           ctx.lineTo(drawX + drawWidth, drawY + drawHeight); // To bottom right
+                           ctx.closePath();
+                           ctx.fill();
+                       } else if (obj.shape === 'stairs') {
+                             const stepW = obj.stepWidth || 30;
+                             const stepH = obj.stepHeight || 20;
+                             const numSteps = obj.steps || 5;
+                             ctx.beginPath();
+                             if (obj.flipX) { // Stairs going down-left
+                                 ctx.moveTo(drawX + drawWidth, drawY);
+                                 for (let i = 0; i < numSteps; i++) {
+                                     ctx.lineTo(drawX + drawWidth - i * stepW, drawY + i * stepH);
+                                     ctx.lineTo(drawX + drawWidth - (i + 1) * stepW, drawY + i * stepH);
+                                 }
+                                 ctx.lineTo(drawX + drawWidth - numSteps * stepW, drawY + numSteps * stepH);
+                                 ctx.lineTo(drawX + drawWidth, drawY + numSteps * stepH);
+                              } else { // Stairs going up-right (default)
+                                  ctx.moveTo(drawX, drawY + drawHeight);
+                                  for (let i = 0; i < numSteps; i++) {
+                                      ctx.lineTo(drawX + i * stepW, drawY + drawHeight - i * stepH);
+                                      ctx.lineTo(drawX + (i + 1) * stepW, drawY + drawHeight - i * stepH);
+                                  }
+                                   ctx.lineTo(drawX + numSteps * stepW, drawY + drawHeight - numSteps * stepH);
+                                   ctx.lineTo(drawX, drawY + drawHeight - numSteps * stepH); // Should go to start Y? Check video
+                                   // Needs adjustment based on total height/width vs steps
+                              }
+                              ctx.closePath();
+                              ctx.fill();
+                        }
+                       else {
+                          ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
+                      }
+
+                      // Draw grass top if applicable
+                      if (obj.grass && !(obj.shape && obj.shape.includes('Pipe'))) { // Don't draw grass on pipes for now
+                          ctx.fillStyle = '#228B22'; // ForestGreen
+                           let grassY = drawY;
+                           let grassH = 10;
+                           // Adjust grass for slopes (approximate)
+                           if (obj.shape === 'slopeUp') grassY = drawY + drawHeight - grassH; // Bottom edge needs grass
+                           if (obj.shape === 'slopeDown') grassY = drawY;
+                          // For regular platforms
+                          ctx.fillRect(drawX, grassY - grassH, drawWidth, grassH);
+                      }
+                 } else if (obj.type === 'hazard') {
+                     ctx.fillStyle = obj.color || 'red';
+                     if (obj.shape === 'spikes') {
+                          const spikeWidth = obj.width / obj.count;
+                          const spikeHeight = 10;
+                          for (let i = 0; i < obj.count; i++) {
+                              ctx.beginPath();
+                              const baseX = drawX + i * spikeWidth;
+                              if (obj.spikesOnTop) {
+                                 ctx.moveTo(baseX, drawY);
+                                 ctx.lineTo(baseX + spikeWidth / 2, drawY - spikeHeight);
+                                 ctx.lineTo(baseX + spikeWidth, drawY);
+                             } else { // Default spikes on bottom edge of object y
+                                 ctx.moveTo(baseX, drawY);
+                                 ctx.lineTo(baseX + spikeWidth / 2, drawY + spikeHeight);
+                                 ctx.lineTo(baseX + spikeWidth, drawY);
+                              }
+                              ctx.closePath();
+                              ctx.fill();
+                          }
+                     } else if (obj.shape === 'stomp') {
+                          // Draw stomper body (grey cylinder)
+                         ctx.fillStyle = '#808080'; // Grey
+                         ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
+                         // Draw red triangle base
+                         ctx.fillStyle = 'red';
+                         ctx.beginPath();
+                         ctx.moveTo(drawX, drawY + drawHeight);
+                         ctx.lineTo(drawX + drawWidth, drawY + drawHeight);
+                         ctx.lineTo(drawX + drawWidth / 2, drawY + drawHeight + 20); // Point downwards
+                         ctx.closePath();
+                         ctx.fill();
+                     } else if (obj.shape === 'wreckingBall' || obj.shape === 'boulder' || obj.shape === 'bounce') {
+                           ctx.fillStyle = '#808080'; // Grey
+                           ctx.beginPath();
+                           ctx.arc(drawX, drawY, obj.radius, 0, Math.PI * 2);
+                           ctx.fill();
+                           if (obj.shape === 'wreckingBall') { // Draw string
+                               ctx.strokeStyle = '#555';
+                               ctx.lineWidth = 2;
+                               ctx.beginPath();
+                               ctx.moveTo(obj.initialX, obj.initialY);
+                               ctx.lineTo(drawX, drawY);
+                               ctx.stroke();
+                           }
+                     } else if (obj.shape === 'triangleRamp') {
+                          ctx.fillStyle = obj.color || '#8B4513';
+                          ctx.beginPath();
+                          ctx.moveTo(drawX, drawY + drawHeight); // Bottom left
+                          ctx.lineTo(drawX + drawWidth, drawY + drawHeight); // Bottom right
+                          ctx.lineTo(drawX + drawWidth, drawY); // Top right (peak)
+                          ctx.closePath();
+                          ctx.fill();
+                     }
+                     // ... other hazard shapes ...
+                 } else if (obj.type === 'flag' || obj.type === 'finalFlag') {
+                     ctx.fillStyle = 'red';
+                     ctx.font = '30px Arial';
+                      ctx.fillText('🚩', drawX, drawY); // Use emoji
+                 } else if (obj.type === 'button') {
+                     ctx.fillStyle = obj.color || 'blue';
+                     ctx.fillRect(drawX, drawY, obj.size, obj.size);
+                 } else if (obj.type === 'box') {
+                      ctx.fillStyle = '#D2B48C'; // Tan
+                      ctx.strokeStyle = '#8B4513'; // Brown border
+                      ctx.lineWidth = 1;
+                      ctx.fillRect(drawX, drawY, obj.size, obj.size);
+                      ctx.strokeRect(drawX, drawY, obj.size, obj.size);
+                      // Simple 'X' mark on box
+                      ctx.beginPath();
+                      ctx.moveTo(drawX + 5, drawY + 5);
+                      ctx.lineTo(drawX + obj.size - 5, drawY + obj.size - 5);
+                      ctx.moveTo(drawX + obj.size - 5, drawY + 5);
+                      ctx.lineTo(drawX + 5, drawY + obj.size - 5);
+                      ctx.stroke();
+                 } else if (obj.type === 'seesaw') {
+                     ctx.save();
+                     ctx.translate(drawX + drawWidth / 2, drawY + drawHeight / 2);
+                     ctx.rotate(obj.angle);
+                     ctx.fillStyle = '#A0A0A0'; // Grey
+                      ctx.fillRect(-drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+                     ctx.restore();
+                     // Draw fulcrum (triangle)
+                     ctx.fillStyle = '#808080';
+                     ctx.beginPath();
+                     ctx.moveTo(drawX + drawWidth / 2 - 15, drawY + drawHeight / 2 + 5);
+                     ctx.lineTo(drawX + drawWidth / 2 + 15, drawY + drawHeight / 2 + 5);
+                     ctx.lineTo(drawX + drawWidth / 2, drawY + drawHeight / 2 + 25);
+                     ctx.closePath();
+                     ctx.fill();
+                 } else if (obj.type === 'axe') {
+                     // Draw handle
+                      ctx.strokeStyle = '#8B4513'; // Brown
+                      ctx.lineWidth = 5;
+                      ctx.beginPath();
+                      ctx.moveTo(obj.x, obj.y);
+                      ctx.lineTo(obj.axeHeadPos.x, obj.axeHeadPos.y);
+                      ctx.stroke();
+                      // Draw head (simple double triangle)
+                      ctx.fillStyle = 'red';
+                      ctx.save();
+                      ctx.translate(obj.axeHeadPos.x, obj.axeHeadPos.y);
+                      ctx.rotate(obj.angle + Math.PI / 2); // Align with handle
+                      ctx.beginPath();
+                      ctx.moveTo(0, -obj.size / 2);
+                      ctx.lineTo(-obj.size * 0.8, 0);
+                      ctx.lineTo(0, obj.size / 2);
+                       ctx.moveTo(0, -obj.size / 2);
+                       ctx.lineTo(obj.size * 0.8, 0);
+                       ctx.lineTo(0, obj.size / 2);
+                      ctx.fill();
+                      ctx.restore();
+                 } else if (obj.type === 'windmill') {
+                     ctx.save();
+                     ctx.translate(obj.x, obj.y);
+                     ctx.rotate(obj.angle);
+                     ctx.fillStyle = '#A9A9A9'; // Dark Grey
+                     ctx.strokeStyle = '#696969';
+                     ctx.lineWidth = 2;
+                     // Center circle
+                     ctx.beginPath();
+                     ctx.arc(0, 0, obj.radius * 0.3, 0, Math.PI * 2);
+                     ctx.fill();
+                     ctx.stroke();
+                     // Blades
+                     for (let i = 0; i < obj.numBlades; i++) {
+                         ctx.rotate(Math.PI * 2 / obj.numBlades);
+                         ctx.beginPath();
+                         ctx.moveTo(0, 0);
+                         ctx.lineTo(obj.radius * 0.6, -obj.radius * 0.1);
+                         ctx.lineTo(obj.radius, 0);
+                         ctx.lineTo(obj.radius * 0.6, obj.radius * 0.1);
+                         ctx.closePath();
+                         ctx.fill();
+                         ctx.stroke();
+                     }
+                     ctx.restore();
+                 } else if (obj.type === 'platform' && obj.shape === 'funnel') {
+                      ctx.strokeStyle = '#A9A9A9';
+                      ctx.lineWidth = 4;
+                      ctx.beginPath();
+                      ctx.moveTo(drawX, drawY); // Top left opening
+                      ctx.lineTo(drawX + drawWidth * 0.3, drawY + drawHeight * 0.7); // To narrow part left
+                      ctx.lineTo(drawX + drawWidth * 0.3, drawY + drawHeight); // Down left
+                      ctx.moveTo(drawX + drawWidth, drawY); // Top right opening
+                      ctx.lineTo(drawX + drawWidth * 0.7, drawY + drawHeight * 0.7); // To narrow part right
+                       ctx.lineTo(drawX + drawWidth * 0.7, drawY + drawHeight); // Down right
+                      ctx.stroke();
+                 } else if (obj.type === 'starPlatform') {
+                     drawStar(drawX, drawY, 5, obj.size / 2, obj.size / 4); // 5 points, outer/inner radius
+                 }
+
+             });
+        }
+
+         function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
+            let rot = Math.PI / 2 * 3;
+            let x = cx;
+            let y = cy;
+            let step = Math.PI / spikes;
+            ctx.fillStyle = 'gold';
+            ctx.strokeStyle = '#DAA520';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - outerRadius)
+            for (let i = 0; i < spikes; i++) {
+                x = cx + Math.cos(rot) * outerRadius;
+                y = cy + Math.sin(rot) * outerRadius;
+                ctx.lineTo(x, y)
+                rot += step
+
+                x = cx + Math.cos(rot) * innerRadius;
+                y = cy + Math.sin(rot) * innerRadius;
+                ctx.lineTo(x, y)
+                rot += step
+            }
+            ctx.lineTo(cx, cy - outerRadius)
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            if (!gameActive) return;
+
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+             // Update game elements
+             updatePlayer();
+             updateDynamicObjects(deltaTime || (1000/60)); // Use deltaTime, fallback for first frame
+             updateCamera();
+
+             // Apply camera transform
+             ctx.save();
+             ctx.translate(-camera.x, -camera.y);
+
+            // Draw game elements
+            drawObjects();
+            drawPlayer();
+
+             // Restore context
+             ctx.restore();
+
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        document.getElementById('play-button').addEventListener('click', showLevelSelect);
+         document.getElementById('back-to-menu').addEventListener('click', showMainMenu);
+         document.getElementById('message-back-button').addEventListener('click', showLevelSelect);
+         document.getElementById('final-back-button').addEventListener('click', showMainMenu);
+
+         document.querySelectorAll('.level-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const levelIndex = parseInt(e.target.dataset.level);
+                loadLevel(levelIndex);
+            });
+             button.addEventListener('mouseover', (e) => {
+                 const levelIndex = parseInt(e.target.dataset.level);
+                 if (levels[levelIndex]) {
+                     levelPreviewBox.textContent = `Level ${levelIndex + 1}: ${levels[levelIndex].name}`;
+                     // Add simple drawing maybe?
+                 } else {
+                     levelPreviewBox.textContent = `Level ${levelIndex + 1}: ???`;
+                 }
+             });
+             button.addEventListener('mouseout', () => {
+                  levelPreviewBox.textContent = 'Hover over a level to see details.';
+             });
+        });
+
+        nextLevelButton.addEventListener('click', () => {
+            loadLevel(currentLevelIndex + 1);
+            messageScreen.classList.add('hidden');
+        });
+
+        skipLevelButton.addEventListener('click', () => {
+             if (currentLevelIndex < levels.length - 1) {
+                 loadLevel(currentLevelIndex + 1);
+             } else {
+                 showFinalScreen(); // Reached end
+             }
+        });
+         function populateLevelSelect(){
+             // Could add logic here to check which levels are unlocked if needed
+             // For now, all are available
+             document.querySelectorAll('.level-button').forEach(button => {
+                 const levelIndex = parseInt(button.dataset.level);
+                 button.disabled = false; // Ensure all are enabled initially
+                 if (!levels[levelIndex]) {
+                      button.style.backgroundColor = '#ccc'; // Grey out non-existent levels
+                      button.disabled = true;
+                  } else {
+                      button.style.backgroundColor = '#90EE90'; // Reset color
+                  }
+             });
+         }
+
+        // --- Initial Setup ---
+        showMainMenu(); // Start with the main menu
+
+    </script>
+</body>
+</html>

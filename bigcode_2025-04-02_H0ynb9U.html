@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flush The Toilet - Engine v1.0</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Arial', sans-serif; /* Basic fallback font */
+            overflow: hidden;
+            background-color: #333; /* Background for area outside game */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            user-select: none;
+        }
+
+        #game-engine-container {
+            width: 800px;
+            height: 600px;
+            background-color: #00BFFF; /* DeepSkyBlue / Turquoise */
+            position: relative;
+            overflow: hidden;
+            border: 3px solid black;
+            box-sizing: border-box;
+        }
+
+        .game-screen, .game-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: inherit; /* Inherit from container or override */
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .game-screen.active-screen, .game-overlay.active-overlay {
+            display: flex;
+        }
+
+        /* Basic Button Style */
+        .engine-button {
+            padding: 10px 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            border: 2px solid black;
+            cursor: pointer;
+            margin: 10px;
+            min-width: 150px;
+            box-sizing: border-box;
+        }
+
+        /* --- Start Screen --- */
+        #screen-start { background-color: #00BFFF; }
+        #screen-start h1 { font-size: 48px; margin-bottom: 15px; line-height: 1.2; font-weight: bold; }
+        #screen-start .toilet-asset { font-size: 100px; position: absolute; left: 50px; bottom: 100px; }
+        #screen-start .start-button { background-color: #32CD32; font-size: 36px; min-width: 250px; } /* LimeGreen */
+        #screen-start .speedrun-button { background-color: #FF00FF; color: red; font-size: 24px; min-width: 250px; } /* Magenta */
+        #screen-start .speedrun-button span { color: white; font-size: 18px; display: block; }
+        #screen-start .version-button { background-color: #00FF00; font-size: 20px; position: absolute; bottom: 10px; left: 10px; width: calc(100% - 24px); /* Account for border+padding */ } /* Lime */
+
+        /* --- Game Screen --- */
+        #screen-game { background-color: #00BFFF; justify-content: flex-start; }
+        #screen-game .game-content { position: relative; width: 100%; height: 100%; }
+        #screen-game .toilet-asset { font-size: 100px; position: absolute; left: 50px; bottom: 80px; } /* Adjusted bottom */
+        #screen-game .toilet-water { position: absolute; left: 70px; bottom: 105px; width: 60px; height: 20px; background-color: transparent; border-radius: 50% / 100%; border-bottom-left-radius: 0; border-bottom-right-radius: 0; transition: background-color 0.1s; }
+        #screen-game .flush-button { position: absolute; top: 50px; left: 50px; width: 80px; height: 80px; background-color: #808080; border: 2px solid black; cursor: pointer; }
+        #screen-game .flush-text { position: absolute; top: 80px; left: 140px; font-size: 24px; color: white; }
+        #screen-game .objective-text { position: absolute; top: 50px; right: 50px; font-size: 24px; color: red; text-align: right; white-space: pre-line; }
+        #screen-game .pause-button { position: absolute; bottom: 10px; right: 10px; width: 80px; height: 40px; display: flex; gap: 5px; cursor: pointer; z-index: 1;}
+        #screen-game .pause-square { width: 35px; height: 35px; background-color: blue; border: 1px solid black; }
+        #screen-game .bottom-bar { position: absolute; bottom: 0; left: 0; width: 100%; height: 60px; background-color: #32CD32; z-index: 0; }
+        #screen-game .explosion-graphic { position: absolute; font-size: 150px; left: 50px; bottom: 100px; display: none; color: orange; }
+        #screen-game .explosion-text { font-size: 40px; color: red; font-weight: bold; line-height: 1.2; display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; background-color: rgba(0,0,0,0.5); padding: 10px; border: 2px solid red;}
+
+
+        /* --- Overlays --- */
+        .game-overlay { background-color: rgba(0, 0, 0, 0.7); z-index: 10; }
+        .overlay-content { background-color: #008080; /* Teal */ padding: 30px; border: 3px solid white; display: flex; flex-direction: column; align-items: center; min-width: 400px; max-width: 90%; }
+        .overlay-content h2 { font-size: 36px; margin-top: 0; margin-bottom: 20px; }
+        .overlay-button { background-color: #FFFF00; color: black; /* Yellow default */ }
+
+        /* Pause Menu */
+        #screen-pause .overlay-content { background-color: #005050; } /* Darker Teal */
+
+        /* Speedrun Menu */
+        #screen-speedrun .overlay-content { background-color: #00008B; } /* DarkBlue */
+        #screen-speedrun .toggle-buttons { display: flex; margin-bottom: 15px; }
+        #screen-speedrun .toggle-buttons .engine-button { min-width: 80px; margin: 0 5px; }
+        #screen-speedrun .on-button { background-color: #FF00FF; color: white;} /* Magenta */
+        #screen-speedrun .off-button { background-color: #DC143C; color: white;} /* Crimson */
+        #screen-speedrun .orange-button { background-color: #FFA500; color: white; } /* Orange */
+
+        /* Leaderboards Screen */
+        #screen-leaderboards .overlay-content { background-color: #2F4F4F; } /* DarkSlateGray */
+        #screen-leaderboards .leaderboard-entry { display: flex; justify-content: space-between; align-items: center; width: 95%; padding: 8px 15px; margin: 5px 0; border: 1px solid black; font-size: 18px; }
+        #screen-leaderboards .rank { font-weight: bold; margin-right: 10px; min-width: 20px; text-align: right;}
+        #screen-leaderboards .name { flex-grow: 1; text-align: left; margin: 0 10px;}
+        #screen-leaderboards .score { margin-left: 10px; white-space: nowrap; }
+        #screen-leaderboards .l1 { background-color: #FFFF00; color: black; } /* Yellow */
+        #screen-leaderboards .l2 { background-color: #C0C0C0; color: black; } /* Silver */
+        #screen-leaderboards .l3 { background-color: #CD7F32; color: white; } /* Bronze */
+        #screen-leaderboards .l4, #screen-leaderboards .l5 { background-color: #FFFFFF; color: black; } /* White */
+        #screen-leaderboards .purple-button { background-color: #800080; color: white; } /* Purple */
+
+        /* Version Screen */
+        #screen-version .overlay-content { background-color: #A0522D; } /* Sienna (Brownish) */
+        #screen-version p { font-size: 18px; max-width: 90%; margin-bottom: 20px; line-height: 1.4; text-align: left;}
+        #screen-version .purple-button { background-color: #800080; color: white; } /* Purple */
+
+        /* --- Dialogue & Undertale Screens --- */
+        .dialogue-screen, .undertale-screen {
+            background-color: black;
+            justify-content: flex-start; /* Align content top */
+            font-family: 'Courier New', monospace; /* Pixel font approximation */
+        }
+        .dialogue-sprite, .undertale-sprite {
+            min-height: 200px; /* Space for sprite */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 100px; /* Placeholder size */
+            color: white;
+            width: 100%;
+             padding-top: 30px;
+             padding-bottom: 10px;
+        }
+        /* Specific Sprite Placeholders */
+        .sprite-skeleton::before { content: '💀'; } /* Papyrus/Sans */
+        .sprite-robot::before { content: '🤖'; color: #D3D3D3; } /* Mettaton/Coom Guy */
+
+        .dialogue-content-area {
+             width: 100%;
+             display: flex;
+             flex-direction: column;
+             align-items: center;
+             margin-top: 10px;
+        }
+
+        .dialogue-text-box {
+            width: 80%;
+            min-height: 120px;
+            border: 4px solid white;
+            padding: 15px;
+            box-sizing: border-box;
+            position: relative;
+            font-size: 24px;
+            line-height: 1.4;
+            text-align: left;
+            white-space: pre-wrap; /* Handle newlines */
+            display: flex; /* For speaker icon */
+            align-items: flex-start;
+        }
+        .dialogue-speaker {
+             font-size: 30px;
+             margin-right: 15px;
+             min-width: 40px;
+             text-align: center;
+        }
+        .dialogue-text-content { flex-grow: 1; }
+        .dialogue-next-arrow {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            font-size: 30px;
+            animation: blink 1s step-start infinite;
+            display: none; /* Hidden initially */
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .dialogue-options {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .dialogue-option-button {
+            background-color: #0000FF; /* Blue */
+            color: white;
+            border: 2px solid white;
+            padding: 10px 20px;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 5px;
+            cursor: pointer;
+            min-width: 200px;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* Undertale Battle Options */
+        .undertale-options-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 10%;
+            box-sizing: border-box;
+        }
+        .undertale-option {
+            padding: 5px 15px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            border: 4px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Courier New', monospace;
+        }
+         .fight-option { color: red; border-color: red; }
+         .act-option { color: orange; border-color: orange; }
+         .mercy-option { color: lime; border-color: lime; }
+
+         /* Sans Fight Specifics */
+         #screen-sans-fight .undertale-sprite { min-height: 250px; } /* More space */
+         .attack-animation { position: absolute; top: 45%; left: 0; width: 100%; height: 20px; display: none; align-items: center; z-index: 15; }
+         .attack-line { height: 100%; width: 5px; background-color: red; position: absolute; left: 10%; animation: attack-sweep 0.5s linear forwards; }
+         @keyframes attack-sweep { from { left: 10%; } to { left: 90%; } }
+         .miss-text { position: absolute; top: 40%; left: 50%; transform: translateX(-50%); font-size: 40px; color: white; font-weight: bold; display: none; z-index: 16; }
+         .soul-box { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); width: 200px; height: 100px; border: 3px solid white; display: none; justify-content: center; align-items: center; background-color: black; z-index: 15; }
+         .soul-heart { color: red; font-size: 40px; animation: shake 0.5s linear infinite; }
+          @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+         .soul-bones { position: absolute; width: 100%; height: 100%; display: flex; justify-content: space-around; align-items: center; font-size: 30px; color: white; opacity: 0.8; } /* Bone emoji: 🦴 */
+
+         /* Mettaton/Coom Guy Fight Specifics */
+         #screen-coom-guy-fight .undertale-sprite { min-height: 250px; }
+         .act-options-menu {
+             position: absolute;
+             top: 55%; /* Position below sprite */
+             left: 50%;
+             transform: translateX(-50%);
+             background-color: black;
+             border: 4px solid white;
+             padding: 10px;
+             display: none; /* Hidden initially */
+             flex-direction: column;
+             gap: 10px;
+             z-index: 16;
+             min-width: 200px;
+         }
+         .act-menu-option {
+             font-family: 'Courier New', monospace;
+             font-size: 24px;
+             color: white;
+             cursor: pointer;
+             text-align: left;
+             padding: 5px;
+         }
+         .act-menu-option:hover { color: yellow; }
+
+
+        /* --- Ending Screens --- */
+        .ending-screen h2 { font-size: 48px; margin-bottom: 15px; font-weight: bold; }
+        .ending-screen p { font-size: 24px; margin-bottom: 30px; }
+        .ending-screen .restart-button { background-color: #0000FF; color: white; } /* Blue */
+        #screen-good-ending { background-color: #32CD32; } /* LimeGreen */
+        #screen-bad-ending { background-color: #DC143C; } /* Crimson */
+        #screen-secret-ending { background-color: #696969; } /* DimGray */
+
+        /* Escape Options Screen */
+        #screen-escape-options { background-color: black; }
+        #screen-escape-options .option-button { background-color: #808080; color: white; font-size: 28px; margin-top: 20px; } /* Gray */
+        #screen-escape-options .overlay-content { background-color: transparent; border: none; padding-top: 150px;}
+
+    </style>
+</head>
+<body>
+    <div id="game-engine-container">
+
+        <!-- Start Screen -->
+        <div id="screen-start" class="game-screen">
+            <h1>Flush<br>The<br>Toilet</h1>
+            <div class="toilet-asset">🚽</div>
+            <button class="engine-button start-button" data-action='{"emit": "start_game"}'>START</button>
+            <button class="engine-button speedrun-button" data-action='{"emit": "open_speedrun_menu"}'>
+                Speedrun Mode
+                <span id="speedrun-status-text" data-bind-text="speedrunStatus">Off</span>
+            </button>
+            <button class="engine-button version-button" data-action='{"emit": "open_version_info"}'>Version 0.8</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="screen-game" class="game-screen">
+            <div class="game-content">
+                <div class="toilet-asset">🚽
+                     <div class="toilet-water" data-bind-style="backgroundColor:toiletWaterColor"></div>
+                </div>
+                <div class="flush-button" data-bind-style="backgroundColor:flushButtonColor" data-action='{"emit": "flush_toilet"}'></div>
+                <div class="flush-text">&lt;-- press to flush</div>
+                <div class="objective-text" data-bind-text="objectiveText" data-bind-style="color:objectiveColor">Objective:<br>Flush the toilet.</div>
+                <div class="pause-button" data-action='{"emit": "pause_game"}'>
+                    <div class="pause-square"></div>
+                    <div class="pause-square"></div>
+                </div>
+                 <div class="explosion-graphic">💥</div>
+                 <div class="explosion-text"></div>
+            </div>
+            <div class="bottom-bar"></div>
+        </div>
+
+        <!-- Pause Menu -->
+        <div id="screen-pause" class="game-overlay">
+            <div class="overlay-content">
+                <h2>Game Paused</h2>
+                <button class="engine-button overlay-button" data-action='{"emit": "resume_game"}'>Resume</button>
+                <button class="engine-button overlay-button" data-action='{"emit": "quit_to_start"}'>Quit</button>
+                <button id="papyrus-pause-button" class="engine-button overlay-button" data-action='{"emit": "start_papyrus_dialogue"}' style="display: none;">PAPYRUS</button>
+                <button id="hell-pause-button" class="engine-button overlay-button" data-action='{"emit": "start_escape_sequence"}' style="display: none;">HELL.</button>
+            </div>
+        </div>
+
+        <!-- Speedrun Menu -->
+        <div id="screen-speedrun" class="game-overlay">
+            <div class="overlay-content">
+                <h2>Speedrun Mode</h2>
+                <div class="toggle-buttons">
+                    <button class="engine-button on-button" data-action='{"emit": "toggle_speedrun", "payload": {"mode": "on"}}'>ON</button>
+                    <button class="engine-button off-button" data-action='{"emit": "toggle_speedrun", "payload": {"mode": "off"}}'>OFF</button>
+                </div>
+                <button class="engine-button orange-button" data-action='{"emit": "open_leaderboards"}'>Leaderboards</button>
+                <button class="engine-button orange-button" data-action='{"emit": "close_overlay"}'>Back</button>
+            </div>
+        </div>
+
+        <!-- Leaderboards Screen -->
+        <div id="screen-leaderboards" class="game-overlay">
+            <div class="overlay-content">
+                <h2>Top Speedrunners</h2>
+                <p style="font-size: 16px;">G = Good Ending B = Bad Ending</p>
+                <div class="leaderboard-entry l1">
+                    <span class="rank">1</span>
+                    <span class="name">Meethexep [Game Dev]</span>
+                    <span class="score">G 2.94</span>
+                    <span class="score">B 3.58</span>
+                </div>
+                <div class="leaderboard-entry l2"><span class="rank">2</span><span class="name">None</span></div>
+                <div class="leaderboard-entry l3"><span class="rank">3</span><span class="name">None</span></div>
+                <div class="leaderboard-entry l4"><span class="rank">4</span><span class="name">None</span></div>
+                <div class="leaderboard-entry l5"><span class="rank">5</span><span class="name">None</span></div>
+                <button class="engine-button purple-button" data-action='{"emit": "open_speedrun_menu"}'>Back</button>
+            </div>
+        </div>
+
+         <!-- Version Screen -->
+         <div id="screen-version" class="game-overlay">
+            <div class="overlay-content">
+                <h2>Update version 0.8 (last update)</h2>
+                <p>Hello toilet flushers, i have not made an update for this game in a while and it seems like im running out of ideas for this game. as a last update i decided to make version 0.8</p>
+                <button class="engine-button purple-button" data-action='{"emit": "close_overlay"}'>Back</button>
+            </div>
+        </div>
+
+        <!-- Generic Dialogue Screen -->
+        <div id="screen-dialogue" class="game-screen dialogue-screen">
+             <div class="dialogue-sprite"></div>
+             <div class="dialogue-content-area">
+                 <div class="dialogue-text-box">
+                     <span class="dialogue-speaker"></span>
+                     <span class="dialogue-text-content"></span>
+                     <span class="dialogue-next-arrow">&gt;</span>
+                 </div>
+                 <div class="dialogue-options">
+                     <!-- Options added dynamically -->
+                 </div>
+             </div>
+        </div>
+
+        <!-- Escape Options Screen -->
+        <div id="screen-escape-options" class="game-screen">
+             <div class="overlay-content">
+                 <button class="engine-button option-button" data-action='{"emit": "escape_option_a"}'>Option A</button>
+                 <button class="engine-button option-button" data-action='{"emit": "escape_option_b"}'>Option B</button>
+             </div>
+        </div>
+
+        <!-- Sans Fight Screen -->
+        <div id="screen-sans-fight" class="game-screen undertale-screen">
+             <div class="undertale-sprite sprite-skeleton"></div>
+             <div class="dialogue-content-area">
+                  <div class="dialogue-text-box"> <!-- Reusing dialogue box for Sans text -->
+                      <span class="dialogue-text-content"></span>
+                      <span class="dialogue-next-arrow">&gt;</span>
+                  </div>
+             </div>
+             <div class="attack-animation" data-bind-visible="attackInProgress"><div class="attack-line"></div></div>
+             <div class="miss-text" data-bind-visible="missTextVisible">MISS</div>
+             <div class="soul-box" data-bind-visible="soulBoxVisible">
+                 <div class="soul-bones">🦴&nbsp;&nbsp;&nbsp;🦴&nbsp;&nbsp;&nbsp;🦴</div>
+                 <span class="soul-heart" data-bind-text="soulState">❤️</span>
+             </div>
+             <div class="undertale-options-bar" data-bind-visible="showSansOptions">
+                 <div class="undertale-option fight-option" data-action='{"emit": "sans_fight"}'>⚔️ FIGHT</div>
+                 <div class="undertale-option mercy-option" data-action='{"emit": "sans_mercy"}'>💖 MERCY</div>
+             </div>
+        </div>
+
+        <!-- Coom Guy Fight Screen -->
+        <div id="screen-coom-guy-fight" class="game-screen undertale-screen">
+             <div class="undertale-sprite sprite-robot"></div>
+              <div class="dialogue-content-area">
+                  <div class="dialogue-text-box"> <!-- Reusing dialogue box -->
+                       <span class="dialogue-speaker"></span>
+                       <span class="dialogue-text-content"></span>
+                       <span class="dialogue-next-arrow">&gt;</span>
+                   </div>
+              </div>
+              <div class="act-options-menu" data-bind-visible="showActOptions">
+                 <div class="act-menu-option" data-action='{"emit": "coom_act_check"}'>* CHECK</div>
+                 <div class="act-menu-option" data-action='{"emit": "coom_act_ask"}'>* ASK FOR COOM</div>
+              </div>
+             <div class="undertale-options-bar" data-bind-visible="showCoomGuyOptions">
+                 <div class="undertale-option fight-option" data-action='{"emit": "coom_fight"}' style="border-color: orange; color: orange;">⚔️ FIGHT</div>
+                 <div class="undertale-option act-option" data-action='{"emit": "coom_act"}'>🔊 ACT</div>
+             </div>
+        </div>
+
+        <!-- Ending Screens -->
+        <div id="screen-good-ending" class="game-screen ending-screen">
+            <h2>Good Ending</h2>
+            <p>Ate papyrus's spaghetti</p>
+            <button class="engine-button restart-button" data-action='{"emit": "restart_game"}'>Restart game</button>
+        </div>
+        <div id="screen-bad-ending" class="game-screen ending-screen">
+            <h2>Bad Ending</h2>
+            <p>Exploded the toilet.</p>
+            <button class="engine-button restart-button" data-action='{"emit": "restart_game"}'>Restart game</button>
+        </div>
+         <div id="screen-secret-ending" class="game-screen ending-screen">
+             <h2>Secret Ending</h2>
+             <p>Fucked coom guy and ate his coom</p>
+             <button class="engine-button restart-button" data-action='{"emit": "restart_game"}'>Restart game</button>
+        </div>
+
+    </div>
+
+    <script>
+        const GameEngine = (() => {
+            let state = {};
+            let config = {};
+            let eventHandlers = {};
+            let currentScreenElement = null;
+            let currentOverlayElement = null;
+            let typingTimeout = null;
+            let activeTimeouts = []; // Store active timeouts
+
+            // --- Core Engine ---
+            function init(gameConfig) {
+                config = gameConfig;
+                resetState(); // Set initial state
+                attachRootEventHandler();
+                showScreen(state.currentScreen); // Show initial screen
+                console.log("Game Engine Initialized.");
+            }
+
+            function resetState() {
+                 // Deep copy initial state to prevent mutation issues
+                 state = JSON.parse(JSON.stringify(config.initialState));
+            }
+
+            function on(eventName, handler) {
+                if (!eventHandlers[eventName]) {
+                    eventHandlers[eventName] = [];
+                }
+                eventHandlers[eventName].push(handler);
+            }
+
+            function emit(eventName, data = {}) {
+                console.log("Event:", eventName, data);
+                // Clear timers on significant events that change flow
+                if (!['flush_toilet', 'toggle_speedrun'].includes(eventName)) { // Avoid clearing basic interaction timers
+                    clearAllTimers();
+                }
+
+                if (eventHandlers[eventName]) {
+                    eventHandlers[eventName].forEach(handler => handler(data));
+                }
+                if (config.globalEvents && config.globalEvents[eventName]) {
+                     // Allow global event handlers to be functions now
+                     if(typeof config.globalEvents[eventName] === 'function') {
+                        config.globalEvents[eventName](data);
+                     } else {
+                        executeAction(config.globalEvents[eventName], data); // Original object-based action
+                     }
+                }
+            }
+
+             function setState(newState) {
+                 let changed = false;
+                 let keysChanged = [];
+                 for (const key in newState) {
+                    // Basic check; for objects/arrays, a deep compare might be needed
+                    if (state[key] !== newState[key]) {
+                        state[key] = newState[key];
+                        changed = true;
+                        keysChanged.push(key);
+                        // console.log("State updated:", key, "=", state[key]);
+                    }
+                 }
+                 if(changed) {
+                     // Trigger targeted re-render only if the active screen/overlay uses the changed keys
+                    if(currentScreenElement && currentScreenElement.classList.contains('active-screen')) {
+                        renderScreenContent(state.currentScreen, keysChanged);
+                    }
+                    if(currentOverlayElement && currentOverlayElement.classList.contains('active-overlay')) {
+                        const overlayId = currentOverlayElement.id.replace('screen-', '');
+                        renderScreenContent(overlayId, keysChanged);
+                    }
+                     // Optionally emit state change events:
+                     // keysChanged.forEach(key => emit(`stateChange:${key}`, state[key]));
+                 }
+                 return changed;
+             }
+
+            function getState() {
+                return JSON.parse(JSON.stringify(state)); // Return a deep copy
+            }
+
+             function clearAllTimers() {
+                if (typingTimeout) clearTimeout(typingTimeout);
+                typingTimeout = null;
+                activeTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+                activeTimeouts = [];
+             }
+
+             function addTimeout(callback, delay) {
+                 const timeoutId = setTimeout(() => {
+                     // Remove from active list before executing
+                     activeTimeouts = activeTimeouts.filter(id => id !== timeoutId);
+                     callback();
+                 }, delay);
+                 activeTimeouts.push(timeoutId);
+                 return timeoutId;
+             }
+
+
+            function showScreen(screenId) {
+                 clearAllTimers();
+                 if (currentScreenElement) {
+                     currentScreenElement.classList.remove('active-screen');
+                     currentScreenElement.style.display = 'none';
+                     if (typeof config.screens[state.currentScreen]?.onHide === 'function') {
+                         config.screens[state.currentScreen].onHide(currentScreenElement, state);
+                     }
+                 }
+                 hideOverlay(); // Always hide overlay when changing main screen
+
+                 const screenElement = document.getElementById(`screen-${screenId}`);
+                 if (screenElement) {
+                    currentScreenElement = screenElement;
+                    currentScreenElement.style.display = 'flex';
+                    currentScreenElement.classList.add('active-screen');
+                    const previousScreen = state.currentScreen;
+                    setState({ currentScreen: screenId, previousScreen: previousScreen }); // Update state
+
+                    // Initial render for the entire screen
+                    renderScreenContent(screenId);
+
+                    // Call screen-specific load function if defined
+                    if (config.screens[screenId] && typeof config.screens[screenId].onLoad === 'function') {
+                        config.screens[screenId].onLoad(screenElement, state);
+                    }
+                 } else {
+                    console.error(`Screen 'screen-${screenId}' not found.`);
+                 }
+            }
+
+             function showOverlay(overlayId) {
+                 // Don't clear timers here, overlay might be temporary
+                 hideOverlay(); // Hide any existing overlay first
+
+                 const overlayElement = document.getElementById(`screen-${overlayId}`);
+                  if (overlayElement) {
+                    currentOverlayElement = overlayElement;
+                    currentOverlayElement.style.display = 'flex';
+                    currentOverlayElement.classList.add('active-overlay');
+
+                     // Initial render for the overlay
+                     renderScreenContent(overlayId);
+
+                     // Call overlay-specific setup function if defined
+                     if (config.screens[overlayId] && typeof config.screens[overlayId].onLoad === 'function') {
+                        config.screens[overlayId].onLoad(overlayElement, state);
+                    }
+                  } else {
+                     console.error(`Overlay screen 'screen-${overlayId}' not found.`);
+                  }
+             }
+
+             function hideOverlay() {
+                 // Don't clear timers here
+                 if (currentOverlayElement) {
+                    currentOverlayElement.classList.remove('active-overlay');
+                    currentOverlayElement.style.display = 'none';
+                    const overlayId = currentOverlayElement.id.replace('screen-', '');
+                     if (typeof config.screens[overlayId]?.onHide === 'function') {
+                         config.screens[overlayId].onHide(currentOverlayElement, state);
+                     }
+                    currentOverlayElement = null;
+                 }
+             }
+
+             // --- Rendering & DOM Update ---
+             function renderScreenContent(screenId, keysThatChanged = null) {
+                 const screenConfig = config.screens[screenId];
+                 const screenElement = document.getElementById(`screen-${screenId}`);
+                 if (!screenConfig || !screenElement) return;
+
+                 const elementsToUpdate = keysThatChanged
+                     ? screenElement.querySelectorAll(`[data-bind-text*="${keysThatChanged.join('"], [data-bind-text*="')}"], [data-bind-visible*="${keysThatChanged.join('"], [data-bind-visible*="')}"], [data-bind-style*="${keysThatChanged.join('"], [data-bind-style*="')}"]`)
+                     : screenElement.querySelectorAll('[data-bind-text], [data-bind-visible], [data-bind-style]');
+
+                 elementsToUpdate.forEach(el => {
+                    // Update Text
+                    if (el.matches('[data-bind-text]')) {
+                        const stateKey = el.getAttribute('data-bind-text');
+                        if (state.hasOwnProperty(stateKey) && (keysThatChanged === null || keysThatChanged.includes(stateKey))) {
+                            el.textContent = state[stateKey];
+                        }
+                    }
+
+                    // Update Visibility
+                     if (el.matches('[data-bind-visible]')) {
+                         const condition = el.getAttribute('data-bind-visible');
+                         const relevantKeyChanged = keysThatChanged === null || condition.split(/==|!=/).some(part => keysThatChanged.includes(part.trim()));
+                         if (relevantKeyChanged) {
+                              let isVisible = evaluateCondition(condition);
+                              el.style.display = isVisible ? '' : 'none';
+                         }
+                     }
+
+                    // Update Styles
+                     if (el.matches('[data-bind-style]')) {
+                        const binding = el.getAttribute('data-bind-style'); // e.g., "backgroundColor:flushButtonColor"
+                        const [styleProp, stateKey] = binding.split(':').map(s => s.trim());
+                         if (state.hasOwnProperty(stateKey) && (keysThatChanged === null || keysThatChanged.includes(stateKey))) {
+                             el.style[styleProp] = state[stateKey];
+                         }
+                     }
+                 });
+             }
+
+             function evaluateCondition(condition) {
+                 // Evaluates simple conditions like "key==value", "key!=value", or "key" (truthy/falsy)
+                 try {
+                     if (condition.includes('==')) {
+                         const [key, value] = condition.split('==');
+                         return state[key.trim()]?.toString() === value.trim();
+                     } else if (condition.includes('!=')) {
+                         const [key, value] = condition.split('!=');
+                         return state[key.trim()]?.toString() !== value.trim();
+                     } else {
+                         return !!state[condition.trim()];
+                     }
+                 } catch (e) {
+                     console.warn("Error evaluating condition:", condition, e);
+                     return false;
+                 }
+             }
+
+             // --- Event Handling ---
+            function attachRootEventHandler() {
+                 const container = document.getElementById('game-engine-container');
+                 container.addEventListener('click', (event) => {
+                    const target = event.target.closest('[data-action]');
+                    if (target) {
+                        try {
+                            const actionData = JSON.parse(target.getAttribute('data-action'));
+                             executeAction(actionData, event);
+                        } catch (e) {
+                             console.error("Invalid action data on element:", target, e);
+                        }
+                    }
+                 });
+            }
+
+             function executeAction(actionData, event = null) {
+                if (!actionData) return;
+                if (actionData.emit) {
+                    emit(actionData.emit, actionData.payload || {});
+                } else if (actionData.setState) {
+                     setState(actionData.setState);
+                } else if (actionData.showScreen) {
+                     showScreen(actionData.showScreen);
+                } else if (actionData.showOverlay) {
+                     showOverlay(actionData.showOverlay);
+                } else if (actionData.hideOverlay) {
+                     hideOverlay();
+                } else if (actionData.startDialogue) {
+                     startDialogue(actionData.startDialogue, actionData.startNodeKey || 'start');
+                } else if (actionData.advanceDialogue) {
+                     advanceDialogue(); // Should only be triggered by specific handler, not generic buttons
+                } else if (actionData.restartGame) {
+                     emit('restart_game'); // Use event for consistency
+                }
+                // Add more action types (e.g., playSound, addScore) later if needed
+            }
+
+            // --- Dialogue System ---
+             let currentDialogueConfig = null;
+             let currentDialogueNodeKey = null;
+             let currentDialogueTextIndex = 0;
+             let currentDialogueCallback = null; // Function to call on next advance click
+
+            function startDialogue(dialogueId, startNodeKey = 'start') {
+                if (!config.dialogues || !config.dialogues[dialogueId]) {
+                    console.error("Dialogue not found:", dialogueId);
+                    return;
+                }
+                // Store where to return after dialogue, if not already set by caller
+                 if (!state.lastDialogueEndAction) {
+                    setState({ lastDialogueEndAction: { showScreen: state.previousScreen || 'start' } });
+                 }
+
+                currentDialogueConfig = config.dialogues[dialogueId];
+                currentDialogueNodeKey = startNodeKey;
+                currentDialogueTextIndex = 0;
+                showScreen('dialogue'); // Handles setup via onLoad
+                displayCurrentDialogueNode();
+            }
+
+             function displayCurrentDialogueNode() {
+                 clearAllTimers(); // Clear previous typing timer
+                 const node = currentDialogueConfig?.nodes?.[currentDialogueNodeKey];
+                 if (!node) {
+                     console.error("Dialogue node not found:", currentDialogueNodeKey, "in", currentDialogueConfig);
+                     endDialogue();
+                     return;
+                 }
+
+                 const dialogueScreen = document.getElementById('screen-dialogue');
+                 const textBox = dialogueScreen.querySelector('.dialogue-text-content');
+                 const speakerBox = dialogueScreen.querySelector('.dialogue-speaker');
+                 const optionsBox = dialogueScreen.querySelector('.dialogue-options');
+                 const spriteBox = dialogueScreen.querySelector('.dialogue-sprite');
+                 const nextArrow = dialogueScreen.querySelector('.dialogue-next-arrow');
+
+                 textBox.innerHTML = '';
+                 optionsBox.innerHTML = '';
+                 nextArrow.style.display = 'none';
+                 speakerBox.textContent = node.speaker || '';
+                 // Update sprite - assumes sprite class maps to emoji or CSS
+                 spriteBox.className = 'dialogue-sprite'; // Reset classes
+                 if (node.spriteClass) {
+                     spriteBox.classList.add(node.spriteClass);
+                     spriteBox.style.display = 'flex';
+                 } else {
+                      spriteBox.style.display = 'none';
+                 }
+
+                 const fullText = node.text[currentDialogueTextIndex];
+                 let charIndex = 0;
+                 function typeChar() {
+                     if (charIndex < fullText.length) {
+                         textBox.innerHTML += fullText.charAt(charIndex);
+                         charIndex++;
+                         typingTimeout = setTimeout(typeChar, state.typingSpeed || 40);
+                     } else {
+                         typingTimeout = null;
+                         finishNodeDisplay(node); // Handle logic after typing finishes
+                     }
+                 }
+                 typeChar();
+            }
+
+             function finishNodeDisplay(node) {
+                 const nextArrow = document.getElementById('screen-dialogue').querySelector('.dialogue-next-arrow');
+                 // Check if more text in this node
+                 if (currentDialogueTextIndex < node.text.length - 1) {
+                     nextArrow.style.display = 'block';
+                     currentDialogueCallback = advanceText; // Next click advances text index
+                 } else {
+                     // Last text in node, show options or set up next step
+                     if (node.options && node.options.length > 0) {
+                         displayDialogueOptions(node.options);
+                         currentDialogueCallback = null; // Click handled by option buttons
+                     } else if (node.next) {
+                         nextArrow.style.display = 'block';
+                         currentDialogueCallback = () => goToDialogueNode(node.next); // Next click goes to next node
+                     } else if (node.emit) {
+                          nextArrow.style.display = 'block'; // Allow click before emitting
+                          currentDialogueCallback = () => {
+                              emit(node.emit, node.payload || {});
+                              // If emit doesn't change screen, we might need to end dialogue explicitly?
+                              // For now, assume emit handles the next step (like ending dialogue or changing screen).
+                              // If the screen didn't change, call endDialogue? Risky.
+                              // Let's assume emit handles the transition. If stuck, check emit handler.
+                              // If emit should *also* end dialogue: add an `endAfterEmit: true` flag?
+                              if (node.endAfterEmit) {
+                                 endDialogue();
+                              }
+                          }
+                     }
+                     else {
+                         nextArrow.style.display = 'block'; // Allow click to end
+                         currentDialogueCallback = endDialogue; // Next click ends dialogue
+                     }
+                 }
+             }
+
+            function advanceText() {
+                 currentDialogueTextIndex++;
+                 displayCurrentDialogueNode();
+            }
+
+            function displayDialogueOptions(options) {
+                 const optionsBox = document.getElementById('screen-dialogue').querySelector('.dialogue-options');
+                 optionsBox.innerHTML = '';
+                 options.forEach(option => {
+                     const button = document.createElement('button');
+                     button.textContent = option.text;
+                     button.classList.add('dialogue-option-button');
+                     // Use data-action for consistency
+                      const action = {
+                         emit: 'dialogue_option_selected',
+                         payload: { option: option } // Pass the whole option object
+                     };
+                     button.setAttribute('data-action', JSON.stringify(action));
+                     optionsBox.appendChild(button);
+                 });
+            }
+
+            function handleDialogueOption(optionData) {
+                const option = optionData.option; // Extract option from payload
+                if (option.setState) setState(option.setState);
+                if (option.emit) emit(option.emit, option.payload || {});
+
+                if (option.next) {
+                    goToDialogueNode(option.next);
+                } else if (!option.emit) { // If option only set state, end dialogue? Assume no for now. If no next and no emit, end.
+                    endDialogue();
+                }
+                 // If it emitted, assume the emit handler manages the flow (might end dialogue or change screen)
+            }
+
+            function goToDialogueNode(nodeKey) {
+                 currentDialogueNodeKey = nodeKey;
+                 currentDialogueTextIndex = 0;
+                 displayCurrentDialogueNode();
+            }
+
+            function advanceDialogue() {
+                if (typingTimeout) { // Finish typing immediately
+                     clearAllTimers();
+                     const node = currentDialogueConfig.nodes[currentDialogueNodeKey];
+                     const textBox = document.getElementById('screen-dialogue').querySelector('.dialogue-text-content');
+                     textBox.innerHTML = node.text[currentDialogueTextIndex]; // Show full text
+                     finishNodeDisplay(node); // Redo end-of-typing logic
+                } else if (currentDialogueCallback) {
+                     const callback = currentDialogueCallback; // Store callback
+                     currentDialogueCallback = null; // Prevent re-triggering during callback execution
+                     callback(); // Execute the stored callback
+                }
+            }
+
+            function endDialogue() {
+                 clearAllTimers();
+                 currentDialogueConfig = null;
+                 currentDialogueNodeKey = null;
+                 currentDialogueCallback = null;
+                 const finalAction = state.lastDialogueEndAction || { showScreen: state.previousScreen || 'start' };
+                 setState({ lastDialogueEndAction: null }); // Clear the stored action
+                 executeAction(finalAction);
+            }
+
+            // --- Public API ---
+            return {
+                init,
+                on,
+                emit,
+                setState,
+                getState,
+                showScreen,
+                showOverlay,
+                hideOverlay,
+                // Dialogue related methods exposed if needed externally, but mostly handled via events/actions
+                // startDialogue,
+                // advanceDialogue,
+                // handleDialogueOption
+            };
+        })();
+
+        // --- Game Definition ---
+        const myGameConfig = {
+            initialState: {
+                currentScreen: 'start',
+                previousScreen: 'start',
+                speedrunMode: false,
+                speedrunStatus: 'Off',
+                flushCount: 0,
+                objective: 'flush', // 'flush', 'explode', 'exploded'
+                objectiveText: 'Objective:\nFlush the toilet.',
+                objectiveColor: 'red',
+                flushButtonColor: '#808080', // Gray
+                toiletWaterColor: 'transparent',
+                isPaused: false,
+                typingSpeed: 40,
+                lastDialogueEndAction: null, // Action to perform when dialogue ends
+                // Fight states
+                showSansOptions: false,
+                 showCoomGuyOptions: false,
+                 showActOptions: false,
+                 attackInProgress: false,
+                 missTextVisible: false,
+                 soulBoxVisible: false,
+                 soulState: '❤️'
+            },
+            screens: { // Screen definitions (onLoad/onHide can be added if needed)
+                'start': {
+                    onLoad: () => GameEngine.resetState() // Reset state when returning to start
+                },
+                'game': {
+                     onLoad: (el, state) => {
+                         // Ensure visuals match state on load/resume
+                         el.querySelector('.explosion-graphic').style.display = 'none';
+                         el.querySelector('.explosion-text').style.display = 'none';
+                         el.querySelector('.toilet-emoji').style.display = 'block';
+                         el.querySelector('.pause-button').style.display = 'flex';
+                         GameEngine.setState({ previousScreen: 'game' });
+                         GameEngine.renderScreenContent('game'); // Force render based on current state
+                     }
+                },
+                'pause': {
+                     onLoad: (el, state) => GameEngine.renderScreenContent('pause') // Render conditional buttons
+                },
+                'speedrun': {},
+                'leaderboards': {},
+                'version': {},
+                'dialogue': {
+                     onLoad: (screenElement) => {
+                         screenElement.onclick = () => GameEngine.emit('dialogue_advance_requested'); // Use emit for advance
+                         // Clear dynamic parts
+                         screenElement.querySelector('.dialogue-options').innerHTML = '';
+                         screenElement.querySelector('.dialogue-text-content').innerHTML = '';
+                         screenElement.querySelector('.dialogue-next-arrow').style.display = 'none';
+                         screenElement.querySelector('.dialogue-sprite').className = 'dialogue-sprite'; // Reset sprite
+                         screenElement.querySelector('.dialogue-speaker').textContent = '';
+                     },
+                     onHide: (screenElement) => {
+                         screenElement.onclick = null; // Remove listener when leaving screen
+                     }
+                },
+                'escape-options': {},
+                'sans-fight': {
+                    onLoad: () => {
+                         // Set initial state for the fight screen display
+                         GameEngine.setState({
+                             showSansOptions: false,
+                             attackInProgress: false,
+                             missTextVisible: false,
+                             soulBoxVisible: false,
+                             soulState: '❤️'
+                         });
+                         // Start the intro dialogue
+                         GameEngine.setState({ lastDialogueEndAction: { emit: 'show_sans_options' } }); // Action after dialogue
+                         GameEngine.executeAction({ startDialogue: 'sans_intro' });
+                    }
+                },
+                'coom-guy-fight': {
+                     onLoad: () => {
+                         GameEngine.setState({
+                             showCoomGuyOptions: false,
+                             showActOptions: false
+                         });
+                         GameEngine.setState({ lastDialogueEndAction: { emit: 'show_coom_options' } });
+                         GameEngine.executeAction({ startDialogue: 'coom_guy_intro' });
+                     }
+                },
+                'good-ending': {},
+                'bad-ending': {},
+                'secret-ending': {}
+            },
+             dialogues: { // Dialogue tree definitions
+                 'papyrus_intro': {
+                    nodes: {
+                        'start': { spriteClass: 'sprite-skeleton', text: ["* THE GREAT PAPYRUS OFFERS YOU SOME SPAGHETTI!"], options: [ {text: 'Accept', next: 'accept'}] },
+                        'accept': { spriteClass: 'sprite-skeleton', text: ["* YOU EAT PAPYRUS'S SPAGHETTI\nIT TASTES GOOD\nYOU TELL PAPYRUS HE IS VERY GOOD AT COOKING"], next: 'reaction1'},
+                        'reaction1': { speaker: 'Papyrus', spriteClass: 'sprite-skeleton', text: ["WOW..."], next: 'reaction2'},
+                        'reaction2': { speaker: 'Papyrus', spriteClass: 'sprite-skeleton', text: ["WOW, I SURE AM THE GREATEST CHEF IN THIS WORLD!"], emit: 'papyrus_finished', endAfterEmit: true }
+                    }
+                 },
+                 'escape_sequence': {
+                     nodes: {
+                        'start': { text: ["It seems like you tried to escape when the toilet was about to explode."], next: 'managed'},
+                        'managed': { text: ["You managed to escape from \"HELL.\""], next: 'choose'},
+                        'choose': { text: ["Now choose, enough of talking"], emit: 'escape_choice_prompt', endAfterEmit: true}
+                     }
+                 },
+                 'sans_intro': {
+                     nodes: {
+                         'start': { spriteClass: 'sprite-skeleton', text: ["* YOU SHOULDN'T HAVE EXPLODED THAT TOILET."], endAfterEmit: true } // Dialogue ends, triggers lastDialogueEndAction (show_sans_options)
+                     }
+                 },
+                 'sans_mercy': {
+                    nodes: {
+                        'start': { spriteClass: 'sprite-skeleton', text: ["* YOU CAN'T SPARE HIM BECAUSE YOU EXPLODED THE TOILET, AND DOING THAT IS AN UNFORGIVABLE SIN"], endAfterEmit: true} // Ends, triggers lastDialogueEndAction (show_sans_options)
+                    }
+                 },
+                 'coom_guy_intro': {
+                     nodes: {
+                         'start': { speaker: 'Coom Guy', spriteClass: 'sprite-robot', text: ["* OH, HELLO THERE"], next: 'ask_party' },
+                         'ask_party': { speaker: 'Coom Guy', spriteClass: 'sprite-robot', text: ["* SO YOU DECIDED TO COME INTO THE COOMING PARTY?"], next: 'great' },
+                         'great': { speaker: 'Coom Guy', spriteClass: 'sprite-robot', text: ["* WELL, GREAT THEN!"], next: 'begin' },
+                         'begin': { speaker: 'Coom Guy', spriteClass: 'sprite-robot', text: ["* LETS BEGIN."], next: 'stands' },
+                         'stands': { spriteClass: 'sprite-robot', text: ["* COOM GUY STANDS."], endAfterEmit: true } // Ends, triggers lastDialogueEndAction (show_coom_options)
+                     }
+                 },
+                 'coom_guy_fight_reply': {
+                      nodes: {
+                        'start': { spriteClass: 'sprite-robot', text: ["* YOU ARE NOT ABLE TO KILL COOM GUY AS HE IS TOO STRONG."], next: 'return'},
+                        'return': { spriteClass: 'sprite-robot', text: ["* COOM GUY STANDS."], endAfterEmit: true} // Ends, triggers lastDialogueEndAction (show_coom_options)
+                      }
+                 },
+                 'coom_guy_check': {
+                     nodes: {
+                         'start': { spriteClass: 'sprite-robot', text: ["* COOM GUY - 120 ATK - 40 DEF"], next: 'return'},
+                         'return': { spriteClass: 'sprite-robot', text: ["* COOM GUY STANDS."], endAfterEmit: true} // Ends, triggers lastDialogueEndAction (show_coom_options)
+                     }
+                 },
+                 'coom_guy_ask': {
+                     nodes: {
+                         'start': { spriteClass: 'sprite-robot', text: ["* YOU ASK COOM GUY FOR HIS COOM"], next: 'ask1'},
+                         'ask1': { speaker: 'Coom Guy', spriteClass: 'sprite-robot', text: ["* YOU WANT MY COOM?"], next: 'ask2'},
+                         'ask2': { speaker: 'Coom Guy', spriteClass: 'sprite-robot', text: ["* UHHH..."], next: 'ask3'},
+                         'ask3': { speaker: 'Coom Guy', spriteClass: 'sprite-robot', text: ["* SURE! LETS DO IT-"], emit: 'coom_accepted', endAfterEmit: true } // Emit happens just before ending dialogue naturally
+                     }
+                 }
+             },
+            globalEvents: { // Define global handlers for emitted events
+                 'dialogue_advance_requested': () => GameEngine.advanceDialogue(), // Handle clicks on dialogue screen
+                 'dialogue_option_selected': (data) => GameEngine.handleDialogueOption(data.option), // Handle option button clicks
+                 'papyrus_finished': () => GameEngine.showScreen('good-ending'),
+                 'escape_choice_prompt': () => GameEngine.showScreen('escape-options'),
+                 'sans_fight_start_attack': () => {
+                      GameEngine.setState({ showSansOptions: false, attackInProgress: true, missTextVisible: true });
+                      const screenElement = document.getElementById('screen-sans-fight');
+                      // Reset attack line animation
+                      const attackLine = screenElement.querySelector('.attack-line');
+                      attackLine.style.animation = 'none';
+                       requestAnimationFrame(() => { // Allow reset then apply animation
+                           requestAnimationFrame(() => { attackLine.style.animation = 'attack-sweep 0.5s linear forwards'; });
+                       });
+
+                      GameEngine.addTimeout(() => {
+                           GameEngine.setState({ missTextVisible: false, soulBoxVisible: true, soulState: '❤️' });
+                           GameEngine.addTimeout(() => {
+                               GameEngine.setState({ soulState: '💔' });
+                               document.getElementById('game-engine-container').style.transition = 'background-color 0.1s';
+                               document.getElementById('game-engine-container').style.backgroundColor = 'red';
+                               GameEngine.addTimeout(() => {
+                                   document.getElementById('game-engine-container').style.backgroundColor = 'black';
+                                    GameEngine.addTimeout(() => {
+                                        document.getElementById('game-engine-container').style.transition = ''; // Remove transition for instant changes later
+                                        GameEngine.emit('sans_defeated_player');
+                                    }, 500);
+                               }, 100);
+                           }, 1500); // Time before heart breaks
+                       }, 600); // Time after attack starts
+                 },
+                 'sans_defeated_player': () => GameEngine.showScreen('bad-ending'),
+                 'show_sans_options': () => GameEngine.setState({ showSansOptions: true, attackInProgress: false, soulBoxVisible: false }),
+                 'show_coom_options': () => GameEngine.setState({ showCoomGuyOptions: true, showActOptions: false }),
+                 'coom_accepted': () => {
+                      // Short delay then ending
+                      GameEngine.addTimeout(() => GameEngine.showScreen('secret-ending'), 500);
+                 }
+            }
+        };
+
+        // --- Game-Specific Event Listeners ---
+        GameEngine.on('start_game', () => GameEngine.showScreen('game'));
+        GameEngine.on('open_speedrun_menu', () => GameEngine.showOverlay('speedrun'));
+        GameEngine.on('open_leaderboards', () => GameEngine.showOverlay('leaderboards'));
+        GameEngine.on('open_version_info', () => GameEngine.showOverlay('version'));
+        GameEngine.on('close_overlay', () => GameEngine.hideOverlay());
+        GameEngine.on('toggle_speedrun', (data) => {
+            const newState = data.mode === 'on';
+            GameEngine.setState({ speedrunMode: newState, speedrunStatus: newState ? 'On' : 'Off' });
+        });
+
+        GameEngine.on('pause_game', () => {
+            const state = GameEngine.getState();
+            if (state.currentScreen === 'game' && state.objective !== 'exploded') {
+                GameEngine.setState({ isPaused: true });
+                GameEngine.showOverlay('pause');
+            }
+        });
+        GameEngine.on('resume_game', () => {
+             GameEngine.setState({ isPaused: false });
+             GameEngine.hideOverlay();
+        });
+        GameEngine.on('quit_to_start', () => {
+             const state = GameEngine.getState();
+             if (state.objective === 'explode' && state.currentScreen === 'game') {
+                  GameEngine.emit('start_escape_sequence');
+             } else {
+                 GameEngine.showScreen('start');
+             }
+        });
+        GameEngine.on('restart_game', () => GameEngine.showScreen('start'));
+
+         GameEngine.on('start_papyrus_dialogue', () => {
+             GameEngine.setState({ lastDialogueEndAction: { showScreen: 'good-ending' } });
+             GameEngine.executeAction({ startDialogue: 'papyrus_intro' });
+         });
+
+         GameEngine.on('start_escape_sequence', () => {
+            GameEngine.setState({ lastDialogueEndAction: { showScreen: 'escape-options' } });
+             GameEngine.executeAction({ startDialogue: 'escape_sequence' });
+         });
+
+         GameEngine.on('escape_option_a', () => { // Option A -> Sans
+             const container = document.getElementById('game-engine-container');
+             container.style.transition = 'background-color 0.1s';
+             container.style.backgroundColor = 'white'; // Flash
+             GameEngine.addTimeout(() => {
+                 container.style.backgroundColor = 'black';
+                 GameEngine.addTimeout(() => {
+                      container.style.transition = '';
+                      GameEngine.showScreen('sans-fight');
+                 }, 50);
+             }, 100);
+         });
+          GameEngine.on('escape_option_b', () => { // Option B -> Coom Guy
+             GameEngine.showScreen('coom-guy-fight');
+          });
+
+        GameEngine.on('flush_toilet', () => {
+            const state = GameEngine.getState();
+            if (state.isPaused || state.objective === 'exploded') return;
+
+            let currentCount = state.flushCount + 1;
+            let currentObjective = state.objective;
+            let updates = { flushCount: currentCount, toiletWaterColor: '#20B2AA' };
+
+            GameEngine.addTimeout(() => GameEngine.setState({ toiletWaterColor: 'transparent' }), 150);
+
+            if (currentObjective === 'flush') {
+                if (currentCount > 3 && currentCount <= 6) {
+                    updates.flushButtonColor = '#32CD32'; // LimeGreen
+                } else if (currentCount > 6) {
+                    currentObjective = 'explode';
+                    updates.objective = currentObjective;
+                    updates.objectiveText = 'Objective:\nExplode the toilet.';
+                    updates.objectiveColor = '#FF4500'; // OrangeRed
+                    updates.flushButtonColor = '#DC143C'; // Crimson
+                }
+            } else if (currentObjective === 'explode') {
+                 updates.objective = 'exploded'; // Prevent further flushing
+                 GameEngine.setState(updates); // Update state first
+
+                 const gameScreen = document.getElementById('screen-game');
+                 gameScreen.querySelector('.toilet-emoji').style.display = 'none';
+                 gameScreen.querySelector('.pause-button').style.display = 'none';
+                 gameScreen.querySelector('.explosion-graphic').style.display = 'block';
+                 const explosionTextEl = gameScreen.querySelector('.explosion-text');
+                 explosionTextEl.innerHTML = "YOU EXPLODED THE<br>FUCKING TOILET!!!<br>LOOK WHAT YOU<br>HAVE DONE";
+                 explosionTextEl.style.display = 'block';
+
+                 const container = document.getElementById('game-engine-container');
+                 container.style.transition = 'background-color 0.1s';
+                 container.style.backgroundColor = 'white';
+                 GameEngine.addTimeout(() => {
+                     container.style.backgroundColor = 'red';
+                     GameEngine.addTimeout(() => {
+                         container.style.backgroundColor = 'black';
+                         GameEngine.addTimeout(() => {
+                             container.style.transition = '';
+                             GameEngine.showScreen('sans-fight'); // Transition after effects
+                         }, 500);
+                     }, 150);
+                 }, 100);
+                 return; // Stop processing here
+            }
+            GameEngine.setState(updates);
+        });
+
+         // Sans Fight Actions
+         GameEngine.on('sans_mercy', () => {
+             GameEngine.setState({ showSansOptions: false, lastDialogueEndAction: { emit: 'show_sans_options' } });
+             GameEngine.executeAction({ startDialogue: 'sans_mercy' });
+         });
+         GameEngine.on('sans_fight', () => {
+             GameEngine.emit('sans_fight_start_attack');
+         });
+
+          // Coom Guy Actions
+         GameEngine.on('coom_fight', () => {
+             GameEngine.setState({ showCoomGuyOptions: false, lastDialogueEndAction: { emit: 'show_coom_options' }});
+             GameEngine.executeAction({ startDialogue: 'coom_guy_fight_reply' });
+         });
+         GameEngine.on('coom_act', () => GameEngine.setState({ showActOptions: true }));
+         GameEngine.on('coom_act_check', () => {
+              GameEngine.setState({ showActOptions: false, lastDialogueEndAction: { emit: 'show_coom_options' }});
+              GameEngine.executeAction({ startDialogue: 'coom_guy_check' });
+         });
+         GameEngine.on('coom_act_ask', () => {
+               GameEngine.setState({ showActOptions: false, lastDialogueEndAction: { emit: 'coom_accepted' }}); // This dialogue emits coom_accepted itself
+               GameEngine.executeAction({ startDialogue: 'coom_guy_ask' });
+         });
+
+
+        // --- Initialize ---
+        window.addEventListener('DOMContentLoaded', () => {
+            GameEngine.init(myGameConfig);
+        });
+
+    </script>
+</body>
+</html>

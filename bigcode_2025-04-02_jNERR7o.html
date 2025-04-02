@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Ball Adventure</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #87CEEB; /* Sky Blue */
+            display: block;
+        }
+        #ui-container {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+        }
+        #skipButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-left: 20px;
+        }
+        #levelDisplay {
+            font-size: 18px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<div id="ui-container">
+    <div id="levelDisplay">Level: 1 / 250</div>
+    <button id="skipButton">Skip Level</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const levelDisplay = document.getElementById('levelDisplay');
+    const skipButton = document.getElementById('skipButton');
+
+    // --- Game Settings ---
+    const GRAVITY = 0.5;
+    const FRICTION = 0.85;
+    const PLAYER_MOVE_SPEED = 5;
+    const PLAYER_JUMP_FORCE = 12;
+    const PLAYER_RADIUS = 15;
+    const TILE_SIZE = 40; // Base size for level elements
+
+    // --- Game State ---
+    let player = {
+        x: 100,
+        y: 500,
+        vx: 0,
+        vy: 0,
+        radius: PLAYER_RADIUS,
+        onGround: false,
+        color: 'red'
+    };
+
+    let camera = {
+        x: 0,
+        y: 0
+    };
+
+    let keys = {
+        w: false,
+        a: false,
+        d: false,
+        space: false
+    };
+
+    let currentLevelIndex = 0;
+    let gameWon = false;
+    const TOTAL_LEVELS_PLANNED = 250; // As requested
+
+    // --- Level Definitions ---
+    // Structure: Array of objects. Each object has type, x, y, width, height (or other props)
+    // Coordinates are world coordinates, not screen coordinates.
+    // Types: 'platform', 'hazard', 'goal', 'player_start'
+    const levels = [
+        // Level 1: Basic Intro
+        {
+            playerStart: { x: 100, y: 500 },
+            elements: [
+                { type: 'platform', x: 0, y: canvas.height - TILE_SIZE, width: canvas.width * 1.5, height: TILE_SIZE, color: '#8B4513' }, // Brown Ground
+                { type: 'platform', x: 300, y: canvas.height - TILE_SIZE * 3, width: TILE_SIZE * 4, height: TILE_SIZE, color: '#A9A9A9' }, // Grey Platform
+                { type: 'platform', x: 600, y: canvas.height - TILE_SIZE * 5, width: TILE_SIZE * 3, height: TILE_SIZE, color: '#A9A9A9' },
+                { type: 'goal', x: 700, y: canvas.height - TILE_SIZE * 6 - TILE_SIZE / 2, width: TILE_SIZE, height: TILE_SIZE } // Goal Flag
+            ]
+        },
+        // Level 2: Stairs and a small gap
+        {
+            playerStart: { x: 60, y: 500 },
+            elements: [
+                { type: 'platform', x: 0, y: canvas.height - TILE_SIZE, width: TILE_SIZE * 5, height: TILE_SIZE, color: '#8B4513' },
+                { type: 'platform', x: TILE_SIZE * 5, y: canvas.height - TILE_SIZE * 2, width: TILE_SIZE, height: TILE_SIZE, color: '#8B4513' },
+                { type: 'platform', x: TILE_SIZE * 6, y: canvas.height - TILE_SIZE * 3, width: TILE_SIZE, height: TILE_SIZE, color: '#8B4513' },
+                { type: 'platform', x: TILE_SIZE * 7, y: canvas.height - TILE_SIZE * 4, width: TILE_SIZE, height: TILE_SIZE, color: '#8B4513' },
+                // Gap
+                { type: 'platform', x: TILE_SIZE * 10, y: canvas.height - TILE_SIZE * 4, width: TILE_SIZE * 5, height: TILE_SIZE, color: '#8B4513' },
+                { type: 'goal', x: TILE_SIZE * 13, y: canvas.height - TILE_SIZE * 5 - TILE_SIZE / 2, width: TILE_SIZE, height: TILE_SIZE }
+            ]
+        },
+        // Level 3: Hazard Introduction
+        {
+            playerStart: { x: 60, y: 500 },
+            elements: [
+                { type: 'platform', x: 0, y: canvas.height - TILE_SIZE, width: canvas.width, height: TILE_SIZE, color: '#8B4513' },
+                { type: 'hazard', x: 300, y: canvas.height - TILE_SIZE * 2, width: TILE_SIZE * 3, height: TILE_SIZE, color: 'black' }, // Spikes (represented by black rect)
+                { type: 'platform', x: 500, y: canvas.height - TILE_SIZE * 3, width: TILE_SIZE * 5, height: TILE_SIZE, color: '#A9A9A9' },
+                { type: 'goal', x: 650, y: canvas.height - TILE_SIZE * 4 - TILE_SIZE / 2, width: TILE_SIZE, height: TILE_SIZE }
+            ]
+        },
+        // Level 4: Simple Moving Platform (Horizontal)
+        {
+            playerStart: { x: 60, y: 400 },
+            elements: [
+                { type: 'platform', x: 0, y: canvas.height - TILE_SIZE, width: TILE_SIZE * 4, height: TILE_SIZE, color: '#8B4513' },
+                // Moving platform definition requires dynamic state
+                { type: 'moving_platform', x: TILE_SIZE * 6, y: canvas.height - TILE_SIZE, width: TILE_SIZE * 3, height: TILE_SIZE / 2, color: '#4682B4', speed: 1.5, range: 150, direction: 'horizontal', currentOffset: 0, initialX: TILE_SIZE * 6 },
+                { type: 'platform', x: TILE_SIZE * 12, y: canvas.height - TILE_SIZE, width: TILE_SIZE * 4, height: TILE_SIZE, color: '#8B4513' },
+                { type: 'goal', x: TILE_SIZE * 14, y: canvas.height - TILE_SIZE * 2 - TILE_SIZE / 2, width: TILE_SIZE, height: TILE_SIZE }
+            ]
+        },
+         // Level 5: Higher Jumps and Precision
+        {
+            playerStart: { x: 60, y: 500 },
+            elements: [
+                { type: 'platform', x: 0, y: canvas.height - TILE_SIZE, width: TILE_SIZE * 3, height: TILE_SIZE, color: '#8B4513' },
+                { type: 'platform', x: TILE_SIZE * 5, y: canvas.height - TILE_SIZE * 4, width: TILE_SIZE, height: TILE_SIZE, color: '#A9A9A9' },
+                { type: 'platform', x: TILE_SIZE * 8, y: canvas.height - TILE_SIZE * 7, width: TILE_SIZE, height: TILE_SIZE, color: '#A9A9A9' },
+                { type: 'platform', x: TILE_SIZE * 11, y: canvas.height - TILE_SIZE * 10, width: TILE_SIZE * 4, height: TILE_SIZE, color: '#A9A9A9' },
+                { type: 'hazard', x: TILE_SIZE * 11, y: canvas.height - TILE_SIZE * 10 - TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE, color: 'black' },
+                { type: 'goal', x: TILE_SIZE * 13, y: canvas.height - TILE_SIZE * 11 - TILE_SIZE / 2, width: TILE_SIZE, height: TILE_SIZE }
+            ]
+        }
+        // NOTE: Cannot realistically create 250 unique levels here. These 5 samples demonstrate progression.
+    ];
+
+    // --- Input Handling ---
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'w' || e.key === 'W') keys.w = true;
+        if (e.key === 'a' || e.key === 'A') keys.a = true;
+        if (e.key === 'd' || e.key === 'D') keys.d = true;
+        if (e.key === ' ') keys.space = true; // Space bar
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'w' || e.key === 'W') keys.w = false;
+        if (e.key === 'a' || e.key === 'A') keys.a = false;
+        if (e.key === 'd' || e.key === 'D') keys.d = false;
+        if (e.key === ' ') keys.space = false;
+    });
+
+    // --- Collision Detection ---
+    function checkCollision(circle, rect) {
+        // Find the closest point to the circle within the rect
+        let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.width));
+        let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.height));
+
+        // Calculate the distance between the circle's center and this closest point
+        let distanceX = circle.x - closestX;
+        let distanceY = circle.y - closestY;
+        let distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+
+        // If the distance is less than the circle's radius squared, an overlap occurs
+        return distanceSquared < (circle.radius * circle.radius);
+    }
+
+     function handleCollision(circle, rect) {
+        // Find the closest point on the rectangle to the center of the circle
+        let closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.width));
+        let closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.height));
+
+        // Calculate the distance vector between the circle's center and this closest point
+        let dx = circle.x - closestX;
+        let dy = circle.y - closestY;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        let overlap = circle.radius - distance;
+
+        if (overlap > 0) {
+            // Normalize the distance vector
+            let nx = dx / distance;
+            let ny = dy / distance;
+
+            // Push the circle out of the rectangle
+            circle.x += nx * overlap;
+            circle.y += ny * overlap;
+
+            // Collision response based on direction
+            // Check collision side (simplified)
+            let playerBottom = circle.y + circle.radius;
+            let playerTop = circle.y - circle.radius;
+            let playerLeft = circle.x - circle.radius;
+            let playerRight = circle.x + circle.radius;
+            let rectTop = rect.y;
+            let rectBottom = rect.y + rect.height;
+            let rectLeft = rect.x;
+            let rectRight = rect.x + rect.width;
+
+            // Check overlap amounts
+            let overlapYBottom = playerBottom - rectTop; // Overlap with top surface
+            let overlapYTop = rectBottom - playerTop;    // Overlap with bottom surface
+            let overlapXRight = playerRight - rectLeft;  // Overlap with left surface
+            let overlapXLeft = rectRight - playerLeft;   // Overlap with right surface
+
+            // Find minimum overlap
+            let minOverlap = Math.min(overlapYBottom, overlapYTop, overlapXRight, overlapXLeft);
+
+             // Resolve collision based on minimum overlap direction
+            if (minOverlap === overlapYBottom && Math.abs(nx) < 0.8) { // Hit the top surface
+                 if (circle.vy > 0) {
+                    circle.vy = 0;
+                    circle.onGround = true;
+                    // Adjust y position exactly to the surface
+                    circle.y = rect.y - circle.radius;
+                    // Apply platform velocity if it's a moving platform
+                     if (rect.type === 'moving_platform') {
+                         if (rect.direction === 'horizontal') {
+                            // Add platform's horizontal speed only when on top
+                            circle.x += rect.vx;
+                         } else { // vertical
+                            // If platform is moving up, push player up slightly more forcefully
+                            if (rect.vy < 0) {
+                                circle.y += rect.vy; // Move with platform
+                            }
+                         }
+                     }
+                }
+            } else if (minOverlap === overlapYTop && Math.abs(nx) < 0.8) { // Hit the bottom surface
+                 if (circle.vy < 0) {
+                    circle.vy = 0;
+                    // Adjust y position exactly below the surface
+                    circle.y = rect.y + rect.height + circle.radius;
+                 }
+            } else if (minOverlap === overlapXRight && Math.abs(ny) < 0.8) { // Hit the left surface
+                 if (circle.vx > 0) {
+                    circle.vx = 0;
+                    // Adjust x position exactly to the left
+                    circle.x = rect.x - circle.radius;
+                 }
+            } else if (minOverlap === overlapXLeft && Math.abs(ny) < 0.8) { // Hit the right surface
+                 if (circle.vx < 0) {
+                    circle.vx = 0;
+                    // Adjust x position exactly to the right
+                    circle.x = rect.x + rect.width + circle.radius;
+                 }
+            }
+
+             // Fallback/Corner case: Resolve directly away from closest point if axis check fails
+            if (circle.vy > 0 && ny < -0.7) { // If mostly vertical collision from top
+                circle.vy = 0;
+                circle.onGround = true;
+                 if (rect.type === 'moving_platform') {
+                    if (rect.direction === 'horizontal') circle.x += rect.vx;
+                    else if (rect.vy < 0) circle.y += rect.vy;
+                 }
+            } else if (circle.vy < 0 && ny > 0.7) { // Vertical collision from bottom
+                circle.vy = 0;
+            } else if (circle.vx > 0 && nx < -0.7) { // Horizontal collision from left
+                circle.vx = 0;
+            } else if (circle.vx < 0 && nx > 0.7) { // Horizontal collision from right
+                circle.vx = 0;
+            }
+
+            return true; // Collision happened
+        }
+        return false; // No collision
+    }
+
+
+    // --- Game Logic ---
+    function update() {
+        if (gameWon) return;
+
+        // Handle Input
+        if (keys.a) {
+            player.vx = -PLAYER_MOVE_SPEED;
+        } else if (keys.d) {
+            player.vx = PLAYER_MOVE_SPEED;
+        } else {
+            player.vx *= FRICTION; // Apply friction only when no horizontal input
+            if (Math.abs(player.vx) < 0.1) player.vx = 0;
+        }
+
+        if ((keys.space || keys.w) && player.onGround) {
+            player.vy = -PLAYER_JUMP_FORCE;
+            player.onGround = false;
+        }
+
+        // Apply Gravity
+        player.vy += GRAVITY;
+
+        // --- Update Moving Platforms ---
+        const level = levels[currentLevelIndex];
+        level.elements.forEach(element => {
+            if (element.type === 'moving_platform') {
+                if (element.direction === 'horizontal') {
+                    element.x += element.speed;
+                    element.currentOffset += element.speed;
+                    element.vx = element.speed; // Store current velocity
+                    element.vy = 0;
+                     if (Math.abs(element.currentOffset) >= element.range) {
+                        element.speed *= -1; // Reverse direction
+                        element.currentOffset = Math.sign(element.currentOffset) * element.range; // Clamp offset
+                        element.x = element.initialX + element.currentOffset; // Ensure correct position at turn
+                    }
+                } else { // Vertical (add if needed)
+                   // element.y += element.speed;
+                   // element.currentOffset += element.speed;
+                   // element.vx = 0;
+                   // element.vy = element.speed;
+                   // if (Math.abs(element.currentOffset) >= element.range) {
+                   //    element.speed *= -1;
+                   // }
+                   element.vx = 0; // No horizontal movement for now
+                   element.vy = 0; // No vertical movement for now (implement if needed)
+                }
+            } else {
+                element.vx = 0;
+                element.vy = 0;
+            }
+        });
+
+
+        // Proposed new position
+        let nextX = player.x + player.vx;
+        let nextY = player.y + player.vy;
+
+        // Reset onGround before collision checks
+        player.onGround = false;
+
+        // --- Collision Detection and Resolution ---
+        let potentialCollisions = level.elements.filter(el => el.type === 'platform' || el.type === 'moving_platform' || el.type === 'hazard' || el.type === 'goal');
+
+        // Create a temporary player object for prediction
+        let tempPlayer = { ...player, x: nextX, y: nextY };
+
+        potentialCollisions.forEach(element => {
+             // Broad phase check (optional but good for performance with many objects)
+            let dx = Math.abs(tempPlayer.x - (element.x + element.width / 2));
+            let dy = Math.abs(tempPlayer.y - (element.y + element.height / 2));
+             if (dx > (element.width / 2 + tempPlayer.radius + Math.abs(player.vx))) return;
+             if (dy > (element.height / 2 + tempPlayer.radius + Math.abs(player.vy))) return;
+
+
+            if (checkCollision(tempPlayer, element)) {
+                 if (element.type === 'hazard') {
+                    resetLevel();
+                    return; // Stop further processing for this frame after reset
+                } else if (element.type === 'goal') {
+                    nextLevel();
+                    return; // Stop further processing
+                } else if (element.type === 'platform' || element.type === 'moving_platform') {
+                    // Use the handleCollision function which modifies player's position and velocity
+                    handleCollision(player, element); // Pass the *original* player object to modify
+                }
+            }
+        });
+
+
+        // --- Update Player Position (if not modified by collision) ---
+        // The handleCollision should ideally adjust player.x and player.y directly.
+        // If handleCollision didn't resolve, update position (though it should always resolve if checkCollision is true)
+         // Re-check if a reset or level change happened
+         if (gameWon || levels[currentLevelIndex] !== level) return;
+
+         // Apply final velocity adjustments from input/gravity *after* collision resolution attempt
+         player.x += player.vx;
+         player.y += player.vy;
+
+
+        // --- Keep Player within reasonable vertical bounds (prevent falling forever) ---
+        if (player.y > canvas.height * 3) { // Fall death
+             resetLevel();
+             return;
+        }
+
+        // --- Update Camera ---
+        // Simple centered camera with limits
+        camera.x = player.x - canvas.width / 2;
+        camera.y = player.y - canvas.height / 2 - 100; // Look slightly ahead vertically
+
+        // Clamp camera (optional, prevents seeing edges of the world)
+         // camera.x = Math.max(0, camera.x); // Prevent camera moving left of world start
+         // camera.y = Math.max(0, camera.y); // Prevent camera moving above world top
+         // Add logic for right/bottom limits based on level size if needed
+
+    }
+
+    // --- Drawing ---
+    function draw() {
+        // Clear canvas
+        ctx.fillStyle = '#87CEEB'; // Sky Blue
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Apply camera transform
+        ctx.save();
+        ctx.translate(-camera.x, -camera.y);
+
+        // Draw level elements
+        const level = levels[currentLevelIndex];
+        if (!level) return; // Should not happen if gameWon is handled correctly
+
+        level.elements.forEach(element => {
+            ctx.fillStyle = element.color || 'grey';
+            if (element.type === 'platform' || element.type === 'moving_platform') {
+                ctx.fillRect(element.x, element.y, element.width, element.height);
+            } else if (element.type === 'hazard') {
+                 // Draw simple triangles for spikes/hazard
+                 ctx.fillStyle = element.color || 'black';
+                 const spikeCount = Math.floor(element.width / (TILE_SIZE / 2));
+                 const spikeBase = element.width / spikeCount;
+                 const spikeHeight = element.height;
+                 for(let i=0; i<spikeCount; i++){
+                     ctx.beginPath();
+                     ctx.moveTo(element.x + i * spikeBase, element.y + spikeHeight);
+                     ctx.lineTo(element.x + (i + 0.5) * spikeBase, element.y);
+                     ctx.lineTo(element.x + (i + 1) * spikeBase, element.y + spikeHeight);
+                     ctx.closePath();
+                     ctx.fill();
+                 }
+            } else if (element.type === 'goal') {
+                // Draw flag: pole + triangle
+                const poleX = element.x + element.width / 4;
+                const poleY = element.y + element.height / 4;
+                const poleHeight = element.height * 0.75;
+                const flagSize = element.width * 0.5;
+
+                ctx.fillStyle = '#666'; // Pole color
+                ctx.fillRect(poleX, poleY, 5, poleHeight); // Pole
+
+                ctx.fillStyle = 'red'; // Flag color
+                ctx.beginPath();
+                ctx.moveTo(poleX + 5, poleY); // Attach point
+                ctx.lineTo(poleX + 5 + flagSize, poleY + flagSize / 2); // Tip
+                ctx.lineTo(poleX + 5, poleY + flagSize); // Bottom corner
+                ctx.closePath();
+                ctx.fill();
+            }
+        });
+
+        // Draw Player
+        ctx.fillStyle = player.color;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'black'; // Outline
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+
+        // Restore camera transform
+        ctx.restore();
+
+        // --- Draw UI (fixed position) ---
+        if (gameWon) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '40px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('You Completed All Levels!', canvas.width / 2, canvas.height / 2 - 20);
+             ctx.font = '20px Arial';
+            ctx.fillText('Thank you for playing!', canvas.width / 2, canvas.height / 2 + 20);
+        } else {
+            // Update level display text
+            levelDisplay.textContent = `Level: ${currentLevelIndex + 1} / ${TOTAL_LEVELS_PLANNED}`;
+        }
+    }
+
+    // --- Level Management ---
+    function loadLevel(levelIndex) {
+        if (levelIndex >= levels.length) {
+            gameWon = true;
+            console.log("Game Complete!");
+             levelDisplay.textContent = `Completed ${levels.length} levels!`;
+             skipButton.disabled = true;
+            return;
+        }
+         gameWon = false;
+         skipButton.disabled = false;
+        currentLevelIndex = levelIndex;
+        const level = levels[currentLevelIndex];
+
+        // Reset player position and physics state
+        player.x = level.playerStart.x;
+        player.y = level.playerStart.y;
+        player.vx = 0;
+        player.vy = 0;
+        player.onGround = false;
+
+         // Reset moving platforms to initial state for the current level
+        level.elements.forEach(element => {
+            if (element.type === 'moving_platform') {
+                element.x = element.initialX !== undefined ? element.initialX : element.x; // Use initialX if defined
+                element.currentOffset = 0;
+                 // Reset speed direction if needed (might depend on design)
+                 // element.speed = Math.abs(element.speed); // Example: always start moving right/down
+            }
+        });
+
+
+        // Reset camera
+        camera.x = player.x - canvas.width / 2;
+        camera.y = player.y - canvas.height / 2 - 100;
+
+        console.log(`Loading Level ${currentLevelIndex + 1}`);
+        levelDisplay.textContent = `Level: ${currentLevelIndex + 1} / ${TOTAL_LEVELS_PLANNED}`;
+    }
+
+    function resetLevel() {
+        console.log("Resetting Level");
+        loadLevel(currentLevelIndex); // Reload the current level
+    }
+
+    function nextLevel() {
+        console.log("Level Complete!");
+        loadLevel(currentLevelIndex + 1);
+    }
+
+    // --- Skip Button ---
+    skipButton.addEventListener('click', () => {
+        if (!gameWon) {
+            console.log("Skipping Level");
+            nextLevel();
+        }
+    });
+
+    // --- Game Loop ---
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // --- Start Game ---
+    loadLevel(0); // Load the first level
+    gameLoop(); // Start the loop
+
+</script>
+
+</body>
+</html>

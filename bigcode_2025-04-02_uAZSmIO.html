@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Ball Platformer - 50 Levels</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Light Sky Blue */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+
+        #game-window {
+            width: 800px;
+            height: 600px;
+            overflow: hidden;
+            position: relative;
+            background-color: #87CEEB; /* Sky blue background */
+            border: 2px solid #333;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        #game-world {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: transform 0.2s linear; /* Smooth camera movement */
+        }
+
+        .platform {
+            position: absolute;
+            background-color: #8B4513; /* Saddle Brown */
+            border: 1px solid #4a2a0c;
+        }
+
+        .hazard {
+            position: absolute;
+            background-color: #FF4500; /* OrangeRed */
+            border: 1px solid #cc3700;
+        }
+
+        .goal {
+            position: absolute;
+            background-color: transparent; /* Goal is invisible until styled */
+            /* Use emoji for flag */
+            font-size: 24px; /* Adjust size as needed */
+            text-align: center;
+        }
+
+        #player {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: #FF0000; /* Red */
+            border-radius: 50%;
+            border: 1px solid #a00000;
+            box-shadow: inset -3px -3px 5px rgba(0,0,0,0.3);
+        }
+
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 16px;
+            z-index: 100;
+        }
+
+         #skip-button {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 100;
+         }
+         #skip-button:hover {
+             background-color: #45a049;
+         }
+
+        .level-complete-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 128, 0, 0.8);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            font-size: 24px;
+            text-align: center;
+            z-index: 200;
+            display: none; /* Hidden by default */
+        }
+         .game-over-message {
+             position: absolute;
+             top: 50%;
+             left: 50%;
+             transform: translate(-50%, -50%);
+             background-color: rgba(200, 0, 0, 0.8);
+             color: white;
+             padding: 30px;
+             border-radius: 10px;
+             font-size: 24px;
+             text-align: center;
+             z-index: 200;
+             display: none; /* Hidden by default */
+         }
+
+    </style>
+</head>
+<body>
+    <div id="game-window">
+        <div id="game-world">
+            <!-- Level elements will be dynamically added here -->
+            <div id="player"></div>
+        </div>
+        <div id="ui">
+            Level: <span id="level-display">1</span> | Press 'R' to Reset
+        </div>
+        <button id="skip-button">Skip Level</button>
+        <div id="level-complete" class="level-complete-message">
+            Level Complete!<br>Loading next level...
+        </div>
+        <div id="game-over" class="game-over-message">
+            Game Over!<br>You completed all levels!
+        </div>
+    </div>
+
+    <script>
+        const gameWindow = document.getElementById('game-window');
+        const gameWorld = document.getElementById('game-world');
+        const player = document.getElementById('player');
+        const levelDisplay = document.getElementById('level-display');
+        const skipButton = document.getElementById('skip-button');
+        const levelCompleteMessage = document.getElementById('level-complete');
+        const gameOverMessage = document.getElementById('game-over');
+
+        const PLAYER_SIZE = 30;
+        const GRAVITY = 0.8;
+        const MOVE_SPEED = 5;
+        const JUMP_FORCE = 14;
+        const FRICTION = 0.8;
+        const MAX_FALL_SPEED = 15;
+        const CAMERA_SMOOTH_FACTOR = 0.1; // Not used with transform translate
+
+        let playerState = {
+            x: 100,
+            y: 100,
+            vx: 0,
+            vy: 0,
+            grounded: false,
+            canJump: true
+        };
+
+        let keys = {
+            a: false,
+            d: false,
+            w: false, // Or space
+            space: false
+        };
+
+        let currentLevelIndex = 0;
+        let levelElements = []; // To hold refs to platforms, hazards, goal
+        let cameraX = 0;
+        let gameActive = true;
+
+        // --- LEVEL DATA ---
+        // Define all 50 levels here.
+        // Format: { start: {x, y}, goal: {x, y, w, h}, platforms: [{x, y, w, h}, ...], hazards: [{x, y, w, h}, ...] }
+        // Coordinates are relative to the game world.
+        const levels = [
+            // World 1 (Levels 1-10) - Introduction
+            { // 1: Simple Start
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 500, w: 40, h: 40 },
+                platforms: [{ x: 0, y: 550, w: 800, h: 50 }], hazards: []
+            },
+            { // 2: First Jump
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 400, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 300, h: 50 }, { x: 400, y: 500, w: 150, h: 20 }, { x: 650, y: 450, w: 150, h: 150 } ], hazards: []
+            },
+             { // 3: Small Hazard
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 500, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 800, h: 50 } ], hazards: [ {x: 300, y: 530, w: 50, h: 20} ]
+            },
+            { // 4: Staircase Up
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 200, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 150, h: 50 },
+                    { x: 150, y: 500, w: 100, h: 100 },
+                    { x: 250, y: 450, w: 100, h: 150 },
+                    { x: 350, y: 400, w: 100, h: 200 },
+                    { x: 550, y: 350, w: 250, h: 250 }
+                ], hazards: []
+            },
+            { // 5: Gap Jump with Hazard
+                start: { x: 50, y: 450 }, goal: { x: 700, y: 450, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 500, w: 200, h: 100 }, { x: 450, y: 500, w: 350, h: 100 } ],
+                hazards: [ {x: 250, y: 580, w: 150, h: 20} ]
+            },
+            { // 6: Drop Down
+                start: { x: 100, y: 100 }, goal: { x: 700, y: 500, w: 40, h: 40 },
+                platforms: [ { x: 50, y: 150, w: 200, h: 30 }, { x: 400, y: 350, w: 150, h: 30 }, { x: 0, y: 550, w: 800, h: 50 } ], hazards: []
+            },
+            { // 7: Basic Bounce Pad Idea (conceptual - simple high platform)
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 100, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 200, h: 50 }, { x: 200, y: 500, w: 100, h: 100 }, { x: 650, y: 150, w: 150, h: 450 } ], hazards: [ {x: 400, y: 580, w: 100, h: 20} ]
+            },
+            { // 8: Precision Jump
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 500, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 100, h: 50 }, { x: 200, y: 550, w: 50, h: 50 }, { x: 350, y: 550, w: 50, h: 50 }, { x: 500, y: 550, w: 50, h: 50 }, { x: 650, y: 550, w: 150, h: 50 } ], hazards: []
+            },
+             { // 9: Long level start
+                start: { x: 50, y: 500 }, goal: { x: 1500, y: 500, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 1600, h: 50 } ], hazards: [ {x: 300, y: 530, w: 50, h: 20}, {x: 800, y: 530, w: 50, h: 20}, {x: 1200, y: 530, w: 50, h: 20} ]
+            },
+            { // 10: World 1 Boss (conceptual - harder jumps/hazards)
+                start: { x: 50, y: 100 }, goal: { x: 700, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 150, h: 30 },
+                    { x: 300, y: 250, w: 100, h: 30 },
+                    { x: 50, y: 400, w: 100, h: 30 },
+                    { x: 400, y: 500, w: 100, h: 30 },
+                    { x: 650, y: 550, w: 150, h: 50 }
+                ], hazards: [ {x: 0, y: 580, w: 800, h: 20} ] // Lava floor
+            },
+            // World 2 (Levels 11-20) - More Hazards, Longer Levels
+             { // 11: Intro moving platforms (conceptual - static for now)
+                start: { x: 50, y: 100 }, goal: { x: 1400, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 150, h: 30 },
+                    { x: 400, y: 150, w: 150, h: 30 }, // Gap 1
+                    { x: 800, y: 150, w: 150, h: 30 }, // Gap 2
+                    { x: 1350, y: 150, w: 150, h: 30 }
+                ], hazards: [ {x: 0, y: 580, w: 1500, h: 20} ]
+            },
+            { // 12: Verticality
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 150, h: 50 }, { x: 150, y: 450, w: 30, h: 150 },
+                    { x: 300, y: 350, w: 150, h: 30 }, { x: 450, y: 250, w: 30, h: 130 },
+                    { x: 600, y: 150, w: 200, h: 30 }
+                ], hazards: []
+            },
+            { // 13: Hazard Gauntlet
+                start: { x: 50, y: 500 }, goal: { x: 1100, y: 500, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 1200, h: 50 } ],
+                hazards: [
+                    {x: 200, y: 530, w: 50, h: 20}, {x: 400, y: 500, w: 30, h: 50},
+                    {x: 600, y: 530, w: 50, h: 20}, {x: 800, y: 500, w: 30, h: 50},
+                    {x: 1000, y: 530, w: 50, h: 20}
+                ]
+            },
+            { // 14: Bouncy floor simulation (higher jump needed)
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 200, h: 50 },
+                    // Big gap requires high jump
+                    { x: 600, y: 150, w: 200, h: 450 } // Tall platform to land on
+                ], hazards: [ {x: 200, y: 580, w: 400, h: 20} ]
+            },
+             { // 15: Maze-like structure (simple)
+                start: { x: 750, y: 100 }, goal: { x: 50, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 700, y: 150, w: 100, h: 450 }, // Start platform
+                    { x: 400, y: 150, w: 300, h: 30 },
+                    { x: 400, y: 150, w: 30, h: 300 }, // Wall down
+                    { x: 100, y: 420, w: 330, h: 30 }, // Mid floor
+                    { x: 100, y: 250, w: 30, h: 170 }, // Wall up
+                     { x: 100, y: 250, w: 200, h: 30 },
+                    { x: 0, y: 550, w: 430, h: 50 }, // Bottom floor left
+                     { x: 400, y: 550, w: 400, h: 50 } // Bottom floor right
+                ], hazards: []
+            },
+            { // 16: Longer Jump Sequences
+                start: { x: 50, y: 100 }, goal: { x: 1550, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 100, h: 30 }, { x: 250, y: 150, w: 100, h: 30 },
+                    { x: 500, y: 150, w: 100, h: 30 }, { x: 750, y: 150, w: 100, h: 30 },
+                    { x: 1000, y: 150, w: 100, h: 30 }, { x: 1250, y: 150, w: 100, h: 30 },
+                    { x: 1500, y: 150, w: 100, h: 30 },
+                ], hazards: [ {x: 0, y: 580, w: 1600, h: 20} ]
+            },
+             { // 17: Tight passages
+                start: { x: 50, y: 100 }, goal: { x: 750, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 800, h: 30 }, // Ceiling
+                    { x: 0, y: 550, w: 800, h: 50 }, // Floor
+                    { x: 200, y: 250, w: 30, h: 200 }, // Obstacle 1
+                    { x: 500, y: 350, w: 30, h: 200 }, // Obstacle 2
+                    { x: 700, y: 180, w: 100, h: 370 }, // End wall
+                ], hazards: [ {x: 300, y: 530, w: 100, h: 20} ]
+            },
+            { // 18: Rise and Fall
+                start: { x: 50, y: 500 }, goal: { x: 1150, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 150, h: 50 },
+                    { x: 150, y: 450, w: 100, h: 150 }, { x: 250, y: 350, w: 100, h: 250 },
+                    { x: 350, y: 250, w: 100, h: 350 }, // Peak
+                    { x: 700, y: 350, w: 100, h: 250 }, { x: 800, y: 450, w: 100, h: 150 },
+                    { x: 900, y: 550, w: 300, h: 50 }
+                ], hazards: [ {x: 450, y: 580, w: 250, h: 20} ]
+            },
+             { // 19: Under and Over
+                start: { x: 50, y: 500 }, goal: { x: 1150, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 400, h: 50 }, // Start lower
+                    { x: 370, y: 400, w: 30, h: 150 }, // Wall up
+                    { x: 370, y: 400, w: 400, h: 30 }, // Mid platform
+                    { x: 770, y: 400, w: 30, h: 200 }, // Wall down slightly
+                    { x: 500, y: 550, w: 300, h: 50 }, // Lower path end
+                    { x: 770, y: 150, w: 430, h: 30 }, // Upper path
+                    { x: 1100, y: 150, w: 100, h: 300 }, // End platform area
+                ], hazards: [ { x: 550, y: 530, w: 50, h: 20} ]
+            },
+            { // 20: World 2 Boss (Longer, more hazards)
+                start: { x: 50, y: 100 }, goal: { x: 1950, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 200, h: 30 },
+                    { x: 300, y: 250, w: 100, h: 30 }, { x: 500, y: 350, w: 100, h: 30 },
+                    { x: 700, y: 450, w: 100, h: 30 }, { x: 900, y: 550, w: 1100, h: 50 }, // Long floor
+                    { x: 1200, y: 400, w: 100, h: 150 }, // Obstacle on floor
+                    { x: 1600, y: 400, w: 100, h: 150 }, // Obstacle 2
+                    { x: 1900, y: 500, w: 100, h: 50 } // Goal platform lower
+                ], hazards: [ { x: 950, y: 530, w: 100, h: 20 }, { x: 1400, y: 530, w: 100, h: 20 }, { x: 1800, y: 530, w: 100, h: 20 }]
+            },
+
+            // World 3 (Levels 21-30) - Complex Paths, Timing
+            { // 21: Simple world 3 start
+                start: { x: 50, y: 500 }, goal: { x: 1500, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 200, h: 50 },
+                    { x: 300, y: 450, w: 100, h: 30 },
+                    { x: 500, y: 350, w: 100, h: 30 },
+                    { x: 700, y: 250, w: 100, h: 30 },
+                    { x: 900, y: 150, w: 650, h: 30 }, // Long top platform
+                ], hazards: [ {x: 0, y: 580, w: 900, h: 20} ]
+            },
+            { // 22: Drop and Weave
+                start: { x: 100, y: 100 }, goal: { x: 100, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 50, y: 150, w: 200, h: 30 }, // Top start
+                    { x: 400, y: 250, w: 200, h: 30 }, // Mid right
+                    { x: 50, y: 350, w: 200, h: 30 }, // Mid left
+                    { x: 400, y: 450, w: 200, h: 30 }, // Lower right
+                    { x: 0, y: 550, w: 200, h: 50 }, // Bottom goal area
+                ], hazards: [
+                    {x: 300, y: 200, w: 30, h: 100}, {x: 250, y: 400, w: 30, h: 100}
+                ]
+            },
+            { // 23: Multi-path (simple)
+                start: { x: 50, y: 100 }, goal: { x: 1150, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 1200, h: 30 }, // High path (ceiling)
+                    { x: 0, y: 550, w: 1200, h: 50 }, // Low path (floor)
+                    { x: 300, y: 180, w: 30, h: 200 }, // Obstacle high
+                    { x: 700, y: 350, w: 30, h: 200 }, // Obstacle low
+                    { x: 1100, y: 180, w: 100, h: 370 } // End goal area connects both
+                ], hazards: [ {x: 500, y: 530, w: 100, h: 20} ]
+            },
+             { // 24: Wall Jumps (Conceptual - need precise physics)
+                start: { x: 50, y: 500 }, goal: { x: 750, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 100, h: 50 }, // Start
+                    { x: 200, y: 150, w: 30, h: 450 }, // Wall 1
+                    { x: 400, y: 150, w: 30, h: 450 }, // Wall 2
+                    { x: 600, y: 150, w: 30, h: 450 }, // Wall 3
+                    { x: 700, y: 150, w: 100, h: 30 } // Goal plat
+                ], hazards: [ {x: 0, y: 580, w: 800, h: 20} ]
+            },
+            { // 25: Hazard Drop Zone
+                start: { x: 100, y: 100 }, goal: { x: 700, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 50, y: 150, w: 700, h: 30 }, // Ceiling plat
+                    { x: 650, y: 550, w: 150, h: 50 } // Goal plat
+                ], hazards: [
+                    {x: 150, y: 180, w: 30, h: 50}, {x: 300, y: 180, w: 30, h: 50},
+                    {x: 450, y: 180, w: 30, h: 50}, {x: 600, y: 180, w: 30, h: 50},
+                    {x: 100, y: 580, w: 500, h: 20} // Bottom hazard floor
+                ]
+            },
+            { // 26: Long Level with Checkpoints (Conceptual)
+                start: { x: 50, y: 500 }, goal: { x: 2350, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 800, h: 50 }, // Section 1
+                    { x: 900, y: 550, w: 800, h: 50 }, // Section 2
+                    { x: 1800, y: 550, w: 600, h: 50 }, // Section 3
+                    // Checkpoint platforms (visual only for now)
+                    { x: 750, y: 500, w: 50, h: 50, type: 'checkpoint' }, // Style differently later
+                    { x: 1650, y: 500, w: 50, h: 50, type: 'checkpoint' }
+                ], hazards: [
+                     {x: 300, y: 530, w: 100, h: 20}, {x: 1100, y: 530, w: 100, h: 20}, {x: 2000, y: 530, w: 100, h: 20}
+                ]
+            },
+             { // 27: The Pillar Gauntlet
+                start: { x: 50, y: 500 }, goal: { x: 1150, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 100, h: 50 }, // Start
+                    { x: 200, y: 450, w: 50, h: 150 }, { x: 350, y: 350, w: 50, h: 250 },
+                    { x: 500, y: 450, w: 50, h: 150 }, { x: 650, y: 350, w: 50, h: 250 },
+                    { x: 800, y: 450, w: 50, h: 150 }, { x: 950, y: 350, w: 50, h: 250 },
+                    { x: 1100, y: 550, w: 100, h: 50 } // End
+                ], hazards: [ {x: 0, y: 580, w: 1200, h: 20} ]
+            },
+            { // 28: Conveyor Belts (Conceptual - Use Friction)
+                start: { x: 50, y: 100 }, goal: { x: 1550, y: 100, w: 40, h: 40 },
+                 platforms: [
+                    { x: 0, y: 150, w: 300, h: 30 }, // Normal
+                    { x: 400, y: 150, w: 300, h: 30, friction: 1.1 }, // Faster right (visual cue needed)
+                    { x: 800, y: 150, w: 300, h: 30, friction: 0.7 }, // Slower right (visual cue needed)
+                    { x: 1200, y: 150, w: 400, h: 30 } // Normal end
+                ], hazards: [ {x: 0, y: 580, w: 1600, h: 20} ]
+            },
+            { // 29: Claustrophobia
+                start: { x: 50, y: 280 }, goal: { x: 1150, y: 280, w: 40, h: 40 },
+                 platforms: [
+                    { x: 0, y: 330, w: 1200, h: 30 }, // Floor
+                    { x: 0, y: 230, w: 1200, h: 30 }, // Ceiling (low)
+                    { x: 200, y: 260, w: 50, h: 40 }, // Low obstacle 1
+                    { x: 500, y: 260, w: 50, h: 40 }, // Low obstacle 2
+                    { x: 800, y: 260, w: 50, h: 40 }, // Low obstacle 3
+                ], hazards: [ { x: 1000, y: 310, w: 100, h: 20} ]
+            },
+            { // 30: World 3 Boss (Timing, Precision)
+                start: { x: 50, y: 100 }, goal: { x: 1350, y: 500, w: 40, h: 40 },
+                 platforms: [
+                    { x: 0, y: 150, w: 100, h: 30 }, { x: 200, y: 250, w: 100, h: 30 },
+                    { x: 300, y: 350, w: 100, h: 30 }, { x: 400, y: 450, w: 100, h: 30 },
+                    { x: 500, y: 550, w: 100, h: 50 },
+                    // Gap
+                    { x: 700, y: 550, w: 100, h: 50 }, { x: 800, y: 450, w: 100, h: 30 },
+                    { x: 900, y: 350, w: 100, h: 30 }, { x: 1000, y: 250, w: 100, h: 30 },
+                    { x: 1100, y: 150, w: 100, h: 30 },
+                    // Final jump
+                    { x: 1300, y: 550, w: 100, h: 50 } // Goal platform
+                 ], hazards: [ {x: 0, y: 580, w: 1400, h: 20} ]
+            },
+
+            // World 4 (Levels 31-40) - Advanced Mechanics (Conceptual), Difficulty Spike
+             { // 31: Rising Hazard Floor
+                start: { x: 50, y: 100 }, goal: { x: 750, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 100, h: 30 }, { x: 200, y: 200, w: 100, h: 30 },
+                    { x: 350, y: 180, w: 100, h: 30 }, { x: 500, y: 220, w: 100, h: 30 },
+                    { x: 700, y: 150, w: 100, h: 30 },
+                    // Conceptual: Hazard floor rises (static for now)
+                ], hazards: [ {x: 0, y: 500, w: 800, h: 100, type: 'rising'} ] // Style differently later
+            },
+             { // 32: Key/Door Puzzle (Conceptual - goal appears later)
+                start: { x: 50, y: 500 }, goal: { x: 750, y: 100, w: 40, h: 40, initiallyHidden: true }, // Goal hidden
+                platforms: [
+                    { x: 0, y: 550, w: 800, h: 50 },
+                    { x: 300, y: 400, w: 200, h: 30 }, // Key platform (conceptual)
+                    { x: 700, y: 150, w: 100, h: 450 }, // Area near goal
+                     { x: 400, y: 150, w: 300, h: 30 }, // Path to goal
+                ], hazards: [], key: { x: 375, y: 350, w: 20, h: 20 } // Add key element
+            },
+            { // 33: Crushing Walls (Conceptual - static for now)
+                start: { x: 50, y: 500 }, goal: { x: 750, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 800, h: 50 },
+                    // Narrow gaps between 'crushers'
+                    { x: 200, y: 100, w: 50, h: 450 }, { x: 300, y: 100, w: 50, h: 450 }, // Gap 1
+                    { x: 450, y: 100, w: 50, h: 450 }, { x: 550, y: 100, w: 50, h: 450 }, // Gap 2
+                    { x: 700, y: 100, w: 100, h: 450 } // End area wall
+                ], hazards: []
+            },
+            { // 34: Zero Gravity Zone (Conceptual - lower gravity)
+                start: { x: 50, y: 500 }, goal: { x: 1150, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 1200, h: 50 },
+                    { x: 200, y: 400, w: 100, h: 30 }, // Platforms to float between
+                    { x: 500, y: 300, w: 100, h: 30 },
+                    { x: 800, y: 200, w: 100, h: 30 },
+                    { x: 1100, y: 150, w: 100, h: 30 }, // Goal plat
+                ], hazards: [], gravityMultiplier: 0.5 // Lower gravity in this level
+            },
+            { // 35: Slippery Ice Platforms (Conceptual - low friction)
+                start: { x: 50, y: 100 }, goal: { x: 1150, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 200, h: 30, friction: 0.98 }, // Ice - very low friction
+                    { x: 300, y: 150, w: 200, h: 30, friction: 0.98 },
+                    { x: 600, y: 150, w: 200, h: 30, friction: 0.98 },
+                    { x: 900, y: 150, w: 300, h: 30, friction: 0.98 }, // Goal on ice
+                ], hazards: [ {x: 0, y: 580, w: 1200, h: 20} ]
+            },
+            { // 36: Dark Level (Conceptual - limited visibility)
+                start: { x: 50, y: 500 }, goal: { x: 750, y: 500, w: 40, h: 40 },
+                 platforms: [ { x: 0, y: 550, w: 800, h: 50 } ],
+                 hazards: [ {x: 300, y: 530, w: 50, h: 20} ], isDark: true // Flag for dark effect
+            },
+            { // 37: Enemy Gauntlet (Conceptual - static hazards for now)
+                start: { x: 50, y: 500 }, goal: { x: 1550, y: 500, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 1600, h: 50 } ],
+                hazards: [ // Represent enemies as hazards
+                    {x: 200, y: 520, w: 30, h: 30}, {x: 400, y: 520, w: 30, h: 30},
+                    {x: 600, y: 520, w: 30, h: 30}, {x: 800, y: 520, w: 30, h: 30},
+                    {x: 1000, y: 520, w: 30, h: 30}, {x: 1200, y: 520, w: 30, h: 30},
+                    {x: 1400, y: 520, w: 30, h: 30}
+                ]
+            },
+            { // 38: Precision Drop
+                start: { x: 100, y: 100 }, goal: { x: 400, y: 500, w: 40, h: 40 },
+                 platforms: [
+                    { x: 50, y: 150, w: 100, h: 30 }, // Start plat
+                    // Series of small platforms to drop onto
+                    { x: 200, y: 250, w: 50, h: 20 },
+                    { x: 300, y: 350, w: 50, h: 20 },
+                    { x: 400, y: 450, w: 50, h: 20 },
+                    { x: 375, y: 550, w: 100, h: 50 } // Goal plat
+                 ], hazards: [ { x: 0, y: 580, w: 800, h: 20 } ]
+            },
+             { // 39: Teleporters (Conceptual - instant move)
+                start: { x: 50, y: 500 }, goal: { x: 750, y: 100, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 550, w: 200, h: 50 }, // Start area
+                    { x: 700, y: 150, w: 100, h: 30 }, // Goal area
+                    { x: 400, y: 300, w: 50, h: 50 } // Isolated platform
+                ], hazards: [],
+                teleporters: [ // Define pairs
+                    { x: 150, y: 500, w: 30, h: 30, targetX: 410, targetY: 250 }, // From start to isolated
+                    { x: 410, y: 250, w: 30, h: 30, targetX: 710, targetY: 100 } // From isolated to goal
+                ]
+            },
+            { // 40: World 4 Boss (Combine Mechanics)
+                start: { x: 50, y: 100 }, goal: { x: 1950, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 200, h: 30, friction: 0.98 }, // Ice start
+                    { x: 300, y: 250, w: 100, h: 30 }, // Normal jump
+                    { x: 500, y: 350, w: 100, h: 30 },
+                    { x: 700, y: 450, w: 100, h: 30 },
+                    { x: 900, y: 550, w: 1100, h: 50 }, // Long floor
+                     // Hazard obstacles on floor
+                     { x: 1200, y: 400, w: 100, h: 150 },
+                     { x: 1600, y: 400, w: 100, h: 150 },
+                     { x: 1900, y: 500, w: 100, h: 50 } // Goal lower
+                 ], hazards: [
+                     {x: 1000, y: 520, w: 30, h: 30}, {x: 1400, y: 520, w: 30, h: 30},
+                     {x: 1800, y: 520, w: 30, h: 30},
+                     {x: 200, y: 580, w: 500, h: 20} // Bottom hazard pit
+                 ], gravityMultiplier: 0.8 // Slightly floaty
+            },
+
+            // World 5 (Levels 41-50) - Extreme Difficulty, Final Challenges
+             { // 41: Kaizo Trap Intro (Hazard appears) - Conceptual
+                start: { x: 50, y: 500 }, goal: { x: 700, y: 500, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 800, h: 50 } ],
+                hazards: [ {x: 680, y: 500, w: 20, h: 50, type: 'hidden_trigger'} ] // Hidden until near goal
+            },
+            { // 42: Minimalist Hell
+                start: { x: 50, y: 100 }, goal: { x: 1550, y: 100, w: 40, h: 40 },
+                 platforms: [ // Tiny platforms, long jumps
+                    { x: 0, y: 150, w: 40, h: 20 }, { x: 250, y: 150, w: 40, h: 20 },
+                    { x: 500, y: 150, w: 40, h: 20 }, { x: 750, y: 150, w: 40, h: 20 },
+                    { x: 1000, y: 150, w: 40, h: 20 }, { x: 1250, y: 150, w: 40, h: 20 },
+                    { x: 1530, y: 150, w: 40, h: 20 }, // Goal plat
+                 ], hazards: [ {x: 0, y: 580, w: 1600, h: 20} ]
+            },
+            { // 43: Speed Run Challenge (Conceptual timer)
+                start: { x: 50, y: 500 }, goal: { x: 1500, y: 100, w: 40, h: 40 },
+                 platforms: [
+                    { x: 0, y: 550, w: 200, h: 50 }, { x: 300, y: 450, w: 100, h: 30 },
+                    { x: 500, y: 350, w: 100, h: 30 }, { x: 700, y: 250, w: 100, h: 30 },
+                    { x: 900, y: 150, w: 650, h: 30 },
+                 ], hazards: [ {x: 0, y: 580, w: 900, h: 20} ], timeLimit: 15 // Seconds
+            },
+             { // 44: Upside Down Section (Conceptual - flip gravity)
+                start: { x: 50, y: 100 }, goal: { x: 1150, y: 500, w: 40, h: 40 },
+                 platforms: [
+                     { x: 0, y: 150, w: 400, h: 30 }, // Normal start plat
+                     { x: 500, y: 400, w: 700, h: 30 }, // Flipped 'floor' (ceiling)
+                     { x: 500, y: 100, w: 30, h: 300 }, // Entry wall for flip zone
+                     { x: 1150, y: 100, w: 30, h: 400 }, // Exit wall
+                     { x: 1100, y: 550, w: 100, h: 50 } // Goal plat normal
+                 ], hazards: [], gravityZones: [{x: 500, y: 100, w: 700, h: 330, gravityMultiplier: -1}] // Flip zone
+            },
+            { // 45: Final Hazard Gauntlet
+                start: { x: 50, y: 500 }, goal: { x: 1950, y: 500, w: 40, h: 40 },
+                platforms: [ { x: 0, y: 550, w: 2000, h: 50 } ],
+                hazards: [ // Dense hazards
+                    {x: 150, y: 500, w: 30, h: 50}, {x: 250, y: 530, w: 50, h: 20},
+                    {x: 400, y: 500, w: 30, h: 50}, {x: 500, y: 530, w: 50, h: 20},
+                    {x: 650, y: 500, w: 30, h: 50}, {x: 750, y: 530, w: 50, h: 20},
+                    {x: 900, y: 500, w: 30, h: 50}, {x: 1000, y: 530, w: 50, h: 20},
+                    {x: 1150, y: 500, w: 30, h: 50}, {x: 1250, y: 530, w: 50, h: 20},
+                    {x: 1400, y: 500, w: 30, h: 50}, {x: 1500, y: 530, w: 50, h: 20},
+                    {x: 1650, y: 500, w: 30, h: 50}, {x: 1750, y: 530, w: 50, h: 20},
+                    {x: 1900, y: 500, w: 30, h: 50},
+                ]
+            },
+             { // 46: The Ascent
+                start: { x: 50, y: 1100 }, goal: { x: 400, y: 100, w: 40, h: 40 }, // Very tall level
+                platforms: [
+                    { x: 0, y: 1150, w: 150, h: 50 }, // Bottom start
+                    // Series of small platforms going up
+                    { x: 200, y: 1050, w: 50, h: 20 }, { x: 100, y: 950, w: 50, h: 20 },
+                    { x: 250, y: 850, w: 50, h: 20 }, { x: 150, y: 750, w: 50, h: 20 },
+                    { x: 300, y: 650, w: 50, h: 20 }, { x: 200, y: 550, w: 50, h: 20 },
+                    { x: 350, y: 450, w: 50, h: 20 }, { x: 250, y: 350, w: 50, h: 20 },
+                    { x: 400, y: 250, w: 50, h: 20 },
+                    { x: 350, y: 150, w: 100, h: 30 } // Top goal plat
+                ], hazards: [ { x: 500, y: 0, w: 300, h: 1200 } ] // Wall on right
+            },
+            { // 47: The Descent Reversed (using flip gravity)
+                start: { x: 400, y: 100 }, goal: { x: 50, y: 1100, w: 40, h: 40 }, // Start high, goal low
+                platforms: [
+                     // Copy platforms from 46, but use flip gravity
+                     { x: 350, y: 150, w: 100, h: 30 }, // Top start plat (becomes ceiling)
+                    { x: 400, y: 250, w: 50, h: 20 }, { x: 250, y: 350, w: 50, h: 20 },
+                    { x: 350, y: 450, w: 50, h: 20 }, { x: 200, y: 550, w: 50, h: 20 },
+                    { x: 300, y: 650, w: 50, h: 20 }, { x: 150, y: 750, w: 50, h: 20 },
+                    { x: 250, y: 850, w: 50, h: 20 }, { x: 100, y: 950, w: 50, h: 20 },
+                    { x: 200, y: 1050, w: 50, h: 20 },
+                    { x: 0, y: 1150, w: 150, h: 50 } // Bottom goal plat (becomes floor)
+                 ], hazards: [ { x: 500, y: 0, w: 300, h: 1200 } ], gravityMultiplier: -1 // Flipped
+            },
+            { // 48: Combined Mechanics Madness
+                start: { x: 50, y: 100 }, goal: { x: 1950, y: 500, w: 40, h: 40 },
+                platforms: [
+                    { x: 0, y: 150, w: 200, h: 30, friction: 0.98 }, // Ice
+                    { x: 300, y: 250, w: 100, h: 30 }, // Jump
+                    // Small plats over hazard
+                    { x: 500, y: 400, w: 30, h: 20 }, { x: 600, y: 400, w: 30, h: 20 },
+                    { x: 700, y: 400, w: 30, h: 20 },
+                    // Drop section with tight passage
+                    { x: 800, y: 150, w: 30, h: 300 }, { x: 900, y: 150, w: 30, h: 300 },
+                    { x: 800, y: 550, w: 1200, h: 50 }, // Floor after drop
+                     { x: 1900, y: 500, w: 100, h: 50 } // Goal lower
+                 ], hazards: [
+                     { x: 450, y: 580, w: 300, h: 20 }, // Hazard under small plats
+                     {x: 1000, y: 520, w: 30, h: 30}, {x: 1200, y: 520, w: 30, h: 30},
+                     {x: 1400, y: 520, w: 30, h: 30}, {x: 1600, y: 520, w: 30, h: 30},
+                     {x: 1800, y: 520, w: 30, h: 30}
+                 ], gravityMultiplier: 0.9 // Slightly floaty
+            },
+            { // 49: The Final Trial (Very Long)
+                start: { x: 50, y: 500 }, goal: { x: 3950, y: 500, w: 40, h: 40 },
+                platforms: [
+                    // Section 1: Jumps
+                    { x: 0, y: 550, w: 100, h: 50 }, { x: 250, y: 500, w: 100, h: 30 },
+                    { x: 500, y: 450, w: 100, h: 30 }, { x: 750, y: 400, w: 100, h: 30 },
+                    // Section 2: Hazard Weave Floor
+                    { x: 900, y: 550, w: 1000, h: 50 },
+                    // Section 3: Vertical Climb
+                    { x: 1900, y: 500, w: 50, h: 20 }, { x: 2000, y: 400, w: 50, h: 20 },
+                    { x: 1900, y: 300, w: 50, h: 20 }, { x: 2000, y: 200, w: 50, h: 20 },
+                    // Section 4: Ice Path High
+                    { x: 2100, y: 150, w: 1000, h: 30, friction: 0.98 },
+                    // Section 5: Drop to Goal
+                    { x: 3100, y: 200, w: 50, h: 20 }, { x: 3200, y: 300, w: 50, h: 20 },
+                    { x: 3300, y: 400, w: 50, h: 20 },
+                    { x: 3900, y: 550, w: 100, h: 50 }
+                ], hazards: [
+                    {x: 0, y: 580, w: 900, h: 20}, // Pit 1
+                    {x: 1000, y: 520, w: 30, h: 30},{x: 1200, y: 520, w: 30, h: 30},{x: 1400, y: 520, w: 30, h: 30},{x: 1600, y: 520, w: 30, h: 30},{x: 1800, y: 520, w: 30, h: 30}, // Floor hazards
+                    {x: 1900, y: 580, w: 200, h: 20}, // Pit 2
+                    {x: 2100, y: 580, w: 1000, h: 20}, // Pit 3 under ice
+                    {x: 3100, y: 580, w: 800, h: 20}, // Pit 4 near end
+                ]
+            },
+            { // 50: Final Boss Level (Conceptual - Just a hard level)
+                start: { x: 50, y: 100 }, goal: { x: 1350, y: 100, w: 40, h: 40 },
+                platforms: [
+                    // Series of very precise jumps on tiny platforms over hazards
+                    { x: 0, y: 150, w: 50, h: 20 }, { x: 150, y: 180, w: 40, h: 20 },
+                    { x: 300, y: 150, w: 50, h: 20 }, { x: 450, y: 180, w: 40, h: 20 },
+                    { x: 600, y: 150, w: 50, h: 20 }, { x: 750, y: 180, w: 40, h: 20 },
+                    { x: 900, y: 150, w: 50, h: 20 }, { x: 1050, y: 180, w: 40, h: 20 },
+                    { x: 1200, y: 150, w: 50, h: 20 },
+                    { x: 1330, y: 150, w: 50, h: 20 } // Goal plat
+                 ], hazards: [ {x: 0, y: 580, w: 1400, h: 20} ] // Full floor hazard
+            }
+        ];
+        // --- END LEVEL DATA ---
+
+
+        function AABBCollision(rect1, rect2) {
+            return (
+                rect1.x < rect2.x + rect2.w &&
+                rect1.x + rect1.w > rect2.x &&
+                rect1.y < rect2.y + rect2.h &&
+                rect1.y + rect1.h > rect2.y
+            );
+        }
+
+        function resetPlayer(levelData) {
+            playerState.x = levelData.start.x;
+            playerState.y = levelData.start.y;
+            playerState.vx = 0;
+            playerState.vy = 0;
+            playerState.grounded = false;
+            playerState.canJump = true;
+            gameActive = true;
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                console.log("Game Over!");
+                gameActive = false;
+                gameOverMessage.style.display = 'block';
+                return;
+            }
+
+            // Clear previous level elements
+            levelElements.forEach(el => el.remove());
+            levelElements = [];
+            gameWorld.innerHTML = ''; // Clear everything except player initially? No, need player.
+            gameWorld.appendChild(player); // Re-add player
+
+            const levelData = levels[levelIndex];
+            levelDisplay.textContent = levelIndex + 1;
+
+            // Create platforms
+            levelData.platforms.forEach(p => {
+                const plat = document.createElement('div');
+                plat.className = 'platform';
+                plat.style.left = `${p.x}px`;
+                plat.style.top = `${p.y}px`;
+                plat.style.width = `${p.w}px`;
+                plat.style.height = `${p.h}px`;
+                gameWorld.appendChild(plat);
+                levelElements.push(plat);
+            });
+
+            // Create hazards
+            levelData.hazards.forEach(h => {
+                const hazard = document.createElement('div');
+                hazard.className = 'hazard';
+                hazard.style.left = `${h.x}px`;
+                hazard.style.top = `${h.y}px`;
+                hazard.style.width = `${h.w}px`;
+                hazard.style.height = `${h.h}px`;
+                gameWorld.appendChild(hazard);
+                levelElements.push(hazard);
+            });
+
+            // Create goal
+            const goal = document.createElement('div');
+            goal.className = 'goal';
+            goal.id = 'goal'; // For easy access
+            goal.style.left = `${levelData.goal.x}px`;
+            goal.style.top = `${levelData.goal.y}px`;
+            goal.style.width = `${levelData.goal.w}px`;
+            goal.style.height = `${levelData.goal.h}px`;
+            goal.innerHTML = '🚩'; // Use flag emoji
+            gameWorld.appendChild(goal);
+            levelElements.push(goal);
+
+
+            resetPlayer(levelData);
+            cameraX = playerState.x - gameWindow.offsetWidth / 2; // Initial camera position
+            gameWorld.style.transform = `translateX(${-cameraX}px)`; // Apply initial camera offset
+        }
+
+        function update(dt) { // dt not currently used, assuming fixed frame rate
+            if (!gameActive) return;
+
+            const levelData = levels[currentLevelIndex];
+            const currentPlatforms = levelData.platforms;
+            const currentHazards = levelData.hazards;
+            const currentGoal = levelData.goal; // Goal data
+
+            // --- Input and Movement ---
+            if (keys.a) {
+                playerState.vx -= MOVE_SPEED * 0.3; // Acceleration
+            }
+            if (keys.d) {
+                playerState.vx += MOVE_SPEED * 0.3; // Acceleration
+            }
+
+            // Apply friction
+            playerState.vx *= FRICTION;
+
+            // Clamp horizontal speed
+             if (Math.abs(playerState.vx) > MOVE_SPEED) {
+                playerState.vx = Math.sign(playerState.vx) * MOVE_SPEED;
+            }
+            // Stop if moving very slowly
+             if (Math.abs(playerState.vx) < 0.1) {
+                playerState.vx = 0;
+            }
+
+            // --- Jumping ---
+            if ((keys.w || keys.space) && playerState.grounded && playerState.canJump) {
+                playerState.vy = -JUMP_FORCE;
+                playerState.grounded = false;
+                playerState.canJump = false; // Prevent holding jump
+            }
+             // Allow jumping again when jump key released
+            if (!(keys.w || keys.space)) {
+                playerState.canJump = true;
+            }
+
+            // --- Gravity ---
+             const currentGravity = levelData.gravityMultiplier ? GRAVITY * levelData.gravityMultiplier : GRAVITY;
+            playerState.vy += currentGravity;
+
+            // Clamp fall speed
+            if (playerState.vy > MAX_FALL_SPEED) {
+                 playerState.vy = MAX_FALL_SPEED;
+            }
+             if (playerState.vy < -MAX_FALL_SPEED * 1.5) { // Clamp jump speed too?
+                 playerState.vy = -MAX_FALL_SPEED * 1.5;
+             }
+
+
+            // --- Collision Detection & Resolution ---
+            let nextX = playerState.x + playerState.vx;
+            let nextY = playerState.y + playerState.vy;
+            let isGrounded = false;
+
+            const playerRect = { x: playerState.x, y: playerState.y, w: PLAYER_SIZE, h: PLAYER_SIZE };
+            const nextPlayerRectX = { x: nextX, y: playerState.y, w: PLAYER_SIZE, h: PLAYER_SIZE };
+            const nextPlayerRectY = { x: playerState.x, y: nextY, w: PLAYER_SIZE, h: PLAYER_SIZE };
+
+             // Check Hazards First
+             for (const hazard of currentHazards) {
+                 const hazardRect = { x: hazard.x, y: hazard.y, w: hazard.w, h: hazard.h };
+                 if (AABBCollision({ ...playerRect, x: nextX, y: nextY }, hazardRect)) { // Check future position
+                     console.log("Hit Hazard!");
+                     resetPlayer(levelData);
+                     return; // Stop further updates this frame
+                 }
+             }
+
+            // Check Platforms (Horizontal Collision)
+            for (const platform of currentPlatforms) {
+                const platRect = { x: platform.x, y: platform.y, w: platform.w, h: platform.h };
+                if (AABBCollision(nextPlayerRectX, platRect)) {
+                    if (playerState.vx > 0) { // Moving right
+                        nextX = platform.x - PLAYER_SIZE - 0.1; // Place just left of platform
+                    } else if (playerState.vx < 0) { // Moving left
+                        nextX = platform.x + platform.w + 0.1; // Place just right of platform
+                    }
+                    playerState.vx = 0; // Stop horizontal movement
+                    break; // Stop checking after first horizontal collision
+                }
+            }
+            playerState.x = nextX; // Update horizontal position
+
+            // Check Platforms (Vertical Collision)
+            nextPlayerRectY.x = playerState.x; // Update rect x for vertical check
+             for (const platform of currentPlatforms) {
+                 const platRect = { x: platform.x, y: platform.y, w: platform.w, h: platform.h };
+                 if (AABBCollision(nextPlayerRectY, platRect)) {
+                     if (playerState.vy > 0) { // Moving down
+                         nextY = platform.y - PLAYER_SIZE - 0.1; // Place just above platform
+                         isGrounded = true;
+                         playerState.vy = 0; // Stop vertical movement
+                     } else if (playerState.vy < 0) { // Moving up
+                         nextY = platform.y + platform.h + 0.1; // Place just below platform
+                         playerState.vy = 0; // Stop vertical movement (hit ceiling)
+                     }
+                     // Don't break here, might need to check multiple vertical collisions if falling fast? Usually not needed.
+                     break;
+                 }
+             }
+            playerState.y = nextY; // Update vertical position
+            playerState.grounded = isGrounded;
+
+
+            // --- Check Goal ---
+            const goalRect = { x: currentGoal.x, y: currentGoal.y, w: currentGoal.w, h: currentGoal.h };
+            if (AABBCollision({ ...playerRect, x: playerState.x, y: playerState.y }, goalRect)) {
+                console.log("Level Complete!");
+                gameActive = false; // Pause game briefly
+                levelCompleteMessage.style.display = 'block';
+                setTimeout(() => {
+                    levelCompleteMessage.style.display = 'none';
+                    currentLevelIndex++;
+                    if (currentLevelIndex < levels.length) {
+                         loadLevel(currentLevelIndex);
+                         gameActive = true; // Resume game
+                    } else {
+                        gameOverMessage.style.display = 'block'; // Show final message
+                    }
+                }, 1500); // Show message for 1.5 seconds
+                return; // Don't update further after reaching goal
+            }
+
+             // Check Fall Out of Bounds (simple check)
+             if (playerState.y > 2000) { // Arbitrary large Y value
+                 console.log("Fell out of bounds!");
+                 resetPlayer(levelData);
+                 return;
+             }
+        }
+
+        function render() {
+            if (!gameActive && currentLevelIndex >= levels.length) {
+                 // Don't render if game is truly over
+                 return;
+            }
+            // Update player element position
+            player.style.left = `${playerState.x}px`;
+            player.style.top = `${playerState.y}px`;
+
+            // --- Camera Follow ---
+            // Calculate desired camera position (center player in window)
+            const targetCameraX = playerState.x - gameWindow.offsetWidth / 2;
+
+            // Clamp camera to prevent showing areas outside the logical level bounds (simple clamp)
+            // This needs refinement based on actual level dimensions if they vary greatly
+            const minCameraX = 0; // Assuming levels start at or near x=0
+            // Find max X extent of the current level for clamping
+            let maxXExtent = 800; // Default width
+             if (levels[currentLevelIndex]) {
+                 const levelData = levels[currentLevelIndex];
+                 levelData.platforms.forEach(p => { maxXExtent = Math.max(maxXExtent, p.x + p.w); });
+                 if (levelData.goal) maxXExtent = Math.max(maxXExtent, levelData.goal.x + levelData.goal.w);
+             }
+            const maxCameraX = Math.max(0, maxXExtent - gameWindow.offsetWidth);
+
+            cameraX = Math.max(minCameraX, Math.min(targetCameraX, maxCameraX));
+
+
+            // Apply camera position by translating the world
+            gameWorld.style.transform = `translateX(${-cameraX}px)`;
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'a' || key === 'arrowleft') keys.a = true;
+            if (key === 'd' || key === 'arrowright') keys.d = true;
+            if (key === 'w' || key === 'arrowup') keys.w = true;
+            if (key === ' ') keys.space = true; // Spacebar
+            if (key === 'r') {
+                 console.log("Resetting level...");
+                 resetPlayer(levels[currentLevelIndex]);
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+             if (key === 'a' || key === 'arrowleft') keys.a = false;
+             if (key === 'd' || key === 'arrowright') keys.d = false;
+             if (key === 'w' || key === 'arrowup') keys.w = false;
+             if (key === ' ') keys.space = false; // Spacebar
+             // R is momentary, no keyup needed
+        });
+
+        skipButton.addEventListener('click', () => {
+            if (gameActive || currentLevelIndex < levels.length -1) { // Only skip if not on last level or game over screen
+                 console.log("Skipping level...");
+                 levelCompleteMessage.style.display = 'none'; // Hide any previous messages
+                 gameOverMessage.style.display = 'none';
+                 currentLevelIndex++;
+                 if (currentLevelIndex < levels.length) {
+                     loadLevel(currentLevelIndex);
+                     gameActive = true; // Ensure game is active after skip
+                 } else {
+                     gameActive = false;
+                     gameOverMessage.style.display = 'block'; // Show game over if skipping last level
+                 }
+            }
+        });
+
+
+        // --- Initialization ---
+        loadLevel(currentLevelIndex);
+        gameLoop();
+
+    </script>
+</body>
+</html>

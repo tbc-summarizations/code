@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Easy Platformer 100 Levels</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #lightblue; }
+  #gameCanvas { background-color: #eee; display: block; margin: 20px auto; border: 1px solid black; }
+  #levelDisplay { position: absolute; top: 10px; left: 10px; font-size: 20px; color: black; }
+</style>
+</head>
+<body>
+<div id="levelDisplay">Level: 1</div>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const levelDisplay = document.getElementById('levelDisplay');
+
+  let currentLevel = 1;
+  let playerX = 50;
+  let playerY = 500;
+  let playerSpeedX = 0;
+  let playerSpeedY = 0;
+  const playerSize = 20;
+  let gravity = 0.5;
+  let jumpStrength = -10;
+  let isJumping = false;
+
+  let platforms = [];
+  let goalX = 0;
+  let goalY = 0;
+  const goalSize = 20;
+
+  let keys = {};
+
+  function loadLevel(levelNumber) {
+    levelDisplay.textContent = 'Level: ' + levelNumber;
+    platforms = [];
+    playerX = 50;
+    playerY = 500;
+    playerSpeedX = 0;
+    playerSpeedY = 0;
+    isJumping = false;
+
+    if (levelNumber >= 1 && levelNumber <= 100) {
+      // Level Design (All levels are designed to be very easy)
+      if (levelNumber === 1) {
+        platforms.push({x: 0, y: 550, width: 800, height: 50}); // Ground
+        goalX = 700; goalY = 520;
+      } else if (levelNumber === 2) {
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 200, y: 400, width: 100, height: 20});
+        goalX = 700; goalY = 520;
+      } else if (levelNumber === 3) {
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 400, y: 400, width: 200, height: 20});
+        goalX = 700; goalY = 370;
+      } else if (levelNumber <= 10) { // Levels 4-10: Simple variations
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 100 + (levelNumber-4)*50, y: 450 - (levelNumber-4)*10, width: 100, height: 20});
+        goalX = 700; goalY = 520;
+      } else if (levelNumber <= 20) { // Levels 11-20: Slightly more complex but still easy
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 50, y: 480, width: 100, height: 20});
+        platforms.push({x: 250, y: 400, width: 100, height: 20});
+        goalX = 700; goalY = 520;
+      } else if (levelNumber <= 30) { // Levels 21-30: More platforms, still easy
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 100, y: 480, width: 100, height: 20});
+        platforms.push({x: 300, y: 400, width: 100, height: 20});
+        platforms.push({x: 500, y: 320, width: 100, height: 20});
+        goalX = 700; goalY = 520;
+      } else if (levelNumber <= 40) { // Levels 31-40:  Platforms in a line
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        for (let i = 0; i < 5; i++) {
+          platforms.push({x: 50 + i * 150, y: 400, width: 100, height: 20});
+        }
+        goalX = 700; goalY = 370;
+      } else if (levelNumber <= 50) { // Levels 41-50:  Staircase platforms
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        for (let i = 0; i < 5; i++) {
+          platforms.push({x: 100 + i * 100, y: 550 - i * 50 - 20, width: 100, height: 20});
+        }
+        goalX = 700; goalY = 300;
+      } else if (levelNumber <= 60) { // Levels 51-60:  Floating platforms
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 100, y: 400, width: 50, height: 20});
+        platforms.push({x: 300, y: 350, width: 50, height: 20});
+        platforms.push({x: 500, y: 300, width: 50, height: 20});
+        goalX = 700; goalY = 520;
+      } else if (levelNumber <= 70) { // Levels 61-70:  Platforms with gaps
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 50, y: 450, width: 100, height: 20});
+        platforms.push({x: 250, y: 450, width: 100, height: 20});
+        platforms.push({x: 450, y: 450, width: 100, height: 20});
+        goalX = 700; goalY = 520;
+      } else if (levelNumber <= 80) { // Levels 71-80:  Platforms higher up
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 100, y: 350, width: 100, height: 20});
+        platforms.push({x: 300, y: 250, width: 100, height: 20});
+        goalX = 700; goalY = 320;
+      } else if (levelNumber <= 90) { // Levels 81-90:  More spread out platforms
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 150, y: 400, width: 80, height: 20});
+        platforms.push({x: 450, y: 380, width: 80, height: 20});
+        goalX = 700; goalY = 520;
+      } else if (levelNumber <= 100) { // Levels 91-100: Final easy levels
+        platforms.push({x: 0, y: 550, width: 800, height: 50});
+        platforms.push({x: 200, y: 300, width: 150, height: 20});
+        goalX = 700; goalY = 270;
+      }
+    } else {
+      currentLevel = 1;
+      loadLevel(currentLevel);
+    }
+  }
+
+  function collisionDetection() {
+    playerSpeedY += gravity;
+    playerY += playerSpeedY;
+    playerX += playerSpeedX;
+
+    if (playerY > canvas.height - playerSize) {
+      playerY = canvas.height - playerSize;
+      playerSpeedY = 0;
+      isJumping = false;
+    }
+
+    platforms.forEach(platform => {
+      if (playerX < platform.x + platform.width &&
+          playerX + playerSize > platform.x &&
+          playerY < platform.y + platform.height &&
+          playerY + playerSize > platform.y) {
+
+        let overlapX = Math.min(playerX + playerSize, platform.x + platform.width) - Math.max(playerX, platform.x);
+        let overlapY = Math.min(playerY + playerSize, platform.y + platform.height) - Math.max(playerY, platform.y);
+
+        if (overlapX < overlapY) {
+          if (playerX < platform.x) {
+            playerX = platform.x - playerSize;
+          } else {
+            playerX = platform.x + platform.width;
+          }
+          playerSpeedX = 0;
+        } else {
+          if (playerY < platform.y && playerSpeedY >= 0) {
+            playerY = platform.y - playerSize;
+            playerSpeedY = 0;
+            isJumping = false;
+          } else if (playerY > platform.y) {
+            playerY = platform.y + platform.height;
+            playerSpeedY = 0; // Stop vertical movement if hitting from below
+          }
+        }
+      }
+    });
+
+    // Goal Collision
+    if (playerX < goalX + goalSize &&
+        playerX + playerSize > goalX &&
+        playerY < goalY + goalSize &&
+        playerY + playerSize > goalY) {
+      currentLevel++;
+      if (currentLevel > 100) {
+        currentLevel = 1; // Loop back to level 1 after level 100
+      }
+      loadLevel(currentLevel);
+    }
+
+     // Keep player within bounds
+     if (playerX < 0) playerX = 0;
+     if (playerX > canvas.width - playerSize) playerX = canvas.width - playerSize;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Platforms
+    ctx.fillStyle = 'green';
+    platforms.forEach(platform => {
+      ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+    });
+
+    // Draw Goal
+    ctx.fillStyle = 'gold';
+    ctx.fillRect(goalX, goalY, goalSize, goalSize);
+    ctx.fillStyle = 'black';
+    ctx.font = '12px Arial';
+    ctx.fillText('⭐', goalX + 2, goalY + 15);
+
+
+    // Draw Player (Triangle)
+    ctx.fillStyle = 'red';
+    ctx.beginPath();
+    ctx.moveTo(playerX + playerSize / 2, playerY);
+    ctx.lineTo(playerX, playerY + playerSize);
+    ctx.lineTo(playerX + playerSize, playerY + playerSize);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function update() {
+    if (keys['ArrowLeft']) {
+      playerSpeedX = -3;
+    } else if (keys['ArrowRight']) {
+      playerSpeedX = 3;
+    } else {
+      playerSpeedX = 0;
+    }
+
+    if (keys['ArrowUp'] && !isJumping) {
+      playerSpeedY = jumpStrength;
+      isJumping = true;
+    }
+
+    collisionDetection();
+    draw();
+    requestAnimationFrame(update);
+  }
+
+  document.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+  });
+
+  document.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+  });
+
+  loadLevel(currentLevel);
+  update();
+</script>
+
+</body>
+</html>

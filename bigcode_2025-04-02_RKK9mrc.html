@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generic Event Game Engine</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace; /* Pixel-like font */
+            overflow: hidden;
+            background-color: #333;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+
+        #game-engine-container {
+            width: 800px;
+            height: 600px;
+            position: relative;
+            overflow: hidden;
+            border: 3px solid #555;
+            background-color: black; /* Default background */
+        }
+
+        .game-element {
+            position: absolute;
+            box-sizing: border-box;
+            border: 2px solid black; /* Default border for buttons etc. */
+            cursor: default;
+        }
+
+        .element-text {
+            font-size: 24px;
+            color: white;
+            border: none;
+            white-space: pre-wrap; /* Allow newlines */
+            line-height: 1.2;
+            text-align: center;
+        }
+
+        .element-button {
+            padding: 10px 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: black;
+            background-color: #FFFF00; /* Default Yellow */
+            cursor: pointer;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+         /* Color variations for buttons */
+        .button-green { background-color: #32CD32; color: white; }
+        .button-magenta { background-color: #FF00FF; color: red; }
+        .button-lime { background-color: #00FF00; color: white; }
+        .button-blue { background-color: #0000FF; color: white; }
+        .button-red { background-color: #DC143C; color: white; }
+        .button-gray { background-color: #808080; color: white; }
+        .button-orange { background-color: #FFA500; color: white; }
+        .button-purple { background-color: #800080; color: white; }
+        .button-darkblue { background-color: #00008B; color: white; }
+        .button-darkslategray { background-color: #2F4F4F; color: white; }
+        .button-sienna { background-color: #A0522D; color: white; }
+
+        .element-shape {
+            border: none;
+        }
+
+        .element-emoji {
+            font-size: 100px;
+            border: none;
+            background: none;
+            text-align: center;
+            line-height: 1;
+        }
+
+         /* Specific shapes */
+         .shape-square { background-color: gray; }
+         .shape-rectangle { background-color: limegreen; }
+         .shape-blue-square { background-color: blue; }
+         .shape-red-square { background-color: red; }
+         .shape-green-square { background-color: limegreen; }
+         .shape-white-square { background-color: white; }
+         .shape-black-square { background-color: black; }
+         .shape-brown-rect { background-color: #A0522D; }
+         .shape-dkblue-rect { background-color: #00008B; }
+         .shape-dkslate-rect { background-color: #2F4F4F; }
+
+
+        .element-dialogue-box {
+            border: 4px solid white;
+            background-color: black;
+            color: white;
+            font-size: 24px;
+            padding: 15px;
+            text-align: left;
+            line-height: 1.4;
+        }
+
+        .element-sprite-placeholder {
+            /* Basic representation */
+            border: 5px solid white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 50px;
+            background-color: #222;
+        }
+         .sprite-skeleton::before { content: '💀'; }
+         .sprite-robot::before { content: '🤖'; color: #FF69B4; } /* Pinkish for Mettaton-like */
+         .sprite-explosion::before { content: '💥'; font-size: 150px; }
+
+
+        .element-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .overlay-content {
+            background-color: #008080; /* Teal default */
+            padding: 30px;
+            border: 3px solid white;
+            min-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative; /* For positioning elements inside */
+        }
+
+        .element-undertale-options {
+             display: flex;
+             justify-content: space-around;
+             align-items: center;
+             width: 80%;
+             padding: 0 5%;
+             border: none;
+             background: none;
+             bottom: 10px; /* Position near bottom */
+             height: 60px;
+        }
+
+        .undertale-option {
+             padding: 5px 15px;
+             font-size: 28px;
+             font-weight: bold;
+             cursor: pointer;
+             border: 4px solid transparent;
+             display: flex;
+             align-items: center;
+             gap: 5px;
+             background: none;
+             color: white; /* Base color */
+        }
+         .option-fight { color: red; border-color: red;}
+         .option-act { color: orange; border-color: orange; }
+         .option-mercy { color: lime; border-color: lime; }
+         /* Active state */
+         .option-fight.active { background-color: red; color: black;}
+         .option-act.active { background-color: orange; color: black; }
+         .option-mercy.active { background-color: lime; color: black; }
+
+        .element-attack-bar {
+            height: 20px;
+            width: 80%;
+            border: 2px solid white;
+            background-color: black;
+            display: flex; /* Or block if positioning line inside */
+            align-items: center;
+        }
+        .attack-line {
+             height: 100%;
+             width: 5px;
+             background-color: red;
+             position: relative; /* Changed from absolute */
+             left: 0;
+             /* Animation will be controlled by JS */
+        }
+
+         .element-leaderboard {
+            width: 90%;
+            padding: 8px 15px;
+            margin: 5px 0;
+            border: 1px solid black;
+            font-size: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: black; /* Default text color */
+         }
+         .lb-rank { font-weight: bold; margin-right: 10px; }
+         .lb-name { flex-grow: 1; text-align: left; }
+         .lb-score { margin-left: 10px; }
+
+         /* Leaderboard colors */
+         .lb-1 { background-color: #FFFF00; } /* Yellow */
+         .lb-2 { background-color: #C0C0C0; } /* Silver */
+         .lb-3 { background-color: #CD7F32; color: white; } /* Bronze */
+         .lb-4, .lb-5 { background-color: #FFFFFF; } /* White */
+
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        .next-arrow {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            font-size: 30px;
+            color: white;
+            animation: blink 1s step-start infinite;
+            display: none; /* Hidden by default, shown by script */
+        }
+         @keyframes attack-sweep {
+             from { left: 0%; }
+             to { left: calc(100% - 5px); } /* Adjust for line width */
+         }
+         @keyframes shake {
+           0%, 100% { transform: translateX(0); }
+           25% { transform: translateX(-3px); }
+           75% { transform: translateX(3px); }
+         }
+         .shake { animation: shake 0.5s linear infinite; }
+         .broken-heart::before { content: '💔'; }
+
+    </style>
+</head>
+<body>
+    <div id="game-engine-container">
+        <!-- Game content will be rendered here by the engine -->
+    </div>
+
+    <script>
+        class GameEngine {
+            constructor(containerId) {
+                this.container = document.getElementById(containerId);
+                if (!this.container) {
+                    throw new Error(`Container element with ID "${containerId}" not found.`);
+                }
+                this.scenes = {};
+                this.currentState = {
+                    scene: null,
+                    substate: null,
+                    data: {} // General game state (flags, counters, inventory etc.)
+                };
+                this.timeouts = []; // To keep track of timeouts for clearing
+                this.intervals = []; // To keep track of intervals
+                this.eventListeners = {}; // For custom game events
+            }
+
+            // --- Core Methods ---
+
+            registerScene(name, config) {
+                if (this.scenes[name]) {
+                    console.warn(`Scene "${name}" is being redefined.`);
+                }
+                this.scenes[name] = config;
+            }
+
+            goToScene(sceneName, transitionData = {}) {
+                console.log(`Transitioning to scene: ${sceneName}`);
+                this.clearTimeoutsAndIntervals();
+                this._clearContainer();
+
+                const sceneConfig = this.scenes[sceneName];
+                if (!sceneConfig) {
+                    console.error(`Scene "${sceneName}" not found.`);
+                    this.container.innerHTML = `<div style="color: red; padding: 20px;">Error: Scene "${sceneName}" not registered.</div>`;
+                    return;
+                }
+
+                this.currentState.scene = sceneName;
+                this.currentState.substate = null; // Reset substate on scene change
+                // Merge transition data with existing data if needed, or replace
+                // For simplicity here, let's just use it for onLoad
+                // this.currentState.data = { ...this.currentState.data, ...transitionData };
+
+                this.renderScene(sceneConfig, transitionData);
+
+                // Execute onLoad script if present
+                if (sceneConfig.onLoad && typeof sceneConfig.onLoad === 'function') {
+                    sceneConfig.onLoad(this, transitionData);
+                }
+            }
+
+             // --- Rendering ---
+
+            renderScene(config, transitionData) {
+                this.container.style.backgroundColor = config.background || 'black';
+
+                if (config.elements && Array.isArray(config.elements)) {
+                    config.elements.forEach(elementConfig => {
+                        this.renderElement(elementConfig);
+                    });
+                } else {
+                     console.warn(`Scene "${this.currentState.scene}" has no elements defined.`);
+                }
+            }
+
+            renderElement(config) {
+                const element = document.createElement('div');
+                element.id = config.id || `el_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+                element.className = 'game-element'; // Base class
+
+                // --- Element Type Styling & Content ---
+                 switch (config.type) {
+                    case 'text':
+                        element.classList.add('element-text');
+                        element.textContent = config.text || '';
+                        break;
+                    case 'button':
+                        element.classList.add('element-button');
+                        element.textContent = config.text || 'Button';
+                        if (config.buttonStyle) {
+                             element.classList.add(`button-${config.buttonStyle}`);
+                        }
+                        break;
+                    case 'shape':
+                        element.classList.add('element-shape');
+                        if (config.shape) {
+                            element.classList.add(`shape-${config.shape}`);
+                        } else {
+                            element.style.backgroundColor = config.color || 'gray'; // Fallback color
+                        }
+                        break;
+                    case 'emoji':
+                        element.classList.add('element-emoji');
+                        element.textContent = config.content || '❓';
+                        break;
+                     case 'dialogueBox':
+                         element.classList.add('element-dialogue-box');
+                         element.innerHTML = `<span class="text-content">${config.text || ''}</span>`;
+                         if (config.showNextArrow) {
+                             element.innerHTML += '<span class="next-arrow">&gt;</span>';
+                         }
+                         break;
+                    case 'spritePlaceholder':
+                        element.classList.add('element-sprite-placeholder');
+                        if (config.spriteType) {
+                            element.classList.add(`sprite-${config.spriteType}`);
+                        }
+                        break;
+                     case 'overlay':
+                         element.classList.add('element-overlay');
+                         const overlayContent = document.createElement('div');
+                         overlayContent.className = 'overlay-content';
+                         if(config.overlayStyle) {
+                            overlayContent.style.backgroundColor = config.overlayStyle.bgColor || '#008080';
+                         }
+                         // Render elements *inside* the overlay content div
+                         if (config.elements && Array.isArray(config.elements)) {
+                             config.elements.forEach(innerConfig => {
+                                 const innerElement = this._createElement(innerConfig); // Use helper
+                                 overlayContent.appendChild(innerElement);
+                             });
+                         }
+                         element.appendChild(overlayContent);
+                         break; // Prevent default positioning/style application to outer overlay div
+                     case 'undertaleOptions':
+                         element.classList.add('element-undertale-options');
+                         element.innerHTML = this._createUndertaleOptionsHTML(config.options);
+                         // Attach listeners specifically for these options later
+                         break;
+                     case 'attackBar':
+                         element.classList.add('element-attack-bar');
+                         element.innerHTML = `<div class="attack-line" id="${config.id}_line"></div>`;
+                         break;
+                    case 'leaderboardEntry':
+                         element.classList.add('element-leaderboard', `lb-${config.rank}`);
+                         element.innerHTML = `
+                             <span class="lb-rank">${config.rank}</span>
+                             <span class="lb-name">${config.name || 'None'}</span>
+                             ${config.scores ? Object.entries(config.scores).map(([key, val]) => `<span class="lb-score">${key} ${val}</span>`).join('') : ''}
+                         `;
+                         break;
+                    default:
+                        console.warn(`Unknown element type: ${config.type}`);
+                        element.textContent = `Unknown: ${config.type}`;
+                        break;
+                 }
+
+                // --- Positioning & Styling ---
+                if (config.type !== 'overlay') { // Overlays handle their own positioning
+                     this._applyStyles(element, config.style);
+                     this._applyPosition(element, config.position);
+                }
+
+                // --- Event Handling ---
+                if (config.onClick) {
+                    element.style.cursor = 'pointer'; // Indicate clickable
+                    element.addEventListener('click', (event) => {
+                        event.stopPropagation(); // Prevent clicks bubbling up if needed
+                        this._handleAction(config.onClick);
+                    });
+                }
+
+                 // Special handling for Undertale options container
+                 if (config.type === 'undertaleOptions') {
+                     const options = element.querySelectorAll('.undertale-option');
+                     options.forEach(opt => {
+                         const actionKey = opt.dataset.actionKey;
+                         if (config.actions && config.actions[actionKey]) {
+                            opt.addEventListener('click', (event) => {
+                                event.stopPropagation();
+                                // Optional: Visual feedback for selection
+                                options.forEach(o => o.classList.remove('active'));
+                                opt.classList.add('active');
+                                this.setTimeout(() => opt.classList.remove('active'), 200); // Brief flash
+
+                                this._handleAction(config.actions[actionKey]);
+                            });
+                         }
+                     });
+                 }
+
+
+                this.container.appendChild(element);
+                 return element; // Return the created element if needed
+            }
+
+            // --- Helpers ---
+
+            _createElement(config) {
+                 // Simplified element creation for internal use (like inside overlays)
+                 // Does not add to main container automatically
+                 const element = document.createElement('div');
+                 element.id = config.id || `el_inner_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+                 element.className = 'game-element'; // Base class
+
+                 // Apply types and styles similar to renderElement
+                 switch (config.type) {
+                    case 'text':
+                        element.classList.add('element-text');
+                        element.textContent = config.text || '';
+                        break;
+                    case 'button':
+                        element.classList.add('element-button');
+                        element.textContent = config.text || 'Button';
+                        if (config.buttonStyle) {
+                             element.classList.add(`button-${config.buttonStyle}`);
+                        }
+                        break;
+                     case 'leaderboardEntry':
+                         element.classList.add('element-leaderboard', `lb-${config.rank}`);
+                         element.innerHTML = `
+                             <span class="lb-rank">${config.rank}</span>
+                             <span class="lb-name">${config.name || 'None'}</span>
+                             ${config.scores ? Object.entries(config.scores).map(([key, val]) => `<span class="lb-score">${key} ${val}</span>`).join('') : ''}
+                         `;
+                         break;
+                      case 'shape': // Example: for toggle buttons
+                          element.classList.add('element-shape');
+                          if (config.shape) { element.classList.add(`shape-${config.shape}`); }
+                          else { element.style.backgroundColor = config.color || 'gray'; }
+                          break;
+                    // Add other types as needed for overlay elements
+                    default:
+                        element.textContent = config.text || `Inner ${config.type}`;
+                        break;
+                 }
+
+                 this._applyStyles(element, config.style);
+                 this._applyPosition(element, config.position); // Might need relative positioning within overlay
+
+                 // Event Handling for inner elements
+                 if (config.onClick) {
+                     element.style.cursor = 'pointer';
+                     element.addEventListener('click', (event) => {
+                         event.stopPropagation();
+                         this._handleAction(config.onClick);
+                     });
+                 }
+
+                 return element;
+            }
+
+
+            _applyStyles(element, styleConfig) {
+                 if (styleConfig) {
+                    for (const prop in styleConfig) {
+                        element.style[prop] = styleConfig[prop];
+                    }
+                 }
+             }
+
+            _applyPosition(element, posConfig) {
+                if (posConfig) {
+                    if (posConfig.top !== undefined) element.style.top = typeof posConfig.top === 'number' ? `${posConfig.top}px` : posConfig.top;
+                    if (posConfig.left !== undefined) element.style.left = typeof posConfig.left === 'number' ? `${posConfig.left}px` : posConfig.left;
+                    if (posConfig.right !== undefined) element.style.right = typeof posConfig.right === 'number' ? `${posConfig.right}px` : posConfig.right;
+                    if (posConfig.bottom !== undefined) element.style.bottom = typeof posConfig.bottom === 'number' ? `${posConfig.bottom}px` : posConfig.bottom;
+                    if (posConfig.width !== undefined) element.style.width = typeof posConfig.width === 'number' ? `${posConfig.width}px` : posConfig.width;
+                    if (posConfig.height !== undefined) element.style.height = typeof posConfig.height === 'number' ? `${posConfig.height}px` : posConfig.height;
+                     if (posConfig.transform !== undefined) element.style.transform = posConfig.transform;
+                     if (posConfig.zIndex !== undefined) element.style.zIndex = posConfig.zIndex;
+                }
+            }
+
+            _clearContainer() {
+                this.container.innerHTML = '';
+            }
+
+            clearTimeoutsAndIntervals() {
+                this.timeouts.forEach(clearTimeout);
+                this.intervals.forEach(clearInterval);
+                this.timeouts = [];
+                this.intervals = [];
+                // Clear any globally lingering timeouts (less clean, but can help)
+                let id = window.setTimeout(function() {}, 0);
+                while (id--) {
+                    window.clearTimeout(id);
+                }
+                 id = window.setInterval(function() {}, 0);
+                while (id--) {
+                    window.clearInterval(id);
+                }
+            }
+
+            // Wrapper for setTimeout to keep track
+            setTimeout(callback, delay) {
+                const id = setTimeout(() => {
+                    callback();
+                    // Remove from tracked timeouts once executed
+                    this.timeouts = this.timeouts.filter(tId => tId !== id);
+                }, delay);
+                this.timeouts.push(id);
+                return id;
+            }
+
+             // Wrapper for setInterval to keep track
+             setInterval(callback, delay) {
+                const id = setInterval(callback, delay);
+                this.intervals.push(id);
+                return id;
+             }
+
+            _handleAction(action) {
+                if (!action) return;
+
+                if (action.goToScene) {
+                    this.goToScene(action.goToScene, action.data);
+                } else if (action.emitEvent) {
+                    this.emitEvent(action.emitEvent, action.data);
+                } else if (action.runScript && typeof action.runScript === 'function') {
+                    action.runScript(this); // Pass engine instance for access to state/methods
+                } else if (action.updateData) {
+                    this.updateGameData(action.updateData);
+                } else {
+                    console.warn("Unknown action type:", action);
+                }
+            }
+
+             _createUndertaleOptionsHTML(options) {
+                 // options = { fight: 'FIGHT', act: 'ACT', mercy: 'MERCY' }
+                 let html = '';
+                 if (options.fight) {
+                     html += `<div class="undertale-option option-fight" data-action-key="fight">⚔️ ${options.fight}</div>`;
+                 }
+                 if (options.act) {
+                     html += `<div class="undertale-option option-act" data-action-key="act">🔊 ${options.act}</div>`;
+                 }
+                 if (options.mercy) {
+                     html += `<div class="undertale-option option-mercy" data-action-key="mercy">💖 ${options.mercy}</div>`;
+                 }
+                 return html;
+             }
+
+            // --- Game State Management ---
+
+            updateGameData(updates) {
+                if (typeof updates === 'object' && updates !== null) {
+                    for (const key in updates) {
+                        const value = updates[key];
+                        if (typeof value === 'string' && value.startsWith('increment:')) {
+                             const amount = parseInt(value.split(':')[1] || '1', 10);
+                             this.currentState.data[key] = (this.currentState.data[key] || 0) + amount;
+                        } else if (typeof value === 'string' && value.startsWith('toggle:')) {
+                             this.currentState.data[key] = !this.currentState.data[key];
+                        }
+                        else {
+                             this.currentState.data[key] = value;
+                        }
+                         console.log("Game data updated:", key, "=", this.currentState.data[key]);
+                    }
+                }
+            }
+
+            getGameData(key) {
+                return this.currentState.data[key];
+            }
+
+            // --- Event Bus (Simple Implementation) ---
+
+            onEvent(eventName, handler) {
+                if (!this.eventListeners[eventName]) {
+                    this.eventListeners[eventName] = [];
+                }
+                this.eventListeners[eventName].push(handler);
+            }
+
+            emitEvent(eventName, eventData = {}) {
+                console.log(`Event emitted: ${eventName}`, eventData);
+                if (this.eventListeners[eventName]) {
+                    this.eventListeners[eventName].forEach(handler => {
+                        try {
+                            handler(this, eventData); // Pass engine and data to handler
+                        } catch (error) {
+                            console.error(`Error in event handler for "${eventName}":`, error);
+                        }
+                    });
+                }
+            }
+
+            // --- Utility for Text Animation ---
+            typeWriter(elementId, text, speed, callback, showArrow = true) {
+                this.clearTimeoutsAndIntervals(); // Clear previous typing
+                const element = document.getElementById(elementId);
+                if (!element) {
+                     console.error(`Element with ID "${elementId}" not found for typewriter.`);
+                     if (callback) callback();
+                     return;
+                }
+
+                // Find text content span and arrow if they exist
+                const textContentSpan = element.querySelector ? element.querySelector('.text-content') : element;
+                const nextArrowSpan = element.querySelector ? element.querySelector('.next-arrow') : null;
+
+                if (!textContentSpan) {
+                    console.error(`Could not find text content area within element "${elementId}".`);
+                     if (callback) callback();
+                    return;
+                }
+
+                textContentSpan.innerHTML = ''; // Clear previous text
+                if (nextArrowSpan) {
+                    nextArrowSpan.style.display = 'none';
+                }
+
+                let i = 0;
+                function type() {
+                    if (i < text.length) {
+                        textContentSpan.innerHTML += text.charAt(i);
+                        i++;
+                        const timeoutId = setTimeout(type, speed);
+                        // Track this specific timeout
+                        engine.timeouts.push(timeoutId); // Assume 'engine' is accessible or passed
+                    } else {
+                        if (nextArrowSpan && showArrow) {
+                            nextArrowSpan.style.display = 'inline'; // Show arrow when done
+                        }
+                        if (callback) callback();
+                    }
+                }
+                type();
+            }
+
+             // --- Utility for Animation Control ---
+            animate(elementId, animationName, duration, callback) {
+                 const element = document.getElementById(elementId);
+                 if (!element) {
+                     console.error(`Element with ID "${elementId}" not found for animation.`);
+                     if (callback) callback();
+                     return;
+                 }
+                 element.style.animation = 'none'; // Reset animation
+                 void element.offsetWidth; // Trigger reflow
+                 element.style.animation = `${animationName} ${duration}ms linear forwards`;
+
+                 if (callback) {
+                    this.setTimeout(callback, duration);
+                 }
+            }
+
+             // --- Utility for DOM manipulation ---
+             updateElement(elementId, updates) {
+                const element = document.getElementById(elementId);
+                if (!element) {
+                    console.warn(`Element with ID "${elementId}" not found for update.`);
+                    return;
+                }
+                if (updates.text !== undefined) {
+                    const textContentSpan = element.querySelector ? element.querySelector('.text-content') : element;
+                    if (textContentSpan) {
+                        textContentSpan.textContent = updates.text;
+                    } else {
+                         element.textContent = updates.text; // Fallback
+                    }
+                }
+                if (updates.style !== undefined) {
+                     this._applyStyles(element, updates.style);
+                }
+                if (updates.className !== undefined) { // Allows adding/removing classes
+                     if(updates.className.startsWith('add:')) {
+                         element.classList.add(updates.className.substring(4));
+                     } else if (updates.className.startsWith('remove:')) {
+                          element.classList.remove(updates.className.substring(7));
+                     } else {
+                          element.className = updates.className; // Replace all classes
+                     }
+                }
+                if (updates.innerHTML !== undefined) { // Use with caution
+                     element.innerHTML = updates.innerHTML;
+                }
+                 if (updates.display !== undefined) { // Common style update
+                     element.style.display = updates.display;
+                 }
+            }
+
+        } // End of GameEngine class
+
+        // ==============================================
+        // Initialize Engine
+        // ==============================================
+        const engine = new GameEngine('game-engine-container');
+
+        // ==============================================
+        // Define Game Scenes (Flush The Toilet recreation)
+        // ==============================================
+
+        // --- Start Scene ---
+        engine.registerScene('start', {
+            background: '#00BFFF', // DeepSkyBlue
+            onLoad: (engine) => {
+                 // Initialize game data on start if not already set
+                 engine.currentState.data.flushCount = engine.currentState.data.flushCount ?? 0;
+                 engine.currentState.data.objective = engine.currentState.data.objective ?? 'flush';
+                 engine.currentState.data.speedrunMode = engine.currentState.data.speedrunMode ?? false;
+                 engine.updateElement('speedrun-status-text', { text: engine.currentState.data.speedrunMode ? 'On' : 'Off' });
+            },
+            elements: [
+                { type: 'text', id: 'title', text: 'Flush\nThe\nToilet', style: { fontSize: '48px', lineHeight: '1.2', fontWeight: 'bold' }, position: { top: 50, left: 0, width: '100%'} },
+                { type: 'emoji', id: 'toilet-start', content: '🚽', style: { fontSize: '100px' }, position: { left: 50, bottom: 100 } },
+                { type: 'button', id: 'start-game-btn', text: 'START', buttonStyle: 'green', style: { fontSize: '36px', padding: '15px 30px', minWidth: '250px' }, position: { top: 250, left: '50%', transform: 'translateX(-50%)' }, onClick: { goToScene: 'gameplay' } },
+                {
+                    type: 'button',
+                    id: 'speedrun-btn',
+                    text: 'Speedrun Mode\n<span id="speedrun-status-text" style="font-size: 18px; display: block; color: white;">Off</span>', // Inner span for status
+                    buttonStyle: 'magenta',
+                    style: { fontSize: '24px', padding: '10px 20px', minWidth: '250px', color: 'red' }, // Explicit red text
+                    position: { top: 350, left: '50%', transform: 'translateX(-50%)' },
+                    onClick: { emitEvent: 'openOverlay', data: { overlayName: 'speedrunMenu' } }
+                },
+                 {
+                     type: 'button',
+                     id: 'version-btn',
+                     text: 'Version 0.8',
+                     buttonStyle: 'lime',
+                     style: { fontSize: '20px', padding: '5px 10px', width: 'calc(100% - 20px)' },
+                     position: { bottom: 10, left: 10 },
+                     onClick: { emitEvent: 'openOverlay', data: { overlayName: 'versionInfo' } }
+                 },
+                 // Overlays defined within the scene that triggers them
+                 {
+                     type: 'overlay',
+                     id: 'speedrunMenuOverlay',
+                     overlayStyle: { bgColor: '#00008B' }, // DarkBlue
+                     style: { display: 'none' }, // Initially hidden
+                     elements: [
+                         { type: 'text', text: 'Speedrun Mode', style: { fontSize: '36px', marginBottom: '20px', color: 'white' } },
+                         { type: 'shape', shape: 'black-square', style: { width: '250px', height: '50px', display: 'flex', justifyContent: 'space-around', alignItems: 'center', marginBottom: '15px', border: 'none' },
+                             elements: [ // Using nested elements for the ON/OFF buttons inside a container
+                                { type: 'button', text: 'ON', buttonStyle: 'magenta', style: { minWidth: '80px', margin: '0 5px', fontSize: '20px'}, onClick: { runScript: (engine) => { engine.updateGameData({ speedrunMode: true }); engine.updateElement('speedrun-status-text', { text: 'On' }); } } },
+                                { type: 'button', text: 'OFF', buttonStyle: 'red', style: { minWidth: '80px', margin: '0 5px', fontSize: '20px'}, onClick: { runScript: (engine) => { engine.updateGameData({ speedrunMode: false }); engine.updateElement('speedrun-status-text', { text: 'Off' }); } } },
+                             ]
+                         },
+                         { type: 'button', text: 'Leaderboards', buttonStyle: 'orange', style: { minWidth: '200px', margin: '10px' }, onClick: { emitEvent: 'openOverlay', data: { overlayName: 'leaderboards' } } },
+                         { type: 'button', text: 'Back', buttonStyle: 'orange', style: { minWidth: '200px', margin: '10px' }, onClick: { emitEvent: 'closeOverlay', data: { overlayName: 'speedrunMenuOverlay' } } }
+                     ]
+                 },
+                 {
+                     type: 'overlay',
+                     id: 'leaderboardsOverlay',
+                     overlayStyle: { bgColor: '#2F4F4F' }, // DarkSlateGray
+                     style: { display: 'none' },
+                     elements: [
+                         { type: 'text', text: 'Top Speedrunners', style: { fontSize: '36px', marginBottom: '10px', color: 'white' } },
+                         { type: 'text', text: 'G = Good Ending B = Bad Ending', style: { fontSize: '16px', marginBottom: '20px', color: 'white' } },
+                         { type: 'leaderboardEntry', rank: 1, name: 'Meethexep [Game Dev]', scores: { G: '2.94', B: '3.58' }, style: { position: 'relative' } }, // Relative for stacking
+                         { type: 'leaderboardEntry', rank: 2, name: 'None', style: { position: 'relative' } },
+                         { type: 'leaderboardEntry', rank: 3, name: 'None', style: { position: 'relative' } },
+                         { type: 'leaderboardEntry', rank: 4, name: 'None', style: { position: 'relative' } },
+                         { type: 'leaderboardEntry', rank: 5, name: 'None', style: { position: 'relative' } },
+                         { type: 'button', text: 'Back', buttonStyle: 'purple', style: { minWidth: '200px', marginTop: '30px' }, onClick: { emitEvent: 'closeOverlay', data: { overlayName: 'leaderboardsOverlay' } } } // Go back to speedrun overlay? Or just close? Let's just close.
+                     ]
+                 },
+                 {
+                     type: 'overlay',
+                     id: 'versionInfoOverlay',
+                     overlayStyle: { bgColor: '#A0522D' }, // Sienna
+                     style: { display: 'none' },
+                     elements: [
+                        { type: 'text', text: 'Update version 0.8 (last update)', style: { fontSize: '30px', marginBottom: '15px', color: 'white' } },
+                        { type: 'text', text: 'Hello toilet flushers, i have not made an update for this game in a while and it seems like im running out of ideas for this game. as a last update i decided to make version 0.8', style: { fontSize: '18px', maxWidth: '80%', marginBottom: '20px', lineHeight: '1.4', color: 'white' } },
+                        { type: 'button', text: 'Back', buttonStyle: 'purple', style: { minWidth: '200px', marginTop: '20px' }, onClick: { emitEvent: 'closeOverlay', data: { overlayName: 'versionInfoOverlay' } } }
+                     ]
+                 }
+            ]
+        });
+
+        // Event handlers for overlays
+        engine.onEvent('openOverlay', (engine, data) => {
+            const overlayId = data.overlayName === 'leaderboards' ? 'leaderboardsOverlay'
+                             : data.overlayName === 'versionInfo' ? 'versionInfoOverlay'
+                             : data.overlayName === 'speedrunMenu' ? 'speedrunMenuOverlay'
+                             : data.overlayName === 'pauseMenu' ? 'pauseMenuOverlay' // Handle pause menu overlay
+                             : null;
+             if (overlayId) {
+                 engine.updateElement(overlayId, { display: 'flex' });
+                 if(data.overlayName === 'pauseMenu') { // Specific logic for pause menu
+                     const objective = engine.getGameData('objective');
+                     engine.updateElement('papyrus-pause-btn', { display: objective === 'flush' ? 'flex' : 'none' });
+                     engine.updateElement('hell-pause-btn', { display: objective === 'explode' ? 'flex' : 'none' });
+                     engine.isPaused = true; // Set pause flag
+                 }
+             }
+        });
+         engine.onEvent('closeOverlay', (engine, data) => {
+             if (data.overlayName) {
+                engine.updateElement(data.overlayName, { display: 'none' });
+                 if(data.overlayName === 'pauseMenuOverlay') {
+                    engine.isPaused = false; // Unset pause flag
+                 }
+             }
+         });
+
+
+        // --- Gameplay Scene ---
+        engine.registerScene('gameplay', {
+            background: '#00BFFF',
+            onLoad: (engine) => {
+                engine.isPaused = false; // Ensure not paused on load
+                const objective = engine.getGameData('objective');
+                const flushCount = engine.getGameData('flushCount');
+                 engine.updateElement('objective-text', {
+                     text: `Objective:\n${objective === 'flush' ? 'Flush the toilet.' : 'Explode the toilet.'}`,
+                     style: { color: objective === 'flush' ? 'red' : '#FF4500' } // OrangeRed
+                 });
+                 let flushBtnColor = '#808080'; // Gray
+                 if (objective === 'flush') {
+                    if (flushCount > 3 && flushCount <= 6) flushBtnColor = '#32CD32'; // LimeGreen
+                    else if (flushCount > 6) flushBtnColor = '#DC143C'; // Crimson
+                 } else {
+                     flushBtnColor = '#DC143C'; // Crimson
+                 }
+                 engine.updateElement('flush-btn', { style: { backgroundColor: flushBtnColor } });
+            },
+            elements: [
+                // Game elements
+                 { type: 'emoji', id: 'toilet-game', content: '🚽', style: { fontSize: '100px' }, position: { left: 50, bottom: 100 } },
+                 { type: 'shape', id: 'toilet-water', shape: 'rectangle', style: { width: '60px', height: '20px', backgroundColor: 'transparent', borderRadius: '50% / 100%', borderBottomLeftRadius: 0, borderBottomRightRadius: 0, border: 'none' }, position: { left: 70, bottom: 125 } }, // Water inside toilet
+                { type: 'shape', id: 'flush-btn', shape: 'square', style: { width: '80px', height: '80px', cursor: 'pointer' }, position: { top: 50, left: 50 }, onClick: { emitEvent: 'flushToilet' } },
+                { type: 'text', id: 'flush-text', text: '<-- press to flush', style: { fontSize: '24px', color: 'white', textAlign: 'left', border: 'none' }, position: { top: 80, left: 140 } },
+                { type: 'text', id: 'objective-text', text: 'Objective:\nFlush the toilet.', style: { fontSize: '24px', color: 'red', textAlign: 'right', border: 'none' }, position: { top: 50, right: 50 } },
+                 { type: 'shape', id: 'bottom-bar', shape: 'rectangle', style: { width: '100%', height: '60px', border: 'none', zIndex: '-1' }, position: { bottom: 0, left: 0 } },
+                 { type: 'shape', id: 'pause-container', shape: 'transparent', style: { width: '80px', height: '40px', display: 'flex', gap: '5px', cursor: 'pointer', border: 'none' }, position: { bottom: 10, right: 10 },
+                     onClick: { emitEvent: 'openOverlay', data: { overlayName: 'pauseMenu' } },
+                     elements: [ // Nested simple shapes for the pause icon
+                        { type: 'shape', shape: 'blue-square', style: { width: '35px', height: '35px', position:'static', border: '1px solid black' } },
+                        { type: 'shape', shape: 'blue-square', style: { width: '35px', height: '35px', position:'static', border: '1px solid black' } },
+                     ]
+                 },
+                { type: 'spritePlaceholder', id: 'explosion-graphic', spriteType: 'explosion', style: { display: 'none', border: 'none', background: 'none'}, position: { left: 50, bottom: 100, zIndex: 5 } },
+                { type: 'text', id: 'explosion-text', text: '', style: { display: 'none', fontSize: '40px', color: 'red', fontWeight: 'bold', lineHeight: '1.2', border: 'none', width: '90%'}, position: { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 6 } },
+
+                // Pause Menu Overlay (defined here for access to game state context)
+                 {
+                     type: 'overlay',
+                     id: 'pauseMenuOverlay',
+                     overlayStyle: { bgColor: '#008080' }, // Teal
+                     style: { display: 'none' }, // Initially hidden
+                     elements: [
+                         { type: 'text', text: 'Game Paused', style: { fontSize: '36px', marginBottom: '20px', color: 'white' } },
+                         { type: 'button', text: 'Resume', buttonStyle: 'yellow', style: { minWidth: '200px', margin: '10px' }, onClick: { emitEvent: 'closeOverlay', data: { overlayName: 'pauseMenuOverlay' } } },
+                         { type: 'button', id: 'quit-pause-btn', text: 'Quit', buttonStyle: 'yellow', style: { minWidth: '200px', margin: '10px' },
+                             onClick: { runScript: (engine) => {
+                                if (engine.getGameData('objective') === 'explode') {
+                                    engine.goToScene('escapeDialogue1'); // Start escape sequence
+                                } else {
+                                    engine.goToScene('start'); // Go back to start menu
+                                }
+                             } }
+                         },
+                         { type: 'button', id: 'papyrus-pause-btn', text: 'PAPYRUS', buttonStyle: 'yellow', style: { minWidth: '200px', margin: '10px', display: 'none' }, onClick: { goToScene: 'papyrusDialogue1' } }, // Only visible if objective is flush
+                         { type: 'button', id: 'hell-pause-btn', text: 'HELL.', buttonStyle: 'yellow', style: { minWidth: '200px', margin: '10px', display: 'none' }, onClick: { goToScene: 'escapeDialogue1' } } // Only visible if objective is explode
+                     ]
+                 }
+            ]
+        });
+
+        // Gameplay Event Handlers
+        engine.onEvent('flushToilet', (engine) => {
+             if (engine.isPaused) return;
+
+            engine.updateGameData({ flushCount: 'increment:1' });
+            const flushCount = engine.getGameData('flushCount');
+            let objective = engine.getGameData('objective');
+
+            // Visual feedback: water flash
+             engine.updateElement('toilet-water', { style: { backgroundColor: '#20B2AA' } });
+             engine.setTimeout(() => engine.updateElement('toilet-water', { style: { backgroundColor: 'transparent' } }), 200);
+
+            if (objective === 'flush') {
+                 if (flushCount > 6) {
+                     engine.updateGameData({ objective: 'explode' });
+                     objective = 'explode'; // Update local copy
+                     engine.updateElement('objective-text', { text: 'Objective:\nExplode the toilet.', style: { color: '#FF4500' } });
+                     engine.updateElement('flush-btn', { style: { backgroundColor: '#DC143C' } }); // Crimson
+                 } else if (flushCount > 3) {
+                     engine.updateElement('flush-btn', { style: { backgroundColor: '#32CD32' } }); // LimeGreen
+                 }
+            } else if (objective === 'explode') {
+                 // Trigger Explosion Sequence
+                 engine.updateElement('toilet-game', { display: 'none' });
+                 engine.updateElement('explosion-graphic', { display: 'block' });
+                 engine.updateElement('explosion-text', { display: 'block', text: "YOU EXPLODED THE\nFUCKING TOILET!!!\nLOOK WHAT YOU\nHAVE DONE" });
+                 engine.updateElement('pause-container', { display: 'none' }); // Hide pause button
+
+                 // Flash effect and transition to Sans
+                 engine.container.style.backgroundColor = 'white';
+                 engine.setTimeout(() => {
+                     engine.container.style.backgroundColor = 'red';
+                     engine.setTimeout(() => {
+                          engine.container.style.backgroundColor = 'black'; // Transition to black
+                          engine.setTimeout(() => {
+                             engine.goToScene('sansBattle'); // Go to battle screen
+                          }, 500);
+                     }, 150);
+                 }, 100);
+            }
+        });
+
+
+        // --- Papyrus Ending Scenes ---
+        engine.registerScene('papyrusDialogue1', {
+            background: 'black',
+             elements: [
+                 { type: 'spritePlaceholder', spriteType: 'skeleton', position: { top: '10%', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '150px' } },
+                 { type: 'dialogueBox', id: 'papyrus-box-1', text: '* THE GREAT PAPYRUS OFFERS YOU SOME SPAGHETTI!', position: { bottom: 80, left: '10%', width: '80%', height: '150px' } },
+                 { type: 'button', text: 'Accept', buttonStyle: 'blue', style: { fontSize: '24px' }, position: { bottom: 20, left: '50%', transform: 'translateX(-50%)' }, onClick: { goToScene: 'papyrusDialogue2' } }
+            ]
+        });
+
+        engine.registerScene('papyrusDialogue2', {
+            background: 'black',
+            onLoad: (engine) => {
+                 const text = "* YOU EAT PAPYRUS'S SPAGHETTI\nIT TASTES GOOD\nYOU TELL PAPYRUS HE IS VERY GOOD AT COOKING";
+                 engine.typeWriter('papyrus-box-2-content', text, 50, () => {
+                    // Make the entire screen clickable to advance
+                    engine.container.onclick = () => {
+                        engine.container.onclick = null; // Remove listener
+                        engine.goToScene('papyrusDialogue3');
+                    };
+                 }, true); // Show arrow
+             },
+             elements: [
+                 { type: 'spritePlaceholder', spriteType: 'skeleton', position: { top: '10%', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '150px' } },
+                 { type: 'dialogueBox', id: 'papyrus-box-2', showNextArrow: true, position: { bottom: 80, left: '10%', width: '80%', height: '150px' }, text: '<span id="papyrus-box-2-content"></span>' } // Inner span for typing
+            ]
+        });
+
+        engine.registerScene('papyrusDialogue3', {
+             background: 'black',
+             onLoad: (engine) => {
+                 engine.typeWriter('papyrus-box-3-content', "WOW...", 100, () => {
+                     engine.container.onclick = () => {
+                         engine.container.onclick = null;
+                         engine.goToScene('papyrusDialogue4');
+                     };
+                 }, true);
+             },
+             elements: [
+                 { type: 'spritePlaceholder', spriteType: 'skeleton', position: { top: '10%', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '150px' } },
+                 { type: 'dialogueBox', id: 'papyrus-box-3', showNextArrow: true, position: { bottom: 80, left: '10%', width: '80%', height: '150px' }, text: '<span style="font-size:40px; margin-right: 15px;">💀</span><span id="papyrus-box-3-content"></span>' } // Added speaker icon
+            ]
+        });
+        engine.registerScene('papyrusDialogue4', {
+             background: 'black',
+             onLoad: (engine) => {
+                 engine.typeWriter('papyrus-box-4-content', "WOW, I SURE AM THE GREATEST CHEF IN THIS WORLD!", 50, () => {
+                     engine.container.onclick = () => {
+                         engine.container.onclick = null;
+                         engine.goToScene('goodEnding');
+                     };
+                 }, true);
+             },
+             elements: [
+                 { type: 'spritePlaceholder', spriteType: 'skeleton', position: { top: '10%', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '150px' } },
+                 { type: 'dialogueBox', id: 'papyrus-box-4', showNextArrow: true, position: { bottom: 80, left: '10%', width: '80%', height: '150px' }, text: '<span style="font-size:40px; margin-right: 15px;">💀</span><span id="papyrus-box-4-content"></span>' }
+            ]
+        });
+
+        engine.registerScene('goodEnding', {
+            background: '#32CD32', // LimeGreen
+            elements: [
+                { type: 'text', text: 'Good Ending', style: { fontSize: '48px', fontWeight: 'bold' }, position: { top: 150, left: 0, width: '100%'} },
+                { type: 'text', text: "Ate papyrus's spaghetti", style: { fontSize: '24px' }, position: { top: 250, left: 0, width: '100%'} },
+                { type: 'button', text: 'Restart game', buttonStyle: 'blue', style: { fontSize: '24px' }, position: { top: 350, left: '50%', transform: 'translateX(-50%)' }, onClick: { goToScene: 'start' } }
+            ]
+        });
+
+        // --- Escape/Hell Scenes ---
+         engine.registerScene('escapeDialogue1', {
+             background: 'black',
+             onLoad: (engine) => {
+                 engine.typeWriter('escape-text-1', 'It seems like you tried to escape when the toilet was about to explode.', 50, () => {
+                    engine.container.onclick = () => { engine.container.onclick = null; engine.goToScene('escapeDialogue2'); };
+                 }, true);
+             },
+             elements: [
+                 { type: 'dialogueBox', id: 'escape-box-1', showNextArrow: true, position: { top: '30%', left: '10%', width: '80%', height: 'auto', minHeight: '100px' }, text: '<span id="escape-text-1"></span>' }
+            ]
+         });
+         engine.registerScene('escapeDialogue2', {
+             background: 'black',
+             onLoad: (engine) => {
+                 engine.typeWriter('escape-text-2', 'You managed to escape from "HELL."', 50, () => {
+                     engine.container.onclick = () => { engine.container.onclick = null; engine.goToScene('escapeDialogue3'); };
+                 }, true);
+             },
+             elements: [
+                 { type: 'dialogueBox', id: 'escape-box-2', showNextArrow: true, position: { top: '30%', left: '10%', width: '80%', height: 'auto', minHeight: '100px' }, text: '<span id="escape-text-2"></span>' }
+            ]
+         });
+         engine.registerScene('escapeDialogue3', {
+             background: 'black',
+             onLoad: (engine) => {
+                 engine.typeWriter('escape-text-3', 'Now choose, enough of talking', 50, () => {
+                      engine.container.onclick = () => { engine.container.onclick = null; engine.goToScene('escapeOptions'); };
+                 }, true);
+             },
+             elements: [
+                 { type: 'dialogueBox', id: 'escape-box-3', showNextArrow: true, position: { top: '30%', left: '10%', width: '80%', height: 'auto', minHeight: '100px' }, text: '<span id="escape-text-3"></span>' }
+            ]
+         });
+        engine.registerScene('escapeOptions', {
+             background: 'black',
+             elements: [
+                 { type: 'button', text: 'Option A', buttonStyle: 'gray', style: { fontSize: '24px' }, position: { top: '40%', left: '50%', transform: 'translateX(-50%)' },
+                     onClick: { runScript: (engine) => {
+                         // Flash effect and go to Sans
+                         engine.container.style.backgroundColor = 'red';
+                         engine.setTimeout(() => {
+                             engine.container.style.backgroundColor = 'black';
+                             engine.goToScene('sansBattle');
+                         }, 200);
+                     } }
+                 },
+                 { type: 'button', text: 'Option B', buttonStyle: 'gray', style: { fontSize: '24px' }, position: { top: '55%', left: '50%', transform: 'translateX(-50%)' }, onClick: { goToScene: 'coomGuyDialogue1' } } // Go to Mettaton/Coom Guy
+             ]
+         });
+
+
+        // --- Sans Ending Scenes ---
+        engine.registerScene('sansBattle', {
+            background: 'black',
+            onLoad: (engine) => {
+                 engine.updateGameData({ sansMercyAttempted: false }); // Reset mercy flag for this battle
+                 engine.updateElement('sans-options', {display: 'flex'});
+                 engine.updateElement('sans-attack-miss', {display: 'none'});
+                 engine.updateElement('sans-attack-line', {style:{animation: 'none'}});
+                 engine.updateElement('sans-soul-box', {display: 'none'});
+                 engine.updateElement('sans-dialogue-content', {text: "* YOU SHOULDN'T HAVE EXPLODED THAT TOILET."});
+            },
+             elements: [
+                 { type: 'spritePlaceholder', spriteType: 'skeleton', position: { top: '10%', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '150px' } },
+                 { type: 'dialogueBox', id: 'sans-dialogue-box', position: { top: '45%', left: '10%', width: '80%', height: '150px' }, text: '<span id="sans-dialogue-content">* YOU SHOULDN\'T HAVE EXPLODED THAT TOILET.</span>' }, // Inner span
+
+                 // Attack animation elements (initially hidden/inactive)
+                 { type: 'text', id: 'sans-attack-miss', text: 'MISS', style: { fontSize: '40px', color: 'white', fontWeight: 'bold', display: 'none', border:'none' }, position: { top: '40%', left: '50%', transform: 'translateX(-50%)', zIndex: 6 } },
+                 { type: 'attackBar', id: 'sans-attack-bar', style: { display: 'none', position: 'absolute'}, position: { top: '50%', left: '10%', zIndex: 5 }, // Reference element for line
+                    // The line itself is inside the attackBar type definition
+                     elements: [ {type: 'shape', id: 'sans-attack-line', shape: 'red-square', style: {width: '5px', height: '100%', position:'relative', left:0, border:'none' }}] // This might need adjustment
+                 },
+                 { type: 'shape', id: 'sans-soul-box', shape: 'black-square', style: { width: '200px', height: '100px', border: '3px solid white', display: 'none', justifyContent: 'center', alignItems: 'center' }, position: { bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 5 },
+                    elements: [
+                         {type: 'text', id: 'sans-bones', text: '🦴&nbsp;&nbsp;&nbsp;🦴&nbsp;&nbsp;&nbsp;🦴', style:{fontSize:'30px', color:'white', opacity:0.8, position:'absolute', border:'none'}}, // Bones background
+                         { type: 'emoji', id: 'player-soul', content: '❤️', style: { fontSize: '40px', color: 'red', border:'none', position: 'relative' } } // The soul itself
+                    ]
+                 },
+
+                 // Battle options
+                  { type: 'undertaleOptions', id: 'sans-options', options: { fight: 'FIGHT', mercy: 'MERCY' }, position: { bottom: 0, left: 0, width: '100%', height: '60px', zIndex: 7},
+                     actions: {
+                         fight: { runScript: (engine) => {
+                            engine.updateElement('sans-options', {display: 'none'}); // Hide options
+                             engine.updateElement('sans-dialogue-content', {text: ""}); // Clear text box
+                             engine.updateElement('sans-attack-miss', {display: 'block'});
+                             engine.updateElement('sans-attack-bar', {display: 'block'}); // Show bar
+                             const line = document.getElementById('sans-attack-bar').querySelector('.attack-line'); // Find the line correctly
+                             if (line) {
+                                line.style.animation = 'attack-sweep 0.5s linear forwards';
+                             } else { console.error("Attack line not found!"); }
+
+
+                             engine.setTimeout(() => {
+                                  engine.updateElement('sans-attack-miss', {display: 'none'});
+                                  engine.updateElement('sans-attack-bar', {display: 'none'});
+                                  engine.updateElement('sans-soul-box', {display: 'flex'}); // Show soul box
+                                  engine.updateElement('player-soul', { className: 'game-element element-emoji shake', text: '❤️' }); // Start shaking
+
+                                 engine.setTimeout(() => {
+                                     // Break the heart
+                                     engine.updateElement('player-soul', { className: 'game-element element-emoji broken-heart', text: '' }); // Use CSS pseudo-element for broken heart
+                                      // Flash effect
+                                      engine.container.style.backgroundColor = 'red';
+                                      engine.setTimeout(() => {
+                                         engine.container.style.backgroundColor = 'black';
+                                         engine.setTimeout(() => {
+                                            engine.goToScene('badEnding');
+                                        }, 500);
+                                     }, 100);
+                                 }, 1500); // Time player 'survives'
+
+                            }, 600); // Duration of attack animation + miss text display
+                         }},
+                         mercy: { runScript: (engine) => {
+                             if (!engine.getGameData('sansMercyAttempted')) {
+                                 engine.updateElement('sans-dialogue-content', { text: "* YOU CAN'T SPARE HIM BECAUSE YOU EXPLODED THE TOILET, AND DOING THAT IS AN UNFORGIVABLE SIN" });
+                                 engine.updateGameData({ sansMercyAttempted: true });
+                             }
+                             // If already attempted, maybe do nothing or add different text?
+                         }}
+                     }
+                 }
+             ]
+        });
+
+         engine.registerScene('badEnding', {
+            background: '#DC143C', // Crimson
+            elements: [
+                { type: 'text', text: 'Bad Ending', style: { fontSize: '48px', fontWeight: 'bold' }, position: { top: 150, left: 0, width: '100%'} },
+                { type: 'text', text: "Exploded the toilet.", style: { fontSize: '24px' }, position: { top: 250, left: 0, width: '100%'} },
+                { type: 'button', text: 'Restart game', buttonStyle: 'blue', style: { fontSize: '24px' }, position: { top: 350, left: '50%', transform: 'translateX(-50%)' }, onClick: { goToScene: 'start' } }
+            ]
+        });
+
+        // --- Coom Guy/Secret Ending Scenes ---
+         engine.registerScene('coomGuyDialogue1', {
+             background: 'black',
+             onLoad: (engine) => {
+                engine.currentState.data.coomDialogueIndex = 0;
+                 engine.emitEvent('coomGuyNextDialogue'); // Start the sequence
+             },
+             elements: [
+                { type: 'spritePlaceholder', spriteType: 'robot', position: { top: '10%', left: '50%', transform: 'translateX(-50%)', width: '100px', height: '150px' } },
+                 { type: 'dialogueBox', id: 'coom-dialogue-box', showNextArrow: true, position: { bottom: 80, left: '10%', width: '80%', height: '150px' }, text: '<span style="font-size:30px; transform: rotate(-15deg); display: inline-block; margin-right: 15px;">★</span><span id="coom-dialogue-content"></span>' }, // Icon + Content span
+                 // Options initially hidden
+                 { type: 'undertaleOptions', id: 'coom-options', options: { fight: 'FIGHT', act: 'ACT' }, style: {display: 'none'}, position: { bottom: 0, left: 0, width: '100%', height: '60px', zIndex: 7},
+                     actions: {
+                         fight: { runScript: (engine) => {
+                             engine.typeWriter('coom-dialogue-content', '* YOU ARE NOT ABLE TO KILL COOM GUY AS HE IS TOO STRONG.', 40, () => {
+                                 // Click to return to main state
+                                 engine.container.onclick = () => {
+                                     engine.container.onclick = null;
+                                     engine.typeWriter('coom-dialogue-content', '* COOM GUY STANDS.', 40, null, false); // No arrow here
+                                     engine.updateElement('coom-options', {display: 'flex'}); // Re-show options
+                                 };
+                             }, true);
+                             engine.updateElement('coom-options', {display: 'none'}); // Hide options during text
+                             engine.updateElement('coom-act-menu', {display: 'none'}); // Hide act menu if open
+                         }},
+                         act: { runScript: (engine) => {
+                             engine.updateElement('coom-act-menu', {display: 'flex'}); // Show ACT options
+                             engine.updateElement('coom-dialogue-content', { text: ''}); // Clear dialogue
+                             engine.updateElement('coom-options', {display: 'none'}); // Hide main options
+                         }}
+                     }
+                 },
+                 // ACT Menu (Overlay-like, but positioned absolutely)
+                 { type: 'shape', id: 'coom-act-menu', shape: 'black-square', style: { display: 'none', flexDirection: 'column', gap: '10px', border: '4px solid white', padding: '15px', zIndex: 8 }, position: { top: '55%', left: '50%', transform: 'translateX(-50%)', width: 'auto' },
+                     elements: [
+                        { type: 'text', id: 'act-check-btn', text: '* CHECK', style: { border: 'none', fontSize: '24px', color: 'white', cursor: 'pointer', textAlign: 'left' },
+                             onHover: { style: { color: 'yellow' } }, // Basic hover effect needs adding to engine
+                             onClick: { runScript: (engine) => {
+                                 engine.updateElement('coom-act-menu', {display: 'none'});
+                                 engine.typeWriter('coom-dialogue-content', '* COOM GUY - 120 ATK - 40 DEF', 40, () => {
+                                     engine.container.onclick = () => {
+                                         engine.container.onclick = null;
+                                         engine.typeWriter('coom-dialogue-content', '* COOM GUY STANDS.', 40, null, false);
+                                         engine.updateElement('coom-options', {display: 'flex'});
+                                     };
+                                 }, true);
+                             }}
+                         },
+                        { type: 'text', id: 'act-ask-btn', text: '* ASK FOR COOM', style: { border: 'none', fontSize: '24px', color: 'white', cursor: 'pointer', textAlign: 'left' },
+                             onHover: { style: { color: 'yellow' } },
+                             onClick: { runScript: (engine) => {
+                                engine.updateElement('coom-act-menu', {display: 'none'});
+                                engine.currentState.data.coomAskDialogueIndex = 0;
+                                engine.emitEvent('coomAskNextDialogue'); // Start ask sequence
+                             }}
+                         },
+                     ]
+                 }
+            ]
+        });
+
+        // Coom Guy Dialogue Handling
+        engine.onEvent('coomGuyNextDialogue', (engine) => {
+            const dialogues = [
+                 "* OH, HELLO THERE",
+                 "* SO YOU DECIDED TO COME INTO THE COOMING PARTY?",
+                 "* WELL, GREAT THEN!",
+                 "* LETS BEGIN."
+            ];
+            const index = engine.currentState.data.coomDialogueIndex || 0;
+
+            if (index < dialogues.length) {
+                engine.typeWriter('coom-dialogue-content', dialogues[index], 40, () => {
+                    engine.container.onclick = () => {
+                        engine.container.onclick = null;
+                        engine.currentState.data.coomDialogueIndex = index + 1;
+                        engine.emitEvent('coomGuyNextDialogue'); // Trigger next line
+                    };
+                }, true); // Show arrow
+            } else {
+                // Finished intro dialogue
+                engine.typeWriter('coom-dialogue-content', '* COOM GUY STANDS.', 40, null, false); // No arrow
+                engine.updateElement('coom-options', { display: 'flex' }); // Show battle options
+                engine.container.onclick = null; // Remove screen click listener
+            }
+        });
+         // Coom Guy Ask Dialogue Handling
+         engine.onEvent('coomAskNextDialogue', (engine) => {
+             const dialogues = [
+                 '* YOU ASK COOM GUY FOR HIS COOM',
+                 '* YOU WANT MY COOM?',
+                 '* UHHH...',
+                 '* SURE! LETS DO IT-'
+             ];
+             const index = engine.currentState.data.coomAskDialogueIndex || 0;
+
+             if (index < dialogues.length) {
+                 engine.typeWriter('coom-dialogue-content', dialogues[index], 40, () => {
+                     if (index === dialogues.length - 1) {
+                         // Last line, short pause then ending
+                         engine.setTimeout(() => {
+                            engine.goToScene('secretEnding');
+                         }, 500);
+                     } else {
+                          engine.container.onclick = () => {
+                             engine.container.onclick = null;
+                             engine.currentState.data.coomAskDialogueIndex = index + 1;
+                             engine.emitEvent('coomAskNextDialogue'); // Trigger next line
+                         };
+                     }
+                 }, (index < dialogues.length -1)); // Show arrow except for last line
+             }
+         });
+
+
+         engine.registerScene('secretEnding', {
+            background: '#696969', // DimGray
+            elements: [
+                { type: 'text', text: 'Secret Ending', style: { fontSize: '48px', fontWeight: 'bold' }, position: { top: 150, left: 0, width: '100%'} },
+                { type: 'text', text: "Fucked coom guy and ate his coom", style: { fontSize: '24px' }, position: { top: 250, left: 0, width: '100%'} },
+                { type: 'button', text: 'Restart game', buttonStyle: 'blue', style: { fontSize: '24px' }, position: { top: 350, left: '50%', transform: 'translateX(-50%)' }, onClick: { goToScene: 'start' } }
+            ]
+        });
+
+
+        // ==============================================
+        // Start the Game
+        // ==============================================
+        engine.goToScene('start');
+
+    </script>
+</body>
+</html>

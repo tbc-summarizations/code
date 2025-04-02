@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Platformer Game</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #222; }
+  canvas { display: block; background-color: #333; }
+  #skipButton {
+    position: absolute; top: 10px; left: 10px;
+    padding: 10px 15px;
+    background-color: #f44336; color: white;
+    border: none; cursor: pointer;
+    z-index: 10;
+  }
+  #skipButton:hover { background-color: #d32f2f; }
+</style>
+</head>
+<body>
+<button id="skipButton">Skip Level</button>
+<canvas id="gameCanvas"></canvas>
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 800;
+  canvas.height = 600;
+
+  const skipButton = document.getElementById('skipButton');
+
+  let currentLevelIndex = 0;
+  let levels = [];
+
+  function generateLevels() {
+      levels = [];
+      let levelCount = 50;
+      let worldCount = 5;
+      let levelsPerWorld = levelCount / worldCount;
+
+      for (let world = 0; world < worldCount; world++) {
+          for (let levelInWorld = 0; levelInWorld < levelsPerWorld; levelInWorld++) {
+              let levelNumber = world * levelsPerWorld + levelInWorld + 1;
+              let levelName = `World ${world + 1} - Level ${levelNumber}`;
+              let platforms = [];
+              let playerStart = {x: 50, y: canvas.height - 50};
+
+              // Basic level generation (can be expanded for more complexity)
+              if (levelNumber >= 1 && levelNumber <= 10) { // World 1 - Easy
+                  platforms.push({x: 0, y: canvas.height - 20, width: canvas.width, height: 20}); // Ground
+                  platforms.push({x: 200, y: canvas.height - 100, width: 100, height: 20});
+                  platforms.push({x: 450, y: canvas.height - 180, width: 100, height: 20});
+              } else if (levelNumber >= 11 && levelNumber <= 20) { // World 2 - Medium
+                  platforms.push({x: 0, y: canvas.height - 20, width: canvas.width, height: 20});
+                  platforms.push({x: 150, y: canvas.height - 150, width: 100, height: 20});
+                  platforms.push({x: 400, y: canvas.height - 100, width: 150, height: 20});
+                  platforms.push({x: 650, y: canvas.height - 200, width: 100, height: 20});
+              } else if (levelNumber >= 21 && levelNumber <= 30) { // World 3 - Harder
+                  platforms.push({x: 0, y: canvas.height - 20, width: canvas.width, height: 20});
+                  platforms.push({x: 100, y: canvas.height - 200, width: 80, height: 20});
+                  platforms.push({x: 300, y: canvas.height - 150, width: 120, height: 20});
+                  platforms.push({x: 550, y: canvas.height - 250, width: 90, height: 20});
+                  platforms.push({x: 700, y: canvas.height - 100, width: 100, height: 20});
+              } else if (levelNumber >= 31 && levelNumber <= 40) { // World 4 - More Hard
+                  platforms.push({x: 0, y: canvas.height - 20, width: canvas.width, height: 20});
+                  platforms.push({x: 50, y: canvas.height - 100, width: 60, height: 20});
+                  platforms.push({x: 250, y: canvas.height - 250, width: 70, height: 20});
+                  platforms.push({x: 450, y: canvas.height - 150, width: 80, height: 20});
+                  platforms.push({x: 650, y: canvas.height - 300, width: 90, height: 20});
+              } else { // World 5 - Really Hard
+                  platforms.push({x: 0, y: canvas.height - 20, width: canvas.width, height: 20});
+                  platforms.push({x: 30, y: canvas.height - 300, width: 50, height: 20});
+                  platforms.push({x: 200, y: canvas.height - 100, width: 40, height: 20});
+                  platforms.push({x: 400, y: canvas.height - 200, width: 30, height: 20});
+                  platforms.push({x: 600, y: canvas.height - 400, width: 20, height: 20});
+                  platforms.push({x: 750, y: canvas.height - 150, width: 50, height: 20});
+              }
+
+
+              levels.push({
+                  name: levelName,
+                  platforms: platforms,
+                  playerStart: playerStart
+              });
+          }
+      }
+  }
+
+  generateLevels();
+
+  let player = {
+      x: levels[currentLevelIndex].playerStart.x,
+      y: levels[currentLevelIndex].playerStart.y,
+      size: 20,
+      velocityY: 0,
+      velocityX: 0,
+      gravity: 0.5,
+      jumpPower: -10,
+      moveSpeed: 3,
+      isJumping: false
+  };
+
+  let camera = {
+      x: 0,
+      y: 0
+  };
+
+  let keys = {};
+
+  document.addEventListener('keydown', function(e) {
+      keys[e.key] = true;
+      if (e.key === 'r') {
+          resetPlayerPosition();
+      }
+  });
+
+  document.addEventListener('keyup', function(e) {
+      keys[e.key] = false;
+  });
+
+  skipButton.addEventListener('click', function() {
+      nextLevel();
+  });
+
+  function nextLevel() {
+      currentLevelIndex++;
+      if (currentLevelIndex >= levels.length) {
+          currentLevelIndex = 0; // Loop back to the first level or handle game completion
+      }
+      loadLevel(currentLevelIndex);
+  }
+
+  function loadLevel(levelIndex) {
+      player.x = levels[levelIndex].playerStart.x;
+      player.y = levels[levelIndex].playerStart.y;
+      player.velocityY = 0;
+      player.velocityX = 0;
+      camera.x = 0;
+      camera.y = 0;
+  }
+
+  function resetPlayerPosition() {
+      player.x = levels[currentLevelIndex].playerStart.x;
+      player.y = levels[currentLevelIndex].playerStart.y;
+      player.velocityY = 0;
+      player.velocityX = 0;
+  }
+
+
+  function updatePlayer() {
+      if (keys['a'] || keys['A']) {
+          player.velocityX = -player.moveSpeed;
+      } else if (keys['d'] || keys['D']) {
+          player.velocityX = player.moveSpeed;
+      } else {
+          player.velocityX = 0;
+      }
+
+      if ((keys[' '] || keys['Spacebar']) && !player.isJumping) {
+          player.velocityY = player.jumpPower;
+          player.isJumping = true;
+      }
+
+      player.velocityY += player.gravity;
+      player.x += player.velocityX;
+      player.y += player.velocityY;
+
+      // Collision detection
+      player.isJumping = true; // Assume in air, correct if collision below
+      let levelPlatforms = levels[currentLevelIndex].platforms;
+      for (let platform of levelPlatforms) {
+          if (player.x + player.size > platform.x &&
+              player.x < platform.x + platform.width &&
+              player.y + player.size > platform.y &&
+              player.y < platform.y + platform.height) {
+
+              let overlapX = Math.min(player.x + player.size, platform.x + platform.width) - Math.max(player.x, platform.x);
+              let overlapY = Math.min(player.y + player.size, platform.y + platform.height) - Math.max(player.y, platform.y);
+
+              if (overlapX < overlapY) { // Collision from sides
+                  if (player.velocityX > 0) {
+                      player.x = platform.x - player.size;
+                  } else if (player.velocityX < 0) {
+                      player.x = platform.x + platform.width;
+                  }
+                  player.velocityX = 0;
+              } else { // Collision from top or bottom
+                  if (player.velocityY > 0) {
+                      player.y = platform.y - player.size;
+                      player.isJumping = false;
+                  } else if (player.velocityY < 0) {
+                      player.y = platform.y + platform.height;
+                  }
+                  player.velocityY = 0;
+              }
+          }
+      }
+
+      // Keep player within bounds (optional, can be level specific)
+      if (player.y > canvas.height) {
+          player.y = canvas.height - player.size;
+          player.velocityY = 0;
+          player.isJumping = false;
+      }
+      if (player.x < 0) player.x = 0;
+      if (player.x + player.size > canvas.width) player.x = canvas.width - player.size;
+
+
+      // Camera follow
+      camera.x = player.x - canvas.width / 2;
+      camera.y = player.y - canvas.height / 2;
+
+      // Keep camera within level bounds (if levels were wider than canvas) - not needed in this example as levels are canvas width.
+      camera.x = Math.max(0, camera.x);
+      camera.y = Math.max(0, camera.y);
+      camera.x = Math.min(camera.x, 0); // Assuming level width is canvas.width, no horizontal camera limit needed in this basic example.
+      camera.y = Math.min(camera.y, 0); // Assuming level height is large, can set a limit if needed.
+  }
+
+  function drawPlayer() {
+      ctx.fillStyle = 'yellow';
+      ctx.beginPath();
+      ctx.moveTo(player.x + player.size / 2 - camera.x, player.y - camera.y); // Top point
+      ctx.lineTo(player.x - camera.x, player.y + player.size - camera.y); // Bottom left
+      ctx.lineTo(player.x + player.size - camera.x, player.y + player.size - camera.y); // Bottom right
+      ctx.closePath();
+      ctx.fill();
+  }
+
+  function drawLevel() {
+      ctx.fillStyle = '#4CAF50';
+      for (let platform of levels[currentLevelIndex].platforms) {
+          ctx.fillRect(platform.x - camera.x, platform.y - camera.y, platform.width, platform.height);
+      }
+  }
+
+  function drawLevelName() {
+      ctx.fillStyle = 'white';
+      ctx.font = '20px Arial';
+      ctx.fillText(levels[currentLevelIndex].name, 10 - camera.x, 30 - camera.y);
+  }
+
+
+  function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawLevel();
+      drawPlayer();
+      drawLevelName();
+      updatePlayer();
+      requestAnimationFrame(gameLoop);
+  }
+
+  loadLevel(currentLevelIndex);
+  gameLoop();
+</script>
+</body>
+</html>

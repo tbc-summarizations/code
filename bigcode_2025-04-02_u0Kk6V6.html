@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Pool Puzzle</title>
+<meta charset="UTF-8">
+<style>
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f0f8ff; /* AliceBlue */
+    color: #333;
+    margin: 0;
+    padding-top: 10px;
+  }
+  #gameCanvas {
+    border: 2px solid #4682b4; /* SteelBlue */
+    background-color: #90ee90; /* LightGreen */
+    cursor: crosshair;
+    box-shadow: 3px 3px 8px rgba(0,0,0,0.2);
+  }
+  #ui {
+    margin-top: 15px;
+    margin-bottom: 10px;
+    font-size: 1.4em;
+    color: #2f4f4f; /* DarkSlateGray */
+  }
+  button {
+    margin: 8px;
+    padding: 12px 25px;
+    font-size: 1.1em;
+    cursor: pointer;
+    border: none;
+    border-radius: 5px;
+    background-color: #4682b4; /* SteelBlue */
+    color: white;
+    transition: background-color 0.3s ease;
+  }
+  button:hover {
+    background-color: #5a9bd4; /* Lighter SteelBlue */
+  }
+  button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
+  #message {
+    margin-top: 15px;
+    min-height: 1.5em; /* Reserve space */
+    font-weight: bold;
+    font-size: 1.3em;
+    color: #0000cd; /* MediumBlue */
+  }
+  h1 {
+    color: #191970; /* MidnightBlue */
+  }
+</style>
+</head>
+<body>
+  <h1>Pool Puzzle Mania</h1>
+  <div id="ui">
+    Level: <span id="levelDisplay">1</span> |
+    Moves Left: <span id="movesDisplay">0</span>
+  </div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div id="message">Aim and shoot!</div>
+  <button id="restartButton">Restart Level</button>
+  <button id="nextLevelButton" style="display:none;">Next Level</button>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const levelDisplay = document.getElementById('levelDisplay');
+  const movesDisplay = document.getElementById('movesDisplay');
+  const messageDisplay = document.getElementById('message');
+  const restartButton = document.getElementById('restartButton');
+  const nextLevelButton = document.getElementById('nextLevelButton');
+
+  // --- Game Constants ---
+  const BALL_RADIUS = 10;
+  const TARGET_RADIUS = 20;
+  const FRICTION = 0.985; // Friction factor applied each frame
+  const MIN_SPEED = 0.1; // Speed below which the ball stops
+  const MAX_POWER = 15; // Max initial speed
+  const AIM_LINE_MAX_LENGTH = 100; // Visual limit for aiming line
+  const PORTAL_RADIUS = 15;
+  const PORTAL_COOLDOWN = 30; // Frames before ball can re-enter a portal
+
+  // --- Game State ---
+  let currentLevelIndex = 0;
+  let movesLeft = 0;
+  let ball = { x: 0, y: 0, vx: 0, vy: 0, radius: BALL_RADIUS, onSticky: false, portalCooldown: 0 };
+  let target = { x: 0, y: 0, radius: TARGET_RADIUS, active: true };
+  let obstacles = []; // Will hold current level obstacles
+  let mechanics = []; // Will hold current level mechanics
+  let levelState = { // State specific to the current attempt
+    keyBallHit: false,
+    breakableObstacles: [] // Keep track of original state for restart
+  };
+
+  let isAiming = false;
+  let aimStart = { x: 0, y: 0 };
+  let aimEnd = { x: 0, y: 0 };
+  let ballMoving = false;
+  let gameOver = false;
+  let levelComplete = false;
+
+  // --- Level Definitions ---
+  const levels = [
+    // Level 1: Basic shot
+    {
+      message: "Get the white ball (⚪️) to the target (🎯). Drag and release to shoot.",
+      ballStart: { x: 100, y: 300 },
+      target: { x: 700, y: 300 },
+      moves: 3,
+      obstacles: [],
+      mechanics: []
+    },
+    // Level 2: Static Obstacle
+    {
+      message: "Avoid the grey obstacle (⬛️).",
+      ballStart: { x: 100, y: 100 },
+      target: { x: 700, y: 500 },
+      moves: 4,
+      obstacles: [
+        { type: 'rect', x: 350, y: 200, width: 100, height: 200, color: 'dimgray' }
+      ],
+      mechanics: []
+    },
+    // Level 3: Bouncing off Walls
+    {
+      message: "Use the walls (🧱) to your advantage!",
+      ballStart: { x: 100, y: 100 },
+      target: { x: 100, y: 500 },
+      moves: 2,
+      obstacles: [
+          { type: 'rect', x: 200, y: 0, width: 50, height: 400, color: 'saddlebrown' },
+          { type: 'rect', x: 200, y: 450, width: 500, height: 50, color: 'saddlebrown' }
+      ],
+      mechanics: ['walls'] // Use canvas bounds implicitly
+    },
+    // Level 4: Moving Obstacle
+    {
+      message: "Watch out for the moving block (🟧)! Timing is key.",
+      ballStart: { x: 50, y: 300 },
+      target: { x: 750, y: 300 },
+      moves: 5,
+      obstacles: [
+        { type: 'rect', x: 400, y: 100, width: 50, height: 150, color: 'darkorange', moving: { axis: 'y', min: 100, max: 350, speed: 2, direction: 1 } }
+      ],
+      mechanics: ['moving_obstacles']
+    },
+    // Level 5: Portals
+    {
+      message: "Enter one portal (🌀), exit the other!",
+      ballStart: { x: 100, y: 100 },
+      target: { x: 700, y: 500 },
+      moves: 3,
+      obstacles: [
+          { type: 'rect', x: 0, y: 280, width: 800, height: 40, color: 'dimgray' }
+      ],
+      mechanics: [
+          { type: 'portal', x1: 150, y1: 150, x2: 650, y2: 450, radius: PORTAL_RADIUS, color1: 'purple', color2: 'deeppink'}
+      ]
+    },
+    // Level 6: Sticky Surface
+    {
+      message: "This muddy area (🟫) will slow you down.",
+      ballStart: { x: 100, y: 300 },
+      target: { x: 700, y: 300 },
+      moves: 4,
+      obstacles: [],
+      mechanics: [
+          { type: 'sticky', x: 300, y: 100, width: 200, height: 400, color: 'rgba(139, 69, 19, 0.5)', frictionMultiplier: 0.3 } // Brownish, high friction
+      ]
+    },
+    // Level 7: Boost Pad
+    {
+      message: "Hit the green pad (🟩) for a speed boost!",
+      ballStart: { x: 100, y: 500 },
+      target: { x: 700, y: 100 },
+      moves: 3,
+      obstacles: [ { type: 'rect', x: 400, y: 150, width: 50, height: 450, color: 'dimgray' } ],
+      mechanics: [
+          { type: 'boost', x: 200, y: 250, width: 100, height: 50, color: 'rgba(0, 255, 0, 0.6)', boostVx: 0, boostVy: -15 } // Boost upwards
+      ]
+    },
+    // Level 8: Breakable Wall
+    {
+      message: "Some walls (🧊) break after one hit.",
+      ballStart: { x: 100, y: 300 },
+      target: { x: 700, y: 300 },
+      moves: 3, // Reduced moves to make breaking necessary
+      obstacles: [
+           { type: 'rect', x: 400, y: 200, width: 50, height: 200, color: 'lightblue', breakable: true, health: 1, originalColor: 'lightblue' }
+      ],
+      mechanics: ['breakable']
+    },
+    // Level 9: Key Ball
+    {
+      message: "You must hit the orange ball (🟠) first to activate the target (❓ -> 🎯).",
+      ballStart: { x: 100, y: 150 },
+      target: { x: 700, y: 450, active: false }, // Target initially inactive
+      moves: 4,
+      obstacles: [
+          { type: 'circle', x: 400, y: 300, radius: 15, color: 'orange', id: 'keyBall', mustHit: true, hit: false }
+      ],
+      mechanics: ['key_ball']
+    },
+    // Level 10: Combination
+    {
+      message: "The Final Challenge! Combine all your skills.",
+      ballStart: { x: 50, y: 550 },
+      target: { x: 750, y: 50, active: false }, // Inactive until key ball hit
+      moves: 8,
+      obstacles: [
+        { type: 'rect', x: 200, y: 450, width: 50, height: 150, color: 'dimgray' }, // Static wall near start
+        { type: 'rect', x: 600, y: 50, width: 50, height: 150, color: 'darkorange', moving: { axis: 'y', min: 50, max: 250, speed: 1.5, direction: 1 } }, // Moving near top
+        { type: 'rect', x: 400, y: 250, width: 50, height: 100, color: 'lightblue', breakable: true, health: 1, originalColor: 'lightblue' }, // Breakable middle
+        { type: 'circle', x: 150, y: 150, radius: 15, color: 'orange', id: 'keyBall10', mustHit: true, hit: false } // Key ball top left
+      ],
+      mechanics: [
+        'walls', 'moving_obstacles', 'breakable', 'key_ball',
+        { type: 'portal', x1: 300, y1: 100, x2: 500, y2: 500, radius: PORTAL_RADIUS, color1: 'purple', color2: 'deeppink'},
+        { type: 'sticky', x: 50, y: 250, width: 150, height: 100, color: 'rgba(139, 69, 19, 0.5)', frictionMultiplier: 0.3 }, // Sticky patch left
+        { type: 'boost', x: 650, y: 450, width: 100, height: 50, color: 'rgba(0, 255, 0, 0.6)', boostVx: 0, boostVy: -12 } // Boost pad bottom right
+      ]
+    }
+  ];
+
+  // --- Utility Functions ---
+  function distance(x1, y1, x2, y2) {
+    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  }
+
+  function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+  }
+
+  // Deep clone helper for level state reset
+  function deepClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+
+  // --- Level Loading ---
+  function loadLevel(levelIndex) {
+    if (levelIndex >= levels.length) {
+      messageDisplay.textContent = "🎉 You've completed all levels! 🎉";
+      gameOver = true;
+      levelComplete = false;
+      ballMoving = false;
+      nextLevelButton.style.display = 'none';
+      restartButton.textContent = 'Play Again?'; // Option to restart game
+      currentLevelIndex = 0; // Reset for potential replay
+      draw(); // Draw final state
+      return;
+    }
+
+    const levelData = levels[levelIndex];
+    currentLevelIndex = levelIndex;
+    movesLeft = levelData.moves;
+    ball.x = levelData.ballStart.x;
+    ball.y = levelData.ballStart.y;
+    ball.vx = 0;
+    ball.vy = 0;
+    ball.portalCooldown = 0;
+    target.x = levelData.target.x;
+    target.y = levelData.target.y;
+    target.active = levelData.target.active === undefined ? true : levelData.target.active; // Default to active if not specified
+
+    // Deep clone obstacles and mechanics to avoid modifying the original level data
+    obstacles = deepClone(levelData.obstacles);
+    mechanics = deepClone(levelData.mechanics || []); // Ensure mechanics is always an array
+
+    // Reset level specific state
+    levelState.keyBallHit = false;
+    // Reset breakable obstacle health and key ball hit status
+    obstacles.forEach(obs => {
+        if (obs.breakable) obs.health = obs.health || 1; // Ensure health defined
+        if (obs.mustHit) obs.hit = false;
+        if (obs.moving) obs.direction = obs.direction || 1; // Reset moving direction
+    });
+
+    levelDisplay.textContent = levelIndex + 1;
+    movesDisplay.textContent = movesLeft;
+    messageDisplay.textContent = levelData.message || `Level ${levelIndex + 1}`;
+    gameOver = false;
+    levelComplete = false;
+    ballMoving = false;
+    isAiming = false;
+    nextLevelButton.style.display = 'none';
+    restartButton.textContent = 'Restart Level';
+    restartButton.disabled = false;
+
+    // Store original state of breakable obstacles for reset
+    levelState.breakableObstacles = deepClone(obstacles.filter(o => o.breakable));
+
+    draw(); // Draw the initial state of the level
+  }
+
+   // --- Drawing Functions ---
+   function drawBall() {
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.closePath();
+  }
+
+  function drawTarget() {
+    const isActive = target.active;
+    const outerColor = isActive ? 'red' : 'gray';
+    const innerColor = isActive ? 'white' : '#ccc';
+    const symbol = isActive ? '🎯' : '❓';
+
+    // Draw outer circle
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2);
+    ctx.fillStyle = outerColor;
+    ctx.fill();
+    ctx.closePath();
+
+    // Draw inner circle
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, target.radius * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = innerColor;
+    ctx.fill();
+    ctx.closePath();
+
+     // Draw center circle
+    ctx.beginPath();
+    ctx.arc(target.x, target.y, target.radius * 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = outerColor;
+    ctx.fill();
+    ctx.closePath();
+
+    // Draw Symbol (optional, fallback if emoji doesn't render well)
+    // ctx.fillStyle = 'black';
+    // ctx.font = `${target.radius * 1.5}px Arial`;
+    // ctx.textAlign = 'center';
+    // ctx.textBaseline = 'middle';
+    // ctx.fillText(symbol, target.x, target.y);
+  }
+
+  function drawObstacles() {
+    obstacles.forEach(obs => {
+      if (obs.type === 'rect') {
+          if (!obs.broken) { // Only draw if not broken
+              ctx.fillStyle = obs.health < (levels[currentLevelIndex].obstacles.find(o => o.x === obs.x && o.y === obs.y)?.health || 1) && obs.breakable ? 'rgba(173, 216, 230, 0.5)' : obs.color; // Lighter if damaged
+              ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+              ctx.strokeStyle = 'black';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+              if (obs.breakable) { // Indicate breakable
+                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                 ctx.font = '10px Arial';
+                 ctx.textAlign = 'center';
+                 ctx.textBaseline = 'middle';
+                 ctx.fillText('🧊', obs.x + obs.width / 2, obs.y + obs.height / 2);
+              }
+               if (obs.moving) { // Indicate moving
+                 ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                 ctx.font = 'bold 12px Arial';
+                 ctx.textAlign = 'center';
+                 ctx.textBaseline = 'middle';
+                 ctx.fillText('↔️', obs.x + obs.width / 2, obs.y + obs.height / 2); // Adjust symbol based on axis
+              }
+          }
+      } else if (obs.type === 'circle') {
+          ctx.beginPath();
+          ctx.arc(obs.x, obs.y, obs.radius, 0, Math.PI * 2);
+          ctx.fillStyle = obs.hit ? 'darkgrey' : obs.color; // Grey out if hit
+          ctx.fill();
+          ctx.strokeStyle = 'black';
+           ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.closePath();
+           if (obs.mustHit && !obs.hit) { // Indicate must hit
+               ctx.fillStyle = 'black';
+               ctx.font = 'bold 14px Arial';
+               ctx.textAlign = 'center';
+               ctx.textBaseline = 'middle';
+               ctx.fillText('!', obs.x, obs.y + 1);
+            }
+      }
+    });
+  }
+
+  function drawMechanics() {
+      mechanics.forEach(mech => {
+          if (mech.type === 'portal') {
+              // Draw Portal 1
+              ctx.beginPath();
+              ctx.arc(mech.x1, mech.y1, mech.radius, 0, Math.PI * 2);
+              ctx.fillStyle = mech.color1;
+              ctx.globalAlpha = 0.7;
+              ctx.fill();
+              ctx.globalAlpha = 1.0;
+              ctx.strokeStyle = 'black';
+              ctx.lineWidth = 2;
+              ctx.stroke();
+              ctx.closePath();
+               ctx.fillStyle = 'white';
+               ctx.font = 'bold 12px Arial';
+               ctx.textAlign = 'center';
+               ctx.textBaseline = 'middle';
+               ctx.fillText('🌀', mech.x1, mech.y1);
+
+
+              // Draw Portal 2
+              ctx.beginPath();
+              ctx.arc(mech.x2, mech.y2, mech.radius, 0, Math.PI * 2);
+              ctx.fillStyle = mech.color2;
+              ctx.globalAlpha = 0.7;
+              ctx.fill();
+              ctx.globalAlpha = 1.0;
+              ctx.strokeStyle = 'black';
+              ctx.lineWidth = 2;
+              ctx.stroke();
+              ctx.closePath();
+              ctx.fillStyle = 'white';
+               ctx.font = 'bold 12px Arial';
+               ctx.textAlign = 'center';
+               ctx.textBaseline = 'middle';
+               ctx.fillText('🌀', mech.x2, mech.y2);
+
+          } else if (mech.type === 'sticky') {
+              ctx.fillStyle = mech.color;
+              ctx.fillRect(mech.x, mech.y, mech.width, mech.height);
+              // Add texture/symbol?
+              ctx.fillStyle = 'rgba(0,0,0,0.3)';
+              ctx.font = '20px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('🟫', mech.x + mech.width / 2, mech.y + mech.height / 2);
+          } else if (mech.type === 'boost') {
+              ctx.fillStyle = mech.color;
+              ctx.fillRect(mech.x, mech.y, mech.width, mech.height);
+              // Add arrow/symbol
+              ctx.fillStyle = 'rgba(255,255,255,0.8)';
+              ctx.font = 'bold 20px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              let arrow = '⬆️';
+              if(mech.boostVx > 0) arrow = '➡️';
+              else if(mech.boostVx < 0) arrow = '⬅️';
+              else if(mech.boostVy > 0) arrow = '⬇️';
+              ctx.fillText(arrow, mech.x + mech.width / 2, mech.y + mech.height / 2);
+          }
+      });
+  }
+
+  function drawAimLine() {
+    if (isAiming && !ballMoving) {
+      const dx = ball.x - aimEnd.x;
+      const dy = ball.y - aimEnd.y;
+      const dist = distance(ball.x, ball.y, aimEnd.x, aimEnd.y);
+      const powerRatio = Math.min(dist / AIM_LINE_MAX_LENGTH, 1);
+      const angle = Math.atan2(dy, dx);
+
+      const lineEndX = ball.x + Math.cos(angle) * AIM_LINE_MAX_LENGTH * powerRatio;
+      const lineEndY = ball.y + Math.sin(angle) * AIM_LINE_MAX_LENGTH * powerRatio;
+
+      ctx.beginPath();
+      ctx.moveTo(ball.x, ball.y);
+      ctx.lineTo(lineEndX, lineEndY);
+      ctx.strokeStyle = `rgba(255, 0, 0, ${0.5 + powerRatio * 0.5})`; // Red, opacity based on power
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.closePath();
+
+       // Draw arrowhead
+       const arrowSize = 8;
+       ctx.beginPath();
+       ctx.moveTo(lineEndX, lineEndY);
+       ctx.lineTo(lineEndX - arrowSize * Math.cos(angle - Math.PI / 6), lineEndY - arrowSize * Math.sin(angle - Math.PI / 6));
+       ctx.lineTo(lineEndX - arrowSize * Math.cos(angle + Math.PI / 6), lineEndY - arrowSize * Math.sin(angle + Math.PI / 6));
+       ctx.closePath();
+       ctx.fillStyle = `rgba(255, 0, 0, ${0.5 + powerRatio * 0.5})`;
+       ctx.fill();
+    }
+  }
+
+  function draw() {
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw elements
+    drawMechanics(); // Draw mechanics underneath obstacles/ball
+    drawObstacles();
+    drawTarget();
+    drawBall();
+    drawAimLine();
+  }
+
+  // --- Physics and Collision ---
+  function updatePhysics() {
+      if (!ballMoving) return;
+
+      // Apply friction based on surface
+      let currentFriction = FRICTION;
+      ball.onSticky = false;
+      mechanics.forEach(mech => {
+          if (mech.type === 'sticky' &&
+              ball.x > mech.x && ball.x < mech.x + mech.width &&
+              ball.y > mech.y && ball.y < mech.y + mech.height) {
+              currentFriction **= mech.frictionMultiplier; // Apply extra friction
+              ball.onSticky = true;
+          }
+      });
+
+      ball.vx *= currentFriction;
+      ball.vy *= currentFriction;
+
+
+      // Update position
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Portal Cooldown
+      if (ball.portalCooldown > 0) {
+          ball.portalCooldown--;
+      }
+
+
+      // --- Collision Detection & Response ---
+
+      // 1. Walls (Canvas Bounds)
+      if (ball.x - ball.radius < 0) { ball.x = ball.radius; ball.vx *= -1; }
+      if (ball.x + ball.radius > canvas.width) { ball.x = canvas.width - ball.radius; ball.vx *= -1; }
+      if (ball.y - ball.radius < 0) { ball.y = ball.radius; ball.vy *= -1; }
+      if (ball.y + ball.radius > canvas.height) { ball.y = canvas.height - ball.radius; ball.vy *= -1; }
+
+      // 2. Obstacles
+      obstacles.forEach((obs, index) => {
+          if (obs.broken) return; // Skip broken obstacles
+
+          if (obs.type === 'rect') {
+              // Find closest point on rect to ball center
+              const closestX = clamp(ball.x, obs.x, obs.x + obs.width);
+              const closestY = clamp(ball.y, obs.y, obs.y + obs.height);
+              const dist = distance(ball.x, ball.y, closestX, closestY);
+
+              if (dist < ball.radius) {
+                  // Collision occurred
+                  const overlap = ball.radius - dist;
+                  const dx = ball.x - closestX;
+                  const dy = ball.y - closestY;
+                  const norm = Math.sqrt(dx * dx + dy * dy);
+                  const normalX = norm === 0 ? 1 : dx / norm; // Avoid division by zero if perfectly centered
+                  const normalY = norm === 0 ? 0 : dy / norm;
+
+                  // Move ball out of collision
+                  ball.x += normalX * overlap;
+                  ball.y += normalY * overlap;
+
+                  // Reflect velocity (dot product method)
+                  const dotProduct = ball.vx * normalX + ball.vy * normalY;
+                  ball.vx -= 2 * dotProduct * normalX;
+                  ball.vy -= 2 * dotProduct * normalY;
+
+                  // Handle breakable
+                  if (obs.breakable) {
+                      obs.health--;
+                      if (obs.health <= 0) {
+                          obs.broken = true; // Mark as broken instead of removing, easier for reset
+                          // Find the corresponding obstacle in the original level data to maybe change appearance permanently? No, reset handles this.
+                      }
+                  }
+              }
+          } else if (obs.type === 'circle') {
+                const dist = distance(ball.x, ball.y, obs.x, obs.y);
+                if (dist < ball.radius + obs.radius) {
+                    // Collision occurred
+                    const overlap = ball.radius + obs.radius - dist;
+                    const dx = ball.x - obs.x;
+                    const dy = ball.y - obs.y;
+                    const collisionAngle = Math.atan2(dy, dx);
+
+                    // Move ball out of collision along collision angle
+                    const moveX = (overlap / 2) * Math.cos(collisionAngle); // Move both slightly? No, just move cue ball fully for simplicity
+                    const moveY = (overlap / 2) * Math.sin(collisionAngle);
+                    ball.x += moveX * 2;
+                    ball.y += moveY * 2;
+                    // obs.x -= moveX; // Don't move static obstacle balls
+                    // obs.y -= moveY;
+
+                    // Reflect velocity (simplified for static circle)
+                     // Using normal vector
+                    const normalX = dx / dist;
+                    const normalY = dy / dist;
+                    const dotProduct = ball.vx * normalX + ball.vy * normalY;
+                    ball.vx -= 2 * dotProduct * normalX;
+                    ball.vy -= 2 * dotProduct * normalY;
+
+
+                    // Handle mustHit
+                    if (obs.mustHit && !obs.hit) {
+                        obs.hit = true;
+                        levelState.keyBallHit = true;
+                        target.active = true; // Activate target
+                         messageDisplay.textContent = "Target Activated! 🎯";
+                    }
+                }
+          }
+      });
+
+      // 3. Mechanics Interaction
+      mechanics.forEach(mech => {
+           if (mech.type === 'portal' && ball.portalCooldown <= 0) {
+                const dist1 = distance(ball.x, ball.y, mech.x1, mech.y1);
+                const dist2 = distance(ball.x, ball.y, mech.x2, mech.y2);
+
+                if (dist1 < ball.radius + mech.radius) {
+                    ball.x = mech.x2;
+                    ball.y = mech.y2;
+                    ball.portalCooldown = PORTAL_COOLDOWN; // Prevent immediate re-entry
+                } else if (dist2 < ball.radius + mech.radius) {
+                    ball.x = mech.x1;
+                    ball.y = mech.y1;
+                    ball.portalCooldown = PORTAL_COOLDOWN; // Prevent immediate re-entry
+                }
+            } else if (mech.type === 'boost') {
+                 if (ball.x + ball.radius > mech.x && ball.x - ball.radius < mech.x + mech.width &&
+                     ball.y + ball.radius > mech.y && ball.y - ball.radius < mech.y + mech.height) {
+                     // Apply boost as an impulse (add directly to velocity) - maybe only once? Let's apply continuously for effect
+                     // Check if ball is moving *into* the boost area? Simpler to just apply if inside.
+                     // Apply a cap or apply only if speed is below a threshold?
+                     // Simple impulse on entry might be better - requires state tracking.
+                     // Let's just add velocity directly for now.
+                     // Cap velocity to prevent extreme speeds?
+                     const currentSpeed = Math.sqrt(ball.vx**2 + ball.vy**2);
+                     const MAX_BOOST_SPEED = MAX_POWER * 1.5; // Limit max speed from boost
+                     if (currentSpeed < MAX_BOOST_SPEED) {
+                         ball.vx += mech.boostVx * 0.1; // Scale boost effect per frame
+                         ball.vy += mech.boostVy * 0.1;
+                         // Clamp velocity if needed
+                         const newSpeed = Math.sqrt(ball.vx**2 + ball.vy**2);
+                         if (newSpeed > MAX_BOOST_SPEED) {
+                            const ratio = MAX_BOOST_SPEED / newSpeed;
+                            ball.vx *= ratio;
+                            ball.vy *= ratio;
+                         }
+                     }
+                 }
+            }
+           // Sticky surface friction handled at the start of physics update
+      });
+
+       // 4. Moving Obstacles Update
+        obstacles.forEach(obs => {
+            if (obs.moving && !obs.broken) {
+                if (obs.moving.axis === 'y') {
+                    obs.y += obs.moving.speed * obs.moving.direction;
+                    if (obs.y <= obs.moving.min || obs.y + obs.height >= obs.moving.max) {
+                        obs.moving.direction *= -1;
+                        // Clamp position to avoid getting stuck outside bounds
+                        obs.y = clamp(obs.y, obs.moving.min, obs.moving.max - obs.height);
+                    }
+                } else if (obs.moving.axis === 'x') {
+                     obs.x += obs.moving.speed * obs.moving.direction;
+                    if (obs.x <= obs.moving.min || obs.x + obs.width >= obs.moving.max) {
+                        obs.moving.direction *= -1;
+                        obs.x = clamp(obs.x, obs.moving.min, obs.moving.max - obs.width);
+                    }
+                }
+            }
+        });
+
+
+      // Check if ball stopped moving
+      const speed = Math.sqrt(ball.vx ** 2 + ball.vy ** 2);
+      if (speed < MIN_SPEED) {
+        ball.vx = 0;
+        ball.vy = 0;
+        ballMoving = false;
+        checkEndConditions();
+      }
+  }
+
+  // --- Game Logic ---
+  function checkEndConditions() {
+    if (levelComplete || gameOver) return; // Don't re-evaluate if already decided
+
+    // Check win condition
+    const distToTarget = distance(ball.x, ball.y, target.x, target.y);
+    let conditionsMet = true;
+    // Check if key ball(s) needed hitting
+     if (levels[currentLevelIndex].mechanics.includes('key_ball') || levels[currentLevelIndex].obstacles.some(o => o.mustHit)) {
+        if (!levelState.keyBallHit) {
+            conditionsMet = false;
+        }
+     }
+
+    if (distToTarget < ball.radius + target.radius && target.active && conditionsMet) {
+      levelComplete = true;
+      messageDisplay.textContent = `Level ${currentLevelIndex + 1} Complete! 😄`;
+      nextLevelButton.style.display = 'inline-block';
+      restartButton.disabled = true; // Prevent restart after winning until next level
+    } else if (movesLeft <= 0 && !ballMoving) {
+      // Check lose condition only if ball stopped and no moves left
+      gameOver = true;
+      messageDisplay.textContent = "Out of moves! 😥 Try again?";
+      restartButton.disabled = false; // Allow immediate restart on loss
+    } else if (!ballMoving) {
+        // Ball stopped, but didn't win and has moves left
+        messageDisplay.textContent = "Aim your next shot.";
+    }
+  }
+
+  function shootBall(power, angle) {
+      if (movesLeft > 0 && !ballMoving && !levelComplete && !gameOver) {
+          ball.vx = Math.cos(angle) * power;
+          ball.vy = Math.sin(angle) * power;
+          ballMoving = true;
+          movesLeft--;
+          movesDisplay.textContent = movesLeft;
+          messageDisplay.textContent = "Ball is rolling...";
+      }
+  }
+
+  // --- Event Listeners ---
+  canvas.addEventListener('mousedown', (e) => {
+    if (ballMoving || levelComplete || gameOver) return;
+    const rect = canvas.getBoundingClientRect();
+    isAiming = true;
+    aimStart = { x: ball.x, y: ball.y }; // Aim starts from ball
+    aimEnd = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (!isAiming || ballMoving) return;
+    const rect = canvas.getBoundingClientRect();
+    aimEnd = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    draw(); // Redraw to show aim line updating
+  });
+
+  canvas.addEventListener('mouseup', (e) => {
+    if (!isAiming || ballMoving) return;
+    isAiming = false;
+
+    const dx = ball.x - aimEnd.x; // Reverse direction for shooting
+    const dy = ball.y - aimEnd.y;
+    const dist = distance(ball.x, ball.y, aimEnd.x, aimEnd.y);
+
+    if (dist < 5) return; // Ignore tiny drags (accidental clicks)
+
+    const angle = Math.atan2(dy, dx);
+    const power = Math.min(dist / AIM_LINE_MAX_LENGTH * MAX_POWER, MAX_POWER);
+
+    shootBall(power, angle);
+    draw(); // Redraw to remove aim line
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+      if (isAiming) {
+          isAiming = false; // Cancel aim if mouse leaves canvas
+          draw();
+      }
+  });
+
+  restartButton.addEventListener('click', () => {
+      if (restartButton.textContent === 'Play Again?') {
+          loadLevel(0); // Start from level 1 if game was finished
+      } else {
+          loadLevel(currentLevelIndex); // Restart current level
+      }
+  });
+
+  nextLevelButton.addEventListener('click', () => {
+    if (levelComplete) {
+      loadLevel(currentLevelIndex + 1);
+    }
+  });
+
+  // --- Game Loop ---
+  function gameLoop() {
+    if (!gameOver && !levelComplete) {
+        updatePhysics();
+    }
+    // Always draw to show current state (even if game over/complete)
+    draw();
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  // --- Initialization ---
+  loadLevel(0); // Load the first level
+  gameLoop(); // Start the game loop
+
+</script>
+
+</body>
+</html>

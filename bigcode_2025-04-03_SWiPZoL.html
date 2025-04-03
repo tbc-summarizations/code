@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Game</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #d0e0f0;
+        }
+        #controls {
+            margin-top: 10px;
+        }
+        button {
+            padding: 5px 10px;
+            margin: 0 5px;
+            font-size: 1em;
+        }
+        #info {
+            margin-top: 10px;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <h1>Platformer Adventure</h1>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="info">
+        Level: <span id="levelDisplay">1</span> |
+        Character: <span id="characterDisplay">AdamMady</span> |
+        Controls: Left/Right Arrows (Move), Up Arrow (Jump), C (Switch Character)
+    </div>
+    <div id="controls">
+        <button id="resetButton">Reset Level</button>
+        <button id="switchCharButton">Switch Character</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const characterDisplay = document.getElementById('characterDisplay');
+        const resetButton = document.getElementById('resetButton');
+        const switchCharButton = document.getElementById('switchCharButton');
+
+        const TILE_SIZE = 40;
+        const GRAVITY = 0.5;
+        const JUMP_FORCE = -10;
+        const PLAYER_SPEED = 5;
+        const BOSS_HEALTH = 100;
+
+        let currentLevel = 0;
+        let player;
+        let levels = [];
+        let keys = {};
+        let boss = null;
+        let bossProjectiles = [];
+        let playerProjectiles = []; // For boss level
+
+        const characters = [
+            { name: "AdamMady", color: 'red', shape: 'square' },
+            { name: "Garfield", color: 'orange', shape: 'square' },
+            { name: "Dekoder", color: 'blue', shape: 'square' },
+            { name: "Cora", color: 'pink', shape: 'square' },
+            { name: "Big Balls", color: 'grey', shape: 'circle' }
+        ];
+        let currentCharacterIndex = 0;
+
+        class Player {
+            constructor(x, y, width, height, charIndex) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.dx = 0;
+                this.dy = 0;
+                this.onGround = false;
+                this.charIndex = charIndex;
+                this.isBigBalls = false; // Flag for boss level control
+                this.health = 100; // For boss fight
+            }
+
+            setCharacter(charIndex) {
+                this.charIndex = charIndex;
+                this.isBigBalls = characters[this.charIndex].name === "Big Balls";
+                 if (this.isBigBalls && currentLevel === 9) { // Boss level specific size?
+                    this.width = TILE_SIZE * 1.5;
+                    this.height = TILE_SIZE * 1.5;
+                } else {
+                    this.width = TILE_SIZE * 0.8;
+                    this.height = TILE_SIZE * 0.8;
+                }
+                characterDisplay.textContent = characters[this.charIndex].name;
+            }
+
+            jump() {
+                if (this.onGround) {
+                    this.dy = JUMP_FORCE;
+                    this.onGround = false;
+                }
+            }
+
+            moveLeft() {
+                this.dx = -PLAYER_SPEED;
+            }
+
+            moveRight() {
+                this.dx = PLAYER_SPEED;
+            }
+
+            stopMove() {
+                this.dx = 0;
+            }
+
+            shoot() { // Only for Big Balls in boss fight
+                 if (this.isBigBalls && currentLevel === 9) {
+                    playerProjectiles.push(new Projectile(this.x + this.width / 2, this.y + this.height / 2, 8, 'white', { x: Math.random() * 4 - 2 , y: -6 }));
+                }
+            }
+
+            update(platforms) {
+                // Apply gravity
+                this.dy += GRAVITY;
+
+                // Move horizontally
+                this.x += this.dx;
+                this.handleCollision(platforms, 'horizontal');
+
+                // Move vertically
+                this.y += this.dy;
+                this.onGround = false; // Assume not on ground until collision check
+                this.handleCollision(platforms, 'vertical');
+
+                // Prevent falling off screen
+                if (this.y + this.height > canvas.height) {
+                    this.y = canvas.height - this.height;
+                    this.dy = 0;
+                    this.onGround = true;
+                    if (currentLevel === 9) this.health -= 5; // Damage in boss fight pit
+                }
+                 if (this.x < 0) this.x = 0;
+                 if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+
+
+                // Check goal collision
+                const goal = levels[currentLevel].goal;
+                if (this.collidesWith(goal)) {
+                    nextLevel();
+                }
+
+                 // Boss fight specific updates
+                if (currentLevel === 9 && boss) {
+                    bossProjectiles.forEach((p, index) => {
+                        if (this.collidesWith(p)) {
+                            this.health -= 5;
+                            bossProjectiles.splice(index, 1);
+                            console.log("Player Hit! Health:", this.health);
+                            if (this.health <= 0) {
+                                alert("Game Over!");
+                                loadLevel(currentLevel); // Reset level
+                            }
+                        }
+                    });
+                }
+            }
+
+            handleCollision(platforms, direction) {
+                platforms.forEach(platform => {
+                    if (this.collidesWith(platform)) {
+                        if (direction === 'vertical') {
+                            if (this.dy > 0) { // Moving down
+                                this.y = platform.y - this.height;
+                                this.dy = 0;
+                                this.onGround = true;
+                            } else if (this.dy < 0) { // Moving up
+                                this.y = platform.y + platform.height;
+                                this.dy = 0;
+                            }
+                        } else if (direction === 'horizontal') {
+                            if (this.dx > 0) { // Moving right
+                                this.x = platform.x - this.width;
+                            } else if (this.dx < 0) { // Moving left
+                                this.x = platform.x + platform.width;
+                            }
+                            this.dx = 0; // Stop horizontal movement on collision
+                        }
+                    }
+                });
+            }
+
+
+            collidesWith(rect) {
+                return this.x < rect.x + rect.width &&
+                       this.x + this.width > rect.x &&
+                       this.y < rect.y + rect.height &&
+                       this.y + this.height > rect.y;
+            }
+
+            draw(ctx) {
+                const char = characters[this.charIndex];
+                ctx.fillStyle = char.color;
+                if (char.shape === 'square') {
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                } else if (char.shape === 'circle') {
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Draw health bar for boss fight
+                 if (currentLevel === 9 && this.isBigBalls) {
+                    ctx.fillStyle = 'red';
+                    ctx.fillRect(this.x, this.y - 15, this.width, 5);
+                    ctx.fillStyle = 'green';
+                    ctx.fillRect(this.x, this.y - 15, this.width * (this.health / 100), 5);
+                }
+            }
+        }
+
+        class Platform {
+            constructor(x, y, width, height, type = 'ground') {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.type = type; // 'ground', 'wall', 'goal'
+            }
+
+            draw(ctx) {
+                 switch(this.type) {
+                    case 'goal':
+                        ctx.fillStyle = 'gold';
+                        // Draw a star or simple flag
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + this.width / 2, this.y);
+                        ctx.lineTo(this.x + this.width * 0.6, this.y + this.height * 0.4);
+                        ctx.lineTo(this.x + this.width, this.y + this.height * 0.5);
+                        ctx.lineTo(this.x + this.width * 0.7, this.y + this.height * 0.7);
+                        ctx.lineTo(this.x + this.width * 0.8, this.y + this.height);
+                        ctx.lineTo(this.x + this.width / 2, this.y + this.height * 0.85);
+                        ctx.lineTo(this.x + this.width * 0.2, this.y + this.height);
+                        ctx.lineTo(this.x + this.width * 0.3, this.y + this.height * 0.7);
+                        ctx.lineTo(this.x, this.y + this.height * 0.5);
+                        ctx.lineTo(this.x + this.width * 0.4, this.y + this.height * 0.4);
+                        ctx.closePath();
+                        ctx.fill();
+                        break;
+                    case 'lava': // Example hazard
+                         ctx.fillStyle = 'orangered';
+                         ctx.fillRect(this.x, this.y, this.width, this.height);
+                         break;
+                    default: // Ground / Wall
+                        ctx.fillStyle = '#8B4513'; // Brown
+                        ctx.fillRect(this.x, this.y, this.width, this.height);
+                        ctx.strokeStyle = '#5a2d0c';
+                         ctx.strokeRect(this.x, this.y, this.width, this.height);
+                 }
+            }
+        }
+
+        class Boss {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.health = BOSS_HEALTH;
+                this.dx = 2; // Movement speed
+                this.shootCooldown = 0;
+                this.charColors = ['red', 'orange', 'blue', 'pink']; // Representing combined characters
+            }
+
+             update() {
+                 // Simple back and forth movement
+                this.x += this.dx;
+                if (this.x <= 0 || this.x + this.width >= canvas.width) {
+                    this.dx *= -1;
+                }
+
+                 // Shooting logic
+                this.shootCooldown--;
+                if (this.shootCooldown <= 0) {
+                    this.shoot();
+                    this.shootCooldown = 60; // Shoot every 60 frames (1 second approx)
+                }
+
+                 // Check projectile collision
+                playerProjectiles.forEach((p, index) => {
+                     if (this.collidesWith(p)) {
+                         this.health -= 10; // Damage boss
+                         playerProjectiles.splice(index, 1);
+                         console.log("Boss Hit! Health:", this.health);
+                         if (this.health <= 0) {
+                             alert("You defeated the Boss! You Win!");
+                             currentLevel = 0; // Restart game or show win screen
+                             loadLevel(currentLevel);
+                         }
+                     }
+                 });
+             }
+
+             shoot() {
+                // Shoots projectiles towards player direction (simplified: downwards)
+                const projX = this.x + this.width / 2;
+                const projY = this.y + this.height;
+                 bossProjectiles.push(new Projectile(projX, projY, 10, 'purple', { x: Math.random() * 4 - 2, y: 4 }));
+             }
+
+
+             collidesWith(rect) {
+                 return this.x < rect.x + rect.width &&
+                        this.x + this.width > rect.x &&
+                        this.y < rect.y + rect.height &&
+                        this.y + this.height > rect.y;
+             }
+
+             draw(ctx) {
+                 // Draw a composite shape or overlapping shapes
+                 const segmentWidth = this.width / 4;
+                 for (let i = 0; i < 4; i++) {
+                    ctx.fillStyle = this.charColors[i];
+                    ctx.fillRect(this.x + i * segmentWidth, this.y, segmentWidth, this.height);
+                 }
+                 ctx.strokeStyle = 'black';
+                 ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+
+                 // Draw health bar
+                 ctx.fillStyle = 'red';
+                 ctx.fillRect(this.x, this.y - 15, this.width, 10);
+                 ctx.fillStyle = 'green';
+                 ctx.fillRect(this.x, this.y - 15, this.width * (this.health / BOSS_HEALTH), 10);
+             }
+        }
+
+        class Projectile {
+             constructor(x, y, size, color, velocity) {
+                 this.x = x;
+                 this.y = y;
+                 this.size = size;
+                 this.color = color;
+                 this.velocity = velocity; // {x, y}
+             }
+
+             update() {
+                 this.x += this.velocity.x;
+                 this.y += this.velocity.y;
+             }
+
+             draw(ctx) {
+                 ctx.fillStyle = this.color;
+                 ctx.beginPath();
+                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                 ctx.fill();
+             }
+
+             isOffScreen() {
+                 return this.y > canvas.height || this.y < 0 || this.x < 0 || this.x > canvas.width;
+             }
+        }
+
+
+        function generateLevels() {
+            levels = [];
+            // Level 1
+            levels.push({
+                platforms: [
+                    new Platform(0, canvas.height - TILE_SIZE, canvas.width, TILE_SIZE), // Ground
+                    new Platform(200, canvas.height - TILE_SIZE * 3, TILE_SIZE * 5, TILE_SIZE),
+                    new Platform(500, canvas.height - TILE_SIZE * 5, TILE_SIZE * 3, TILE_SIZE),
+                ],
+                startPos: { x: 50, y: canvas.height - TILE_SIZE * 2 },
+                goal: new Platform(700, canvas.height - TILE_SIZE * 6, TILE_SIZE, TILE_SIZE, 'goal')
+            });
+            // Level 2
+            levels.push({
+                platforms: [
+                    new Platform(0, canvas.height - TILE_SIZE, TILE_SIZE * 4, TILE_SIZE),
+                    new Platform(canvas.width - TILE_SIZE * 4, canvas.height - TILE_SIZE, TILE_SIZE * 4, TILE_SIZE),
+                    new Platform(TILE_SIZE * 5, canvas.height - TILE_SIZE * 4, TILE_SIZE * 3, TILE_SIZE),
+                    new Platform(TILE_SIZE * 9, canvas.height - TILE_SIZE * 6, TILE_SIZE * 3, TILE_SIZE),
+                     new Platform(0, 0, TILE_SIZE, canvas.height), // Left Wall
+                     new Platform(canvas.width - TILE_SIZE, 0, TILE_SIZE, canvas.height) // Right Wall
+                ],
+                startPos: { x: 60, y: canvas.height - TILE_SIZE * 2 },
+                 goal: new Platform(canvas.width - TILE_SIZE*2, TILE_SIZE*2, TILE_SIZE, TILE_SIZE, 'goal')
+            });
+            // Create 7 more simple levels procedurally or manually
+            for (let i = 3; i <= 9; i++) {
+                 levels.push({
+                     platforms: [
+                         new Platform(0, canvas.height - TILE_SIZE, canvas.width, TILE_SIZE), // Ground
+                         new Platform(Math.random() * (canvas.width - 200), canvas.height - TILE_SIZE * (2 + Math.random()*3), TILE_SIZE * (3+Math.random()*3), TILE_SIZE),
+                         new Platform(Math.random() * (canvas.width - 200), canvas.height - TILE_SIZE * (5 + Math.random()*3), TILE_SIZE * (3+Math.random()*3), TILE_SIZE),
+                         new Platform(Math.random() * (canvas.width - 200), canvas.height - TILE_SIZE * (8 + Math.random()*2), TILE_SIZE * (2+Math.random()*2), TILE_SIZE),
+                     ],
+                     startPos: { x: 50, y: canvas.height - TILE_SIZE * 2 },
+                     goal: new Platform(canvas.width - TILE_SIZE * (1 + Math.random()*2), TILE_SIZE * (1 + Math.random()*3), TILE_SIZE, TILE_SIZE, 'goal')
+                 });
+            }
+
+             // Level 10 - Boss Fight
+            levels.push({
+                platforms: [
+                    new Platform(0, canvas.height - TILE_SIZE, canvas.width, TILE_SIZE), // Ground floor
+                    new Platform(0, 0, TILE_SIZE, canvas.height), // Left Wall
+                    new Platform(canvas.width - TILE_SIZE, 0, TILE_SIZE, canvas.height) // Right Wall
+                    // Add some platforms for maneuverability if desired
+                     // new Platform(100, canvas.height - TILE_SIZE * 4, TILE_SIZE * 3, TILE_SIZE),
+                    // new Platform(canvas.width - 100 - TILE_SIZE * 3, canvas.height - TILE_SIZE * 4, TILE_SIZE * 3, TILE_SIZE),
+                ],
+                startPos: { x: canvas.width / 2 - TILE_SIZE, y: canvas.height - TILE_SIZE * 3 },
+                goal: null, // No goal, defeat boss to win
+                isBossLevel: true
+            });
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                alert("Congratulations! You finished all levels!");
+                currentLevel = 0; // Loop back or end
+                levelIndex = 0;
+            }
+             if (levelIndex < 0) levelIndex = 0;
+
+            currentLevel = levelIndex;
+            levelDisplay.textContent = currentLevel + 1;
+            const levelData = levels[currentLevel];
+
+            boss = null; // Reset boss
+            bossProjectiles = [];
+            playerProjectiles = [];
+
+            if (levelData.isBossLevel) {
+                // Force player to be Big Balls
+                currentCharacterIndex = characters.findIndex(c => c.name === "Big Balls");
+                player = new Player(levelData.startPos.x, levelData.startPos.y, TILE_SIZE * 1.5, TILE_SIZE * 1.5, currentCharacterIndex);
+                player.isBigBalls = true;
+                player.health = 100;
+                characterDisplay.textContent = characters[currentCharacterIndex].name;
+                 switchCharButton.disabled = true; // Disable switching
+                // Spawn Boss
+                 boss = new Boss(canvas.width / 2 - TILE_SIZE * 2, TILE_SIZE * 2, TILE_SIZE * 4, TILE_SIZE * 2);
+                 alert("Level 10: Boss Fight! Control Big Balls (Space to Shoot)!");
+
+            } else {
+                // Regular level setup
+                 player = new Player(levelData.startPos.x, levelData.startPos.y, TILE_SIZE * 0.8, TILE_SIZE * 0.8, currentCharacterIndex);
+                 player.setCharacter(currentCharacterIndex); // Ensure correct size/display name
+                switchCharButton.disabled = false; // Enable switching
+            }
+        }
+
+        function nextLevel() {
+            loadLevel(currentLevel + 1);
+        }
+
+        function switchCharacter() {
+            if (levels[currentLevel].isBossLevel) return; // Cannot switch on boss level
+
+            currentCharacterIndex = (currentCharacterIndex + 1) % characters.length;
+            // Respawn player as the new character at start position (or current pos?)
+             // Let's keep current position for less frustration
+             const currentX = player.x;
+             const currentY = player.y;
+             const currentDx = player.dx;
+             const currentDy = player.dy;
+             player = new Player(currentX, currentY, TILE_SIZE*0.8, TILE_SIZE*0.8, currentCharacterIndex);
+             player.dx = currentDx;
+             player.dy = currentDy;
+             player.setCharacter(currentCharacterIndex);
+
+            // player.setCharacter(currentCharacterIndex); // This just updates properties, might need re-instantiation if size/hitbox changes drastically
+        }
+
+        function handleInput() {
+            if (keys['ArrowLeft']) {
+                player.moveLeft();
+            } else if (keys['ArrowRight']) {
+                player.moveRight();
+            } else {
+                player.stopMove();
+            }
+
+            if (keys['ArrowUp']) {
+                 player.jump();
+                 keys['ArrowUp'] = false; // Prevent holding jump key
+            }
+
+             if (keys['c'] || keys['C']) {
+                 switchCharacter();
+                 keys['c'] = keys['C'] = false; // Process once per press
+             }
+
+            if (keys[' '] && currentLevel === 9 && player.isBigBalls) { // Spacebar to shoot for Big Balls on boss level
+                player.shoot();
+                 keys[' '] = false; // Shoot once per press
+            }
+        }
+
+        function update() {
+             handleInput();
+             player.update(levels[currentLevel].platforms);
+
+             // Update boss if exists
+             if (boss) {
+                 boss.update();
+             }
+
+             // Update projectiles
+             bossProjectiles.forEach((p, index) => {
+                 p.update();
+                 if (p.isOffScreen()) {
+                     bossProjectiles.splice(index, 1);
+                 }
+             });
+            playerProjectiles.forEach((p, index) => {
+                 p.update();
+                 if (p.isOffScreen()) {
+                     playerProjectiles.splice(index, 1);
+                 }
+            });
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background (optional)
+             ctx.fillStyle = '#d0e0f0'; // Light blue background
+             ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+
+            // Draw platforms
+            levels[currentLevel].platforms.forEach(p => p.draw(ctx));
+
+            // Draw goal (if not boss level)
+            if (levels[currentLevel].goal) {
+                levels[currentLevel].goal.draw(ctx);
+            }
+
+             // Draw player
+             player.draw(ctx);
+
+            // Draw boss if exists
+             if (boss) {
+                 boss.draw(ctx);
+             }
+
+             // Draw projectiles
+             bossProjectiles.forEach(p => p.draw(ctx));
+             playerProjectiles.forEach(p => p.draw(ctx));
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        resetButton.addEventListener('click', () => {
+            loadLevel(currentLevel); // Reload current level
+        });
+        switchCharButton.addEventListener('click', switchCharacter);
+
+
+        // Initialize Game
+        generateLevels();
+        loadLevel(0);
+        gameLoop();
+
+    </script>
+
+</body>
+</html>

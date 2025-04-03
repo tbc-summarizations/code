@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Awesome City Walk</title>
+    <style>
+        :root {
+            --grid-size: 12; /* Logical grid units */
+            --cell-size: 50px; /* Visual size of each grid cell */
+            --map-width: calc(var(--grid-size) * var(--cell-size));
+            --map-height: calc(var(--grid-size) * var(--cell-size));
+            --road-color: #777;
+            --road-line-color: #eee;
+            --building-bg: #bcaaa4;
+            --building-border: #5d4037;
+            --residential-bg: #a5d6a7;
+            --player-color: #ff5722;
+            --grass-color: #81c784;
+            --ui-bg: rgba(0, 0, 0, 0.7);
+            --ui-text: #ffffff;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(to bottom, #87ceeb, #f0f8ff);
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden; /* Hide scrollbars */
+        }
+
+        #game-container {
+            width: var(--map-width);
+            height: var(--map-height);
+            border: 5px solid #333;
+            background-color: var(--grass-color); /* Grass background */
+            position: relative;
+            overflow: hidden; /* Keep player inside */
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+
+        .grid-element {
+            position: absolute;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: #333;
+            overflow: hidden; /* Prevent text spill */
+        }
+
+        .building {
+            background-color: var(--building-bg);
+            border: 2px solid var(--building-border);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+            z-index: 1; /* Buildings above roads */
+        }
+        .building span {
+            margin-top: 3px;
+            font-size: 12px;
+            color: #fff;
+            text-shadow: 1px 1px 2px black;
+        }
+        .building .emoji {
+             font-size: calc(var(--cell-size) * 0.5);
+             line-height: 1;
+        }
+
+
+        .road {
+            background-color: var(--road-color);
+            z-index: 0; /* Roads below buildings/player */
+        }
+
+        /* Road lines (simplified) */
+        .road-h::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            height: 2px;
+            background: repeating-linear-gradient(to right, var(--road-line-color), var(--road-line-color) 10px, transparent 10px, transparent 20px);
+            transform: translateY(-1px);
+        }
+         .road-v::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            background: repeating-linear-gradient(to bottom, var(--road-line-color), var(--road-line-color) 10px, transparent 10px, transparent 20px);
+            transform: translateX(-1px);
+        }
+
+        .residential {
+            background-color: var(--residential-bg);
+            border: 3px dashed #4caf50;
+            z-index: 1;
+            font-size: 18px;
+            color: #2e7d32;
+            font-weight: bold;
+            text-shadow: 1px 1px white;
+        }
+
+        #player {
+            position: absolute;
+            width: calc(var(--cell-size) * 0.6);
+            height: calc(var(--cell-size) * 0.6);
+            background-color: var(--player-color);
+            /* background-image: radial-gradient(circle, #ff8a65, var(--player-color)); */
+            border-radius: 50%; /* Make player a circle */
+            border: 2px solid #bf360c;
+            z-index: 10; /* Player above everything */
+            transition: top 0.1s linear, left 0.1s linear; /* Smooth movement */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: calc(var(--cell-size) * 0.4); /* Emoji size */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+
+        #status-bar {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--ui-bg);
+            color: var(--ui-text);
+            padding: 8px 15px;
+            border-radius: 15px;
+            font-size: 14px;
+            z-index: 20;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            text-align: center;
+            min-width: 200px;
+        }
+
+         /* Specific Building Styles & Positions */
+         /* Use grid coordinates [row-start, col-start, row-end, col-end] (1-based index) */
+         .pos-1-1 { top: 0; left: 0; width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 2); } /* Car Dealership */
+         .pos-1-3 { top: 0; left: calc(var(--cell-size) * 2); width: calc(var(--cell-size) * 3); height: calc(var(--cell-size) * 2); } /* Bank */
+         .pos-1-6 { top: 0; left: calc(var(--cell-size) * 5); width: calc(var(--cell-size) * 3); height: calc(var(--cell-size) * 2); } /* Real Estate */
+         .pos-1-9 { top: 0; left: calc(var(--cell-size) * 8); width: calc(var(--cell-size) * 4); height: calc(var(--cell-size) * 2); } /* Supermarket */
+
+         .pos-3-1 { top: calc(var(--cell-size) * 2); left: 0; width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 2); } /* Cafe */
+         .pos-5-1 { top: calc(var(--cell-size) * 4); left: 0; width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 3); } /* Hospital */
+         .pos-8-1 { top: calc(var(--cell-size) * 7); left: 0; width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 3); } /* President House */
+
+         .pos-3-11 { top: calc(var(--cell-size) * 2); left: calc(var(--cell-size) * 10); width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 2); } /* Clothing Shop */
+         .pos-5-11 { top: calc(var(--cell-size) * 4); left: calc(var(--cell-size) * 10); width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 2); } /* Pizza Place */
+         .pos-7-11 { top: calc(var(--cell-size) * 6); left: calc(var(--cell-size) * 10); width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 3); } /* Police Station */
+         .pos-10-11 { top: calc(var(--cell-size) * 9); left: calc(var(--cell-size) * 10); width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 3); } /* Shooting Range */
+
+         .pos-11-3 { top: calc(var(--cell-size) * 10); left: calc(var(--cell-size) * 2); width: calc(var(--cell-size) * 2); height: calc(var(--cell-size) * 2); } /* Jewel Store */
+         .pos-11-5 { top: calc(var(--cell-size) * 10); left: calc(var(--cell-size) * 4); width: calc(var(--cell-size) * 3); height: calc(var(--cell-size) * 2); } /* Gun Store */
+
+         /* Roads */
+         .road-top { top: calc(var(--cell-size) * 2); left: calc(var(--cell-size) * 2); width: calc(var(--cell-size) * 8); height: var(--cell-size); }
+         .road-bottom { top: calc(var(--cell-size) * 9); left: calc(var(--cell-size) * 2); width: calc(var(--cell-size) * 8); height: var(--cell-size); }
+         .road-left { top: calc(var(--cell-size) * 3); left: calc(var(--cell-size) * 2); width: var(--cell-size); height: calc(var(--cell-size) * 6); }
+         .road-right { top: calc(var(--cell-size) * 3); left: calc(var(--cell-size) * 9); width: var(--cell-size); height: calc(var(--cell-size) * 6); }
+
+         /* Residential Area */
+         .res-area { top: calc(var(--cell-size) * 3); left: calc(var(--cell-size) * 3); width: calc(var(--cell-size) * 6); height: calc(var(--cell-size) * 6); }
+
+         /* Interactive Sparkle Effect */
+         .sparkle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: yellow;
+            border-radius: 50%;
+            opacity: 0;
+            animation: sparkle-effect 0.6s ease-out;
+            pointer-events: none; /* Prevent interaction with sparkles */
+         }
+
+         @keyframes sparkle-effect {
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(2); opacity: 0; }
+         }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Buildings -->
+        <div class="grid-element building pos-1-1 collidable" data-name="Car Dealership"><div class="emoji">🚗</div><span>Car Dealership</span></div>
+        <div class="grid-element building pos-1-3 collidable" data-name="Bank"><div class="emoji">🏦</div><span>Bank</span></div>
+        <div class="grid-element building pos-1-6 collidable" data-name="Real Estate"><div class="emoji">🏠</div><span>Real Estate</span></div>
+        <div class="grid-element building pos-1-9 collidable" data-name="Supermarket"><div class="emoji">🛒</div><span>Supermarket</span></div>
+
+        <div class="grid-element building pos-3-1 collidable" data-name="Cafe"><div class="emoji">☕</div><span>Cafe</span></div>
+        <div class="grid-element building pos-5-1 collidable" data-name="Hospital"><div class="emoji">🏥</div><span>Hospital</span></div>
+        <div class="grid-element building pos-8-1 collidable" data-name="President House"><div class="emoji">🏛️</div><span>President House</span></div>
+
+        <div class="grid-element building pos-3-11 collidable" data-name="Clothing Shop"><div class="emoji">👕</div><span>Clothing Shop</span></div>
+        <div class="grid-element building pos-5-11 collidable" data-name="Pizza Place"><div class="emoji">🍕</div><span>Pizza Place</span></div>
+        <div class="grid-element building pos-7-11 collidable" data-name="Police Station"><div class="emoji">👮</div><span>Police Station</span></div>
+        <div class="grid-element building pos-10-11 collidable" data-name="Shooting Range"><div class="emoji">🎯</div><span>Shooting Range</span></div>
+
+        <div class="grid-element building pos-11-3 collidable" data-name="Jewel Store"><div class="emoji">💎</div><span>Jewel Store</span></div>
+        <div class="grid-element building pos-11-5 collidable" data-name="Gun Store"><div class="emoji">🔫</div><span>Gun Store</span></div>
+
+        <!-- Roads -->
+        <div class="grid-element road road-h road-top"></div>
+        <div class="grid-element road road-h road-bottom"></div>
+        <div class="grid-element road road-v road-left"></div>
+        <div class="grid-element road road-v road-right"></div>
+        <!-- Road Corners -->
+         <div class="grid-element road" style="top: calc(var(--cell-size) * 2); left: calc(var(--cell-size) * 2); width: var(--cell-size); height: var(--cell-size);"></div>
+         <div class="grid-element road" style="top: calc(var(--cell-size) * 2); left: calc(var(--cell-size) * 9); width: var(--cell-size); height: var(--cell-size);"></div>
+         <div class="grid-element road" style="top: calc(var(--cell-size) * 9); left: calc(var(--cell-size) * 2); width: var(--cell-size); height: var(--cell-size);"></div>
+         <div class="grid-element road" style="top: calc(var(--cell-size) * 9); left: calc(var(--cell-size) * 9); width: var(--cell-size); height: var(--cell-size);"></div>
+
+
+        <!-- Residential Area -->
+        <div class="grid-element residential res-area collidable" data-name="Residential Area">Residential</div>
+
+        <!-- Player -->
+        <div id="player">🚶</div>
+
+        <!-- Status Bar -->
+        <div id="status-bar">Use Arrow Keys to Move!</div>
+    </div>
+
+    <script>
+        const player = document.getElementById('player');
+        const gameContainer = document.getElementById('game-container');
+        const statusBar = document.getElementById('status-bar');
+        const collidables = document.querySelectorAll('.collidable');
+        const allElements = document.querySelectorAll('.grid-element'); // For interaction checks
+
+        const moveSpeed = 10; // Pixels per move
+        const containerRect = gameContainer.getBoundingClientRect();
+        const playerSize = player.offsetWidth; // Assuming width and height are the same
+
+        // Convert container bounds relative to the page if needed, but since it's centered,
+        // internal 0,0 should map to container's top-left.
+        const mapWidth = gameContainer.offsetWidth;
+        const mapHeight = gameContainer.offsetHeight;
+
+        // Initial player position (adjust as needed, e.g., middle of a road)
+        let playerX = mapWidth / 2 - playerSize / 2;
+        let playerY = mapHeight - (2 * parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size'))) - playerSize; // Start on bottom road
+
+        player.style.left = `${playerX}px`;
+        player.style.top = `${playerY}px`;
+
+        function checkCollision(nextX, nextY) {
+            const playerRect = {
+                left: nextX,
+                top: nextY,
+                right: nextX + playerSize,
+                bottom: nextY + playerSize
+            };
+
+            // 1. Boundary Check
+            if (playerRect.left < 0 || playerRect.right > mapWidth || playerRect.top < 0 || playerRect.bottom > mapHeight) {
+                //console.log("Boundary collision");
+                return true; // Collision with map boundaries
+            }
+
+            // 2. Check against collidable elements
+            for (const obstacle of collidables) {
+                const obsRect = obstacle.getBoundingClientRect();
+                const gameRect = gameContainer.getBoundingClientRect(); // Get container offset
+
+                // Adjust obstacle rect to be relative to the game container
+                const obsRelRect = {
+                     left: obsRect.left - gameRect.left,
+                     top: obsRect.top - gameRect.top,
+                     right: obsRect.right - gameRect.left,
+                     bottom: obsRect.bottom - gameRect.top
+                 };
+
+                // Simple AABB collision detection
+                if (playerRect.left < obsRelRect.right &&
+                    playerRect.right > obsRelRect.left &&
+                    playerRect.top < obsRelRect.bottom &&
+                    playerRect.bottom > obsRelRect.top) {
+                    //console.log("Collision with:", obstacle.dataset.name || "obstacle");
+                    return true; // Collision detected
+                }
+            }
+
+            return false; // No collision
+        }
+
+        function checkInteraction() {
+            const playerCenterX = playerX + playerSize / 2;
+            const playerCenterY = playerY + playerSize / 2;
+            let nearbyPlace = null;
+            const interactionDistance = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) * 1.5; // Increased check radius
+
+            for (const element of allElements) {
+                 if (!element.dataset.name) continue; // Only interact with named places
+
+                 const elemRect = element.getBoundingClientRect();
+                 const gameRect = gameContainer.getBoundingClientRect();
+
+                 const elemRelRect = {
+                     left: elemRect.left - gameRect.left,
+                     top: elemRect.top - gameRect.top,
+                     width: element.offsetWidth,
+                     height: element.offsetHeight
+                 };
+
+                 const elemCenterX = elemRelRect.left + elemRelRect.width / 2;
+                 const elemCenterY = elemRelRect.top + elemRelRect.height / 2;
+
+                 const distance = Math.sqrt(Math.pow(playerCenterX - elemCenterX, 2) + Math.pow(playerCenterY - elemCenterY, 2));
+
+                 if (distance < interactionDistance) {
+                    // Check if player center is roughly *inside* the element bounds for more accuracy
+                     if (playerCenterX > elemRelRect.left && playerCenterX < elemRelRect.left + elemRelRect.width &&
+                         playerCenterY > elemRelRect.top && playerCenterY < elemRelRect.top + elemRelRect.height)
+                     {
+                           nearbyPlace = element.dataset.name;
+                           createSparkle(playerCenterX, playerCenterY); // Add sparkle effect on interaction
+                           break; // Found the closest interactable place
+                     } else if (!nearbyPlace && distance < interactionDistance * 1.2) { // Slightly larger check for "Near" status
+                        nearbyPlace = `Near ${element.dataset.name}`;
+                     }
+                 }
+            }
+
+            if (nearbyPlace) {
+                statusBar.textContent = `Location: ${nearbyPlace}`;
+            } else {
+                 // Check if on a road
+                 let onRoad = false;
+                 const roads = document.querySelectorAll('.road');
+                 for (const road of roads) {
+                      const roadRect = road.getBoundingClientRect();
+                      const gameRect = gameContainer.getBoundingClientRect();
+                      const roadRelRect = {
+                           left: roadRect.left - gameRect.left,
+                           top: roadRect.top - gameRect.top,
+                           right: roadRect.right - gameRect.left,
+                           bottom: roadRect.bottom - gameRect.top
+                      };
+                       if (playerCenterX > roadRelRect.left && playerCenterX < roadRelRect.right &&
+                           playerCenterY > roadRelRect.top && playerCenterY < roadRelRect.bottom) {
+                            onRoad = true;
+                            break;
+                        }
+                 }
+                 statusBar.textContent = onRoad ? "Location: On the road" : "Location: Exploring";
+            }
+        }
+
+
+        function createSparkle(x, y) {
+            const sparkle = document.createElement('div');
+            sparkle.className = 'sparkle';
+            sparkle.style.left = `${x - 5}px`; // Center the sparkle visually
+            sparkle.style.top = `${y - 5}px`;
+            gameContainer.appendChild(sparkle);
+
+            // Remove sparkle after animation finishes
+            sparkle.addEventListener('animationend', () => {
+                sparkle.remove();
+            });
+        }
+
+
+        document.addEventListener('keydown', (event) => {
+            let nextX = playerX;
+            let nextY = playerY;
+
+            switch (event.key) {
+                case 'ArrowUp':
+                    nextY -= moveSpeed;
+                    player.style.transform = 'rotate(-90deg)'; // Rotate player visually
+                    break;
+                case 'ArrowDown':
+                    nextY += moveSpeed;
+                     player.style.transform = 'rotate(90deg)';
+                    break;
+                case 'ArrowLeft':
+                    nextX -= moveSpeed;
+                     player.style.transform = 'rotate(180deg)';
+                    break;
+                case 'ArrowRight':
+                    nextX += moveSpeed;
+                     player.style.transform = 'rotate(0deg)';
+                    break;
+                default:
+                    return; // Exit if not an arrow key
+            }
+
+            if (!checkCollision(nextX, nextY)) {
+                playerX = nextX;
+                playerY = nextY;
+                player.style.left = `${playerX}px`;
+                player.style.top = `${playerY}px`;
+                checkInteraction(); // Update status after successful move
+            } else {
+                 // Optional: Add a small shake effect on collision
+                 player.animate([
+                    { transform: `${player.style.transform || 'rotate(0deg)'} translateX(-2px)` },
+                    { transform: `${player.style.transform || 'rotate(0deg)'} translateX(2px)` },
+                    { transform: `${player.style.transform || 'rotate(0deg)'} translateX(0px)` }
+                 ], { duration: 100, iterations: 1});
+            }
+        });
+
+        // Initial check for status bar content
+        checkInteraction();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Game</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #87CEEB; /* Sky blue */
+        }
+        #controls {
+            margin-top: 10px;
+        }
+        button {
+            padding: 10px;
+            margin: 0 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #info {
+            margin-top: 10px;
+            font-size: 18px;
+            min-height: 50px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="info">Level: 1 - Character: AdamMady</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <span>Controls: Left/Right Arrows (Move), Up Arrow (Jump), Spacebar (Ability)</span>
+        <button id="skipLevelBtn">Skip Level</button>
+    </div>
+    <div id="winMessage" style="display: none; color: green; font-size: 24px; margin-top: 20px;">CONGRATULATIONS! YOU WIN!</div>
+     <div id="abilityStatus" style="margin-top: 5px; font-size: 14px; min-height: 20px;"></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const infoDisplay = document.getElementById('info');
+        const skipLevelBtn = document.getElementById('skipLevelBtn');
+        const winMessage = document.getElementById('winMessage');
+        const abilityStatusDisplay = document.getElementById('abilityStatus');
+
+        // Game Constants
+        const GRAVITY = 0.6;
+        const PLAYER_WIDTH = 40;
+        const PLAYER_HEIGHT = 40;
+        const PLATFORM_COLOR = '#654321'; // Brown
+        const GOAL_COLOR = '#FFD700'; // Gold
+        const BOSS_COLOR = '#DC143C'; // Crimson
+        const PROJECTILE_COLOR = '#FFFF00'; // Yellow
+
+        // Game State
+        let currentLevel = 1;
+        let player = {};
+        let platforms = [];
+        let goal = {};
+        let keys = {};
+        let projectiles = [];
+        let boss = null;
+        let gameOver = false;
+        let gameWon = false;
+
+        // Character Definitions
+        const characters = [
+            {
+                name: "AdamMady (Very racist programmer and troll)",
+                shape: "😠", // Emoji representation
+                stats: { speed: 4, jumpPower: 12, friction: 0.8, color: '#FF0000' },
+                abilityCooldown: 180, // 3 seconds at 60fps
+                abilityTimer: 0,
+                abilityActive: false,
+                abilityDuration: 60, // 1 second
+                ability: function() { // Troll Dash (Speed Burst + Invincibility)
+                    if (this.abilityTimer <= 0) {
+                        this.abilityTimer = this.abilityCooldown;
+                        this.abilityActive = true;
+                        this.stats.speed *= 2; // Double speed
+                         abilityStatusDisplay.textContent = `${this.name} used Troll Dash!`;
+                        setTimeout(() => {
+                            this.abilityActive = false;
+                            this.stats.speed /= 2; // Reset speed
+                            abilityStatusDisplay.textContent = ``;
+                        }, this.abilityDuration * 1000 / 60);
+                         setTimeout(() => { abilityStatusDisplay.textContent = ''; }, 2000);
+                    }
+                }
+            },
+            {
+                name: "Garfield (Palestinian guy that loves dekoder in a special way)",
+                shape: "🟧", // Orange Square
+                stats: { speed: 3, jumpPower: 14, friction: 0.8, color: '#FFA500' },
+                abilityCooldown: 0,
+                abilityTimer: 0,
+                abilityActive: false, // Used to track double jump state
+                ability: function() { // Double Jump
+                    if (this.canDoubleJump) {
+                        this.vy = -this.stats.jumpPower * 0.9; // Slightly less powerful second jump
+                        this.canDoubleJump = false;
+                         abilityStatusDisplay.textContent = `${this.name} used Double Jump!`;
+                         setTimeout(() => { abilityStatusDisplay.textContent = ''; }, 1500);
+                    }
+                }
+            },
+            {
+                name: "Dekoder (Half Life enthusiast)",
+                shape: "λ", // Lambda
+                stats: { speed: 3.5, jumpPower: 12, friction: 0.8, color: '#808080' }, // Grey
+                abilityCooldown: 45, // 0.75 seconds
+                abilityTimer: 0,
+                ability: function() { // Shoot Projectile
+                     if (this.abilityTimer <= 0) {
+                        this.abilityTimer = this.abilityCooldown;
+                        projectiles.push({
+                            x: player.x + (player.facingRight ? player.width : -10),
+                            y: player.y + player.height / 2 - 2.5,
+                            width: 10,
+                            height: 5,
+                            vx: player.facingRight ? 8 : -8,
+                            damage: 1
+                        });
+                        abilityStatusDisplay.textContent = `${this.name} fired!`;
+                        setTimeout(() => { abilityStatusDisplay.textContent = ''; }, 1500);
+                    }
+                }
+            },
+            {
+                name: "Cora (Annoying ahh pick me girl)",
+                shape: "✨", // Sparkles
+                stats: { speed: 3, jumpPower: 11, friction: 0.9, color: '#FFC0CB' }, // Pink
+                abilityCooldown: 120, // 2 seconds
+                abilityTimer: 0,
+                abilityActive: false,
+                abilityDuration: 90, // 1.5 seconds
+                ability: function() { // Slow Fall
+                     if (this.abilityTimer <= 0) {
+                        this.abilityTimer = this.abilityCooldown;
+                        this.abilityActive = true;
+                        abilityStatusDisplay.textContent = `${this.name} used Slow Fall!`;
+                        setTimeout(() => {
+                            this.abilityActive = false;
+                            abilityStatusDisplay.textContent = '';
+                        }, this.abilityDuration * 1000 / 60);
+                         setTimeout(() => { abilityStatusDisplay.textContent = ''; }, 2000);
+                    }
+                }
+            },
+             { // Added fallback for levels 5-9 cycle
+                name: "AdamMady (Very racist programmer and troll)",
+                shape: "😠",
+                stats: { speed: 4, jumpPower: 12, friction: 0.8, color: '#FF0000' },
+                abilityCooldown: 180, abilityTimer: 0, abilityActive: false, abilityDuration: 60,
+                ability: characters[0].ability // Reuse function
+            },
+             {
+                name: "Garfield (Palestinian guy that loves dekoder in a special way)",
+                shape: "🟧",
+                stats: { speed: 3, jumpPower: 14, friction: 0.8, color: '#FFA500' },
+                abilityCooldown: 0, abilityTimer: 0, abilityActive: false,
+                ability: characters[1].ability // Reuse function
+            },
+             {
+                name: "Dekoder (Half Life enthusiast)",
+                shape: "λ",
+                stats: { speed: 3.5, jumpPower: 12, friction: 0.8, color: '#808080' },
+                abilityCooldown: 45, abilityTimer: 0,
+                ability: characters[2].ability // Reuse function
+            },
+             {
+                name: "Cora (Annoying ahh pick me girl)",
+                shape: "✨",
+                stats: { speed: 3, jumpPower: 11, friction: 0.9, color: '#FFC0CB' },
+                abilityCooldown: 120, abilityTimer: 0, abilityActive: false, abilityDuration: 90,
+                ability: characters[3].ability // Reuse function
+            },
+              { // For Level 9 (Adam Again)
+                name: "AdamMady (Very racist programmer and troll)",
+                shape: "😠",
+                stats: { speed: 4, jumpPower: 12, friction: 0.8, color: '#FF0000' },
+                abilityCooldown: 180, abilityTimer: 0, abilityActive: false, abilityDuration: 60,
+                ability: characters[0].ability // Reuse function
+            },
+            { // Boss Player
+                name: "Big Balls (Image Generation Bot)",
+                shape: "⚫️", // Black Circle
+                stats: { speed: 3.5, jumpPower: 13, friction: 0.85, color: '#000000' },
+                abilityCooldown: 90, // 1.5 seconds
+                abilityTimer: 0,
+                ability: function() { // Ground Pound / Strong Attack
+                     if (this.abilityTimer <= 0 && !this.grounded) { // Only usable mid-air
+                        this.abilityTimer = this.abilityCooldown;
+                        this.vy = 15; // Force downwards
+                         // Add visual effect for pound later if needed
+                        abilityStatusDisplay.textContent = `${this.name} used Generate Impact!`;
+                        // Damage dealt on landing is handled in collision check
+                        setTimeout(() => { abilityStatusDisplay.textContent = ''; }, 1500);
+                    }
+                     else if (this.abilityTimer <= 0 && this.grounded) { // Ground attack variant - shoot projectile
+                         this.abilityTimer = this.abilityCooldown / 2; // Faster cooldown for ground attack
+                           projectiles.push({
+                            x: player.x + (player.facingRight ? player.width : -15),
+                            y: player.y + player.height / 2 - 5,
+                            width: 15,
+                            height: 10,
+                            vx: player.facingRight ? 6 : -6,
+                            damage: 2 // Stronger projectile
+                        });
+                        abilityStatusDisplay.textContent = `${this.name} fired Big Ball!`;
+                        setTimeout(() => { abilityStatusDisplay.textContent = ''; }, 1500);
+                     }
+                }
+            }
+        ];
+
+        // Level Definitions (x, y, width, height)
+        const levelData = [
+            // Level 1
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 800, height: 50 },
+                    { x: 200, y: 450, width: 150, height: 20 },
+                    { x: 450, y: 380, width: 200, height: 20 },
+                    { x: 100, y: 300, width: 100, height: 20 }
+                ],
+                goal: { x: 120, y: 260, width: 40, height: 40 },
+                startPos: { x: 50, y: 500 }
+            },
+            // Level 2
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 250, height: 50 },
+                    { x: 350, y: 480, width: 100, height: 20 },
+                    { x: 550, y: 400, width: 250, height: 50 },
+                    { x: 400, y: 300, width: 80, height: 20 },
+                    { x: 150, y: 250, width: 150, height: 20 },
+                ],
+                goal: { x: 180, y: 210, width: 40, height: 40 },
+                startPos: { x: 50, y: 500 }
+            },
+             // Level 3
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 800, height: 50 },
+                    { x: 100, y: 450, width: 50, height: 100 },
+                    { x: 250, y: 380, width: 50, height: 170 },
+                    { x: 400, y: 300, width: 50, height: 250 },
+                     { x: 550, y: 250, width: 150, height: 20 },
+                ],
+                goal: { x: 600, y: 210, width: 40, height: 40 },
+                startPos: { x: 50, y: 500 }
+            },
+             // Level 4
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 100, height: 50 },
+                    { x: 150, y: 480, width: 100, height: 20 },
+                    { x: 300, y: 410, width: 100, height: 20 },
+                    { x: 450, y: 340, width: 100, height: 20 },
+                    { x: 600, y: 270, width: 100, height: 20 },
+                     { x: 750, y: 200, width: 50, height: 400 }, // Wall
+                     { x: 650, y: 150, width: 100, height: 20 },
+                ],
+                goal: { x: 680, y: 110, width: 40, height: 40 },
+                 startPos: { x: 30, y: 500 }
+            },
+             // Level 5
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 800, height: 50 },
+                     { x: 0, y: 0, width: 20, height: 550 }, // Left Wall
+                     { x: 780, y: 0, width: 20, height: 550 }, // Right Wall
+                    { x: 100, y: 450, width: 100, height: 20 },
+                    { x: 600, y: 450, width: 100, height: 20 },
+                    { x: 350, y: 350, width: 100, height: 20 },
+                    { x: 100, y: 250, width: 100, height: 20 },
+                     { x: 600, y: 250, width: 100, height: 20 },
+                ],
+                goal: { x: 380, y: 310, width: 40, height: 40 },
+                startPos: { x: 400, y: 500 }
+            },
+            // Level 6
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 150, height: 50 },
+                     { x: 250, y: 480, width: 50, height: 120 },
+                     { x: 400, y: 400, width: 50, height: 200 },
+                     { x: 550, y: 320, width: 50, height: 280 },
+                    { x: 600, y: 320, width: 200, height: 20 },
+                    { x: 200, y: 250, width: 150, height: 20 }, // High plat requires double jump
+                ],
+                goal: { x: 250, y: 210, width: 40, height: 40 },
+                startPos: { x: 50, y: 500 }
+            },
+             // Level 7
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 800, height: 50 },
+                    { x: 150, y: 450, width: 100, height: 20 },
+                    { x: 350, y: 350, width: 100, height: 20 },
+                    { x: 550, y: 250, width: 100, height: 20 },
+                     // Moving platform (simple horizontal)
+                    { x: 100, y: 150, width: 100, height: 20, moving: true, speed: 2, range: 300, startX: 100, dir: 1 },
+                ],
+                goal: { x: 600, y: 210, width: 40, height: 40 },
+                startPos: { x: 50, y: 500 }
+            },
+             // Level 8
+            {
+                platforms: [
+                    { x: 0, y: 550, width: 800, height: 20 }, // Floor is thin
+                    { x: 100, y: 450, width: 50, height: 20 },
+                     { x: 250, y: 380, width: 50, height: 20 },
+                     { x: 400, y: 310, width: 50, height: 20 },
+                     { x: 550, y: 240, width: 50, height: 20 },
+                     { x: 700, y: 170, width: 50, height: 20 }, // Need floaty jump / slow fall
+                ],
+                goal: { x: 710, y: 130, width: 40, height: 40 },
+                startPos: { x: 50, y: 500 }
+            },
+             // Level 9
+            {
+                 platforms: [
+                    { x: 0, y: 550, width: 800, height: 50 },
+                    { x: 200, y: 450, width: 150, height: 20 },
+                    { x: 0, y: 350, width: 150, height: 20 },
+                    { x: 400, y: 300, width: 400, height: 20 }, // Long platform
+                    { x: 400, y: 400, width: 50, height: 50 }, // Obstacle
+                     { x: 600, y: 450, width: 50, height: 50 }, // Obstacle
+                    { x: 100, y: 200, width: 150, height: 20 },
+                ],
+                goal: { x: 150, y: 160, width: 40, height: 40 },
+                startPos: { x: 700, y: 500 }
+            },
+             // Level 10 - Boss Fight
+            {
+                 platforms: [
+                    { x: 0, y: 550, width: 800, height: 50 },
+                     { x: 200, y: 400, width: 150, height: 20 },
+                     { x: 450, y: 400, width: 150, height: 20 },
+                ],
+                goal: null, // No goal, defeat boss
+                startPos: { x: 100, y: 500 },
+                 boss: {
+                    x: 600, y: 450, width: 100, height: 100,
+                    vx: 1, vy: 0,
+                    health: 20, maxHealth: 20,
+                    shape: "😈", // Combined boss representation
+                    color: BOSS_COLOR,
+                    attackCooldown: 120, // 2 seconds
+                    attackTimer: 0,
+                    invulnerableTimer: 0,
+                     update: function() {
+                        // Simple movement
+                        this.x += this.vx;
+                         if (this.x <= 0 || this.x + this.width >= canvas.width) {
+                            this.vx *= -1;
+                        }
+
+                        // Attack logic
+                        this.attackTimer--;
+                        if (this.attackTimer <= 0) {
+                            this.attackTimer = this.attackCooldown;
+                            // Drop a projectile
+                             projectiles.push({
+                                x: this.x + this.width / 2 - 5,
+                                y: this.y + this.height,
+                                width: 10,
+                                height: 10,
+                                vy: 4, // Drops down
+                                damage: 1,
+                                color: '#FF69B4', // Pink projectile
+                                isEnemy: true
+                            });
+                        }
+                         if(this.invulnerableTimer > 0) this.invulnerableTimer--;
+
+                    },
+                    draw: function() {
+                         const originalAlpha = ctx.globalAlpha;
+                         if(this.invulnerableTimer > 0 && Math.floor(this.invulnerableTimer / 5) % 2 === 0) {
+                              ctx.globalAlpha = 0.5; // Flash when hit
+                         }
+                        ctx.fillStyle = this.color;
+                        ctx.font = `${this.height}px sans-serif`;
+                         ctx.textAlign = "center";
+                         ctx.textBaseline = "middle";
+                         const centerX = this.x + this.width / 2;
+                         const centerY = this.y + this.height / 2;
+                         ctx.fillText(this.shape, centerX, centerY);
+
+                         // Health bar
+                        ctx.fillStyle = 'red';
+                        ctx.fillRect(this.x, this.y - 20, this.width, 10);
+                        ctx.fillStyle = 'green';
+                        ctx.fillRect(this.x, this.y - 20, this.width * (this.health / this.maxHealth), 10);
+                         ctx.globalAlpha = originalAlpha; // Restore alpha
+                         ctx.textAlign = "start"; // Reset alignment
+                         ctx.textBaseline = "alphabetic"; // Reset baseline
+                    },
+                     takeDamage: function(amount) {
+                         if (this.invulnerableTimer <= 0) {
+                            this.health -= amount;
+                            this.invulnerableTimer = 30; // 0.5 seconds invulnerability
+                            if (this.health <= 0) {
+                                // Boss defeated
+                                gameWon = true;
+                                winMessage.style.display = 'block';
+                                skipLevelBtn.disabled = true;
+                             }
+                        }
+                    }
+                }
+            }
+        ];
+
+        function setupLevel(levelNum) {
+            if (levelNum > levelData.length) {
+                 console.error("Level", levelNum, "does not exist.");
+                 gameWon = true; // Consider winning if trying to load past last level
+                 winMessage.style.display = 'block';
+                 skipLevelBtn.disabled = true;
+                return;
+            }
+            if (gameWon) return; // Don't resetup if already won
+
+            currentLevel = levelNum;
+            const level = levelData[currentLevel - 1];
+            platforms = level.platforms.map(p => ({...p})); // Deep copy platforms
+            goal = level.goal ? {...level.goal} : null;
+             projectiles = []; // Clear projectiles
+
+             // Determine character based on level
+            let charIndex;
+            if (currentLevel === 10) {
+                charIndex = characters.length - 1; // Big Balls for level 10
+                boss = level.boss ? {...level.boss} : null; // Setup boss
+                 if(boss) {
+                     boss.update = level.boss.update; // Reassign methods
+                     boss.draw = level.boss.draw;
+                     boss.takeDamage = level.boss.takeDamage;
+                 }
+            } else {
+                 // Cycle through Adam, Garfield, Dekoder, Cora for levels 1-9
+                charIndex = (currentLevel - 1) % 4; // characters[0] to characters[3]
+                 // Assign correct name based on actual level index for cycling
+                 const actualCharData = characters[(currentLevel - 1) % 4]; // Get base character data
+                 player = { // Create new player object
+                    ...characters[charIndex], // Copy base properties
+                    name: actualCharData.name, // Ensure correct name is displayed
+                    shape: actualCharData.shape,
+                    stats: { ...actualCharData.stats }, // Copy stats
+                     ability: actualCharData.ability, // Assign ability function
+                    x: level.startPos.x,
+                    y: level.startPos.y,
+                    width: PLAYER_WIDTH,
+                    height: PLAYER_HEIGHT,
+                    vx: 0,
+                    vy: 0,
+                    grounded: false,
+                    facingRight: true,
+                    canDoubleJump: false, // Specific for Garfield
+                     abilityTimer: 0, // Reset ability timer
+                     abilityActive: false, // Reset ability active state
+                };
+                boss = null; // No boss in levels 1-9
+            }
+
+             // Special case for setting up Big Balls
+             if (currentLevel === 10) {
+                 const bigBallsData = characters[characters.length - 1];
+                  player = {
+                    ...bigBallsData,
+                     name: bigBallsData.name,
+                     shape: bigBallsData.shape,
+                     stats: { ...bigBallsData.stats },
+                     ability: bigBallsData.ability,
+                     x: level.startPos.x,
+                     y: level.startPos.y,
+                     width: PLAYER_WIDTH * 1.2, // Slightly bigger
+                     height: PLAYER_HEIGHT * 1.2,
+                     vx: 0,
+                     vy: 0,
+                     grounded: false,
+                     facingRight: true,
+                     abilityTimer: 0,
+                     abilityActive: false,
+                };
+             }
+
+
+            infoDisplay.textContent = `Level: ${currentLevel} - Character: ${player.name}`;
+            gameOver = false;
+             winMessage.style.display = 'none';
+             skipLevelBtn.disabled = false;
+             abilityStatusDisplay.textContent = ''; // Clear ability status
+        }
+
+        function handleInput() {
+            if (gameOver || gameWon) return;
+
+            // Horizontal Movement
+            if (keys['ArrowLeft']) {
+                player.vx -= player.stats.speed * 0.2;
+                player.facingRight = false;
+            }
+            if (keys['ArrowRight']) {
+                player.vx += player.stats.speed * 0.2;
+                player.facingRight = true;
+            }
+
+            // Apply friction
+            player.vx *= player.stats.friction;
+             if (Math.abs(player.vx) < 0.1) player.vx = 0; // Stop if slow enough
+
+             // Limit speed
+             if (player.vx > player.stats.speed) player.vx = player.stats.speed;
+             if (player.vx < -player.stats.speed) player.vx = -player.stats.speed;
+
+
+            // Jumping
+            if (keys['ArrowUp']) {
+                if (player.grounded) {
+                    player.vy = -player.stats.jumpPower;
+                    player.grounded = false;
+                    if (player.name.includes("Garfield")) { // Enable double jump for Garfield
+                        player.canDoubleJump = true;
+                    }
+                } else if (player.name.includes("Garfield") && player.canDoubleJump) {
+                    // Garfield double jump handled by ability function on spacebar press
+                     // This section prevents accidental double jump with up arrow again
+                }
+                keys['ArrowUp'] = false; // Prevent holding jump key
+            }
+
+             // Ability
+             if (keys[' ']) { // Spacebar
+                  if (player.ability) {
+                     // Special case for Garfield's double jump on spacebar if not grounded
+                     if (player.name.includes("Garfield") && !player.grounded && player.canDoubleJump) {
+                         player.ability.call(player); // Call ability with player as 'this' context
+                     } else if (!player.name.includes("Garfield") || player.grounded) { // Other abilities or Garfield on ground
+                         player.ability.call(player);
+                     }
+                  }
+                 keys[' '] = false; // Trigger once per press
+             }
+        }
+
+         function updateProjectiles() {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.x += p.vx || 0;
+                 p.y += p.vy || 0;
+
+                // Remove projectiles going off-screen
+                if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+
+                 // Projectile collision with platforms
+                for (const platform of platforms) {
+                     if (p.x < platform.x + platform.width &&
+                        p.x + p.width > platform.x &&
+                        p.y < platform.y + platform.height &&
+                        p.y + p.height > platform.y) {
+                        projectiles.splice(i, 1); // Remove projectile on hitting platform
+                        break; // Stop checking platforms for this projectile
+                    }
+                }
+
+                 // Player projectile collision with boss
+                 if (currentLevel === 10 && boss && !p.isEnemy && boss.health > 0) {
+                     if (p.x < boss.x + boss.width &&
+                        p.x + p.width > boss.x &&
+                        p.y < boss.y + boss.height &&
+                        p.y + p.height > boss.y) {
+                         boss.takeDamage(p.damage || 1);
+                         projectiles.splice(i, 1); // Remove projectile
+                        continue;
+                    }
+                }
+
+                 // Enemy projectile collision with player
+                 if (p.isEnemy && !player.abilityActive) { // Check if player is not invincible
+                     if (p.x < player.x + player.width &&
+                        p.x + p.width > player.x &&
+                        p.y < player.y + player.height &&
+                        p.y + p.height > player.y) {
+                         // Player hit - reset level? or add health later
+                         console.log("Player hit!");
+                         projectiles.splice(i, 1);
+                         // For now, just restart level on hit
+                         setupLevel(currentLevel);
+                        continue;
+                    }
+                 }
+            }
+        }
+
+
+         function updateMovingPlatforms() {
+             for (const platform of platforms) {
+                 if (platform.moving) {
+                     platform.x += platform.speed * platform.dir;
+                     if (platform.x <= platform.startX || platform.x >= platform.startX + platform.range) {
+                         platform.dir *= -1; // Change direction
+                         // Clamp position to avoid overshooting
+                          if(platform.x < platform.startX) platform.x = platform.startX;
+                          if(platform.x > platform.startX + platform.range) platform.x = platform.startX + platform.range;
+                     }
+                 }
+             }
+         }
+
+         function update() {
+             if (gameOver || gameWon) return;
+
+             handleInput();
+             updateMovingPlatforms();
+
+             // Apply gravity
+             let effectiveGravity = GRAVITY;
+             if (player.name.includes("Cora") && player.abilityActive && player.vy > 0) {
+                 effectiveGravity *= 0.2; // Slow fall effect
+             }
+             player.vy += effectiveGravity;
+
+
+             // Move player horizontally
+             player.x += player.vx;
+
+             // Horizontal collision with platforms
+             player.grounded = false; // Assume not grounded until collision check proves otherwise
+            let onMovingPlatform = null;
+            for (const platform of platforms) {
+                // Check horizontal collision
+                 if (player.x < platform.x + platform.width &&
+                    player.x + player.width > platform.x &&
+                    player.y < platform.y + platform.height &&
+                    player.y + player.height > platform.y) {
+                    // Collision detected, adjust position
+                    if (player.vx > 0) { // Moving right
+                        player.x = platform.x - player.width;
+                    } else if (player.vx < 0) { // Moving left
+                        player.x = platform.x + platform.width;
+                    }
+                     player.vx = 0; // Stop horizontal movement
+                 }
+            }
+
+             // Move player vertically
+             player.y += player.vy;
+
+            // Vertical collision with platforms
+            for (const platform of platforms) {
+                 if (player.x < platform.x + platform.width &&
+                     player.x + player.width > platform.x &&
+                     player.y < platform.y + platform.height &&
+                     player.y + player.height > platform.y) {
+
+                     // Check collision from above (landing)
+                     if (player.vy > 0 && player.y + player.height - player.vy <= platform.y) { // Ensure player was above platform last frame
+                         player.y = platform.y - player.height;
+                         player.vy = 0;
+                         player.grounded = true;
+                         if (player.name.includes("Garfield")) player.canDoubleJump = false; // Reset double jump on landing
+
+                          // Check if landed on moving platform
+                         if (platform.moving) {
+                            onMovingPlatform = platform;
+                         }
+
+                          // Check for Big Balls ground pound damage
+                         if (currentLevel === 10 && player.name.includes("Big Balls") && keys[' '] && player.abilityTimer > 0) { // Check if ability was just used (timer is high)
+                             if (boss && boss.health > 0) {
+                                 // Simple proximity check for ground pound AOE
+                                const poundRadius = player.width * 1.5;
+                                const dx = (boss.x + boss.width / 2) - (player.x + player.width / 2);
+                                const dy = (boss.y + boss.height / 2) - (player.y + player.height); // Check below player
+                                if (Math.abs(dx) < poundRadius && dy > 0 && dy < poundRadius/2) {
+                                     boss.takeDamage(3); // Ground pound damage
+                                     console.log("Ground pound hit!");
+                                 }
+                             }
+                         }
+
+                     }
+                     // Check collision from below (hitting ceiling)
+                     else if (player.vy < 0 && player.y - player.vy >= platform.y + platform.height) { // Ensure player was below platform last frame
+                         player.y = platform.y + platform.height;
+                         player.vy = 0;
+                     }
+                 }
+             }
+
+             // Stick to moving platform if landed on one
+             if (onMovingPlatform) {
+                  player.x += onMovingPlatform.speed * onMovingPlatform.dir;
+             }
+
+             // Check goal collision (Levels 1-9)
+             if (goal && currentLevel < 10) {
+                 if (player.x < goal.x + goal.width &&
+                     player.x + player.width > goal.x &&
+                     player.y < goal.y + goal.height &&
+                     player.y + player.height > goal.y) {
+                     // Level complete
+                     if (currentLevel < 10) {
+                         setupLevel(currentLevel + 1);
+                     }
+                 }
+             }
+
+             // Check falling out of bounds
+             if (player.y > canvas.height) {
+                 setupLevel(currentLevel); // Restart current level
+             }
+
+             // Update ability timers
+             if (player.abilityTimer > 0) player.abilityTimer--;
+
+              // Update projectiles
+             updateProjectiles();
+
+             // Update boss (Level 10)
+             if (currentLevel === 10 && boss && boss.health > 0) {
+                 boss.update();
+                 // Basic boss collision with player
+                 if (!player.abilityActive) { // Check if player isn't invincible (AdamMady ability)
+                      if (player.x < boss.x + boss.width &&
+                         player.x + player.width > boss.x &&
+                         player.y < boss.y + boss.height &&
+                         player.y + player.height > boss.y) {
+                          // Player hit by boss - restart level
+                          console.log("Player hit by boss!");
+                          setupLevel(currentLevel);
+                      }
+                 }
+             }
+         }
+
+
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#87CEEB'; // Sky blue
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw platforms
+            ctx.fillStyle = PLATFORM_COLOR;
+            platforms.forEach(p => {
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+            });
+
+            // Draw goal (Levels 1-9)
+            if (goal && currentLevel < 10) {
+                ctx.fillStyle = GOAL_COLOR;
+                // Draw a simple star or sparkle for the goal
+                ctx.font = `${goal.height}px sans-serif`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("🏆", goal.x + goal.width / 2, goal.y + goal.height / 2); // Trophy emoji
+                ctx.textAlign = "start"; // Reset alignment
+                 ctx.textBaseline = "alphabetic"; // Reset baseline
+            }
+
+             // Draw projectiles
+             projectiles.forEach(p => {
+                ctx.fillStyle = p.color || PROJECTILE_COLOR;
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+            });
+
+            // Draw player
+             if (!gameOver && player.stats) { // Check if player exists
+                 const originalAlpha = ctx.globalAlpha;
+                 if(player.abilityActive && player.name.includes("AdamMady") && Math.floor(Date.now() / 100) % 2 === 0) {
+                      ctx.globalAlpha = 0.5; // Flash if invincible
+                 }
+
+                 ctx.fillStyle = player.stats.color; // Use character specific color
+                 ctx.font = `${player.height}px sans-serif`;
+                 ctx.textAlign = "center";
+                 ctx.textBaseline = "middle";
+                 const centerX = player.x + player.width / 2;
+                 const centerY = player.y + player.height / 2;
+                 ctx.fillText(player.shape, centerX, centerY); // Use emoji/shape
+                 ctx.textAlign = "start"; // Reset alignment
+                  ctx.textBaseline = "alphabetic"; // Reset baseline
+                  ctx.globalAlpha = originalAlpha; // Restore alpha
+            }
+
+            // Draw Boss (Level 10)
+             if (currentLevel === 10 && boss && boss.health > 0) {
+                boss.draw();
+            }
+
+
+            // Draw Ability Cooldown Timer (optional visualization)
+             if (player.abilityTimer > 0 && player.abilityCooldown > 0) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                const cooldownRatio = player.abilityTimer / player.abilityCooldown;
+                ctx.fillRect(player.x, player.y - 10, player.width, 5);
+                 ctx.fillStyle = 'blue';
+                 ctx.fillRect(player.x, player.y - 10, player.width * (1-cooldownRatio), 5);
+             }
+
+        }
+
+        function gameLoop() {
+            if (!gameWon) { // Stop loop if game is won
+                 update();
+                 draw();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+             // Prevent default browser behavior for space and arrow keys
+            if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        skipLevelBtn.addEventListener('click', () => {
+            if (currentLevel < levelData.length) {
+                setupLevel(currentLevel + 1);
+            } else if (currentLevel === levelData.length && !gameWon) {
+                 // If skipping final level (boss fight), consider it a win? Or just load it? Let's load it.
+                 // If already on level 10, skipping does nothing unless we add a win condition here.
+                 // Let's make skipping level 10 instantly win.
+                 console.log("Skipped final boss!");
+                 gameWon = true;
+                 winMessage.style.display = 'block';
+                 skipLevelBtn.disabled = true;
+                 boss = null; // Remove boss visually
+                 draw(); // Update display
+            }
+        });
+
+        // Initial Setup
+        setupLevel(1);
+        gameLoop();
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pull The Square Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+            flex-direction: column;
+        }
+        #game-container {
+            width: 600px;
+            height: 400px;
+            border: 2px solid #333;
+            position: relative;
+            background-color: #fff;
+            overflow: hidden;
+            cursor: none; /* Hide default cursor */
+        }
+        .square {
+            width: 40px;
+            height: 40px;
+            background-color: #55f;
+            position: absolute;
+            /* Centered origin for easier positioning */
+            transform: translate(-50%, -50%);
+        }
+        .goal {
+            width: 40px;
+            height: 40px;
+            position: absolute;
+            font-size: 40px; /* Star emoji size */
+            line-height: 40px; /* Center emoji vertically */
+            text-align: center; /* Center emoji horizontally */
+            /* Centered origin */
+            transform: translate(-50%, -50%);
+        }
+        .obstacle {
+            background-color: #8B4513; /* Brown */
+            position: absolute;
+        }
+        .player-cursor {
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-bottom: 20px solid #000; /* Black triangle */
+            position: absolute;
+            pointer-events: none; /* Prevent cursor from blocking interactions */
+            transform: translate(-50%, -50%); /* Center tip on cursor */
+            z-index: 100;
+            transition: transform 0.05s linear; /* Smooth movement */
+        }
+        #level-display {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        #message-display {
+            margin-top: 10px;
+            font-size: 1.1em;
+            color: green;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="level-display">Level: 1</div>
+    <div id="game-container">
+        <div class="square" id="square"></div>
+        <div class="goal" id="goal">⭐</div>
+        <!-- Obstacles will be added dynamically -->
+    </div>
+    <div class="player-cursor" id="player-cursor"></div>
+    <div id="message-display">Pull the blue square to the star!</div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const square = document.getElementById('square');
+        const goal = document.getElementById('goal');
+        const playerCursor = document.getElementById('player-cursor');
+        const levelDisplay = document.getElementById('level-display');
+        const messageDisplay = document.getElementById('message-display');
+
+        let isDragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+        let currentLevel = 0; // Start with level 0 (index)
+        let animationFrameId = null;
+
+        // Level Definitions
+        // Positions are {x, y} percentages or pixels. Using pixels for simplicity here.
+        // Obstacles are {x, y, width, height}
+        const levels = [
+            // Level 1
+            { squarePos: { x: 50, y: 350 }, goalPos: { x: 550, y: 50 }, obstacles: [] },
+            // Level 2
+            { squarePos: { x: 50, y: 50 }, goalPos: { x: 550, y: 350 }, obstacles: [] },
+            // Level 3 - Simple Obstacle
+            { squarePos: { x: 50, y: 200 }, goalPos: { x: 550, y: 200 }, obstacles: [
+                { x: 280, y: 100, width: 40, height: 200 }
+            ]},
+            // Level 4 - Narrow Path Top
+            { squarePos: { x: 50, y: 50 }, goalPos: { x: 550, y: 50 }, obstacles: [
+                { x: 0, y: 100, width: 450, height: 40 },
+                { x: 150, y: 140, width: 450, height: 40 }
+            ]},
+             // Level 5 - Narrow Path Bottom
+            { squarePos: { x: 50, y: 350 }, goalPos: { x: 550, y: 350 }, obstacles: [
+                { x: 0, y: 200, width: 450, height: 40 },
+                { x: 150, y: 240, width: 450, height: 40 }
+            ]},
+            // Level 6 - Maze like
+            { squarePos: { x: 50, y: 50 }, goalPos: { x: 550, y: 350 }, obstacles: [
+                { x: 150, y: 0, width: 40, height: 250 },
+                { x: 150, y: 210, width: 300, height: 40 }
+            ]},
+            // Level 7 - More Obstacles
+            { squarePos: { x: 300, y: 350 }, goalPos: { x: 300, y: 50 }, obstacles: [
+                { x: 100, y: 150, width: 400, height: 20 },
+                { x: 100, y: 250, width: 400, height: 20 },
+                { x: 0, y: 170, width: 100, height: 80 },
+                { x: 500, y: 170, width: 100, height: 80 }
+            ]},
+            // Level 8 - Diagonal path
+            { squarePos: { x: 50, y: 350 }, goalPos: { x: 550, y: 50 }, obstacles: [
+                { x: 200, y: 200, width: 200, height: 30 },
+                { x: 100, y: 100, width: 30, height: 150 },
+                { x: 470, y: 150, width: 30, height: 150 }
+            ]},
+            // Level 9 - Requires careful pulling
+             { squarePos: { x: 50, y: 50 }, goalPos: { x: 550, y: 50 }, obstacles: [
+                { x: 100, y: 0, width: 20, height: 150 },
+                { x: 100, y: 150, width: 400, height: 20},
+                { x: 500, y: 150, width: 20, height: 250},
+                { x: 200, y: 170, width: 20, height: 150},
+             ]},
+            // Level 10 - Final Challenge
+            { squarePos: { x: 50, y: 200 }, goalPos: { x: 550, y: 200 }, obstacles: [
+                { x: 150, y: 0, width: 30, height: 150 },
+                { x: 150, y: 250, width: 30, height: 150 },
+                { x: 300, y: 50, width: 30, height: 300 },
+                { x: 450, y: 0, width: 30, height: 150 },
+                { x: 450, y: 250, width: 30, height: 150 }
+            ]}
+        ];
+
+        function getMousePos(event) {
+            const rect = gameContainer.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        }
+
+        function isColliding(rect1, rect2) {
+             // Simple AABB collision detection
+             // Assumes rects have { x, y, width, height } where x,y is top-left
+             return !(rect1.x + rect1.width < rect2.x ||
+                      rect1.x > rect2.x + rect2.width ||
+                      rect1.y + rect1.height < rect2.y ||
+                      rect1.y > rect2.y + rect2.height);
+        }
+
+        function updateGame() {
+            if (!isDragging) {
+                animationFrameId = requestAnimationFrame(updateGame);
+                return; // Only update position while dragging
+            }
+
+            // Get current square position (center based)
+            const squareRect = {
+                x: parseFloat(square.style.left || '0'),
+                y: parseFloat(square.style.top || '0'),
+                width: square.offsetWidth,
+                height: square.offsetHeight
+            };
+
+            // Convert to top-left based for collision check
+            const squareTopLeft = {
+                x: squareRect.x - squareRect.width / 2,
+                y: squareRect.y - squareRect.height / 2,
+                width: squareRect.width,
+                height: squareRect.height
+            };
+
+
+            // Check collision with goal
+            const goalRect = {
+                x: parseFloat(goal.style.left) - goal.offsetWidth / 2,
+                y: parseFloat(goal.style.top) - goal.offsetHeight / 2,
+                width: goal.offsetWidth,
+                height: goal.offsetHeight
+            };
+
+            if (isColliding(squareTopLeft, goalRect)) {
+                winLevel();
+                animationFrameId = requestAnimationFrame(updateGame);
+                return;
+            }
+
+            // Check collision with obstacles
+            const obstacles = gameContainer.querySelectorAll('.obstacle');
+            for (const obs of obstacles) {
+                const obsRect = {
+                    x: parseFloat(obs.style.left),
+                    y: parseFloat(obs.style.top),
+                    width: obs.offsetWidth,
+                    height: obs.offsetHeight
+                };
+                if (isColliding(squareTopLeft, obsRect)) {
+                    loseLevel(); // Reset level on collision
+                    animationFrameId = requestAnimationFrame(updateGame);
+                    return;
+                }
+            }
+             // Boundary check
+            if (squareTopLeft.x < 0 || squareTopLeft.x + squareTopLeft.width > gameContainer.offsetWidth ||
+                squareTopLeft.y < 0 || squareTopLeft.y + squareTopLeft.height > gameContainer.offsetHeight) {
+                loseLevel(); // Reset if out of bounds
+                animationFrameId = requestAnimationFrame(updateGame);
+                return;
+            }
+
+
+            animationFrameId = requestAnimationFrame(updateGame);
+        }
+
+        function winLevel() {
+            isDragging = false; // Stop dragging on win
+            square.removeEventListener('mousedown', onMouseDown); // Disable interaction until next level loads
+            messageDisplay.textContent = `Level ${currentLevel + 1} Complete!`;
+            messageDisplay.style.color = 'green';
+            currentLevel++;
+            setTimeout(() => {
+                if (currentLevel < levels.length) {
+                    loadLevel(currentLevel);
+                } else {
+                    messageDisplay.textContent = "Congratulations! You completed all levels!";
+                     // Optional: Stop game loop if truly finished
+                    if (animationFrameId) {
+                        cancelAnimationFrame(animationFrameId);
+                        animationFrameId = null;
+                    }
+                    // Maybe add a restart button here
+                }
+            }, 1500); // Wait 1.5 seconds before loading next level
+        }
+
+        function loseLevel() {
+             isDragging = false; // Stop dragging
+             square.removeEventListener('mousedown', onMouseDown); // Disable interaction briefly
+             messageDisplay.textContent = `Oops! Try Level ${currentLevel + 1} again.`;
+             messageDisplay.style.color = 'red';
+             setTimeout(() => {
+                loadLevel(currentLevel); // Reload the current level
+             }, 1000); // Wait 1 second
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                console.log("Attempted to load non-existent level");
+                return; // Should not happen if winLevel logic is correct
+            }
+
+            // Clear previous obstacles
+            const existingObstacles = gameContainer.querySelectorAll('.obstacle');
+            existingObstacles.forEach(obs => gameContainer.removeChild(obs));
+
+            const levelData = levels[levelIndex];
+
+            // Position square
+            square.style.left = `${levelData.squarePos.x}px`;
+            square.style.top = `${levelData.squarePos.y}px`;
+
+            // Position goal
+            goal.style.left = `${levelData.goalPos.x}px`;
+            goal.style.top = `${levelData.goalPos.y}px`;
+
+            // Create and position obstacles
+            levelData.obstacles.forEach(obsData => {
+                const obstacleEl = document.createElement('div');
+                obstacleEl.classList.add('obstacle');
+                obstacleEl.style.left = `${obsData.x}px`;
+                obstacleEl.style.top = `${obsData.y}px`;
+                obstacleEl.style.width = `${obsData.width}px`;
+                obstacleEl.style.height = `${obsData.height}px`;
+                gameContainer.appendChild(obstacleEl);
+            });
+
+            levelDisplay.textContent = `Level: ${levelIndex + 1}`;
+            messageDisplay.textContent = `Level ${levelIndex + 1}. Pull the blue square to the star!`;
+            messageDisplay.style.color = '#333'; // Reset message color
+
+            // Re-enable interaction
+            isDragging = false;
+            square.addEventListener('mousedown', onMouseDown);
+
+            // Restart game loop if it was stopped
+            if (!animationFrameId && currentLevel < levels.length) {
+                 animationFrameId = requestAnimationFrame(updateGame);
+            }
+        }
+
+        function onMouseDown(event) {
+            event.preventDefault(); // Prevent default drag behavior
+            isDragging = true;
+            const mousePos = getMousePos(event);
+            // Calculate offset from square's center to mouse click
+            offsetX = mousePos.x - parseFloat(square.style.left);
+            offsetY = mousePos.y - parseFloat(square.style.top);
+            gameContainer.style.cursor = 'none'; // Ensure custom cursor shows
+            square.style.cursor = 'none';
+        }
+
+        function onMouseMove(event) {
+            const mousePos = getMousePos(event);
+            // Move player cursor representation
+            playerCursor.style.left = `${mousePos.x}px`;
+            playerCursor.style.top = `${mousePos.y}px`;
+
+            if (isDragging) {
+                // Calculate new center position for the square
+                let newX = mousePos.x - offsetX;
+                let newY = mousePos.y - offsetY;
+
+                // Keep square within bounds (based on center position) - optional refinement
+                // const halfWidth = square.offsetWidth / 2;
+                // const halfHeight = square.offsetHeight / 2;
+                // newX = Math.max(halfWidth, Math.min(gameContainer.offsetWidth - halfWidth, newX));
+                // newY = Math.max(halfHeight, Math.min(gameContainer.offsetHeight - halfHeight, newY));
+
+
+                square.style.left = `${newX}px`;
+                square.style.top = `${newY}px`;
+            }
+        }
+
+        function onMouseUp(event) {
+            if (isDragging) {
+                isDragging = false;
+                 gameContainer.style.cursor = 'none';
+                 square.style.cursor = 'none'; // Keep cursor hidden when not dragging over square
+            }
+        }
+
+         function onMouseEnter(event) {
+            playerCursor.style.display = 'block'; // Show custom cursor
+        }
+
+        function onMouseLeave(event) {
+            playerCursor.style.display = 'none'; // Hide custom cursor if mouse leaves area
+            if (isDragging) {
+                // Option: treat leaving the area as losing the level or just stop dragging
+                isDragging = false;
+                // Or uncomment below to reset level if drag goes out of bounds
+                // loseLevel();
+            }
+        }
+
+
+        // Initial setup
+        square.addEventListener('mousedown', onMouseDown);
+        // Use gameContainer for mousemove/mouseup to track even if cursor leaves the square
+        gameContainer.addEventListener('mousemove', onMouseMove);
+        gameContainer.addEventListener('mouseup', onMouseUp);
+        gameContainer.addEventListener('mouseleave', onMouseLeave); // Handle mouse leaving game area
+        gameContainer.addEventListener('mouseenter', onMouseEnter); // Show cursor on entry
+
+        // Load the first level
+        loadLevel(currentLevel);
+
+        // Start the game loop
+        animationFrameId = requestAnimationFrame(updateGame);
+
+    </script>
+
+</body>
+</html>

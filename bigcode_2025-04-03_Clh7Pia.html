@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Supreme</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+        }
+        canvas {
+            border: 2px solid black;
+            background-color: #87CEEB; /* Sky blue background */
+        }
+        #controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #ui {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #333;
+        }
+        #characterInfo {
+            margin-top: 5px;
+            font-style: italic;
+            color: #555;
+            min-height: 40px; /* Reserve space */
+            text-align: center;
+        }
+        .boss-health-bar-container {
+            width: 300px;
+            height: 20px;
+            background-color: #ccc;
+            border: 1px solid #000;
+            margin: 10px auto;
+            display: none; /* Hidden by default */
+        }
+        .boss-health-bar {
+            height: 100%;
+            width: 100%;
+            background-color: red;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Platformer Supreme</h1>
+    <div id="ui">
+        Level: <span id="levelDisplay">1</span> | Ability Ready: <span id="abilityStatus">Yes</span> | Cooldown: <span id="abilityCooldown">0</span>s
+    </div>
+     <div id="characterInfo">
+        Character: <span id="characterName"></span> | Description: <span id="characterDescription"></span> <br>
+        Ability: <span id="abilityName"></span> - <span id="abilityDescription"></span> (Press X)
+    </div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="controls">
+        <span>Controls: Left/Right Arrows (Move), Up Arrow (Jump), X (Ability)</span>
+        <button id="skipLevelBtn">Skip Level</button>
+    </div>
+     <div id="bossHealthContainer" class="boss-health-bar-container">
+        Boss Health: <div id="bossHealthBar" class="boss-health-bar"></div>
+    </div>
+     <div id="winMessage" style="display: none; color: green; font-size: 24px; margin-top: 10px;">
+        CONGRATULATIONS! YOU BEAT THE GAME!
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const abilityStatus = document.getElementById('abilityStatus');
+        const abilityCooldownDisplay = document.getElementById('abilityCooldown');
+        const skipLevelBtn = document.getElementById('skipLevelBtn');
+        const characterNameDisplay = document.getElementById('characterName');
+        const characterDescriptionDisplay = document.getElementById('characterDescription');
+        const abilityNameDisplay = document.getElementById('abilityName');
+        const abilityDescriptionDisplay = document.getElementById('abilityDescription');
+        const bossHealthContainer = document.getElementById('bossHealthContainer');
+        const bossHealthBar = document.getElementById('bossHealthBar');
+        const winMessage = document.getElementById('winMessage');
+
+        // Game Settings
+        const gravity = 0.3;
+        const friction = 0.8;
+        const platformColor = '#654321'; // Brown
+        const goalColor = '#FFD700'; // Gold
+        const hazardColor = '#FF0000'; // Red
+        const coinColor = '#FFFF00'; // Yellow
+
+        // Game State
+        let currentLevel = 1;
+        let keys = {};
+        let player;
+        let platforms = [];
+        let hazards = [];
+        let coins = [];
+        let goal;
+        let characters;
+        let currentCharacterIndex = 0;
+        let abilityReady = true;
+        let abilityCooldown = 0;
+        let abilityTimer = 0;
+        let effects = []; // For visual effects like glitches, shields
+        let boss = null;
+        let gameWon = false;
+
+        const characterData = [
+            {
+                name: "AdamMady",
+                description: "Very racist programmer and troll",
+                emoji: "👨‍💻",
+                color: "#ADD8E6", // Light Blue
+                width: 30,
+                height: 40,
+                speed: 3,
+                jumpPower: -8, // Negative because Y increases downwards
+                health: 100,
+                abilityName: "Spawn Glitch",
+                abilityDescription: "Creates temporary visual distortion/hazard",
+                abilityCooldownTime: 5, // seconds
+                abilityAction: () => {
+                    // Spawn a temporary visual glitch effect near the player
+                    effects.push({
+                        type: 'glitch',
+                        x: player.x + player.width / 2,
+                        y: player.y + player.height / 2,
+                        radius: 30,
+                        duration: 1 * 60 // 1 second (60 frames)
+                    });
+                }
+            },
+            {
+                name: "Garfield",
+                description: "Palestinian guy that loves dekoder in a special way",
+                emoji: "🇵🇸", // Using flag emoji
+                color: "#FFA500", // Orange
+                width: 35, // Wider
+                height: 35,
+                speed: 2,
+                jumpPower: -9, // Higher jump
+                health: 120,
+                abilityName: "Love Dekoder",
+                abilityDescription: "Short-range charm aura",
+                abilityCooldownTime: 8,
+                 abilityAction: () => {
+                    // Create a charm aura effect (visual only in this basic version)
+                     effects.push({
+                        type: 'charm',
+                        x: player.x + player.width / 2,
+                        y: player.y + player.height / 2,
+                        radius: 50,
+                        duration: 2 * 60 // 2 seconds
+                    });
+                    // In a more complex game, this would affect enemies
+                }
+            },
+            {
+                name: "Dekoder",
+                description: "Half Life enthusiast",
+                emoji: "🔧", // Tool emoji
+                color: "#808080", // Gray
+                width: 30,
+                height: 40,
+                speed: 4, // Faster
+                jumpPower: -7.5,
+                health: 100,
+                abilityName: "Throw Crowbar",
+                abilityDescription: "Throws a projectile",
+                abilityCooldownTime: 3,
+                abilityAction: () => {
+                    // Create a crowbar projectile
+                    effects.push({
+                        type: 'projectile',
+                        x: player.x + player.width / 2,
+                        y: player.y + player.height / 2,
+                        width: 20,
+                        height: 5,
+                        vx: player.facingRight ? 6 : -6,
+                        vy: 0,
+                        duration: 3 * 60, // 3 seconds lifetime
+                        color: '#A52A2A' // Brownish
+                    });
+                }
+            },
+            {
+                name: "Cora",
+                description: "Annoying ahh pick me girl",
+                emoji: "✨", // Sparkles emoji
+                color: "#FFC0CB", // Pink
+                width: 30,
+                height: 40,
+                speed: 3,
+                jumpPower: -9, // Floaty jump (higher power, maybe adjust gravity effect later if needed)
+                health: 90,
+                abilityName: "Pick Me Shield",
+                abilityDescription: "Temporary shield against one hit",
+                abilityCooldownTime: 10,
+                abilityAction: () => {
+                    // Apply shield effect to player
+                    player.shielded = true;
+                    player.shieldDuration = 5 * 60; // 5 seconds
+                     effects.push({
+                        type: 'shield',
+                        target: player, // Link effect to player
+                        radius: player.width, // Shield radius
+                        duration: 5 * 60 // 5 seconds
+                    });
+                }
+            },
+             { // This entry is for Big Balls when playing Level 10
+                name: "Big Balls",
+                description: "Image Generation Bot",
+                emoji: "⚽️", // Soccer ball emoji
+                color: "#FFFFFF", // White
+                width: 50, // Larger
+                height: 50,
+                speed: 2.5,
+                jumpPower: -7,
+                health: 200,
+                abilityName: "Ground Pound",
+                abilityDescription: "Damages nearby enemies/boss on landing",
+                abilityCooldownTime: 6,
+                abilityAction: () => {
+                    // Mark player for ground pound state on next landing
+                    if (!player.grounded) {
+                        player.groundPounding = true;
+                        player.vy = 10; // Force downwards
+                    }
+                }
+            }
+        ];
+
+        function createPlayer(charData) {
+            return {
+                x: 50,
+                y: canvas.height - 100,
+                width: charData.width,
+                height: charData.height,
+                speed: charData.speed,
+                jumpPower: charData.jumpPower,
+                health: charData.health,
+                maxHealth: charData.health,
+                color: charData.color,
+                emoji: charData.emoji,
+                vx: 0,
+                vy: 0,
+                grounded: false,
+                facingRight: true,
+                abilityAction: charData.abilityAction,
+                abilityCooldownTime: charData.abilityCooldownTime,
+                shielded: false,
+                shieldDuration: 0,
+                groundPounding: false,
+                // Include description info for UI
+                name: charData.name,
+                description: charData.description,
+                abilityName: charData.abilityName,
+                abilityDescription: charData.abilityDescription
+            };
+        }
+
+        function createBoss() {
+            return {
+                x: canvas.width - 150,
+                y: canvas.height - 200,
+                width: 80,
+                height: 100,
+                emoji: "👾",
+                color: '#FF00FF', // Magenta
+                health: 500,
+                maxHealth: 500,
+                vx: 1, // Simple back and forth movement
+                vy: 0,
+                attackTimer: 0,
+                attackCooldown: 120, // Attack every 2 seconds
+                currentAttack: 0 // Index for cycling attacks
+            };
+        }
+
+        function setupLevel(level) {
+            if (gameWon) return;
+
+            platforms = [];
+            hazards = [];
+            coins = [];
+            goal = null;
+            effects = [];
+            boss = null;
+            bossHealthContainer.style.display = 'none'; // Hide boss health bar initially
+            winMessage.style.display = 'none';
+
+            // Reset ability state
+            abilityReady = true;
+            abilityCooldown = 0;
+            abilityTimer = 0;
+
+            levelDisplay.textContent = level;
+
+            // Ground platform
+            platforms.push({ x: 0, y: canvas.height - 20, width: canvas.width, height: 20 });
+
+            // Level Design based on level number
+            switch (level) {
+                case 1: // AdamMady - Tutorial
+                    platforms.push({ x: 150, y: canvas.height - 80, width: 100, height: 20 });
+                    platforms.push({ x: 350, y: canvas.height - 140, width: 100, height: 20 });
+                    platforms.push({ x: 550, y: canvas.height - 200, width: 100, height: 20 });
+                    goal = { x: canvas.width - 70, y: canvas.height - 240, width: 40, height: 40 };
+                    break;
+                case 2: // Garfield - Higher Jumps
+                    platforms.push({ x: 100, y: canvas.height - 100, width: 80, height: 20 });
+                    platforms.push({ x: 300, y: canvas.height - 180, width: 80, height: 20 });
+                    platforms.push({ x: 500, y: canvas.height - 260, width: 80, height: 20 });
+                    platforms.push({ x: 650, y: canvas.height - 180, width: 80, height: 20 }); // Need jump back
+                    goal = { x: canvas.width - 70, y: canvas.height - 50, width: 40, height: 40 };
+                    break;
+                case 3: // Dekoder - Moving Platforms
+                    platforms.push({ x: 100, y: canvas.height - 80, width: 100, height: 20 });
+                    platforms.push({ x: 300, y: canvas.height - 150, width: 100, height: 20, moving: true, speed: 1, range: 100, startX: 300 });
+                    platforms.push({ x: 550, y: canvas.height - 220, width: 100, height: 20 });
+                    goal = { x: canvas.width - 70, y: canvas.height - 260, width: 40, height: 40 };
+                    break;
+                 case 4: // Cora - Hazards
+                    platforms.push({ x: 100, y: canvas.height - 80, width: 100, height: 20 });
+                    hazards.push({ x: 200, y: canvas.height - 40, width: 100, height: 20 }); // Floor hazard
+                    platforms.push({ x: 350, y: canvas.height - 140, width: 100, height: 20 });
+                    hazards.push({ x: 350, y: canvas.height - 160, width: 100, height: 20 }); // Hazard above platform
+                    platforms.push({ x: 550, y: canvas.height - 200, width: 100, height: 20 });
+                     goal = { x: canvas.width - 70, y: canvas.height - 240, width: 40, height: 40 };
+                    break;
+                case 5: // AdamMady - Complex Platforming
+                     platforms.push({ x: 50, y: canvas.height - 80, width: 50, height: 20 });
+                     platforms.push({ x: 150, y: canvas.height - 140, width: 50, height: 20 });
+                     platforms.push({ x: 250, y: canvas.height - 200, width: 50, height: 20 });
+                     platforms.push({ x: 350, y: canvas.height - 140, width: 50, height: 20 });
+                     platforms.push({ x: 450, y: canvas.height - 80, width: 50, height: 20 });
+                     platforms.push({ x: 550, y: canvas.height - 160, width: 100, height: 20 });
+                     hazards.push({ x: 0, y: canvas.height - 40, width: 500, height: 20 }); // Long floor hazard
+                     goal = { x: canvas.width - 70, y: canvas.height - 200, width: 40, height: 40 };
+                    break;
+                 case 6: // Garfield - Charm (Simple Enemies needed, visual only here)
+                    platforms.push({ x: 100, y: canvas.height - 80, width: 100, height: 20 });
+                    platforms.push({ x: 300, y: canvas.height - 150, width: 100, height: 20 });
+                    platforms.push({ x: 500, y: canvas.height - 220, width: 100, height: 20 });
+                     // Add some 'enemies' (visual only for now)
+                    coins.push({ x: 250, y: canvas.height - 100, width: 15, height: 15, collected: false });
+                    coins.push({ x: 450, y: canvas.height - 170, width: 15, height: 15, collected: false });
+                    goal = { x: canvas.width - 70, y: canvas.height - 260, width: 40, height: 40 };
+                    break;
+                case 7: // Dekoder - Projectile Use (Targets needed, visual only here)
+                    platforms.push({ x: 100, y: canvas.height - 80, width: 100, height: 20 });
+                    platforms.push({ x: 250, y: canvas.height - 140, width: 100, height: 20 });
+                    platforms.push({ x: 400, y: canvas.height - 200, width: 100, height: 20 });
+                    platforms.push({ x: 550, y: canvas.height - 140, width: 100, height: 20 });
+                    // Add targets (coins for now)
+                    coins.push({ x: 600, y: canvas.height - 180, width: 15, height: 15, collected: false });
+                    goal = { x: canvas.width - 70, y: canvas.height - 50, width: 40, height: 40 };
+                    break;
+                case 8: // Cora - Floaty Jumps & Hazards
+                    platforms.push({ x: 50, y: canvas.height - 60, width: 50, height: 20 });
+                    platforms.push({ x: 150, y: canvas.height - 120, width: 50, height: 20 });
+                    hazards.push({ x: 250, y: canvas.height - 40, width: 100, height: 20 });
+                    platforms.push({ x: 400, y: canvas.height - 180, width: 50, height: 20 });
+                    platforms.push({ x: 500, y: canvas.height - 240, width: 50, height: 20 });
+                     hazards.push({ x: 550, y: canvas.height - 200, width: 100, height: 20 });
+                     goal = { x: canvas.width - 70, y: canvas.height - 280, width: 40, height: 40 };
+                    break;
+                 case 9: // AdamMady (Cycle repeats) - Combination Challenge
+                    platforms.push({ x: 100, y: canvas.height - 80, width: 80, height: 20 });
+                    platforms.push({ x: 250, y: canvas.height - 150, width: 80, height: 20, moving: true, speed: -1, range: 80, startX: 250 });
+                    hazards.push({ x: 400, y: canvas.height - 40, width: 100, height: 20 });
+                    platforms.push({ x: 550, y: canvas.height - 200, width: 80, height: 20 });
+                    platforms.push({ x: 400, y: canvas.height - 280, width: 80, height: 20 });
+                    coins.push({ x: 150, y: canvas.height - 120, width: 15, height: 15, collected: false });
+                    coins.push({ x: 600, y: canvas.height - 240, width: 15, height: 15, collected: false });
+                     goal = { x: 20, y: canvas.height - 120, width: 40, height: 40 };
+                    break;
+                case 10: // Big Balls - Boss Fight
+                    // Arena setup
+                    platforms.push({ x: 100, y: canvas.height - 100, width: 150, height: 20 });
+                    platforms.push({ x: canvas.width - 250, y: canvas.height - 100, width: 150, height: 20 });
+                    platforms.push({ x: canvas.width / 2 - 75, y: canvas.height - 200, width: 150, height: 20 });
+                    boss = createBoss();
+                    bossHealthContainer.style.display = 'block'; // Show boss health bar
+                    updateBossHealthBar();
+                    goal = null; // No goal flag in boss level
+                    break;
+            }
+
+            // Determine character for the level
+            if (level === 10) {
+                player = createPlayer(characterData[4]); // Big Balls
+            } else {
+                // Cycle through AdamMady, Garfield, Dekoder, Cora (indices 0, 1, 2, 3)
+                 currentCharacterIndex = (level - 1) % 4;
+                 player = createPlayer(characterData[currentCharacterIndex]);
+            }
+
+            // Update UI with character info
+            characterNameDisplay.textContent = player.name;
+            characterDescriptionDisplay.textContent = player.description;
+            abilityNameDisplay.textContent = player.abilityName;
+            abilityDescriptionDisplay.textContent = player.abilityDescription;
+        }
+
+        function update() {
+            if (gameWon) return;
+
+            // Handle Input
+            player.vx *= friction; // Apply friction
+
+            if (keys['ArrowLeft']) {
+                player.vx = -player.speed;
+                player.facingRight = false;
+            }
+            if (keys['ArrowRight']) {
+                player.vx = player.speed;
+                player.facingRight = true;
+            }
+
+            // Apply Velocity
+            player.x += player.vx;
+            player.vy += gravity;
+            player.y += player.vy;
+
+            // Ground Check & Collision
+            player.grounded = false;
+
+            // Platform Collision
+             platforms.forEach(platform => {
+                // Move moving platforms
+                 if (platform.moving) {
+                    platform.x += platform.speed;
+                    if (platform.x <= platform.startX - platform.range || platform.x >= platform.startX + platform.range) {
+                        platform.speed *= -1; // Reverse direction
+                    }
+                }
+
+                if (checkCollision(player, platform)) {
+                    // Check collision side
+                    const overlapX = (player.width / 2 + platform.width / 2) - Math.abs((player.x + player.width / 2) - (platform.x + platform.width / 2));
+                    const overlapY = (player.height / 2 + platform.height / 2) - Math.abs((player.y + player.height / 2) - (platform.y + platform.height / 2));
+
+                    if (overlapY < overlapX) {
+                        // Vertical collision
+                        if (player.vy > 0 && player.y + player.height - player.vy <= platform.y) { // Landed on top
+                            player.y = platform.y - player.height;
+                            player.vy = 0;
+                            player.grounded = true;
+                            if (player.groundPounding) { // Ground pound effect on landing
+                                triggerGroundPound();
+                                player.groundPounding = false;
+                            }
+                             // Stick to moving platform if landed on it
+                            if (platform.moving) {
+                                player.x += platform.speed;
+                            }
+                        } else if (player.vy < 0 && player.y - player.vy >= platform.y + platform.height) { // Hit bottom
+                             player.y = platform.y + platform.height;
+                             player.vy = 0;
+                        }
+                    } else {
+                        // Horizontal collision
+                         if (player.vx > 0 && player.x + player.width - player.vx <= platform.x) { // Hit left side
+                            player.x = platform.x - player.width;
+                            player.vx = 0;
+                         } else if (player.vx < 0 && player.x - player.vx >= platform.x + platform.width) { // Hit right side
+                            player.x = platform.x + platform.width;
+                            player.vx = 0;
+                        }
+                    }
+                }
+            });
+
+             // Prevent falling off screen bottom (treat bottom as death/reset)
+            if (player.y + player.height > canvas.height) {
+                 resetLevel(); // Or implement lives/game over
+            }
+            // Prevent going off screen top/sides
+            if (player.y < 0) {
+                player.y = 0;
+                player.vy = 0;
+            }
+             if (player.x < 0) {
+                player.x = 0;
+                player.vx = 0;
+            }
+             if (player.x + player.width > canvas.width) {
+                player.x = canvas.width - player.width;
+                player.vx = 0;
+            }
+
+
+            // Hazard Collision
+            hazards.forEach(hazard => {
+                if (checkCollision(player, hazard)) {
+                    if (player.shielded) {
+                        player.shielded = false; // Shield breaks
+                        // Find and remove shield effect visual
+                        effects = effects.filter(e => !(e.type === 'shield' && e.target === player));
+                    } else {
+                        resetLevel(); // Player hit hazard
+                    }
+                }
+            });
+
+            // Coin Collision
+            coins.forEach(coin => {
+                if (!coin.collected && checkCollision(player, coin)) {
+                    coin.collected = true;
+                    // Add score or other effect here if desired
+                }
+            });
+
+
+            // Goal Collision
+            if (goal && checkCollision(player, goal)) {
+                levelComplete();
+            }
+
+            // Ability Cooldown
+            if (!abilityReady) {
+                abilityTimer += 1 / 60; // Increment timer by frame time
+                abilityCooldown = Math.max(0, player.abilityCooldownTime - abilityTimer);
+                abilityCooldownDisplay.textContent = abilityCooldown.toFixed(1) + 's';
+                if (abilityTimer >= player.abilityCooldownTime) {
+                    abilityReady = true;
+                    abilityTimer = 0;
+                    abilityStatus.textContent = 'Yes';
+                    abilityCooldownDisplay.textContent = '0.0s';
+                }
+            }
+
+            // Update Effects
+            effects.forEach((effect, index) => {
+                effect.duration--;
+                if (effect.duration <= 0) {
+                    effects.splice(index, 1); // Remove expired effects
+                } else {
+                    // Update effect state (e.g., projectile movement)
+                    if (effect.type === 'projectile') {
+                        effect.x += effect.vx;
+                        effect.y += effect.vy;
+                         // Check collision with boss
+                        if (boss && checkCollision(effect, boss)) {
+                             boss.health -= 10; // Projectile damage
+                             updateBossHealthBar();
+                             effects.splice(index, 1); // Remove projectile on hit
+                             checkBossDefeat();
+                        }
+                         // Check collision with platforms (optional)
+                        platforms.forEach(p => {
+                             if(checkCollision(effect, p)) {
+                                 effects.splice(index, 1); // Remove projectile on hitting wall
+                             }
+                        });
+                    } else if (effect.type === 'shield' && effect.target) {
+                        // Update shield position to follow target
+                        effect.x = effect.target.x + effect.target.width / 2;
+                        effect.y = effect.target.y + effect.target.height / 2;
+                    } else if (effect.type === 'groundPound') {
+                         // Effect visual fades or shrinks
+                        effect.radius += 1; // Expand radius
+                        effect.opacity = effect.duration / 60; // Fade out
+                    }
+                }
+            });
+
+            // Update Player Shield state
+            if(player.shielded) {
+                player.shieldDuration--;
+                if(player.shieldDuration <= 0) {
+                    player.shielded = false;
+                     // Remove shield effect if it hasn't been removed by collision
+                    effects = effects.filter(e => !(e.type === 'shield' && e.target === player));
+                }
+            }
+
+             // Boss Logic (Level 10)
+            if (boss) {
+                 // Simple AI: Move back and forth, attack periodically
+                 boss.x += boss.vx;
+                 if (boss.x <= 0 || boss.x + boss.width >= canvas.width) {
+                     boss.vx *= -1; // Change direction at edges
+                 }
+
+                // Attack Timer
+                 boss.attackTimer--;
+                 if (boss.attackTimer <= 0) {
+                    bossAttack();
+                    boss.attackTimer = boss.attackCooldown; // Reset timer
+                 }
+
+                 // Boss collision with player (damage player)
+                if (checkCollision(player, boss)) {
+                     if (player.shielded) {
+                         player.shielded = false;
+                         effects = effects.filter(e => !(e.type === 'shield' && e.target === player));
+                     } else if (!player.invincible) { // Add brief invincibility after hit
+                         player.health -= 20; // Boss collision damage
+                         resetLevel(); // For simplicity, reset level on hit. Could implement health/lives.
+                         // Could add invincibility frames here:
+                         // player.invincible = true;
+                         // setTimeout(() => player.invincible = false, 1000);
+                     }
+                }
+            }
+        }
+
+        function triggerGroundPound() {
+            // Create ground pound visual effect
+             effects.push({
+                 type: 'groundPound',
+                 x: player.x + player.width / 2,
+                 y: player.y + player.height,
+                 radius: 10,
+                 maxRadius: 80,
+                 duration: 30, // Half second effect
+                 opacity: 1
+             });
+
+             // Damage boss if nearby
+             if (boss) {
+                 const dx = (player.x + player.width / 2) - (boss.x + boss.width / 2);
+                 const dy = (player.y + player.height) - (boss.y + boss.height / 2); // Check distance from feet
+                 const distance = Math.sqrt(dx * dx + dy * dy);
+                 if (distance < 100) { // Ground pound radius
+                     boss.health -= 50; // Ground pound damage
+                     updateBossHealthBar();
+                     checkBossDefeat();
+                 }
+             }
+        }
+
+        function bossAttack() {
+            if (!boss) return;
+
+            // Cycle through attacks based on the 4 characters
+             const attackType = boss.currentAttack % 4;
+             const targetX = player.x + player.width / 2;
+             const targetY = player.y + player.height / 2;
+             const bossCenterX = boss.x + boss.width / 2;
+             const bossCenterY = boss.y + boss.height / 2;
+
+             switch(attackType) {
+                 case 0: // AdamMady - Glitch Attack (Area effect)
+                     effects.push({ type: 'glitch', x: Math.random() * canvas.width, y: Math.random() * canvas.height, radius: 40, duration: 2 * 60 });
+                     break;
+                 case 1: // Garfield - Charm (Slow player temporarily - not implemented, visual only)
+                      effects.push({ type: 'charm', x: bossCenterX, y: bossCenterY, radius: 60, duration: 1 * 60 });
+                     break;
+                 case 2: // Dekoder - Projectile Attack
+                     let dx = targetX - bossCenterX;
+                     let dy = targetY - bossCenterY;
+                     let dist = Math.sqrt(dx*dx + dy*dy);
+                     effects.push({
+                         type: 'bossProjectile',
+                         x: bossCenterX, y: bossCenterY, width: 15, height: 15, color: '#FF8C00', // Orange projectile
+                         vx: (dx / dist) * 4, vy: (dy / dist) * 4, duration: 5 * 60
+                     });
+                     break;
+                 case 3: // Cora - Annoying Dash Attack (simple horizontal move)
+                     boss.vx = (player.x < boss.x ? -3 : 3); // Dash towards player quickly
+                     // Add a visual effect for dash if desired
+                     setTimeout(() => { boss.vx = (boss.vx > 0 ? 1 : -1); }, 500); // Return to normal speed after dash
+                     break;
+             }
+
+             boss.currentAttack++;
+        }
+
+        function checkBossDefeat() {
+             if (boss && boss.health <= 0) {
+                 console.log("BOSS DEFEATED!");
+                 levelComplete(); // Proceed after defeating boss
+             }
+         }
+
+         function updateBossHealthBar() {
+             if (boss) {
+                 const healthPercentage = Math.max(0, (boss.health / boss.maxHealth) * 100);
+                 bossHealthBar.style.width = healthPercentage + '%';
+             }
+         }
+
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function resetLevel() {
+            console.log(`Resetting Level ${currentLevel}`);
+            // Reset player position, potentially health if implemented
+             setupLevel(currentLevel);
+        }
+
+        function levelComplete() {
+            console.log(`Level ${currentLevel} Complete!`);
+            if (currentLevel === 10) {
+                // Game Won!
+                console.log("YOU WIN!");
+                gameWon = true;
+                winMessage.style.display = 'block';
+                 // You could stop the game loop or show a final screen here
+                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 ctx.fillStyle = 'white';
+                 ctx.font = '40px sans-serif';
+                 ctx.textAlign = 'center';
+                 ctx.fillText("CONGRATULATIONS!", canvas.width / 2, canvas.height / 2 - 40);
+                 ctx.font = '20px sans-serif';
+                 ctx.fillText("You beat the Platformer Supreme!", canvas.width / 2, canvas.height / 2);
+                 ctx.fillText("Refresh to play again.", canvas.width / 2, canvas.height / 2 + 30);
+                 return; // Stop further game logic
+            } else {
+                currentLevel++;
+                 if (currentLevel > 10) {
+                     currentLevel = 1; // Loop back or handle game end
+                 }
+                setupLevel(currentLevel);
+            }
+        }
+
+         function skipLevel() {
+            if (currentLevel < 10) {
+                 levelComplete();
+             } else if (currentLevel === 10 && !gameWon) {
+                 // Skipping boss fight means winning
+                 boss.health = 0; // "Defeat" boss instantly
+                 levelComplete();
+             }
+         }
+
+        function draw() {
+            if (gameWon) return; // Don't draw if game is won
+
+            // Clear Canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Background (simple sky blue)
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Platforms
+            ctx.fillStyle = platformColor;
+            platforms.forEach(platform => {
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                 // Simple 3D effect
+                ctx.fillStyle = '#4a2a0a'; // Darker brown for shadow/edge
+                ctx.fillRect(platform.x + 3, platform.y + 3, platform.width - 6, platform.height - 6);
+                ctx.fillStyle = platformColor; // Reset color
+            });
+
+            // Draw Hazards
+            ctx.fillStyle = hazardColor;
+            hazards.forEach(hazard => {
+                // Draw as spikes ▼▼▼
+                 const spikeSize = 10;
+                 const numSpikes = Math.floor(hazard.width / spikeSize);
+                 for(let i = 0; i < numSpikes; i++) {
+                     ctx.beginPath();
+                     ctx.moveTo(hazard.x + i * spikeSize, hazard.y + hazard.height);
+                     ctx.lineTo(hazard.x + (i + 0.5) * spikeSize, hazard.y);
+                     ctx.lineTo(hazard.x + (i + 1) * spikeSize, hazard.y + hazard.height);
+                     ctx.closePath();
+                     ctx.fill();
+                 }
+               // ctx.fillRect(hazard.x, hazard.y, hazard.width, hazard.height);
+            });
+
+            // Draw Coins
+            ctx.fillStyle = coinColor;
+            ctx.strokeStyle = '#DAA520'; // Gold outline
+            coins.forEach(coin => {
+                if (!coin.collected) {
+                    // Draw as simple circle/emoji
+                    //ctx.fillRect(coin.x, coin.y, coin.width, coin.height);
+                     ctx.font = `${coin.width * 1.5}px sans-serif`;
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText("💰", coin.x + coin.width / 2, coin.y + coin.height / 2);
+                }
+            });
+
+
+            // Draw Goal
+            if (goal) {
+                // Draw flag 🏁
+                 ctx.font = '30px sans-serif';
+                 ctx.textAlign = 'center';
+                 ctx.textBaseline = 'middle';
+                 ctx.fillText("🏁", goal.x + goal.width / 2, goal.y + goal.height / 2);
+                // ctx.fillStyle = goalColor;
+                // ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+            }
+
+             // Draw Boss
+             if (boss) {
+                 ctx.fillStyle = boss.color;
+                 // ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
+                  ctx.font = `${boss.height * 0.8}px sans-serif`; // Adjust size as needed
+                  ctx.textAlign = 'center';
+                  ctx.textBaseline = 'middle';
+                  ctx.fillText(boss.emoji, boss.x + boss.width / 2, boss.y + boss.height / 2);
+             }
+
+
+            // Draw Player
+            ctx.fillStyle = player.color;
+            // ctx.fillRect(player.x, player.y, player.width, player.height);
+             // Use emoji for player representation
+            ctx.font = `${player.height * 0.8}px sans-serif`; // Adjust size as needed
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Flip emoji if not facing right
+            if (!player.facingRight) {
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.fillText(player.emoji, -(player.x + player.width / 2), player.y + player.height / 2);
+                ctx.restore();
+            } else {
+                 ctx.fillText(player.emoji, player.x + player.width / 2, player.y + player.height / 2);
+            }
+
+
+             // Draw Effects
+            effects.forEach(effect => {
+                 ctx.fillStyle = effect.color || 'rgba(255, 255, 255, 0.5)'; // Default color or white with transparency
+                 ctx.strokeStyle = '#000000';
+                 if (effect.type === 'projectile') {
+                     ctx.fillRect(effect.x, effect.y, effect.width, effect.height);
+                 } else if (effect.type === 'bossProjectile') {
+                     ctx.fillStyle = effect.color;
+                     ctx.fillRect(effect.x - effect.width/2, effect.y - effect.height/2, effect.width, effect.height);
+                 } else if (effect.type === 'shield') {
+                     ctx.beginPath();
+                     ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
+                     ctx.fillStyle = 'rgba(173, 216, 230, 0.5)'; // Light blue transparent shield
+                     ctx.fill();
+                     ctx.stroke();
+                 } else if (effect.type === 'glitch') {
+                     // Draw random static/lines for glitch effect
+                     for (let i = 0; i < 5; i++) {
+                         ctx.fillStyle = `rgba(${Math.random()*255}, ${Math.random()*255}, ${Math.random()*255}, ${Math.random()})`;
+                         ctx.fillRect(effect.x - effect.radius + Math.random() * effect.radius * 2,
+                                      effect.y - effect.radius + Math.random() * effect.radius * 2,
+                                      Math.random() * 10, Math.random() * 10);
+                     }
+                 } else if (effect.type === 'charm') {
+                      // Draw pink heart particles
+                      ctx.fillStyle = 'rgba(255, 105, 180, 0.6)'; // Pink transparent
+                      for (let i = 0; i < 5; i++) {
+                         const angle = Math.random() * Math.PI * 2;
+                         const radius = Math.random() * effect.radius;
+                         const heartX = effect.x + Math.cos(angle) * radius;
+                         const heartY = effect.y + Math.sin(angle) * radius;
+                         ctx.fillText("❤️", heartX, heartY); // Draw heart emoji
+                     }
+                 } else if (effect.type === 'groundPound') {
+                     ctx.beginPath();
+                     ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
+                     ctx.fillStyle = `rgba(100, 100, 100, ${effect.opacity * 0.5})`; // Fading gray shockwave
+                     ctx.fill();
+                 }
+             });
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!gameWon) {
+                 requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+
+            // Jump
+            if (e.code === 'ArrowUp' && player.grounded) {
+                player.vy = player.jumpPower;
+                player.grounded = false;
+            }
+
+            // Ability
+            if (e.code === 'KeyX' && abilityReady) {
+                player.abilityAction();
+                abilityReady = false;
+                abilityStatus.textContent = 'No';
+                abilityCooldown = player.abilityCooldownTime; // Display cooldown immediately
+                abilityCooldownDisplay.textContent = abilityCooldown.toFixed(1) + 's';
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        skipLevelBtn.addEventListener('click', skipLevel);
+
+        // Start Game
+        setupLevel(currentLevel);
+        gameLoop();
+
+    </script>
+
+</body>
+</html>

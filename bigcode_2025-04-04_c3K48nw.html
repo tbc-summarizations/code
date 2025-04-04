@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jazz Platformer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&display=swap');
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: 'Oswald', sans-serif;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        canvas {
+            border: 3px solid #333;
+            background-color: #fff;
+            display: block; /* Prevent extra space below canvas */
+        }
+        #controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            font-family: 'Oswald', sans-serif;
+            cursor: pointer;
+            background-color: #e63946;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #d0303d;
+        }
+        #levelInfo {
+             font-size: 18px;
+             color: #333;
+             min-width: 100px;
+             text-align: center;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 24px;
+            text-align: center;
+            display: none; /* Hidden by default */
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 style="color: #1d3557; margin-bottom: 10px;">Jazz Jumper</h1>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <span id="levelInfo">Level: 1</span>
+        <button id="skipButton">Skip Level</button>
+        <span>Controls: WASD/Arrows = Move, Space = Jump, R = Reset</span>
+    </div>
+    <div id="message"></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const skipButton = document.getElementById('skipButton');
+        const levelInfoSpan = document.getElementById('levelInfo');
+        const messageDiv = document.getElementById('message');
+
+        // --- Game Constants ---
+        const GRAVITY = 0.6;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = 13;
+        const FRICTION = 0.85;
+        const TERMINAL_VELOCITY = 15;
+        const PLAYER_SIZE = 30;
+        const TILE_SIZE = 40; // Base size for platforms etc.
+        const BOUNCE_FACTOR = -1.5; // Multiplier for jump force on bouncy platforms
+        const WIND_FORCE = 0.15;
+        const CRUMBLE_TIME = 30; // Frames before crumbling platform falls
+
+        // --- Game State ---
+        let player = {};
+        let platforms = [];
+        let hazards = [];
+        let goals = [];
+        let movingPlatforms = [];
+        let bouncyPlatforms = [];
+        let keys = [];
+        let doors = [];
+        let crumblingPlatforms = [];
+        let windZones = [];
+        let teleporters = [];
+        let gravityZones = [];
+
+        let currentLevelIndex = 0;
+        let keysPressed = {};
+        let camera = { x: 0, y: 0 };
+        let collectedKeys = 0;
+        let levelComplete = false;
+        let gameWon = false;
+
+        // --- Level Definitions ---
+        // Each level function returns an object { platforms, hazards, goals, etc. }
+        // Coordinates are based on TILE_SIZE grid
+        function defineLevels() {
+            const levels = [];
+
+            // Level 1: Basic Movement & Jump
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 2, y: TILE_SIZE * 13 },
+                bgColor: '#a8dadc', // Light Blue
+                platforms: [
+                    { x: 0, y: 14, w: 20, h: 1 }, // Floor
+                    { x: 7, y: 12, w: 3, h: 1 },
+                    { x: 12, y: 10, w: 4, h: 1 },
+                    { x: 5, y: 8, w: 2, h: 1 },
+                    { x: 17, y: 8, w: 3, h: 1 },
+                ],
+                goals: [{ x: 18, y: 7 }],
+                hazards: [], movingPlatforms: [], bouncyPlatforms: [], keys: [], doors: [], crumblingPlatforms: [], windZones: [], teleporters: [], gravityZones: []
+            }));
+
+            // Level 2: Moving Platforms
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 1, y: TILE_SIZE * 1 },
+                bgColor: '#f1faee', // Off White
+                platforms: [
+                    { x: 0, y: 14, w: 8, h: 1 }, // Start Floor
+                    { x: 15, y: 14, w: 5, h: 1 }, // End Floor
+                    { x: 0, y: 3, w: 2, h: 1 },
+                    { x: 12, y: 7, w: 3, h: 1 },
+                ],
+                movingPlatforms: [
+                    { x: 8, y: 14, w: 4, h: 1, speedX: 1.5, rangeX: [8, 11] }, // Horizontal
+                    { x: 5, y: 10, w: 3, h: 1, speedY: -1, rangeY: [6, 10] }, // Vertical
+                ],
+                goals: [{ x: 18, y: 13 }],
+                hazards: [], bouncyPlatforms: [], keys: [], doors: [], crumblingPlatforms: [], windZones: [], teleporters: [], gravityZones: []
+            }));
+
+            // Level 3: Hazards
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 2, y: TILE_SIZE * 13 },
+                bgColor: '#e63946', // Red
+                fgColor: '#f1faee', // Foreground for contrast
+                platforms: [
+                    { x: 0, y: 14, w: 5, h: 1 },
+                    { x: 8, y: 12, w: 4, h: 1 },
+                    { x: 15, y: 10, w: 5, h: 1 },
+                    { x: 8, y: 8, w: 4, h: 1 },
+                     { x: 0, y: 6, w: 5, h: 1 },
+                ],
+                hazards: [
+                    { x: 5, y: 14, w: 3, h: 1 }, // Floor spikes
+                    { x: 12, y: 12, w: 1, h: 1 },
+                    { x: 15, y: 9, w: 5, h: 1 }, // Ceiling spikes
+                    { x: 5, y: 6, w: 3, h: 1 },
+                ],
+                goals: [{ x: 2, y: 5 }],
+                movingPlatforms: [], bouncyPlatforms: [], keys: [], doors: [], crumblingPlatforms: [], windZones: [], teleporters: [], gravityZones: []
+            }));
+
+             // Level 4: Bouncy Platforms
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 1, y: TILE_SIZE * 13 },
+                bgColor: '#457b9d', // Darker Blue
+                platforms: [
+                    { x: 0, y: 14, w: 3, h: 1 },
+                    { x: 17, y: 4, w: 3, h: 1 }, // High platform
+                     { x: 8, y: 8, w: 4, h: 1 },
+                ],
+                bouncyPlatforms: [
+                    { x: 4, y: 14, w: 2, h: 1 }, // Bounce 1
+                    { x: 12, y: 10, w: 2, h: 1 } // Bounce 2
+                ],
+                hazards: [
+                    { x: 0, y: 8, w: 6, h: 1 },
+                    { x: 14, y: 14, w: 6, h: 1 },
+                ],
+                goals: [{ x: 18, y: 3 }],
+                movingPlatforms: [], keys: [], doors: [], crumblingPlatforms: [], windZones: [], teleporters: [], gravityZones: []
+            }));
+
+            // Level 5: Keys and Doors
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 1, y: TILE_SIZE * 1 },
+                bgColor: '#fca311', // Orange
+                platforms: [
+                    { x: 0, y: 2, w: 5, h: 1 },
+                    { x: 8, y: 5, w: 4, h: 1 },
+                    { x: 0, y: 8, w: 3, h: 1 }, // Platform before key
+                    { x: 10, y: 11, w: 5, h: 1 }, // Platform near door
+                    { x: 18, y: 14, w: 2, h: 1 }, // Goal platform
+                    { x: 5, y: 14, w: 3, h: 1 },
+                ],
+                keys: [
+                    { x: 1, y: 7, id: 1 }
+                ],
+                doors: [
+                    { x: 15, y: 11, w: 1, h: 3, keyId: 1 } // Vertical door
+                ],
+                goals: [{ x: 18.5, y: 13 }],
+                hazards: [{x: 3, y: 8, w: 10, h: 1}], movingPlatforms: [], bouncyPlatforms: [], crumblingPlatforms: [], windZones: [], teleporters: [], gravityZones: []
+            }));
+
+            // Level 6: Crumbling Platforms
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 1, y: TILE_SIZE * 1 },
+                bgColor: '#1d3557', // Navy Blue
+                fgColor: '#f1faee',
+                platforms: [
+                    { x: 0, y: 2, w: 2, h: 1 },
+                    { x: 18, y: 10, w: 2, h: 1 }, // Goal platform
+                ],
+                crumblingPlatforms: [
+                    { x: 3, y: 4, w: 4, h: 1, timer: -1 },
+                    { x: 8, y: 6, w: 3, h: 1, timer: -1 },
+                    { x: 5, y: 9, w: 1, h: 1, timer: -1 },
+                    { x: 12, y: 8, w: 4, h: 1, timer: -1 },
+                    { x: 16, y: 10, w: 1, h: 1, timer: -1 },
+                    { x: 8, y: 12, w: 5, h: 1, timer: -1 },
+                ],
+                hazards: [{ x: 0, y: 14, w: 20, h: 1 }], // Floor is lava
+                goals: [{ x: 19, y: 9 }],
+                movingPlatforms: [], bouncyPlatforms: [], keys: [], doors: [], windZones: [], teleporters: [], gravityZones: []
+            }));
+
+            // Level 7: Wind Zones
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 1, y: TILE_SIZE * 13 },
+                bgColor: '#b7e4c7', // Mint Green
+                platforms: [
+                    { x: 0, y: 14, w: 3, h: 1 }, // Start
+                    { x: 6, y: 12, w: 1, h: 1 }, // Small stops
+                    { x: 10, y: 10, w: 1, h: 1 },
+                    { x: 14, y: 8, w: 1, h: 1 },
+                    { x: 18, y: 6, w: 2, h: 1 }, // End
+                ],
+                windZones: [
+                    // Updrafts
+                    { x: 3, y: 8, w: 3, h: 6, forceY: -WIND_FORCE * 2 }, // Strong Up
+                    { x: 11, y: 6, w: 3, h: 4, forceY: -WIND_FORCE * 1.5 }, // Medium Up
+                     // Sideways
+                    { x: 7, y: 0, w: 3, h: 15, forceX: WIND_FORCE }, // Gentle Right
+                    { x: 15, y: 0, w: 3, h: 8, forceX: -WIND_FORCE }, // Gentle Left
+                ],
+                goals: [{ x: 19, y: 5 }],
+                hazards: [{ x: 0, y: 14.5, w: 20, h: 0.5 }], movingPlatforms: [], bouncyPlatforms: [], keys: [], doors: [], crumblingPlatforms: [], teleporters: [], gravityZones: []
+            }));
+
+            // Level 8: Teleporters
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 1, y: TILE_SIZE * 1 },
+                bgColor: '#6a0dad', // Purple
+                fgColor: '#ffffff',
+                platforms: [
+                    { x: 0, y: 2, w: 4, h: 1 }, // Start area
+                    { x: 8, y: 5, w: 4, h: 1 }, // Mid area 1
+                    { x: 15, y: 8, w: 5, h: 1 }, // Mid area 2
+                    { x: 2, y: 12, w: 5, h: 1 }, // Lower area
+                    { x: 12, y: 14, w: 3, h: 1 }, // Goal area
+                ],
+                teleporters: [
+                    // Pair 1
+                    { x: 3, y: 1, w: 1, h: 1, id: 1, targetX: TILE_SIZE * 9, targetY: TILE_SIZE * 4 },
+                    { x: 9, y: 4, w: 1, h: 1, id: 2, targetX: TILE_SIZE * 3, targetY: TILE_SIZE * 1 },
+                    // Pair 2
+                    { x: 18, y: 7, w: 1, h: 1, id: 3, targetX: TILE_SIZE * 3, targetY: TILE_SIZE * 11 },
+                    { x: 3, y: 11, w: 1, h: 1, id: 4, targetX: TILE_SIZE * 18, targetY: TILE_SIZE * 7 },
+                     // Pair 3 (to goal)
+                    { x: 6, y: 11, w: 1, h: 1, id: 5, targetX: TILE_SIZE * 13, targetY: TILE_SIZE * 13 },
+
+                ],
+                goals: [{ x: 14, y: 13 }],
+                hazards: [ { x: 0, y: 14.5, w: 12, h: 0.5 }, { x: 15, y: 14.5, w: 5, h: 0.5 } ], movingPlatforms: [], bouncyPlatforms: [], keys: [], doors: [], crumblingPlatforms: [], windZones: [], gravityZones: []
+            }));
+
+            // Level 9: Gravity Zones
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 2, y: TILE_SIZE * 13 },
+                bgColor: '#2d3a3a', // Dark Teal/Grey
+                fgColor: '#f0ead2', // Parchment
+                platforms: [
+                    // Normal Gravity Area
+                    { x: 0, y: 14, w: 6, h: 1 },
+                    { x: 8, y: 12, w: 4, h: 1 },
+                     // Flipped Gravity Area (ceiling becomes floor)
+                    { x: 5, y: 0, w: 15, h: 1 }, // Ceiling floor
+                    { x: 15, y: 3, w: 4, h: 1 }, // Ceiling platform
+                    { x: 8, y: 5, w: 3, h: 1 },  // Ceiling platform
+                ],
+                 gravityZones: [
+                    { x: 5, y: 0, w: 15, h: 15, gravityMultiplier: -1 } // Zone flips gravity
+                 ],
+                 hazards: [
+                     { x: 6, y: 14, w: 2, h: 1 }, // Spikes on normal floor
+                     { x: 12, y: 12, w: 1, h: 1 },
+                     { x: 5, y: 1, w: 3, h: 1 }, // Spikes on ceiling floor
+                     { x: 11, y: 5, w: 1, h: 1 }
+                 ],
+                goals: [{ x: 6, y: 1 }], // Goal on the ceiling
+                movingPlatforms: [], bouncyPlatforms: [], keys: [], doors: [], crumblingPlatforms: [], windZones: [], teleporters: []
+            }));
+
+            // Level 10: The Finale - Combine Everything
+            levels.push(() => ({
+                playerStart: { x: TILE_SIZE * 1, y: TILE_SIZE * 1 },
+                bgColor: '#000000', // Black
+                fgColor: '#FFFFFF', // White
+                levelWidth: TILE_SIZE * 40, // Longer level
+                levelHeight: TILE_SIZE * 20,
+                platforms: [
+                    { x: 0, y: 2, w: 5, h: 1 }, // Start
+                    { x: 10, y: 8, w: 3, h: 1 },
+                    { x: 18, y: 14, w: 4, h: 1 }, // Near hazard section
+                    { x: 25, y: 10, w: 3, h: 1 }, // After moving platform section
+                    { x: 3, y: 18, w: 5, h: 1 }, // Lower platform near key
+                    { x: 15, y: 18, w: 6, h: 1 }, // Platform near door
+                    { x: 28, y: 5, w: 4, h: 1 }, // High platform near wind
+                    { x: 35, y: 3, w: 5, h: 1 }, // Near end goal platform (on ceiling)
+                    { x: 10, y: 0, w: 15, h: 1 } // Ceiling floor for gravity zone
+                ],
+                movingPlatforms: [
+                    { x: 6, y: 5, w: 4, h: 1, speedX: 2, rangeX: [6, 12] },
+                    { x: 22, y: 12, w: 2, h: 1, speedY: -1.5, rangeY: [8, 14] }
+                ],
+                hazards: [
+                    { x: 18, y: 13, w: 4, h: 1 },
+                    { x: 0, y: 19, w: 40, h: 1 }, // Bottomless pit
+                    { x: 10, y: 1, w: 5, h: 1 }, // Ceiling hazard
+                    { x: 30, y: 10, w: 1, h: 5 } // Vertical hazard wall
+                ],
+                 bouncyPlatforms: [
+                    { x: 14, y: 8, w: 2, h: 1 }
+                ],
+                keys: [
+                    { x: 4, y: 17, id: 1 }
+                ],
+                doors: [
+                    { x: 20, y: 15, w: 1, h: 3, keyId: 1 }
+                ],
+                crumblingPlatforms: [
+                    { x: 26, y: 8, w: 3, h: 1, timer: -1 },
+                    { x: 10, y: 15, w: 4, h: 1, timer: -1 }
+                ],
+                windZones: [
+                    { x: 28, y: 6, w: 4, h: 6, forceY: -WIND_FORCE } // Updraft
+                ],
+                teleporters: [
+                    { x: 1, y: 1, w: 1, h: 1, id: 1, targetX: TILE_SIZE * 36, targetY: TILE_SIZE * 17 }, // Shortcut? Trap?
+                    { x: 38, y: 18, w: 1, h: 1, id: 2, targetX: TILE_SIZE * 1, targetY: TILE_SIZE * 1 }, // Back to start?
+                ],
+                 gravityZones: [
+                    { x: 10, y: 0, w: 15, h: 8, gravityMultiplier: -1 } // Ceiling section
+                 ],
+                goals: [{ x: 38, y: 2 }], // Goal high up on ceiling
+            }));
+
+
+            return levels;
+        }
+
+        const levelDefinitions = defineLevels();
+
+        // --- Helper Functions ---
+        function rectIntersect(r1, r2) {
+            return r1.x < r2.x + r2.w &&
+                   r1.x + r1.w > r2.x &&
+                   r1.y < r2.y + r2.h &&
+                   r1.y + r1.h > r2.y;
+        }
+
+        function drawRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x - camera.x, y - camera.y, w, h);
+        }
+
+         function drawTriangle(x, y, size, color, direction = 'up') {
+             ctx.fillStyle = color;
+             ctx.beginPath();
+             if (direction === 'up') {
+                 ctx.moveTo(x - camera.x, y + size - camera.y);
+                 ctx.lineTo(x + size - camera.x, y + size - camera.y);
+                 ctx.lineTo(x + size / 2 - camera.x, y - camera.y);
+             } else { // down
+                 ctx.moveTo(x - camera.x, y - camera.y);
+                 ctx.lineTo(x + size - camera.x, y - camera.y);
+                 ctx.lineTo(x + size / 2 - camera.x, y + size - camera.y);
+             }
+             ctx.closePath();
+             ctx.fill();
+         }
+
+        function drawEmoji(emoji, x, y, size) {
+            ctx.font = `${size}px Arial`;
+            ctx.fillText(emoji, x - camera.x, y + size - camera.y); // Adjust y for text baseline
+        }
+
+        function showMessage(text, duration = 2000) {
+            messageDiv.textContent = text;
+            messageDiv.style.display = 'block';
+            if (duration > 0) {
+                 setTimeout(() => {
+                     messageDiv.style.display = 'none';
+                 }, duration);
+            }
+        }
+
+        // --- Game Initialization and Level Loading ---
+        function resetPlayer(levelData) {
+            const startPos = levelData.playerStart || { x: TILE_SIZE * 2, y: TILE_SIZE * 10 };
+             player = {
+                x: startPos.x,
+                y: startPos.y,
+                w: PLAYER_SIZE,
+                h: PLAYER_SIZE,
+                vx: 0,
+                vy: 0,
+                onGround: false,
+                canJump: true,
+                currentGravity: GRAVITY,
+                activeTeleporterId: null, // Track last used teleporter
+                teleportCooldown: 0 // Prevent immediate re-teleport
+            };
+            collectedKeys = 0; // Reset keys for the level
+            levelComplete = false;
+
+            // Reset crumbling platforms timers (important for 'R' reset)
+            crumblingPlatforms.forEach(p => {
+                 p.timer = -1;
+                 p.falling = false;
+                 p.fallSpeed = 0;
+            });
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levelDefinitions.length) {
+                gameWon = true;
+                showMessage("YOU WIN! 🎉", -1); // Persistent message
+                return;
+            }
+            if (levelIndex < 0) levelIndex = 0; // Should not happen with skip logic
+
+            currentLevelIndex = levelIndex;
+            const levelFunc = levelDefinitions[currentLevelIndex];
+            const levelData = levelFunc(); // Generate level data
+
+            // Clear existing elements
+            platforms = [];
+            hazards = [];
+            goals = [];
+            movingPlatforms = [];
+            bouncyPlatforms = [];
+            keys = [];
+            doors = [];
+            crumblingPlatforms = [];
+            windZones = [];
+            teleporters = [];
+            gravityZones = [];
+
+            // Populate platforms
+            levelData.platforms.forEach(p => platforms.push({
+                x: p.x * TILE_SIZE,
+                y: p.y * TILE_SIZE,
+                w: p.w * TILE_SIZE,
+                h: p.h * TILE_SIZE,
+                color: levelData.fgColor || '#1d3557' // Use level fgColor or default
+            }));
+
+            // Populate hazards
+            levelData.hazards.forEach(h => hazards.push({
+                x: h.x * TILE_SIZE,
+                y: h.y * TILE_SIZE,
+                w: h.w * TILE_SIZE,
+                h: h.h * TILE_SIZE,
+                color: '#e63946' // Default hazard color (red)
+            }));
+
+            // Populate goals
+            levelData.goals.forEach(g => goals.push({
+                x: g.x * TILE_SIZE,
+                y: g.y * TILE_SIZE,
+                w: TILE_SIZE,
+                h: TILE_SIZE,
+                color: '#52b788' // Green goal
+            }));
+
+            // Populate moving platforms
+            levelData.movingPlatforms.forEach(mp => movingPlatforms.push({
+                x: mp.x * TILE_SIZE,
+                y: mp.y * TILE_SIZE,
+                w: mp.w * TILE_SIZE,
+                h: mp.h * TILE_SIZE,
+                startX: mp.x * TILE_SIZE,
+                startY: mp.y * TILE_SIZE,
+                speedX: mp.speedX || 0,
+                speedY: mp.speedY || 0,
+                rangeX: mp.rangeX ? [mp.rangeX[0] * TILE_SIZE, mp.rangeX[1] * TILE_SIZE] : null,
+                rangeY: mp.rangeY ? [mp.rangeY[0] * TILE_SIZE, mp.rangeY[1] * TILE_SIZE] : null,
+                color: levelData.fgColor || '#457b9d' // Slightly different blue
+            }));
+
+             // Populate bouncy platforms
+            levelData.bouncyPlatforms.forEach(bp => bouncyPlatforms.push({
+                x: bp.x * TILE_SIZE,
+                y: bp.y * TILE_SIZE,
+                w: bp.w * TILE_SIZE,
+                h: bp.h * TILE_SIZE,
+                color: '#fca311' // Orange bouncy
+            }));
+
+            // Populate keys
+            levelData.keys.forEach(k => keys.push({
+                 x: k.x * TILE_SIZE,
+                 y: k.y * TILE_SIZE,
+                 w: TILE_SIZE * 0.8, // Slightly smaller
+                 h: TILE_SIZE * 0.8,
+                 id: k.id,
+                 collected: false
+            }));
+
+            // Populate doors
+            levelData.doors.forEach(d => doors.push({
+                 x: d.x * TILE_SIZE,
+                 y: d.y * TILE_SIZE,
+                 w: d.w * TILE_SIZE,
+                 h: d.h * TILE_SIZE,
+                 keyId: d.keyId,
+                 isOpen: false,
+                 color: '#a8dadc' // Light blue door
+            }));
+
+             // Populate crumbling platforms
+            levelData.crumblingPlatforms.forEach(cp => crumblingPlatforms.push({
+                x: cp.x * TILE_SIZE,
+                y: cp.y * TILE_SIZE,
+                w: cp.w * TILE_SIZE,
+                h: cp.h * TILE_SIZE,
+                timer: -1, // -1 means not triggered
+                falling: false,
+                fallSpeed: 0,
+                color: levelData.fgColor || '#7f7f7f', // Greyish
+                originalY: cp.y * TILE_SIZE
+            }));
+
+            // Populate wind zones
+            levelData.windZones.forEach(wz => windZones.push({
+                x: wz.x * TILE_SIZE,
+                y: wz.y * TILE_SIZE,
+                w: wz.w * TILE_SIZE,
+                h: wz.h * TILE_SIZE,
+                forceX: wz.forceX || 0,
+                forceY: wz.forceY || 0
+            }));
+
+            // Populate teleporters
+            levelData.teleporters.forEach(tp => teleporters.push({
+                x: tp.x * TILE_SIZE,
+                y: tp.y * TILE_SIZE,
+                w: TILE_SIZE,
+                h: TILE_SIZE,
+                id: tp.id,
+                targetX: tp.targetX,
+                targetY: tp.targetY,
+                color: '#9b59b6' // Purple teleporter
+            }));
+
+            // Populate gravity zones
+            levelData.gravityZones.forEach(gz => gravityZones.push({
+                 x: gz.x * TILE_SIZE,
+                 y: gz.y * TILE_SIZE,
+                 w: gz.w * TILE_SIZE,
+                 h: gz.h * TILE_SIZE,
+                 gravityMultiplier: gz.gravityMultiplier || 1
+             }));
+
+            // Set background color
+            canvas.style.backgroundColor = levelData.bgColor || '#ffffff';
+            document.body.style.backgroundColor = levelData.bgColor ? chroma(levelData.bgColor).darken(2).hex() : '#f0f0f0'; // Darken bg for body
+
+
+            // Update level indicator
+            levelInfoSpan.textContent = `Level: ${currentLevelIndex + 1}`;
+            gameWon = false; // Reset win state
+            messageDiv.style.display = 'none'; // Hide any previous messages
+
+            resetPlayer(levelData); // Place player at start
+            // Initial camera position
+            camera.x = player.x - canvas.width / 4;
+            camera.y = player.y - canvas.height / 2;
+            // Clamp initial camera
+             const levelWidth = levelData.levelWidth || canvas.width * 1.5; // Default width if not specified
+             const levelHeight = levelData.levelHeight || canvas.height * 1.5;
+            camera.x = Math.max(0, Math.min(camera.x, levelWidth - canvas.width));
+            camera.y = Math.max(0, Math.min(camera.y, levelHeight - canvas.height));
+        }
+
+        // --- Input Handling ---
+        window.addEventListener('keydown', (e) => {
+            keysPressed[e.code] = true;
+            // Prevent page scrolling with arrow keys or space
+            if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                 e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            keysPressed[e.code] = false;
+        });
+
+        skipButton.addEventListener('click', () => {
+            if (!gameWon) {
+                 loadLevel(currentLevelIndex + 1);
+            }
+        });
+
+        // --- Update Function ---
+        function update() {
+            if (gameWon || levelComplete) return; // Stop updates if won or between levels
+
+            // --- Player Movement ---
+            // Horizontal Movement
+            let targetVx = 0;
+            if (keysPressed['KeyA'] || keysPressed['ArrowLeft']) {
+                targetVx = -PLAYER_SPEED;
+            }
+            if (keysPressed['KeyD'] || keysPressed['ArrowRight']) {
+                targetVx = PLAYER_SPEED;
+            }
+            // Apply friction if no horizontal input
+            if (targetVx === 0) {
+                 player.vx *= FRICTION;
+                 if (Math.abs(player.vx) < 0.1) player.vx = 0; // Stop completely if slow enough
+            } else {
+                 // Smooth acceleration towards target speed
+                 player.vx += (targetVx - player.vx) * 0.2;
+            }
+
+
+            // --- Gravity and Vertical Movement ---
+             // Check for gravity zones
+            let inGravityZone = false;
+            player.currentGravity = GRAVITY; // Reset to default
+            for (const zone of gravityZones) {
+                if (rectIntersect(player, zone)) {
+                    player.currentGravity = GRAVITY * zone.gravityMultiplier;
+                    inGravityZone = true;
+                    break; // Assume only one zone active at a time
+                }
+            }
+
+            player.vy += player.currentGravity;
+            // Apply terminal velocity
+             if (Math.abs(player.vy) > TERMINAL_VELOCITY) {
+                player.vy = Math.sign(player.vy) * TERMINAL_VELOCITY;
+            }
+
+
+             // Jumping
+            if ((keysPressed['Space'] || keysPressed['KeyW'] || keysPressed['ArrowUp']) && player.canJump && player.onGround) {
+                player.vy = -JUMP_FORCE * Math.sign(player.currentGravity); // Adjust jump direction based on gravity
+                player.onGround = false;
+                player.canJump = false; // Prevent holding jump for continuous effect
+            }
+             // Allow jumping again once jump key is released
+            if (!keysPressed['Space'] && !keysPressed['KeyW'] && !keysPressed['ArrowUp']) {
+                 player.canJump = true;
+            }
+
+
+            // --- Wind Application ---
+             let windForceX = 0;
+             let windForceY = 0;
+             for (const zone of windZones) {
+                 if (rectIntersect(player, zone)) {
+                     windForceX += zone.forceX;
+                     windForceY += zone.forceY;
+                 }
+             }
+             player.vx += windForceX;
+             player.vy += windForceY;
+
+            // --- Reset ---
+            if (keysPressed['KeyR']) {
+                 resetPlayer(levelDefinitions[currentLevelIndex]()); // Reset to current level start
+                 keysPressed['KeyR'] = false; // Prevent repeated resets
+                 return; // Skip rest of update for this frame
+            }
+
+
+            // --- Collision Detection & Resolution ---
+            player.onGround = false; // Assume not on ground until collision check proves otherwise
+
+            // --- Moving Platform Update ---
+            movingPlatforms.forEach(mp => {
+                mp.x += mp.speedX;
+                mp.y += mp.speedY;
+
+                if (mp.rangeX) {
+                    if (mp.x < mp.rangeX[0] || mp.x + mp.w > mp.rangeX[1] + TILE_SIZE) { // +TILE_SIZE because range is start coord
+                         mp.speedX *= -1;
+                         // Clamp position to prevent sticking outside range
+                         mp.x = Math.max(mp.rangeX[0], Math.min(mp.x, mp.rangeX[1] + TILE_SIZE - mp.w));
+                     }
+                 }
+                if (mp.rangeY) {
+                     if (mp.y < mp.rangeY[0] || mp.y + mp.h > mp.rangeY[1] + TILE_SIZE) {
+                        mp.speedY *= -1;
+                        mp.y = Math.max(mp.rangeY[0], Math.min(mp.y, mp.rangeY[1] + TILE_SIZE - mp.h));
+                     }
+                }
+             });
+
+             // --- Crumbling Platform Update ---
+             crumblingPlatforms.forEach(cp => {
+                 if (cp.timer > 0) {
+                     cp.timer--;
+                     if (cp.timer === 0) {
+                         cp.falling = true;
+                     }
+                 }
+                 if (cp.falling) {
+                     cp.fallSpeed += GRAVITY * 0.5; // Fall slower than player
+                     cp.y += cp.fallSpeed;
+                 }
+                 // Reset if far off screen (optional cleanup)
+                 if (cp.y > canvas.height + camera.y + 200) {
+                     // Maybe reset to original position if player leaves the area?
+                     // For simplicity now, just let them fall. They reset on level load/reset.
+                 }
+             });
+
+             // --- Future Position ---
+            let nextX = player.x + player.vx;
+            let nextY = player.y + player.vy;
+
+             // Combine all solid objects for collision checks
+             let solidObjects = [
+                 ...platforms,
+                 ...movingPlatforms,
+                 ...doors.filter(d => !d.isOpen),
+                 ...crumblingPlatforms.filter(cp => !cp.falling) // Only collide if not falling
+             ];
+
+
+            // --- Horizontal Collision ---
+             let tempPlayerX = { x: nextX, y: player.y, w: player.w, h: player.h };
+             let collidedX = false;
+             for (const p of solidObjects) {
+                 if (rectIntersect(tempPlayerX, p)) {
+                    // Collision occurred horizontally
+                    collidedX = true;
+                    if (player.vx > 0) { // Moving right
+                        nextX = p.x - player.w;
+                    } else if (player.vx < 0) { // Moving left
+                        nextX = p.x + p.w;
+                    }
+                    player.vx = 0; // Stop horizontal movement
+                    break;
+                 }
+            }
+            player.x = nextX;
+
+            // --- Vertical Collision ---
+             let tempPlayerY = { x: player.x, y: nextY, w: player.w, h: player.h }; // Use updated player.x
+             let collidedY = false;
+             let onMovingPlatform = null;
+             let onCrumblingPlatform = null;
+
+             for (const p of solidObjects) {
+                 if (rectIntersect(tempPlayerY, p)) {
+                    collidedY = true;
+                    const isMoving = movingPlatforms.includes(p);
+                    const isCrumbling = crumblingPlatforms.includes(p);
+
+                    if (player.vy * player.currentGravity >= 0) { // Moving downwards (normal gravity) OR upwards (flipped gravity)
+                        // Check if landing on top (normal gravity) or hitting ceiling (flipped gravity)
+                         if ( (player.currentGravity > 0 && player.y + player.h <= p.y) || (player.currentGravity < 0 && player.y >= p.y + p.h) ){
+                            nextY = (player.currentGravity > 0) ? p.y - player.h : p.y + p.h;
+                            player.onGround = true;
+                             player.vy = 0;
+                            if (isMoving) onMovingPlatform = p;
+                            if (isCrumbling && p.timer === -1) { // Start timer only once
+                                p.timer = CRUMBLE_TIME;
+                                onCrumblingPlatform = p;
+                            }
+                        }
+                    }
+                    if (player.vy * player.currentGravity < 0 ) { // Moving upwards (normal gravity) OR downwards (flipped gravity)
+                        // Check if hitting bottom (normal gravity) or landing on ceiling platform (flipped gravity)
+                        if ((player.currentGravity > 0 && player.y >= p.y + p.h) || (player.currentGravity < 0 && player.y + player.h <= p.y) ) {
+                            nextY = (player.currentGravity > 0) ? p.y + p.h : p.y - player.h;
+                            player.vy = 0;
+                             if (isMoving) onMovingPlatform = p; // Can stick to bottom of moving platforms too
+                            if (isCrumbling && p.timer === -1) {
+                                p.timer = CRUMBLE_TIME;
+                                onCrumblingPlatform = p;
+                            }
+                         }
+                    }
+
+                    // If a specific collision handling already adjusted nextY, break (simple approach)
+                    // More robust physics would resolve all contacts iteratively.
+                    if (player.vy === 0) break;
+
+                 }
+            }
+             player.y = nextY;
+
+            // --- Apply Moving Platform Velocity ---
+            if (onMovingPlatform) {
+                 // Only apply horizontal speed if standing ON TOP (normal gravity) or BELOW (flipped gravity)
+                 if( (player.currentGravity > 0 && player.onGround) || (player.currentGravity < 0 && player.y === onMovingPlatform.y + onMovingPlatform.h) ) {
+                     player.x += onMovingPlatform.speedX;
+                 }
+                 // Apply vertical speed if needed (e.g., pushed by platform moving up)
+                 // This simple model might not handle vertical squishing perfectly.
+                 if (player.currentGravity > 0 && onMovingPlatform.speedY < 0 && player.onGround) {
+                     player.y += onMovingPlatform.speedY; // Move player up with platform
+                 } else if (player.currentGravity < 0 && onMovingPlatform.speedY > 0 && player.y === onMovingPlatform.y + onMovingPlatform.h) {
+                     player.y += onMovingPlatform.speedY; // Move player down with platform (flipped grav)
+                 }
+             }
+
+             // --- Bouncy Platform Collision ---
+             for (const bp of bouncyPlatforms) {
+                // Check collision only when moving downwards (normal grav) or upwards (flipped grav) and hitting the top surface
+                let tempPlayerBounce = { x: player.x, y: player.y + player.vy, w: player.w, h: player.h };
+                 if (rectIntersect(tempPlayerBounce, bp) && (player.vy * player.currentGravity > 0)) {
+                    // Check if landing on top (normal) or hitting from below (flipped)
+                     if ( (player.currentGravity > 0 && player.y + player.h <= bp.y + 5) || (player.currentGravity < 0 && player.y >= bp.y + bp.h - 5)) { // +5/-5 tolerance
+                        player.vy = -JUMP_FORCE * BOUNCE_FACTOR * Math.sign(player.currentGravity); // Bounce!
+                        player.y = (player.currentGravity > 0) ? bp.y - player.h : bp.y + bp.h; // Adjust position slightly
+                        player.onGround = false; // Not technically grounded, but bounced
+                        break; // Only bounce off one platform per frame
+                    }
+                }
+            }
+
+            // --- Hazard Collision ---
+            for (const h of hazards) {
+                if (rectIntersect(player, h)) {
+                    resetPlayer(levelDefinitions[currentLevelIndex]()); // Reset on hazard hit
+                    return; // Skip rest of update
+                }
+            }
+
+            // --- Key Collection ---
+            for (let i = keys.length - 1; i >= 0; i--) {
+                 const key = keys[i];
+                 if (!key.collected && rectIntersect(player, key)) {
+                     key.collected = true;
+                     collectedKeys++;
+                     // Check if collected key opens any doors
+                     doors.forEach(door => {
+                         if (door.keyId === key.id) {
+                             door.isOpen = true;
+                         }
+                     });
+                     // Optionally remove key visually or just mark collected
+                     // keys.splice(i, 1); // Remove if preferred
+                 }
+            }
+
+             // --- Teleporter Collision ---
+             player.teleportCooldown = Math.max(0, player.teleportCooldown - 1); // Decrease cooldown
+             let usedTeleporter = false;
+             for (const tp of teleporters) {
+                 if (rectIntersect(player, tp) && player.teleportCooldown === 0 && player.activeTeleporterId !== tp.id) {
+                     player.x = tp.targetX;
+                     player.y = tp.targetY;
+                     player.vx = 0; // Stop momentum after teleport
+                     player.vy = 0;
+                     player.activeTeleporterId = tp.id; // Mark this teleporter as the entry point
+                     player.teleportCooldown = 30; // Add a short cooldown (30 frames)
+                     usedTeleporter = true;
+                     // Find the exit teleporter to potentially set activeTeleporterId there too, preventing immediate return
+                      const exitTp = teleporters.find(exit => exit.x === tp.targetX && exit.y === tp.targetY);
+                      if (exitTp) {
+                           // No, don't set activeTeleporterId to exit, player needs to move off it first.
+                           // Instead, the cooldown prevents immediate re-entry.
+                      }
+                     break; // Only one teleport per frame
+                 }
+             }
+              // Reset active teleporter ID if player moves away from the teleporter they last used
+              if (player.activeTeleporterId !== null) {
+                  const lastTp = teleporters.find(tp => tp.id === player.activeTeleporterId);
+                  if (lastTp && !rectIntersect(player, lastTp)) {
+                       player.activeTeleporterId = null;
+                  }
+              }
+
+
+            // --- Goal Collision ---
+            for (const g of goals) {
+                if (rectIntersect(player, g)) {
+                    levelComplete = true;
+                    showMessage(`Level ${currentLevelIndex + 1} Complete!`, 1500);
+                    setTimeout(() => {
+                         loadLevel(currentLevelIndex + 1);
+                         levelComplete = false; // Ready for next level's update loop
+                     }, 1500); // Delay before loading next level
+                    return; // Stop update for this frame
+                }
+            }
+
+            // --- Camera Update ---
+            // Smooth follow camera (lerp)
+            const targetCamX = player.x - canvas.width / 2 + player.w / 2;
+            const targetCamY = player.y - canvas.height / 2 + player.h / 2;
+            camera.x += (targetCamX - camera.x) * 0.1;
+            camera.y += (targetCamY - camera.y) * 0.1;
+
+            // Clamp camera to level boundaries (if defined, else use defaults)
+             const levelData = levelDefinitions[currentLevelIndex]();
+             const levelWidth = levelData.levelWidth || canvas.width * 2; // Example default bounds
+             const levelHeight = levelData.levelHeight || canvas.height * 1.5;
+
+             camera.x = Math.max(0, Math.min(camera.x, levelWidth - canvas.width));
+             camera.y = Math.max(0, Math.min(camera.y, levelHeight - canvas.height));
+
+        }
+
+
+        // --- Draw Function ---
+        function draw() {
+            // Clear canvas (uses the background color set during level load)
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Get current level's foreground color or default
+            const levelData = levelDefinitions[currentLevelIndex]();
+            const defaultFgColor = levelData.fgColor || '#1d3557'; // Use level fgColor or default
+
+
+             // Draw Wind Zones (subtle visual indication)
+            windZones.forEach(zone => {
+                ctx.fillStyle = 'rgba(200, 200, 255, 0.1)'; // Semi-transparent blue
+                ctx.fillRect(zone.x - camera.x, zone.y - camera.y, zone.w, zone.h);
+                 // Draw subtle arrows indicating direction
+                 ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                 ctx.font = '12px Arial';
+                 for (let i = 0; i < 5; i++) { // Draw a few arrows within the zone
+                     let arrowX = zone.x + Math.random() * zone.w;
+                     let arrowY = zone.y + Math.random() * zone.h;
+                     if (zone.forceX > 0) ctx.fillText('>', arrowX - camera.x, arrowY - camera.y);
+                     if (zone.forceX < 0) ctx.fillText('<', arrowX - camera.x, arrowY - camera.y);
+                     if (zone.forceY < 0) ctx.fillText('^', arrowX - camera.x, arrowY - camera.y);
+                     if (zone.forceY > 0) ctx.fillText('v', arrowX - camera.x, arrowY - camera.y);
+                 }
+            });
+
+             // Draw Gravity Zones (subtle visual indication)
+             gravityZones.forEach(zone => {
+                 ctx.fillStyle = zone.gravityMultiplier < 0 ? 'rgba(255, 100, 100, 0.08)' : 'rgba(100, 100, 255, 0.08)'; // Red tint for inverted, blue for normal (if needed)
+                 ctx.fillRect(zone.x - camera.x, zone.y - camera.y, zone.w, zone.h);
+                 // Optional: Draw indicator lines or pattern
+                 ctx.strokeStyle = zone.gravityMultiplier < 0 ? 'rgba(255, 150, 150, 0.2)' : 'rgba(150, 150, 255, 0.2)';
+                 ctx.lineWidth = 2;
+                 ctx.beginPath();
+                 for(let y = zone.y; y < zone.y + zone.h; y += 20) {
+                    ctx.moveTo(zone.x - camera.x, y - camera.y);
+                    ctx.lineTo(zone.x + zone.w - camera.x, y - camera.y);
+                 }
+                 ctx.stroke();
+            });
+
+            // Draw Platforms
+            platforms.forEach(p => drawRect(p.x, p.y, p.w, p.h, p.color));
+
+            // Draw Moving Platforms
+            movingPlatforms.forEach(mp => drawRect(mp.x, mp.y, mp.w, mp.h, mp.color));
+
+            // Draw Bouncy Platforms (as triangles for distinction)
+            bouncyPlatforms.forEach(bp => {
+                // Draw multiple triangles side-by-side to fill width
+                 const triangleSize = TILE_SIZE;
+                 const numTriangles = Math.ceil(bp.w / triangleSize);
+                 for (let i = 0; i < numTriangles; i++) {
+                     drawTriangle(bp.x + i * triangleSize, bp.y, triangleSize, bp.color, 'up');
+                 }
+             });
+
+            // Draw Crumbling Platforms
+             crumblingPlatforms.forEach(cp => {
+                 let color = cp.color;
+                 if (cp.timer > 0 && cp.timer <= CRUMBLE_TIME) {
+                     // Flash or change color as timer counts down
+                     color = (Math.floor(cp.timer / 5) % 2 === 0) ? '#aaaaaa' : cp.color;
+                 }
+                 if (!cp.falling || cp.y < canvas.height + camera.y + 50) { // Only draw if not fallen too far
+                     drawRect(cp.x, cp.y, cp.w, cp.h, color);
+                 }
+             });
+
+
+            // Draw Hazards (as red triangles pointing up/down)
+             hazards.forEach(h => {
+                 const isFloorHazard = h.h <= TILE_SIZE; // Assume hazards shorter than tile size are floor/ceiling
+                 const direction = isFloorHazard ? 'up' : 'down'; // Approximation based on aspect ratio, adjust if needed
+                 const triSize = Math.min(h.w, h.h, TILE_SIZE); // Base size on smallest dimension or tile size
+                 const numTriangles = Math.ceil(h.w / triSize); // Fit triangles across width
+
+                 for (let i = 0; i < numTriangles; i++) {
+                     drawTriangle(h.x + i * triSize, h.y, triSize, h.color, direction);
+                 }
+                // Fallback rectangle draw if triangle logic is complex
+                // drawRect(h.x, h.y, h.w, h.h, h.color);
+             });
+
+
+            // Draw Keys
+             keys.forEach(key => {
+                 if (!key.collected) {
+                     drawEmoji('🔑', key.x, key.y, key.w); // Using w for size approximation
+                 }
+             });
+
+             // Draw Doors
+             doors.forEach(door => {
+                 if (!door.isOpen) {
+                    drawRect(door.x, door.y, door.w, door.h, door.color);
+                    // Add a lock symbol?
+                     drawEmoji('🔒', door.x + door.w/2 - TILE_SIZE*0.3, door.y + door.h/2 - TILE_SIZE*0.3, TILE_SIZE*0.6);
+                 }
+             });
+
+            // Draw Teleporters
+             teleporters.forEach(tp => {
+                 drawRect(tp.x, tp.y, tp.w, tp.h, tp.color);
+                 // Add swirling effect? (Simple version: just a symbol)
+                 ctx.fillStyle = '#ffffff';
+                 ctx.font = `${TILE_SIZE * 0.6}px Arial`;
+                 ctx.textAlign = 'center';
+                 ctx.textBaseline = 'middle';
+                 ctx.fillText('🌀', tp.x + tp.w / 2 - camera.x, tp.y + tp.h / 2 - camera.y);
+                 ctx.textAlign = 'left'; // Reset alignment
+                 ctx.textBaseline = 'alphabetic'; // Reset baseline
+             });
+
+
+            // Draw Goal (as a simple green square/circle)
+             goals.forEach(g => {
+                 // Simple square goal
+                 drawRect(g.x, g.y, g.w, g.h, g.color);
+                 // Or draw a flag emoji
+                 //drawEmoji('🏁', g.x, g.y, g.w);
+             });
+
+
+            // Draw Player (simple square)
+             let playerColor = '#e63946'; // Default player color (red)
+             // Change color slightly in gravity zone?
+              if (player.currentGravity < 0) playerColor = '#457b9d'; // Blue when inverted
+             drawRect(player.x, player.y, player.w, player.h, playerColor);
+
+             // Draw collected key count (optional)
+             ctx.fillStyle = '#000000';
+             ctx.font = '18px Oswald';
+             ctx.fillText(`Keys: ${collectedKeys}`, 10, 30);
+
+            requestAnimationFrame(draw); // Continue the draw loop
+        }
+
+        // --- Game Loop ---
+        function gameLoop() {
+            if (!gameWon) { // Only update if game is not won
+                update();
+                // Drawing is handled by the continuous requestAnimationFrame in draw()
+            }
+            requestAnimationFrame(gameLoop); // Continue the main loop
+        }
+
+        // --- Chroma.js (minimal version for color manipulation) ---
+        // Source: https://github.com/gka/chroma.js (MIT License)
+        // Included directly to avoid external dependencies as requested
+        const chroma = (function() {
+            const store = {}; // Simple cache for parsed colors
+             const HSL = function(h, s, l, a) { this.h = h; this.s = s; this.l = l; this.a = a == null ? 1 : a; };
+             const RGB = function(r, g, b, a) { this.r = r; this.g = g; this.b = b; this.a = a == null ? 1 : a; };
+
+             function hexToRgb(hex) {
+                 if (store[hex]) return store[hex];
+                 hex = hex.replace('#', '');
+                 let r, g, b;
+                 if (hex.length === 3) {
+                     r = parseInt(hex[0] + hex[0], 16);
+                     g = parseInt(hex[1] + hex[1], 16);
+                     b = parseInt(hex[2] + hex[2], 16);
+                 } else if (hex.length === 6) {
+                     r = parseInt(hex.substring(0, 2), 16);
+                     g = parseInt(hex.substring(2, 4), 16);
+                     b = parseInt(hex.substring(4, 6), 16);
+                 } else return null; // Invalid hex
+                 const rgb = new RGB(r, g, b);
+                 store[hex] = rgb;
+                 return rgb;
+             }
+
+            function rgbToHsl(rgb) {
+                 let r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+                 let max = Math.max(r, g, b), min = Math.min(r, g, b);
+                 let h, s, l = (max + min) / 2;
+                 if (max === min) {
+                     h = s = 0; // achromatic
+                 } else {
+                     let d = max - min;
+                     s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                     switch(max){
+                         case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                         case g: h = (b - r) / d + 2; break;
+                         case b: h = (r - g) / d + 4; break;
+                     }
+                     h /= 6;
+                 }
+                 return new HSL(h * 360, s, l, rgb.a);
+             }
+
+             function hslToRgb(hsl) {
+                 let h = hsl.h / 360, s = hsl.s, l = hsl.l;
+                 let r, g, b;
+                 if (s === 0) {
+                     r = g = b = l; // achromatic
+                 } else {
+                     function hue2rgb(p, q, t){
+                         if(t < 0) t += 1;
+                         if(t > 1) t -= 1;
+                         if(t < 1/6) return p + (q - p) * 6 * t;
+                         if(t < 1/2) return q;
+                         if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                         return p;
+                     }
+                     let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                     let p = 2 * l - q;
+                     r = hue2rgb(p, q, h + 1/3);
+                     g = hue2rgb(p, q, h);
+                     b = hue2rgb(p, q, h - 1/3);
+                 }
+                 return new RGB(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), hsl.a);
+             }
+
+             function formatHex(rgb) {
+                const fn = (c) => {
+                     const h = Math.round(c).toString(16);
+                     return h.length === 1 ? '0' + h : h;
+                };
+                return `#${fn(rgb.r)}${fn(rgb.g)}${fn(rgb.b)}`;
+             }
+
+             // The main chroma object constructor
+             const Chroma = function(color) {
+                 if (!(this instanceof Chroma)) return new Chroma(color);
+                 this._rgb = hexToRgb(color);
+                 if (!this._rgb) throw new Error("Invalid color format: " + color);
+                 this._hsl = rgbToHsl(this._rgb);
+             };
+
+             Chroma.prototype.darken = function(amount = 1) {
+                const hsl = this._hsl;
+                hsl.l -= 0.15 * amount; // Adjust lightness (amount can scale the effect)
+                hsl.l = Math.max(0, hsl.l); // Clamp lightness above 0
+                this._rgb = hslToRgb(hsl);
+                return this; // Allow chaining
+             };
+
+              Chroma.prototype.hex = function() {
+                 return formatHex(this._rgb);
+              };
+
+             return Chroma; // Expose the main constructor
+        })();
+        // --- End Chroma.js ---
+
+
+        // --- Start Game ---
+        loadLevel(0); // Load the first level
+        draw();       // Start the drawing loop
+        gameLoop();   // Start the game logic loop
+
+    </script>
+
+</body>
+</html>

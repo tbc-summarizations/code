@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ellington Platformer</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #DC143C; /* Red background inspired by album */
+            font-family: sans-serif;
+            color: white;
+        }
+        canvas {
+            border: 2px solid black;
+            background-color: #FF6347; /* Lighter red for contrast */
+            max-width: 100%;
+            max-height: 80vh;
+        }
+        #controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: black;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #333;
+        }
+        #levelInfo {
+             font-size: 1.2em;
+             font-weight: bold;
+        }
+        #winMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 10px;
+            font-size: 2em;
+            text-align: center;
+            display: none; /* Hidden by default */
+        }
+    </style>
+</head>
+<body>
+    <h1>Ellington's Masterpiece Hop</h1>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <span id="levelInfo">Level: 1</span>
+        <button id="skipButton">Skip Level</button>
+        <span>Controls: WASD/Space (Jump), R (Reset)</span>
+    </div>
+     <div id="winMessage">
+        Congratulations!<br>You've mastered the rhythm!
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const skipButton = document.getElementById('skipButton');
+        const levelInfoSpan = document.getElementById('levelInfo');
+        const winMessageDiv = document.getElementById('winMessage');
+
+
+        // Game Settings
+        const GRAVITY = 0.5;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = 12;
+        const PLAYER_SIZE = 30;
+        const TILE_SIZE = 40; // Base size for level elements
+        const FRICTION = 0.8;
+        const WALL_JUMP_FORCE_X = 7;
+        const WALL_JUMP_FORCE_Y = 10;
+        const WALL_SLIDE_SPEED = 1.5;
+
+        let currentLevelIndex = 0;
+        let keys = {};
+        let camera = { x: 0, y: 0 };
+        let gameWon = false;
+
+        let player = {
+            x: 100,
+            y: 100,
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            vx: 0,
+            vy: 0,
+            onGround: false,
+            canWallJump: false,
+            wallJumpSide: null, // 'left' or 'right'
+            canDoubleJump: false, // To be introduced later potentially, or just use wall jump
+            touchingWall: false,
+            collectedItems: 0, // For collectible mechanics
+            hasKey: false // For key/door mechanics
+        };
+
+        // --- Level Definitions ---
+        // Each level object contains:
+        // - platforms: array of {x, y, w, h, type?} (type: 'moving', 'bouncy', 'temporary', 'hazard', 'lowGrav')
+        // - collectibles: array of {x, y, collected?}
+        // - keys: array of {x, y, collected?}
+        // - doors: array of {x, y, w, h, locked?}
+        // - goal: {x, y, w, h}
+        // - start: {x, y}
+        // - requiredCollectibles: number (default 0)
+        // - levelWidth, levelHeight (optional, for camera bounds)
+        const levels = [
+            // Level 1: Basic Jump & Movement
+            {
+                start: { x: 100, y: 500 },
+                goal: { x: 700, y: 100, w: TILE_SIZE, h: TILE_SIZE },
+                platforms: [
+                    { x: 0, y: 560, w: 800, h: 40 }, // Floor
+                    { x: 200, y: 480, w: 120, h: 20 },
+                    { x: 400, y: 400, w: 120, h: 20 },
+                    { x: 600, y: 320, w: 120, h: 20 },
+                    { x: 680, y: 140, w: 120, h: 20 }, // Platform below goal
+                ],
+                levelWidth: 800, levelHeight: 600
+            },
+            // Level 2: Moving Platforms
+            {
+                start: { x: 50, y: 500 },
+                goal: { x: 1100, y: 100, w: TILE_SIZE, h: TILE_SIZE },
+                platforms: [
+                    { x: 0, y: 560, w: 200, h: 40 }, // Start floor
+                    { x: 250, y: 500, w: 100, h: 20, type: 'moving', moveX: 150, speed: 1.5 }, // Horizontal moving
+                    { x: 550, y: 440, w: 100, h: 20 },
+                    { x: 700, y: 440, w: 100, h: 20, type: 'moving', moveY: -100, speed: 1 }, // Vertical moving
+                    { x: 900, y: 300, w: 150, h: 20 },
+                    { x: 1080, y: 140, w: 120, h: 20 }, // Platform below goal
+                    { x: 1150, y: 560, w: 150, h: 40 }, // End floor piece
+                ],
+                levelWidth: 1300, levelHeight: 600
+            },
+             // Level 3: Hazards (Spikes)
+            {
+                start: { x: 50, y: 100 },
+                goal: { x: 700, y: 500, w: TILE_SIZE, h: TILE_SIZE },
+                platforms: [
+                    { x: 0, y: 160, w: 150, h: 20 }, // Start platform
+                    { x: 0, y: 560, w: 800, h: 40 }, // Floor
+                    { x: 200, y: 540, w: 100, h: 20, type: 'hazard' }, // Spike pit base
+                    { x: 350, y: 480, w: 100, h: 20 },
+                    { x: 500, y: 400, w: 100, h: 20 },
+                    { x: 150, y: 300, w: 100, h: 20 },
+                    { x: 300, y: 220, w: 100, h: 20 },
+                    { x: 500, y: 540, w: 100, h: 20, type: 'hazard' }, // Another spike pit
+                    { x: 650, y: 540, w: 150, h: 20 }, // Near goal
+                ],
+                levelWidth: 800, levelHeight: 600
+            },
+            // Level 4: Collectibles
+            {
+                start: { x: 50, y: 500 },
+                goal: { x: 950, y: 100, w: TILE_SIZE, h: TILE_SIZE },
+                requiredCollectibles: 3,
+                platforms: [
+                    { x: 0, y: 560, w: 1000, h: 40 }, // Floor
+                    { x: 150, y: 480, w: 80, h: 20 },
+                    { x: 300, y: 400, w: 80, h: 20 },
+                    { x: 450, y: 480, w: 80, h: 20 },
+                     { x: 600, y: 400, w: 80, h: 20 },
+                    { x: 750, y: 320, w: 80, h: 20 },
+                    { x: 900, y: 240, w: 80, h: 20 },
+                    { x: 930, y: 140, w: 100, h: 20 }, // Near goal
+                ],
+                collectibles: [
+                    { x: 320, y: 370, collected: false },
+                    { x: 620, y: 370, collected: false },
+                    { x: 920, y: 210, collected: false },
+                ],
+                levelWidth: 1000, levelHeight: 600
+            },
+            // Level 5: Bouncy Platforms
+            {
+                start: { x: 50, y: 500 },
+                goal: { x: 750, y: 50, w: TILE_SIZE, h: TILE_SIZE },
+                platforms: [
+                    { x: 0, y: 560, w: 200, h: 40 }, // Start floor
+                    { x: 250, y: 540, w: 100, h: 20, type: 'bouncy' }, // Bouncy
+                    { x: 450, y: 400, w: 100, h: 20 }, // Normal platform
+                    { x: 600, y: 350, w: 100, h: 20, type: 'bouncy' }, // Bouncy to reach goal
+                     { x: 730, y: 90, w: 100, h: 20 }, // Near goal
+                     { x: 350, y: 200, w: 100, h: 20 }, // High platform
+                     { x: 100, y: 300, w: 100, h: 20 }, // Intermediate platform
+                ],
+                 levelWidth: 800, levelHeight: 600
+            },
+            // Level 6: Temporary Platforms
+            {
+                start: { x: 50, y: 100 },
+                goal: { x: 950, y: 500, w: TILE_SIZE, h: TILE_SIZE },
+                 platforms: [
+                    { x: 0, y: 160, w: 100, h: 20 }, // Start platform
+                    { x: 150, y: 220, w: 80, h: 20, type: 'temporary', timer: 30 },
+                    { x: 280, y: 280, w: 80, h: 20, type: 'temporary', timer: 30 },
+                    { x: 410, y: 340, w: 80, h: 20, type: 'temporary', timer: 30 },
+                    { x: 540, y: 400, w: 80, h: 20 }, // Solid midway
+                    { x: 670, y: 460, w: 80, h: 20, type: 'temporary', timer: 30 },
+                    { x: 800, y: 520, w: 80, h: 20, type: 'temporary', timer: 30 },
+                    { x: 930, y: 540, w: 100, h: 20 }, // Near goal
+                    { x: 0, y: 580, w: 1100, h: 20, type: 'hazard' } // Bottom hazard floor
+                ],
+                 levelWidth: 1100, levelHeight: 600
+            },
+             // Level 7: Keys and Locked Doors
+            {
+                start: { x: 50, y: 500 },
+                goal: { x: 1150, y: 100, w: TILE_SIZE, h: TILE_SIZE },
+                platforms: [
+                    { x: 0, y: 560, w: 200, h: 40 }, // Start
+                    { x: 300, y: 480, w: 100, h: 20 },
+                    { x: 500, y: 400, w: 100, h: 20 }, // Platform near key
+                    { x: 700, y: 320, w: 100, h: 20 },
+                    { x: 900, y: 240, w: 100, h: 20 },
+                    { x: 1100, y: 560, w: 200, h: 40 }, // Floor near goal
+                    { x: 1130, y: 140, w: 100, h: 20 } // Platform below goal
+                ],
+                keys: [
+                    { x: 535, y: 360, collected: false }
+                ],
+                doors: [
+                    { x: 1000, y: 480, w: 20, h: 80, locked: true } // Door blocking path on floor
+                ],
+                 levelWidth: 1300, levelHeight: 600
+            },
+            // Level 8: Wall Jumping
+            {
+                start: { x: 100, y: 500 },
+                goal: { x: 100, y: 50, w: TILE_SIZE, h: TILE_SIZE },
+                platforms: [
+                    { x: 0, y: 560, w: 200, h: 40 }, // Start floor
+                    { x: 0, y: 90, w: 140, h: 20 }, // Goal Platform
+                    // Wall jump shaft
+                    { x: 300, y: 200, w: 40, h: 400 }, // Left wall
+                    { x: 500, y: 100, w: 40, h: 500 }, // Right wall
+                    // Some platforms inside
+                    { x: 340, y: 400, w: 60, h: 20},
+                    { x: 400, y: 250, w: 100, h: 20},
+                     // Exit path
+                    { x: 150, y: 150, w: 100, h: 20 },
+
+                ],
+                levelWidth: 600, levelHeight: 600
+            },
+             // Level 9: Low Gravity Zone (simulated with lower GRAVITY and higher jump)
+            {
+                start: { x: 50, y: 500 },
+                goal: { x: 1150, y: 100, w: TILE_SIZE, h: TILE_SIZE },
+                platforms: [
+                    { x: 0, y: 560, w: 1200, h: 40 }, // Floor
+                    // Low Grav Zone defined by position
+                    { x: 300, y: 0, w: 600, h: 560, type: 'lowGravZone' }, // Area marker, doesn't collide
+                    // Platforms within low grav
+                    { x: 350, y: 450, w: 80, h: 20 },
+                    { x: 500, y: 350, w: 80, h: 20 },
+                    { x: 650, y: 250, w: 80, h: 20 },
+                    { x: 800, y: 150, w: 80, h: 20 },
+                    // Exit platform
+                    { x: 1100, y: 140, w: 100, h: 20 },
+                ],
+                 levelWidth: 1200, levelHeight: 600
+            },
+            // Level 10: The Masterpiece (Combine All) - Long Level
+             {
+                start: { x: 50, y: 500 },
+                goal: { x: 2350, y: 100, w: TILE_SIZE, h: TILE_SIZE },
+                requiredCollectibles: 3,
+                platforms: [
+                    // Section 1: Intro & Moving Platforms
+                    { x: 0, y: 560, w: 300, h: 40 },
+                    { x: 350, y: 500, w: 100, h: 20, type: 'moving', moveX: 150, speed: 1.5 },
+                    { x: 600, y: 450, w: 100, h: 20 },
+                    { x: 750, y: 560, w: 40, h: 40, type: 'hazard' }, // Spike
+                    { x: 800, y: 560, w: 200, h: 40 },
+
+                    // Section 2: Temporary & Bouncy
+                    { x: 1000, y: 500, w: 80, h: 20, type: 'temporary', timer: 45 },
+                    { x: 1150, y: 440, w: 80, h: 20, type: 'temporary', timer: 45 },
+                    { x: 1300, y: 500, w: 100, h: 20, type: 'bouncy' },
+                    { x: 1450, y: 350, w: 100, h: 20 }, // High platform
+
+                    // Section 3: Wall Jump & Collectible 1
+                    { x: 1600, y: 150, w: 40, h: 450 }, // Left Wall
+                    { x: 1800, y: 250, w: 40, h: 350 }, // Right Wall
+                     { x: 1640, y: 300, w: 50, h: 20}, // Inside platform
+                     // Collectible 1 high up in wall jump section
+                    { x: 1700, y: 200, w: 50, h: 20}, // Platform for collectible
+
+                    // Section 4: Low Gravity & Collectible 2 & Key
+                     { x: 1900, y: 0, w: 400, h: 600, type: 'lowGravZone' }, // Low grav area
+                    { x: 1950, y: 560, w: 300, h: 40 }, // Floor in low grav
+                    { x: 2000, y: 450, w: 50, h: 20 },
+                    { x: 2100, y: 350, w: 50, h: 20 },
+                    { x: 2200, y: 250, w: 50, h: 20 }, // Platform for Key
+
+                     // Section 5: Door, Final Collectible & Goal
+                    { x: 2300, y: 560, w: 150, h: 40 }, // Final floor segment
+                     { x: 2280, y: 480, w: 20, h: 80 }, // Need platform before door
+                    // Door after low grav
+                    { x: 2300, y: 150, w: 40, h: 410 }, // Wall blocking path before goal platform
+
+                    { x: 2330, y: 140, w: 100, h: 20 }, // Platform below goal
+
+                ],
+                 collectibles: [
+                    { x: 1715, y: 170, collected: false }, // Wall jump section
+                    { x: 1975, y: 530, collected: false }, // Low grav floor
+                    { x: 2350, y: 530, collected: false }, // Near goal
+                 ],
+                 keys: [
+                     { x: 2215, y: 210, collected: false } // In low grav zone
+                 ],
+                 doors: [
+                     { x: 2300, y: 480, w: 20, h: 80, locked: true } // Door placed on the final floor segment blocking path upwards initially? Needs adjustment. Let's put it vertically.
+                                                                      // Adjusted Door: Blocks path to goal platform vertically
+                    // { x: 2300, y: 150, w: 20, h: 80, locked: true } // This seems better positioned. Blocks access to goal platform area.
+                    // Correcting Door placement based on platforms:
+                    // Let's place a vertical door blocking the final jump section.
+                    { x: 2280, y: 150, w: 20, h: 100, locked: true } // Vertical door before goal platform
+
+                 ],
+                levelWidth: 2500, levelHeight: 600
+            },
+        ];
+
+        function resetPlayer(levelData) {
+            player.x = levelData.start.x;
+            player.y = levelData.start.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            player.canWallJump = false;
+            player.touchingWall = false;
+            player.hasKey = false;
+            player.collectedItems = 0;
+
+            // Reset level specifics
+             if (levelData.collectibles) {
+                levelData.collectibles.forEach(c => c.collected = false);
+            }
+            if (levelData.keys) {
+                levelData.keys.forEach(k => k.collected = false);
+            }
+             if (levelData.doors) {
+                levelData.doors.forEach(d => d.locked = true); // Relock doors
+            }
+            // Reset temporary platforms timers/visibility if needed (complex state to manage fully without objects)
+             if (levelData.platforms) {
+                 levelData.platforms.forEach(p => {
+                     if (p.type === 'temporary') {
+                         p.visible = true; // Ensure they are visible on reset
+                         delete p.touchedTime; // Reset timer state
+                     }
+                 });
+             }
+
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                console.log("You Win!");
+                gameWon = true;
+                winMessageDiv.style.display = 'block';
+                return; // Stop game loop or further loading
+            }
+             gameWon = false; // Reset win state if loading a level
+             winMessageDiv.style.display = 'none';
+
+            currentLevelIndex = levelIndex;
+            const levelData = levels[currentLevelIndex];
+            levelInfoSpan.textContent = `Level: ${currentLevelIndex + 1}`;
+
+            resetPlayer(levelData);
+
+             // Initialize moving platforms original positions if not present
+            levelData.platforms.forEach(p => {
+                if (p.type === 'moving') {
+                    if (p.origX === undefined) p.origX = p.x;
+                    if (p.origY === undefined) p.origY = p.y;
+                    if (p.moveDirection === undefined) p.moveDirection = 1; // 1 for forward, -1 for backward
+                }
+                 if (p.type === 'temporary') {
+                    p.visible = true; // Ensure visible at start
+                }
+            });
+
+             camera.x = 0; // Reset camera for new level
+             camera.y = 0;
+        }
+
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.w &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.h &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function handlePlatformCollision(p) {
+             // Simple AABB collision resolution
+            // Calculate overlap in x and y
+            const overlapX = (player.width / 2 + p.w / 2) - Math.abs((player.x + player.width / 2) - (p.x + p.w / 2));
+            const overlapY = (player.height / 2 + p.h / 2) - Math.abs((player.y + player.height / 2) - (p.y + p.h / 2));
+
+             // Check if collision is happening
+             if (overlapX > 0 && overlapY > 0) {
+
+                // Resolve collision based on the smallest overlap
+                if (overlapX < overlapY) {
+                    // Horizontal collision
+                    if ((player.x + player.width / 2) < (p.x + p.w / 2)) { // Player is to the left
+                        player.x = p.x - player.width;
+                        player.touchingWall = true;
+                        player.wallJumpSide = 'right'; // Wall is on the right
+                    } else { // Player is to the right
+                        player.x = p.x + p.w;
+                        player.touchingWall = true;
+                         player.wallJumpSide = 'left'; // Wall is on the left
+                    }
+                    player.vx = 0; // Stop horizontal movement
+                } else {
+                    // Vertical collision
+                    if ((player.y + player.height / 2) < (p.y + p.h / 2)) { // Player is above
+                        player.y = p.y - player.height;
+                        player.vy = 0;
+                        player.onGround = true;
+                         player.canWallJump = false; // Reset wall jump ability when landing
+                         player.touchingWall = false;
+
+                         // Handle different platform types on landing
+                        if (p.type === 'bouncy') {
+                            player.vy = -JUMP_FORCE * 1.5; // Extra bounce
+                            player.onGround = false; // Instantly bouncing off
+                        } else if (p.type === 'temporary' && p.visible && !p.touchedTime) {
+                             p.touchedTime = Date.now(); // Start timer on touch
+                         } else if (p.type === 'hazard') {
+                             resetPlayer(levels[currentLevelIndex]); // Reset on hazard touch
+                         } else if (p.type === 'moving') {
+                            // Stick player to moving platform
+                             player.x += p.vx || 0;
+                         }
+
+                    } else { // Player is below
+                        player.y = p.y + p.h;
+                        player.vy = 0; // Stop upward movement
+                    }
+                }
+            }
+        }
+
+         function update() {
+            if (gameWon) return; // Stop updates if game is won
+
+             const levelData = levels[currentLevelIndex];
+             let currentGravity = GRAVITY;
+             let currentJumpForce = JUMP_FORCE;
+
+             // Check for low gravity zones
+             let inLowGravZone = false;
+             if (levelData.platforms) {
+                 levelData.platforms.forEach(p => {
+                     if (p.type === 'lowGravZone') {
+                         const zoneRect = { x: p.x, y: p.y, w: p.w, h: p.h };
+                         const playerRect = { x: player.x, y: player.y, width: player.width, height: player.height };
+                         if (checkCollision(playerRect, zoneRect)) {
+                             inLowGravZone = true;
+                         }
+                     }
+                 });
+             }
+             if (inLowGravZone) {
+                 currentGravity = GRAVITY * 0.5; // Lower gravity
+                 currentJumpForce = JUMP_FORCE * 1.2; // Higher jump
+             }
+
+
+            // --- Input Handling ---
+            player.vx *= FRICTION; // Apply friction
+             if (Math.abs(player.vx) < 0.1) player.vx = 0;
+
+            if (keys['a'] || keys['A']) {
+                player.vx = -PLAYER_SPEED;
+            }
+            if (keys['d'] || keys['D']) {
+                player.vx = PLAYER_SPEED;
+            }
+            // Jumping (W or Space)
+             if ((keys['w'] || keys['W'] || keys[' ']) && (player.onGround || player.canWallJump)) {
+                 if (player.onGround) {
+                     player.vy = -currentJumpForce;
+                     player.onGround = false;
+                 } else if (player.canWallJump) {
+                     player.vy = -WALL_JUMP_FORCE_Y;
+                     player.vx = player.wallJumpSide === 'left' ? WALL_JUMP_FORCE_X : -WALL_JUMP_FORCE_X; // Jump away from wall
+                     player.canWallJump = false;
+                     player.touchingWall = false;
+                 }
+                 // Prevent holding jump key
+                 keys['w'] = keys['W'] = keys[' '] = false;
+             }
+
+
+            // --- Physics ---
+            player.vy += currentGravity;
+            player.y += player.vy;
+            player.onGround = false; // Assume not on ground until collision check proves otherwise
+             player.touchingWall = false; // Reset touching wall state
+             player.canWallJump = false; // Reset wall jump capability
+
+            // --- Platform Updates & Collision ---
+             if(levelData.platforms) {
+                 levelData.platforms.forEach(p => {
+                    // Update moving platforms
+                     if (p.type === 'moving' && p.speed) {
+                         const moveX = p.moveX || 0;
+                         const moveY = p.moveY || 0;
+                         const totalMoveDist = Math.sqrt(moveX * moveX + moveY * moveY);
+
+                         if (totalMoveDist > 0) {
+                             const currentDist = Math.sqrt(Math.pow(p.x - p.origX, 2) + Math.pow(p.y - p.origY, 2));
+                             const targetDist = Math.sqrt(Math.pow(p.origX + moveX - p.origX, 2) + Math.pow(p.origY + moveY - p.origY, 2));
+
+                             if ((p.moveDirection === 1 && currentDist >= targetDist) || (p.moveDirection === -1 && currentDist <= 0.1)) {
+                                 p.moveDirection *= -1; // Reverse direction
+                             }
+
+                             const moveRatio = p.speed / totalMoveDist;
+                             p.vx = moveX * moveRatio * p.moveDirection;
+                             p.vy = moveY * moveRatio * p.moveDirection;
+                             p.x += p.vx;
+                             p.y += p.vy;
+                         }
+                     }
+
+                     // Update temporary platforms
+                     if (p.type === 'temporary' && p.touchedTime) {
+                         if (Date.now() - p.touchedTime > (p.timer * 16.67)) { // Approx frames to ms
+                             p.visible = false;
+                         }
+                     }
+
+                     // Check collision only with visible platforms or non-visual types
+                    if (p.visible !== false && p.type !== 'lowGravZone') {
+                         handlePlatformCollision(p);
+                    }
+                });
+             }
+
+
+            // Apply horizontal movement and check horizontal collision again
+            player.x += player.vx;
+             if(levelData.platforms) {
+                levelData.platforms.forEach(p => {
+                     if (p.visible !== false && p.type !== 'lowGravZone' && p.type !== 'hazard') { // Don't get stopped horizontally by hazards
+                         handlePlatformCollision(p); // Re-check after moving
+                     }
+                });
+             }
+            // --- Wall Sliding/Jumping Logic ---
+             if (player.touchingWall && !player.onGround && player.vy > 0) { // If touching wall, falling, and not on ground
+                 player.vy = Math.min(player.vy, WALL_SLIDE_SPEED); // Limit downward speed (slide)
+                 player.canWallJump = true; // Allow wall jump
+             } else {
+                 player.canWallJump = false;
+             }
+
+
+            // --- Other Interactions ---
+             // Collectibles
+             if (levelData.collectibles) {
+                 levelData.collectibles.forEach((c, index) => {
+                     if (!c.collected && checkCollision(player, { x: c.x, y: c.y, w: TILE_SIZE * 0.5, h: TILE_SIZE * 0.5 })) {
+                         c.collected = true;
+                         player.collectedItems++;
+                     }
+                 });
+             }
+              // Keys
+             if (levelData.keys) {
+                 levelData.keys.forEach((k, index) => {
+                     if (!k.collected && !player.hasKey && checkCollision(player, { x: k.x, y: k.y, w: TILE_SIZE * 0.5, h: TILE_SIZE * 0.5 })) {
+                         k.collected = true;
+                         player.hasKey = true;
+                         // Unlock corresponding doors
+                         if(levelData.doors) {
+                            levelData.doors.forEach(d => d.locked = false); // Simple: one key unlocks all doors in the level
+                         }
+                     }
+                 });
+             }
+              // Doors - collision if locked
+             if (levelData.doors) {
+                 levelData.doors.forEach(d => {
+                     if (d.locked && checkCollision(player, { x: d.x, y: d.y, w: d.w, h: d.h })) {
+                          // Resolve collision like a solid platform
+                          handlePlatformCollision({x: d.x, y: d.y, w: d.w, h: d.h});
+                     }
+                 });
+             }
+
+
+            // --- Goal Check ---
+            const goal = levelData.goal;
+            const requiredItems = levelData.requiredCollectibles || 0;
+             if (checkCollision(player, { x: goal.x, y: goal.y, w: goal.w, h: goal.h })) {
+                 if (player.collectedItems >= requiredItems) {
+                     loadLevel(currentLevelIndex + 1); // Move to next level
+                 }
+             }
+
+             // --- Player Bounds (Canvas as basic boundary for now) ---
+             if (player.y + player.height > canvas.height) {
+                 // Generally means falling out of bounds - reset? Or set floor?
+                 // For now, let's reset if they fall too far below screen bottom
+                 if (player.y > canvas.height + 200) {
+                     resetPlayer(levelData);
+                 }
+             }
+             // Prevent going off left edge? (Or handle via level design)
+             if (player.x < 0) {
+                 player.x = 0;
+                 player.vx = 0;
+             }
+
+
+             // --- Camera Update ---
+             const levelWidth = levelData.levelWidth || canvas.width;
+             const levelHeight = levelData.levelHeight || canvas.height;
+
+             // Target camera position (center player, within bounds)
+             let targetCamX = player.x - canvas.width / 2 + player.width / 2;
+             let targetCamY = player.y - canvas.height / 2 + player.height / 2;
+
+             // Clamp camera X
+             camera.x = Math.max(0, Math.min(targetCamX, levelWidth - canvas.width));
+              // Clamp camera Y (less common to clamp Y unless level is very tall)
+              // camera.y = Math.max(0, Math.min(targetCamY, levelHeight - canvas.height));
+             // Let's keep Y fixed for now, simpler gameplay unless level is vertically large
+             camera.y = 0; // Or adjust based on level height if needed
+
+         }
+
+         function draw() {
+            if (gameWon) {
+                 // Keep showing the win message, maybe clear canvas
+                ctx.fillStyle = '#DC143C'; // Background color
+                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                 // Win message is handled by the HTML div
+                 return;
+             }
+
+            // Clear canvas
+            ctx.fillStyle = '#DC143C'; // Background color
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Apply camera translation
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            const levelData = levels[currentLevelIndex];
+
+            // Draw low gravity zones (visual indicator)
+            if (levelData.platforms) {
+                 levelData.platforms.forEach(p => {
+                    if (p.type === 'lowGravZone') {
+                        ctx.fillStyle = 'rgba(173, 216, 230, 0.3)'; // Light blue, semi-transparent
+                        ctx.fillRect(p.x, p.y, p.w, p.h);
+                    }
+                });
+            }
+
+
+            // Draw platforms
+            if (levelData.platforms) {
+                levelData.platforms.forEach(p => {
+                     if (p.visible === false || p.type === 'lowGravZone') return; // Don't draw invisible or zone markers
+
+                     if (p.type === 'hazard') {
+                        ctx.fillStyle = 'black'; // Spikes color
+                        // Draw triangle spikes
+                        const spikeSize = TILE_SIZE / 2;
+                        const numSpikes = Math.floor(p.w / spikeSize);
+                        for(let i = 0; i < numSpikes; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(p.x + i * spikeSize, p.y + p.h);
+                            ctx.lineTo(p.x + (i + 0.5) * spikeSize, p.y);
+                            ctx.lineTo(p.x + (i + 1) * spikeSize, p.y + p.h);
+                            ctx.closePath();
+                            ctx.fill();
+                        }
+                    } else if (p.type === 'bouncy') {
+                        ctx.fillStyle = '#90EE90'; // Light green
+                         ctx.fillRect(p.x, p.y, p.w, p.h);
+                         ctx.strokeStyle = 'black';
+                         ctx.strokeRect(p.x, p.y, p.w, p.h);
+                     } else if (p.type === 'temporary') {
+                        ctx.fillStyle = '#D3D3D3'; // Light grey
+                         ctx.fillRect(p.x, p.y, p.w, p.h);
+                         ctx.strokeStyle = 'black';
+                         ctx.setLineDash([5, 5]); // Dashed outline
+                         ctx.strokeRect(p.x, p.y, p.w, p.h);
+                         ctx.setLineDash([]); // Reset line dash
+                     } else {
+                        ctx.fillStyle = 'black'; // Default platform color
+                         ctx.fillRect(p.x, p.y, p.w, p.h);
+                    }
+                });
+            }
+
+             // Draw collectibles
+             if (levelData.collectibles) {
+                 ctx.fillStyle = 'yellow';
+                 ctx.font = `${TILE_SIZE * 0.6}px Arial`;
+                 levelData.collectibles.forEach(c => {
+                     if (!c.collected) {
+                         //ctx.fillRect(c.x, c.y, TILE_SIZE * 0.5, TILE_SIZE * 0.5);
+                         ctx.fillText('🎵', c.x, c.y + TILE_SIZE * 0.5); // Draw music note emoji
+                     }
+                 });
+             }
+             // Draw keys
+             if (levelData.keys) {
+                 ctx.fillStyle = 'gold';
+                 ctx.font = `${TILE_SIZE * 0.6}px Arial`;
+                 levelData.keys.forEach(k => {
+                     if (!k.collected) {
+                        // ctx.fillRect(k.x, k.y, TILE_SIZE * 0.5, TILE_SIZE * 0.5);
+                         ctx.fillText('🔑', k.x, k.y + TILE_SIZE * 0.5); // Draw key emoji
+                     }
+                 });
+             }
+              // Draw doors
+             if (levelData.doors) {
+                 ctx.font = `${TILE_SIZE * 0.8}px Arial`;
+                 levelData.doors.forEach(d => {
+                     if (d.locked) {
+                         ctx.fillStyle = '#8B4513'; // Brownish
+                         ctx.fillRect(d.x, d.y, d.w, d.h);
+                         ctx.fillStyle = 'black';
+                         ctx.fillText('🔒', d.x + d.w/2 - TILE_SIZE*0.3, d.y + d.h/2 + TILE_SIZE*0.3); // Lock icon
+                     } else {
+                          // Optional: Draw open door or just nothing
+                          ctx.fillStyle = 'rgba(0,0,0,0.2)'; // Faded indication maybe
+                          ctx.fillRect(d.x, d.y, d.w, d.h);
+                     }
+                 });
+             }
+
+
+            // Draw Goal
+            const goal = levelData.goal;
+            const requiredItems = levelData.requiredCollectibles || 0;
+            const canReachGoal = player.collectedItems >= requiredItems;
+
+             ctx.fillStyle = canReachGoal ? 'gold' : 'grey'; // Goal active/inactive color
+             //ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
+             ctx.font = `${goal.h}px Arial`;
+             ctx.fillText('★', goal.x, goal.y + goal.h * 0.9); // Draw star emoji
+
+
+            // Draw Player
+            ctx.fillStyle = 'white';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+             ctx.strokeStyle = 'black';
+             ctx.strokeRect(player.x, player.y, player.width, player.height);
+
+
+            // Restore camera state
+            ctx.restore();
+
+             // Draw UI elements (like collected count) over the game - not affected by camera
+            if (levelData.requiredCollectibles && levelData.requiredCollectibles > 0) {
+                 ctx.fillStyle = 'white';
+                 ctx.font = '18px Arial';
+                 ctx.textAlign = 'left';
+                 ctx.fillText(`🎵: ${player.collectedItems} / ${levelData.requiredCollectibles}`, 10, 25);
+            }
+             if (levelData.keys && levelData.keys.length > 0) {
+                 ctx.fillStyle = player.hasKey ? 'gold' : 'grey';
+                 ctx.font = '24px Arial';
+                 ctx.fillText('🔑', canvas.width - 40, 30);
+             }
+
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+             // Handle Reset separately
+             if (e.key.toLowerCase() === 'r') {
+                 resetPlayer(levels[currentLevelIndex]);
+             }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        skipButton.addEventListener('click', () => {
+            if (currentLevelIndex < levels.length -1) {
+                 loadLevel(currentLevelIndex + 1);
+            } else {
+                // Already on last level, skipping wins
+                loadLevel(levels.length); // Trigger win condition
+            }
+        });
+
+
+        // Start Game
+        loadLevel(0);
+        gameLoop();
+
+    </script>
+</body>
+</html>

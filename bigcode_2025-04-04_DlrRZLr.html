@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Charlie Parker Platformer</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #f0f0f0; }
+  canvas { display: block; background-color: #ccffcc; }
+  #skipButton { position: absolute; top: 10px; left: 10px; padding: 10px; }
+</style>
+</head>
+<body>
+
+<button id="skipButton">Skip Level</button>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const skipButton = document.getElementById('skipButton');
+
+  canvas.width = 800;
+  canvas.height = 600;
+
+  let currentLevelIndex = 0;
+  let levels = [];
+
+  // Level 1: Basic Movement
+  levels[0] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 200, y: 400, width: 150, height: 20, color: 'brown'},
+      {x: 500, y: 300, width: 200, height: 20, color: 'brown'}
+    ],
+    hazards: [],
+    mechanics: [],
+    goal: {x: 750, y: 250, size: 20, color: 'gold'},
+    levelName: "Level 1: Basic Movement"
+  };
+
+  // Level 2: Moving Platforms
+  levels[1] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 100, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 300, y: 400, width: 100, height: 20, color: 'brown', moving: {axis: 'x', speed: 1, range: 100, start: 300}},
+      {x: 500, y: 300, width: 100, height: 20, color: 'brown', moving: {axis: 'y', speed: 0.5, range: 50, start: 300}}
+    ],
+    hazards: [],
+    mechanics: ['movingPlatforms'],
+    goal: {x: 750, y: 250, size: 20, color: 'gold'},
+    levelName: "Level 2: Moving Platforms"
+  };
+
+  // Level 3: Falling Platforms
+  levels[2] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 200, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 400, y: 400, width: 100, height: 20, color: 'brown', falling: true},
+      {x: 600, y: 300, width: 100, height: 20, color: 'brown', falling: true}
+    ],
+    hazards: [],
+    mechanics: ['fallingPlatforms'],
+    goal: {x: 750, y: 250, size: 20, color: 'gold'},
+    levelName: "Level 3: Falling Platforms"
+  };
+
+  // Level 4: Spikes
+  levels[3] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 200, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 500, y: 400, width: 100, height: 20, color: 'brown'}
+    ],
+    hazards: [
+      {x: 150, y: 530, type: 'triangle', size: 20, color: 'red'},
+      {x: 350, y: 530, type: 'triangle', size: 20, color: 'red'},
+      {x: 650, y: 530, type: 'triangle', size: 20, color: 'red'}
+    ],
+    mechanics: ['spikes'],
+    goal: {x: 750, y: 250, size: 20, color: 'gold'},
+    levelName: "Level 4: Spikes"
+  };
+
+  // Level 5: Jump Pads
+  levels[4] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 200, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 500, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 350, y: 530, type: 'circle', size: 30, color: 'lightblue', jumpBoost: 2}
+    ],
+    hazards: [],
+    mechanics: ['jumpPads'],
+    goal: {x: 750, y: 250, size: 20, color: 'gold'},
+    levelName: "Level 5: Jump Pads"
+  };
+
+    // Level 6: Portals
+  levels[5] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 100, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 600, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 250, y: 530, type: 'portal', size: 30, color: 'purple', target: {x: 650, y: 370}}
+    ],
+    hazards: [],
+    mechanics: ['portals'],
+    goal: {x: 750, y: 370, size: 20, color: 'gold'},
+    levelName: "Level 6: Portals"
+  };
+
+  // Level 7: Gravity Switch (Simulated with Jump Direction Inversion)
+  levels[6] = {
+    playerSpawn: {x: 50, y: 100},
+    platforms: [
+      {x: 0, y: 50, width: 800, height: 50, color: 'brown'},
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 200, y: 250, width: 100, height: 20, color: 'brown'},
+      {x: 500, y: 250, width: 100, height: 20, color: 'brown'},
+      {x: 400, y: 530, type: 'gravitySwitch', size: 30, color: 'cyan'}
+    ],
+    hazards: [],
+    mechanics: ['gravitySwitch'],
+    goal: {x: 750, y: 220, size: 20, color: 'gold'},
+    levelName: "Level 7: Gravity Switch"
+  };
+
+  // Level 8: Timed Doors (Disappearing Platforms)
+  levels[7] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 200, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 400, y: 400, width: 100, height: 20, color: 'brown', timed: {duration: 200, delay: 100}},
+      {x: 600, y: 300, width: 100, height: 20, color: 'brown', timed: {duration: 200, delay: 300}}
+    ],
+    hazards: [],
+    mechanics: ['timedPlatforms'],
+    goal: {x: 750, y: 250, size: 20, color: 'gold'},
+    levelName: "Level 8: Timed Doors"
+  };
+
+  // Level 9: Wind (Simulated with Push Zones)
+  levels[8] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 200, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 500, y: 400, width: 100, height: 20, color: 'brown'},
+      {x: 300, y: 530, type: 'wind', size: {width: 100, height: 20}, color: 'lightblue', direction: {x: 0.5, y: 0}}
+    ],
+    hazards: [],
+    mechanics: ['windZones'],
+    goal: {x: 750, y: 370, size: 20, color: 'gold'},
+    levelName: "Level 9: Wind Zones"
+  };
+
+  // Level 10: All Mechanics Combined
+  levels[9] = {
+    playerSpawn: {x: 50, y: 500},
+    platforms: [
+      {x: 0, y: 550, width: 800, height: 50, color: 'brown'},
+      {x: 100, y: 400, width: 100, height: 20, color: 'brown', moving: {axis: 'x', speed: 1, range: 150, start: 100}},
+      {x: 300, y: 400, width: 100, height: 20, color: 'brown', falling: true},
+      {x: 500, y: 300, width: 100, height: 20, color: 'brown', timed: {duration: 150, delay: 50}},
+      {x: 700, y: 200, width: 100, height: 20, color: 'brown'}
+    ],
+    hazards: [
+      {x: 450, y: 530, type: 'triangle', size: 20, color: 'red'}
+    ],
+    mechanics: ['movingPlatforms', 'fallingPlatforms', 'timedPlatforms', 'spikes', 'jumpPads', 'portals', 'gravitySwitch', 'windZones'], // All mechanics
+    jumpPads: [{x: 250, y: 530, type: 'circle', size: 30, color: 'lightblue', jumpBoost: 1.5}],
+    portals: [{x: 650, y: 530, type: 'portal', size: 30, color: 'purple', target: {x: 50, y: 170}}],
+    gravitySwitches: [{x: 150, y: 530, type: 'gravitySwitch', size: 30, color: 'cyan'}],
+    windZones: [{x: 700, y: 530, type: 'wind', size: {width: 100, height: 20}, color: 'lightblue', direction: {x: -0.5, y: 0}}],
+    goal: {x: 750, y: 170, size: 20, color: 'gold'},
+    levelName: "Level 10: Master Challenge"
+  };
+
+
+  let player = {
+    x: levels[currentLevelIndex].playerSpawn.x,
+    y: levels[currentLevelIndex].playerSpawn.y,
+    width: 20,
+    height: 40,
+    velocityY: 0,
+    velocityX: 0,
+    gravity: 0.5,
+    jumpStrength: -10,
+    isOnGround: false,
+    isGravityInverted: false
+  };
+
+  let keys = {};
+  let camera = {x: 0, y: 0};
+
+  function drawPlayer() {
+    ctx.fillStyle = 'black';
+    ctx.fillRect(player.x - camera.x, player.y - camera.y, player.width, player.height);
+  }
+
+  function drawPlatform(platform) {
+    ctx.fillStyle = platform.color;
+    ctx.fillRect(platform.x - camera.x, platform.y - camera.y, platform.width, platform.height);
+  }
+
+  function drawHazard(hazard) {
+    ctx.fillStyle = hazard.color;
+    if (hazard.type === 'triangle') {
+      ctx.beginPath();
+      ctx.moveTo(hazard.x - camera.x, hazard.y - camera.y + hazard.size);
+      ctx.lineTo(hazard.x - camera.x + hazard.size, hazard.y - camera.y + hazard.size);
+      ctx.lineTo(hazard.x - camera.x + (hazard.size / 2), hazard.y - camera.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function drawGoal(goal) {
+    ctx.fillStyle = goal.color;
+    ctx.fillRect(goal.x - camera.x, goal.y - camera.y, goal.size, goal.size);
+    ctx.fillStyle = 'white';
+    ctx.font = '12px Arial';
+    ctx.fillText('Goal', goal.x - camera.x -10, goal.y - camera.y - 5);
+  }
+
+  function drawJumpPad(pad) {
+    ctx.fillStyle = pad.color;
+    ctx.beginPath();
+    ctx.arc(pad.x - camera.x + pad.size / 2, pad.y - camera.y + pad.size / 2, pad.size / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawPortal(portal) {
+    ctx.fillStyle = portal.color;
+    ctx.fillRect(portal.x - camera.x, portal.y - camera.y, portal.size, portal.size);
+    ctx.fillStyle = 'white';
+    ctx.font = '12px Arial';
+    ctx.fillText('Portal', portal.x - camera.x - 15, portal.y - camera.y - 5);
+  }
+
+  function drawGravitySwitch(gs) {
+    ctx.fillStyle = gs.color;
+    ctx.fillRect(gs.x - camera.x, gs.y - camera.y, gs.size, gs.size);
+    ctx.fillStyle = 'black';
+    ctx.font = '10px Arial';
+    ctx.fillText('Gravity', gs.x - camera.x - 15, gs.y - camera.y + 15);
+  }
+
+  function drawWindZone(wind) {
+    ctx.fillStyle = wind.color;
+    ctx.fillRect(wind.x - camera.x, wind.y - camera.y, wind.size.width, wind.size.height);
+    ctx.fillStyle = 'black';
+    ctx.font = '10px Arial';
+    ctx.fillText('Wind', wind.x - camera.x + 5, wind.y - camera.y + 15);
+  }
+
+  function handleCollisions() {
+    player.isOnGround = false;
+    let currentLevel = levels[currentLevelIndex];
+
+    currentLevel.platforms.forEach(platform => {
+      let platformRect = {x: platform.x, y: platform.y, width: platform.width, height: platform.height};
+      let playerRect = {x: player.x, y: player.y, width: player.width, height: player.height};
+
+      if (rectIntersect(playerRect, platformRect)) {
+        let overlapX = Math.min(playerRect.x + playerRect.width, platformRect.x + platformRect.width) - Math.max(playerRect.x, platformRect.x);
+        let overlapY = Math.min(playerRect.y + playerRect.height, platformRect.y + platformRect.height) - Math.max(playerRect.y, platformRect.y);
+
+        if (overlapX > overlapY) {
+          if (player.y < platform.y) {
+            player.y = platform.y - player.height;
+            player.isOnGround = true;
+            player.velocityY = 0;
+          } else if (player.y > platform.y) {
+            player.y = platform.y + platform.height;
+            player.velocityY = 0;
+          }
+        } else {
+          if (player.x < platform.x) {
+            player.x = platform.x - player.width;
+            player.velocityX = 0;
+          } else if (player.x > platform.x) {
+            player.x = platform.x + platform.width;
+            player.velocityX = 0;
+          }
+        }
+      }
+    });
+
+    currentLevel.hazards.forEach(hazard => {
+      let hazardRect = {x: hazard.x, y: hazard.y, width: hazard.size, height: hazard.size};
+      if (hazard.type === 'triangle') {
+        hazardRect = {x: hazard.x, y: hazard.y, width: hazard.size, height: hazard.size}; //Approximate, triangle collision more complex
+      }
+      let playerRect = {x: player.x, y: player.y, width: player.width, height: player.height};
+
+      if (rectIntersect(playerRect, hazardRect)) {
+        resetLevel();
+      }
+    });
+
+    if (currentLevel.jumpPads) {
+      currentLevel.jumpPads.forEach(pad => {
+        let padRect = {x: pad.x, y: pad.y, width: pad.size, height: pad.size};
+        let playerRect = {x: player.x, y: player.y, width: player.width, height: player.height};
+        if (circleRectIntersect(padRect, playerRect)) {
+          player.velocityY = pad.jumpBoost * player.jumpStrength;
+        }
+      });
+    }
+
+    if (currentLevel.portals) {
+      currentLevel.portals.forEach(portal => {
+        let portalRect = {x: portal.x, y: portal.y, width: portal.size, height: portal.size};
+        let playerRect = {x: player.x, y: player.y, width: player.width, height: player.height};
+        if (rectIntersect(playerRect, portalRect)) {
+          player.x = portal.target.x;
+          player.y = portal.target.y;
+        }
+      });
+    }
+
+    if (currentLevel.gravitySwitches) {
+      currentLevel.gravitySwitches.forEach(gs => {
+        let gsRect = {x: gs.x, y: gs.y, width: gs.size, height: gs.size};
+        let playerRect = {x: player.x, y: player.y, width: player.width, height: player.height};
+        if (rectIntersect(playerRect, gsRect)) {
+          player.isGravityInverted = !player.isGravityInverted;
+          player.gravity = -player.gravity;
+          player.jumpStrength = -player.jumpStrength;
+        }
+      });
+    }
+
+    if (currentLevel.windZones) {
+      currentLevel.windZones.forEach(wind => {
+        let windRect = {x: wind.x, y: wind.y, width: wind.size.width, height: wind.size.height};
+        let playerRect = {x: player.x, y: player.y, width: player.width, height: player.height};
+        if (rectIntersect(playerRect, windRect)) {
+          player.velocityX += wind.direction.x;
+          player.velocityY += wind.direction.y;
+        }
+      });
+    }
+
+
+    let goalRect = currentLevel.goal;
+    let playerGoalRect = {x: player.x, y: player.y, width: player.width, height: player.height};
+    if (rectIntersect(playerGoalRect, goalRect)) {
+      nextLevel();
+    }
+  }
+
+  function updateMovingPlatforms() {
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      if (platform.moving) {
+        if (platform.moving.axis === 'x') {
+          platform.x += platform.moving.speed;
+          if (platform.x > platform.moving.start + platform.moving.range || platform.x < platform.moving.start) {
+            platform.moving.speed *= -1;
+          }
+        } else if (platform.moving.axis === 'y') {
+          platform.y += platform.moving.speed;
+          if (platform.y > platform.moving.start + platform.moving.range || platform.y < platform.moving.start) {
+            platform.moving.speed *= -1;
+          }
+        }
+      }
+    });
+  }
+
+  function updateFallingPlatforms() {
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      if (platform.falling && platform.fallingTimer === undefined) {
+        let platformRect = {x: platform.x, y: platform.y, width: platform.width, height: platform.height};
+        let playerRect = {x: player.x, y: player.y, width: player.width, height: player.height};
+        if (rectIntersect(playerRect, platformRect)) {
+          platform.fallingTimer = 0;
+        }
+      }
+      if (platform.fallingTimer !== undefined) {
+        platform.fallingTimer++;
+        if (platform.fallingTimer > 60) { // Fall after 1 second
+          platform.y += 2; // Fall speed
+          if (platform.y > canvas.height) {
+            platform.width = 0; // Effectively remove it
+          }
+        }
+      }
+    });
+  }
+
+  function updateTimedPlatforms() {
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      if (platform.timed) {
+        if (platform.timedState === undefined) platform.timedState = 'visible';
+        if (platform.timedCounter === undefined) platform.timedCounter = 0;
+
+        platform.timedCounter++;
+        if (platform.timedState === 'visible') {
+          if (platform.timedCounter > platform.timed.duration) {
+            platform.timedState = 'hidden';
+            platform.timedCounter = 0;
+            platform.originalColor = platform.color;
+            platform.color = '#888888'; // Grayed out when hidden
+          }
+        } else if (platform.timedState === 'hidden') {
+          if (platform.timedCounter > platform.timed.delay) {
+            platform.timedState = 'visible';
+            platform.timedCounter = 0;
+            platform.color = platform.originalColor;
+          }
+        }
+
+        if (platform.timedState === 'hidden') {
+          platform.width = 0; // Make it disappear visually, still collide for top collision if needed.
+        } else {
+          platform.width = levels[currentLevelIndex].platforms.find(p => p === platform).width; // Reset width to original
+        }
+      }
+    });
+  }
+
+
+  function updateCamera() {
+    camera.x = player.x - canvas.width / 2;
+    camera.y = player.y - canvas.height / 2;
+
+    camera.x = Math.max(0, camera.x);
+    camera.y = Math.max(0, camera.y);
+    camera.x = Math.min(camera.x, currentLevelWidth() - canvas.width);
+    camera.y = Math.min(camera.y, currentLevelHeight() - canvas.height);
+  }
+
+  function currentLevelWidth() {
+    let maxWidth = 0;
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      maxWidth = Math.max(maxWidth, platform.x + platform.width);
+    });
+    return maxWidth > canvas.width ? maxWidth : canvas.width;
+  }
+
+  function currentLevelHeight() {
+    let maxHeight = 0;
+    levels[currentLevelIndex].platforms.forEach(platform => {
+      maxHeight = Math.max(maxHeight, platform.y + platform.height);
+    });
+    return maxHeight > canvas.height ? maxHeight : canvas.height;
+  }
+
+
+  function updatePlayer() {
+    if (keys['w'] || keys[' ']) {
+      if (player.isOnGround) {
+        player.velocityY = player.jumpStrength;
+        player.isOnGround = false;
+      }
+    }
+    if (keys['a']) {
+      player.velocityX = -5;
+    } else if (keys['d']) {
+      player.velocityX = 5;
+    } else {
+      player.velocityX = 0;
+    }
+
+    player.velocityY += player.gravity;
+    player.x += player.velocityX;
+    player.y += player.velocityY;
+
+    if (player.y > canvas.height * 2 || player.y < -canvas.height) { // Fall out of bounds
+      resetLevel();
+    }
+  }
+
+  function drawLevel() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y); // Apply camera offset
+
+    levels[currentLevelIndex].platforms.forEach(drawPlatform);
+    levels[currentLevelIndex].hazards.forEach(drawHazard);
+    if(levels[currentLevelIndex].jumpPads) levels[currentLevelIndex].jumpPads.forEach(drawJumpPad);
+    if(levels[currentLevelIndex].portals) levels[currentLevelIndex].portals.forEach(drawPortal);
+    if(levels[currentLevelIndex].gravitySwitches) levels[currentLevelIndex].gravitySwitches.forEach(drawGravitySwitch);
+    if(levels[currentLevelIndex].windZones) levels[currentLevelIndex].windZones.forEach(drawWindZone);
+    drawGoal(levels[currentLevelIndex].goal);
+    drawPlayer();
+
+    ctx.restore(); // Restore to no camera offset for UI elements
+
+    ctx.fillStyle = 'black';
+    ctx.font = '16px Arial';
+    ctx.fillText(levels[currentLevelIndex].levelName, 10 + camera.x, 30 + camera.y); // Level name fixed to camera position
+  }
+
+  function gameLoop() {
+    updatePlayer();
+    updateCamera();
+    handleCollisions();
+    if (levels[currentLevelIndex].mechanics.includes('movingPlatforms')) updateMovingPlatforms();
+    if (levels[currentLevelIndex].mechanics.includes('fallingPlatforms')) updateFallingPlatforms();
+    if (levels[currentLevelIndex].mechanics.includes('timedPlatforms')) updateTimedPlatforms();
+    drawLevel();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function nextLevel() {
+    currentLevelIndex++;
+    if (currentLevelIndex >= levels.length) {
+      currentLevelIndex = levels.length - 1; // Stay on last level for now. In a real game, go to win screen.
+      alert("You win! ... For now. More levels coming soon!");
+    }
+    resetLevel();
+  }
+
+  function resetLevel() {
+    player.x = levels[currentLevelIndex].playerSpawn.x;
+    player.y = levels[currentLevelIndex].playerSpawn.y;
+    player.velocityY = 0;
+    player.velocityX = 0;
+    player.isGravityInverted = false;
+    player.gravity = Math.abs(player.gravity);
+    player.jumpStrength = -Math.abs(player.jumpStrength);
+
+    levels[currentLevelIndex].platforms.forEach(platform => { // Reset falling platforms
+      if (platform.falling) {
+        platform.y = levels[currentLevelIndex].platforms.find(p => p === platform).y; // Reset Y to original
+        platform.width = levels[currentLevelIndex].platforms.find(p => p === platform).width; // Reset width
+        platform.fallingTimer = undefined;
+      }
+      if (platform.timed) {
+        platform.width = levels[currentLevelIndex].platforms.find(p => p === platform).width;
+        platform.color = levels[currentLevelIndex].platforms.find(p => p === platform).originalColor || 'brown';
+        platform.timedState = 'visible';
+        platform.timedCounter = 0;
+      }
+    });
+
+  }
+
+  document.addEventListener('keydown', function(e) {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === 'r') {
+      resetLevel();
+    }
+  });
+
+  document.addEventListener('keyup', function(e) {
+    keys[e.key.toLowerCase()] = false;
+  });
+
+  skipButton.addEventListener('click', nextLevel);
+
+  // Helper function for rectangle intersection
+  function rectIntersect(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.height > rect2.y;
+  }
+
+  function circleRectIntersect(circle, rect) {
+    let distX = Math.abs(circle.x - rect.x-rect.width/2);
+    let distY = Math.abs(circle.y - rect.y-rect.height/2);
+
+    if (distX > (rect.width/2 + circle.size/2)) { return false; }
+    if (distY > (rect.height/2 + circle.size/2)) { return false; }
+
+    if (distX <= (rect.width/2)) { return true; }
+    if (distY <= (rect.height/2)) { return true; }
+
+    let dx=distX-rect.width/2;
+    let dy=distY-rect.height/2;
+    return (dx*dx+dy*dy<=(circle.size/2*circle.size));
+  }
+
+
+  resetLevel(); // Initial level setup
+  gameLoop(); // Start the game loop
+</script>
+
+</body>
+</html>

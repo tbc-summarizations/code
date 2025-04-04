@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>George Floyd Obby</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #lightblue;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  #gameCanvas {
+    background-color: #f0f0f0;
+    border: 2px solid black;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let playerX = 50;
+  let playerY = canvas.height - 50;
+  const playerSize = 20;
+  const playerSpeed = 5;
+  let isJumping = false;
+  let jumpHeight = 80;
+  let currentJumpHeight = 0;
+  let jumpSpeed = 8;
+
+  const obstacles = [
+    { x: 200, y: canvas.height - 40, width: 60, height: 40, color: 'red' },
+    { x: 400, y: canvas.height - 100, width: 60, height: 100, color: 'red' },
+    { x: 600, y: canvas.height - 40, width: 60, height: 40, color: 'red' },
+    { x: 700, y: canvas.height - 80, width: 40, height: 80, color: 'red' },
+    { x: 300, y: canvas.height - 200, points: [[0, 0], [30, -50], [60, 0]], color: 'orange', triangle: true},
+    { x: 500, y: canvas.height - 150, points: [[0, 0], [30, -50], [60, 0]], color: 'orange', triangle: true}
+  ];
+
+  const finishLineX = canvas.width - 80;
+
+  let keys = {};
+
+  document.addEventListener('keydown', function(e) {
+    keys[e.key] = true;
+  });
+
+  document.addEventListener('keyup', function(e) {
+    keys[e.key] = false;
+  });
+
+  function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Player Movement
+    if (keys['ArrowLeft'] || keys['a']) {
+      playerX -= playerSpeed;
+    }
+    if (keys['ArrowRight'] || keys['d']) {
+      playerX += playerSpeed;
+    }
+    if ((keys['ArrowUp'] || keys['w'] || keys[' '] ) && !isJumping) {
+      isJumping = true;
+      currentJumpHeight = 0;
+    }
+
+    if (isJumping) {
+      if (currentJumpHeight < jumpHeight) {
+        playerY -= jumpSpeed;
+        currentJumpHeight += jumpSpeed;
+      } else {
+        isJumping = false;
+      }
+    } else if (playerY < canvas.height - playerSize) {
+      playerY += jumpSpeed; // Gravity
+      if (playerY > canvas.height - playerSize) {
+        playerY = canvas.height - playerSize;
+      }
+    }
+
+
+    // Draw Player
+    ctx.fillStyle = 'blue';
+    ctx.fillRect(playerX, playerY, playerSize, playerSize);
+
+    // Draw Obstacles
+    obstacles.forEach(obstacle => {
+      ctx.fillStyle = obstacle.color;
+      if (obstacle.triangle) {
+        ctx.beginPath();
+        ctx.moveTo(obstacle.x + obstacle.points[0][0], obstacle.y + obstacle.points[0][1]);
+        ctx.lineTo(obstacle.x + obstacle.points[1][0], obstacle.y + obstacle.points[1][1]);
+        ctx.lineTo(obstacle.x + obstacle.points[2][0], obstacle.y + obstacle.points[2][1]);
+        ctx.closePath();
+        ctx.fill();
+
+        // Triangle Collision (Simplified AABB for triangle bounding box)
+        let triangleMinX = Math.min(obstacle.points[0][0], obstacle.points[1][0], obstacle.points[2][0]) + obstacle.x;
+        let triangleMaxX = Math.max(obstacle.points[0][0], obstacle.points[1][0], obstacle.points[2][0]) + obstacle.x;
+        let triangleMinY = Math.min(obstacle.points[0][1], obstacle.points[1][1], obstacle.points[2][1]) + obstacle.y;
+        let triangleMaxY = Math.max(obstacle.points[0][1], obstacle.points[1][1], obstacle.points[2][1]) + obstacle.y;
+
+
+        if (playerX < triangleMaxX && playerX + playerSize > triangleMinX &&
+            playerY < triangleMaxY && playerY + playerSize > triangleMinY) {
+          playerX = 50;
+          playerY = canvas.height - 50; // Reset Position
+        }
+
+      } else {
+        ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+
+        // Rectangle Collision
+        if (playerX < obstacle.x + obstacle.width && playerX + playerSize > obstacle.x &&
+            playerY < obstacle.y + obstacle.height && playerY + playerSize > obstacle.y) {
+          playerX = 50;
+          playerY = canvas.height - 50; // Reset Position
+        }
+      }
+    });
+
+    // Draw Finish Line
+    ctx.fillStyle = 'green';
+    ctx.fillRect(finishLineX, 0, 20, canvas.height);
+
+    // Check Finish Line
+    if (playerX + playerSize > finishLineX) {
+      ctx.font = "30px Arial";
+      ctx.fillStyle = "black";
+      ctx.fillText("You Win!", canvas.width/2 - 80, canvas.height/2);
+      return; // Stop game loop
+    }
+
+
+    // Keep player within bounds
+    if (playerX < 0) playerX = 0;
+    if (playerX + playerSize > canvas.width) playerX = canvas.width - playerSize;
+    if (playerY < 0) playerY = 0;
+    if (playerY + playerSize > canvas.height) playerY = canvas.height - playerSize;
+
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  gameLoop();
+</script>
+
+</body>
+</html>

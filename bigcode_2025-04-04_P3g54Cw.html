@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Builder & Player</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #game-container {
+            display: flex;
+            margin-top: 10px;
+            gap: 10px;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #e0f7ff;
+            cursor: default;
+        }
+        #controls, #properties {
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #fff;
+            min-width: 200px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        #controls button, #properties button, #mode-toggle, #share-button, #clear-button {
+            display: block;
+            margin-bottom: 5px;
+            width: 100%;
+            padding: 8px;
+            cursor: pointer;
+        }
+        #controls h3, #properties h3 {
+            margin-top: 0;
+            text-align: center;
+        }
+         label {
+            display: block;
+            margin-top: 8px;
+            font-size: 0.9em;
+         }
+         input[type="number"], input[type="color"], select {
+             width: calc(100% - 10px);
+             margin-bottom: 5px;
+         }
+         #selected-info {
+             margin-top: 10px;
+             font-size: 0.9em;
+             word-wrap: break-word;
+         }
+         #share-link-container {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            width: 80%;
+            max-width: 820px;
+            display: none; /* Hidden by default */
+         }
+         #share-link-container h4 { margin-top: 0; }
+         #share-link {
+            width: 100%;
+            padding: 5px;
+            box-sizing: border-box;
+            word-wrap: break-word;
+         }
+         #share-links-list {
+             list-style: none;
+             padding: 0;
+             max-height: 150px;
+             overflow-y: auto;
+         }
+         #share-links-list li {
+             margin-bottom: 5px;
+         }
+         #share-links-list a {
+             display: block;
+             padding: 5px;
+             background-color: #eee;
+             text-decoration: none;
+             color: blue;
+             word-break: break-all;
+             font-size: 0.9em;
+         }
+         #share-links-list a:hover {
+             background-color: #ddd;
+         }
+         .tooltip {
+             position: relative;
+             display: inline-block;
+             cursor: help;
+         }
+         .tooltip .tooltiptext {
+             visibility: hidden;
+             width: 150px;
+             background-color: black;
+             color: #fff;
+             text-align: center;
+             border-radius: 6px;
+             padding: 5px 0;
+             position: absolute;
+             z-index: 1;
+             bottom: 125%;
+             left: 50%;
+             margin-left: -75px;
+             opacity: 0;
+             transition: opacity 0.3s;
+         }
+         .tooltip:hover .tooltiptext {
+             visibility: visible;
+             opacity: 1;
+         }
+
+         /* Element Specific Styles (Rendered on Canvas) */
+        .platform { fill: #8B4513; stroke: #5A2D0C; stroke-width: 1; } /* Brown */
+        .moving-platform { fill: #4682B4; stroke: #2E5A80; stroke-width: 1; } /* Steel Blue */
+        .hazard { fill: #FF0000; } /* Red Triangle */
+        .collectible { fill: #FFD700; stroke: #DAA520; stroke-width: 1; } /* Gold Circle */
+        .goal { fill: #00FF00; stroke: #008000; stroke-width: 1; } /* Green Square */
+        .player { fill: #0000FF; } /* Blue Square */
+        .selected { stroke: #FFA500; stroke-width: 3; stroke-dasharray: 5, 5; }
+    </style>
+</head>
+<body>
+
+    <h1>Platformer Builder & Player</h1>
+    <button id="mode-toggle">Switch to Play Mode</button>
+
+    <div id="game-container">
+        <div id="controls">
+            <h3>Add Elements</h3>
+            <button data-type="platform">Platform 🟫</button>
+            <button data-type="moving-platform">Moving Platform 🟦</button>
+            <button data-type="hazard">Hazard🔺</button>
+            <button data-type="collectible">Collectible🟡</button>
+            <button data-type="goal">Goal🟩</button>
+            <hr>
+            <button id="clear-button">Clear Level</button>
+        </div>
+
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+        <div id="properties">
+            <h3>Properties</h3>
+            <div id="player-settings">
+                <h4>Player Settings</h4>
+                 <label for="player-width">Width:</label>
+                 <input type="number" id="player-width" value="30" min="10">
+                 <label for="player-height">Height:</label>
+                 <input type="number" id="player-height" value="30" min="10">
+                 <label for="player-speed">Speed:</label>
+                 <input type="number" id="player-speed" value="3" step="0.1" min="1">
+                 <label for="player-jump">Jump Height:</label>
+                 <input type="number" id="player-jump" value="10" step="0.5" min="1">
+                 <label for="player-color">Color:</label>
+                 <input type="color" id="player-color" value="#0000FF">
+            </div>
+             <hr>
+            <div id="element-settings" style="display: none;">
+                <h4>Selected Element</h4>
+                <label for="elem-x">X:</label>
+                <input type="number" id="elem-x">
+                <label for="elem-y">Y:</label>
+                <input type="number" id="elem-y">
+                <label for="elem-width">Width:</label>
+                <input type="number" id="elem-width" min="10">
+                <label for="elem-height">Height:</label>
+                <input type="number" id="elem-height" min="10">
+                <label for="elem-color">Color:</label>
+                <input type="color" id="elem-color">
+
+                <!-- Element specific properties -->
+                <div id="moving-platform-props" style="display: none;">
+                     <label for="elem-move-axis">Move Axis:</label>
+                     <select id="elem-move-axis">
+                         <option value="x">Horizontal</option>
+                         <option value="y">Vertical</option>
+                     </select>
+                     <label for="elem-move-range">Move Range:</label>
+                     <input type="number" id="elem-move-range" min="0" value="100">
+                     <label for="elem-move-speed">Move Speed:</label>
+                     <input type="number" id="elem-move-speed" step="0.1" min="0.1" value="1">
+                </div>
+                 <div id="hazard-props" style="display: none;">
+                     <!-- No specific props for basic hazard yet -->
+                 </div>
+                 <div id="collectible-props" style="display: none;">
+                     <label for="elem-score">Score Value:</label>
+                     <input type="number" id="elem-score" min="1" value="10">
+                 </div>
+                 <div id="goal-props" style="display: none;">
+                     <!-- No specific props for basic goal yet -->
+                 </div>
+                 <button id="delete-element" style="background-color: #ffaaaa;">Delete Element</button>
+            </div>
+            <div id="selected-info">Select an element or player to edit properties.</div>
+        </div>
+    </div>
+
+    <button id="share-button">Share Level</button>
+    <div id="share-link-container">
+        <h4>Shareable Link(s)</h4>
+        <p><small>Copy the link(s) below. If there are multiple links, the player needs to open them in order to play the full level.</small></p>
+        <textarea id="share-link" rows="3" readonly style="display:none;"></textarea>
+        <ul id="share-links-list"></ul>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const controlsDiv = document.getElementById('controls');
+        const propertiesDiv = document.getElementById('properties');
+        const playerSettingsDiv = document.getElementById('player-settings');
+        const elementSettingsDiv = document.getElementById('element-settings');
+        const selectedInfoDiv = document.getElementById('selected-info');
+        const modeToggleButton = document.getElementById('mode-toggle');
+        const shareButton = document.getElementById('share-button');
+        const clearButton = document.getElementById('clear-button');
+        const shareLinkContainer = document.getElementById('share-link-container');
+        const shareLinkTextarea = document.getElementById('share-link');
+        const shareLinksList = document.getElementById('share-links-list');
+        const deleteElementButton = document.getElementById('delete-element');
+
+        const MAX_SHARE_LENGTH = 1950; // Slightly less than 2000 to be safe
+
+        let mode = 'BUILD'; // 'BUILD' or 'PLAY'
+        let elements = [];
+        let player = {
+            x: 100, y: canvas.height - 60, // Initial position
+            baseX: 100, baseY: canvas.height - 60, // Respawn position
+            width: 30, height: 30,
+            vx: 0, vy: 0,
+            speed: 3, jumpPower: 10,
+            color: '#0000FF',
+            onGround: false,
+            score: 0
+        };
+
+        let selectedElement = null;
+        let dragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let resizeHandle = null; // null, 'topLeft', 'topRight', 'bottomLeft', 'bottomRight'
+        let currentTool = null; // 'platform', 'moving-platform', etc.
+
+        const gravity = 0.5;
+        const friction = 0.8;
+        let keys = {};
+
+        let levelPartData = {
+            currentPart: 1,
+            totalParts: 1,
+            nextLink: null
+        };
+
+        // --- Initialization ---
+        function init() {
+            loadFromURL(); // Attempt to load level data from URL first
+            bindInputListeners();
+            bindButtonListeners();
+            canvas.addEventListener('mousedown', handleMouseDown);
+            canvas.addEventListener('mousemove', handleMouseMove);
+            canvas.addEventListener('mouseup', handleMouseUp);
+            canvas.addEventListener('mouseout', handleMouseOut); // Handle mouse leaving canvas
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+            gameLoop();
+        }
+
+        // --- Mode Switching ---
+        function setMode(newMode) {
+            mode = newMode;
+            selectedElement = null; // Deselect elements when switching mode
+            dragging = false;
+            resizeHandle = null;
+            updateUI();
+            if (mode === 'PLAY') {
+                resetPlayerState(); // Reset player position etc. for playing
+                canvas.style.cursor = 'default';
+                player.score = 0; // Reset score when starting play
+            } else {
+                canvas.style.cursor = 'crosshair';
+                 resetPlayerToSpawn(); // Put player back at editable start pos in build mode
+            }
+        }
+
+        function updateUI() {
+            if (mode === 'BUILD') {
+                modeToggleButton.textContent = 'Switch to Play Mode';
+                controlsDiv.style.display = 'block';
+                propertiesDiv.style.display = 'block';
+                shareButton.style.display = 'block';
+                clearButton.style.display = 'block';
+                updatePropertiesPanel();
+            } else { // PLAY mode
+                modeToggleButton.textContent = 'Switch to Build Mode';
+                controlsDiv.style.display = 'none';
+                propertiesDiv.style.display = 'none';
+                shareButton.style.display = 'none';
+                clearButton.style.display = 'none';
+                shareLinkContainer.style.display = 'none'; // Hide share links in play mode
+            }
+        }
+
+         function resetPlayerState() {
+             player.x = player.baseX;
+             player.y = player.baseY;
+             player.vx = 0;
+             player.vy = 0;
+             player.onGround = false;
+             // Don't reset score here, reset only when starting a new play session or loading level part 1
+         }
+
+         function resetPlayerToSpawn() {
+             player.x = player.baseX;
+             player.y = player.baseY;
+             player.vx = 0;
+             player.vy = 0;
+         }
+
+
+        // --- Event Listeners ---
+        function handleKeyDown(e) {
+            keys[e.code] = true;
+             // Prevent browser scrolling with arrow keys/space
+             if (mode === 'PLAY' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+                 e.preventDefault();
+             }
+        }
+
+        function handleKeyUp(e) {
+            keys[e.code] = false;
+        }
+
+        function handleMouseDown(e) {
+            if (mode !== 'BUILD') return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // Check for resize handle first
+            resizeHandle = getResizeHandle(mouseX, mouseY);
+            if (selectedElement && resizeHandle) {
+                dragging = true;
+                dragStart = { x: mouseX, y: mouseY };
+                canvas.style.cursor = getResizeCursor(resizeHandle);
+                return; // Don't check for selection or placement if resizing
+            }
+
+            // Check for selection
+            let foundElement = null;
+            for (let i = elements.length - 1; i >= 0; i--) {
+                const elem = elements[i];
+                if (mouseX >= elem.x && mouseX <= elem.x + elem.width &&
+                    mouseY >= elem.y && mouseY <= elem.y + elem.height) {
+                    foundElement = elem;
+                    break;
+                }
+            }
+
+            if (foundElement) {
+                selectedElement = foundElement;
+                dragging = true;
+                dragStart = { x: mouseX - selectedElement.x, y: mouseY - selectedElement.y };
+                canvas.style.cursor = 'move';
+                updatePropertiesPanel();
+            } else if (currentTool) {
+                // Place new element
+                const newElement = createElement(currentTool, mouseX, mouseY);
+                elements.push(newElement);
+                selectedElement = newElement;
+                dragging = true; // Allow dragging immediately after placing
+                dragStart = { x: mouseX - selectedElement.x, y: mouseY - selectedElement.y };
+                canvas.style.cursor = 'move';
+                currentTool = null; // Reset tool after placing
+                updatePropertiesPanel();
+            } else {
+                // Clicked on empty space, deselect
+                selectedElement = null;
+                dragging = false;
+                canvas.style.cursor = 'crosshair';
+                updatePropertiesPanel();
+            }
+        }
+
+        function handleMouseMove(e) {
+             if (mode !== 'BUILD' || !dragging || !selectedElement) return;
+             const rect = canvas.getBoundingClientRect();
+             const mouseX = e.clientX - rect.left;
+             const mouseY = e.clientY - rect.top;
+
+             if (resizeHandle) {
+                 // Resizing logic
+                 const dx = mouseX - dragStart.x;
+                 const dy = mouseY - dragStart.y;
+
+                 if (resizeHandle.includes('left')) {
+                     selectedElement.x += dx;
+                     selectedElement.width -= dx;
+                 }
+                 if (resizeHandle.includes('top')) {
+                     selectedElement.y += dy;
+                     selectedElement.height -= dy;
+                 }
+                 if (resizeHandle.includes('right')) {
+                     selectedElement.width += dx;
+                 }
+                 if (resizeHandle.includes('bottom')) {
+                     selectedElement.height += dy;
+                 }
+
+                 // Prevent negative dimensions
+                 if (selectedElement.width < 10) {
+                    if (resizeHandle.includes('left')) selectedElement.x += selectedElement.width - 10;
+                    selectedElement.width = 10;
+                 }
+                  if (selectedElement.height < 10) {
+                     if (resizeHandle.includes('top')) selectedElement.y += selectedElement.height - 10;
+                     selectedElement.height = 10;
+                 }
+
+
+                 dragStart = { x: mouseX, y: mouseY }; // Update drag start for continuous resize
+                 updatePropertiesPanel(false); // Update input fields without reading from them
+             } else {
+                 // Dragging logic
+                 selectedElement.x = mouseX - dragStart.x;
+                 selectedElement.y = mouseY - dragStart.y;
+                 updatePropertiesPanel(false); // Update input fields without reading from them
+             }
+        }
+
+        function handleMouseUp(e) {
+            if (mode !== 'BUILD') return;
+            dragging = false;
+            resizeHandle = null;
+            canvas.style.cursor = selectedElement ? 'default' : 'crosshair'; // Show selection cursor or default tool cursor
+             if (selectedElement) {
+                 // Snap to grid or round coordinates if desired
+                 // selectedElement.x = Math.round(selectedElement.x);
+                 // selectedElement.y = Math.round(selectedElement.y);
+                 updatePropertiesPanel(); // Final update after drag/resize
+             }
+        }
+
+        function handleMouseOut(e) {
+             // If dragging or resizing, treat mouseout like mouseup
+            if (mode === 'BUILD' && (dragging || resizeHandle)) {
+                handleMouseUp(e);
+            }
+        }
+
+        function bindButtonListeners() {
+            modeToggleButton.addEventListener('click', () => {
+                setMode(mode === 'BUILD' ? 'PLAY' : 'BUILD');
+            });
+
+            controlsDiv.querySelectorAll('button[data-type]').forEach(button => {
+                button.addEventListener('click', () => {
+                    currentTool = button.getAttribute('data-type');
+                    selectedElement = null; // Deselect any element when choosing a new tool
+                    canvas.style.cursor = 'crosshair';
+                    updatePropertiesPanel();
+                    console.log("Selected tool:", currentTool);
+                });
+            });
+
+            deleteElementButton.addEventListener('click', () => {
+                if (selectedElement) {
+                    const index = elements.indexOf(selectedElement);
+                    if (index > -1) {
+                        elements.splice(index, 1);
+                    }
+                    selectedElement = null;
+                    updatePropertiesPanel();
+                }
+            });
+
+            shareButton.addEventListener('click', generateShareLink);
+
+            clearButton.addEventListener('click', () => {
+                if (confirm("Are you sure you want to clear the entire level?")) {
+                    elements = [];
+                    selectedElement = null;
+                    resetPlayerToSpawn(); // Reset player position too
+                    updatePropertiesPanel();
+                    shareLinkContainer.style.display = 'none';
+                }
+            });
+        }
+
+        function bindInputListeners() {
+            // Player settings
+            document.getElementById('player-width').addEventListener('change', (e) => { player.width = parseFloat(e.target.value); player.baseX = player.x; player.baseY = player.y;});
+            document.getElementById('player-height').addEventListener('change', (e) => { player.height = parseFloat(e.target.value); player.baseX = player.x; player.baseY = player.y;});
+            document.getElementById('player-speed').addEventListener('change', (e) => { player.speed = parseFloat(e.target.value); player.baseX = player.x; player.baseY = player.y;});
+            document.getElementById('player-jump').addEventListener('change', (e) => { player.jumpPower = parseFloat(e.target.value); player.baseX = player.x; player.baseY = player.y;});
+            document.getElementById('player-color').addEventListener('change', (e) => { player.color = e.target.value; player.baseX = player.x; player.baseY = player.y;});
+
+            // Element settings
+            document.getElementById('elem-x').addEventListener('change', (e) => { if(selectedElement) selectedElement.x = parseFloat(e.target.value); });
+            document.getElementById('elem-y').addEventListener('change', (e) => { if(selectedElement) selectedElement.y = parseFloat(e.target.value); });
+            document.getElementById('elem-width').addEventListener('change', (e) => { if(selectedElement) selectedElement.width = Math.max(10, parseFloat(e.target.value)); updatePropertiesPanel(false); });
+            document.getElementById('elem-height').addEventListener('change', (e) => { if(selectedElement) selectedElement.height = Math.max(10, parseFloat(e.target.value)); updatePropertiesPanel(false); });
+            document.getElementById('elem-color').addEventListener('change', (e) => { if(selectedElement) selectedElement.color = e.target.value; });
+
+            // Moving Platform specific
+             document.getElementById('elem-move-axis').addEventListener('change', (e) => { if(selectedElement && selectedElement.type === 'moving-platform') selectedElement.moveAxis = e.target.value; });
+             document.getElementById('elem-move-range').addEventListener('change', (e) => { if(selectedElement && selectedElement.type === 'moving-platform') selectedElement.moveRange = parseFloat(e.target.value); });
+             document.getElementById('elem-move-speed').addEventListener('change', (e) => { if(selectedElement && selectedElement.type === 'moving-platform') selectedElement.moveSpeed = parseFloat(e.target.value); });
+
+             // Collectible specific
+             document.getElementById('elem-score').addEventListener('change', (e) => { if(selectedElement && selectedElement.type === 'collectible') selectedElement.scoreValue = parseInt(e.target.value); });
+        }
+
+
+        // --- Element Creation ---
+        function createElement(type, x, y) {
+            const defaultSize = (type === 'hazard' || type === 'collectible') ? 20 : 50;
+            const baseElement = {
+                id: Date.now() + Math.random(), // Simple unique ID
+                type: type,
+                x: x - defaultSize / 2,
+                y: y - defaultSize / 2,
+                width: defaultSize,
+                height: defaultSize,
+            };
+
+            switch (type) {
+                case 'platform':
+                    baseElement.color = '#8B4513';
+                    baseElement.width = 100; // Platforms usually wider
+                    baseElement.height = 20;
+                    break;
+                case 'moving-platform':
+                    baseElement.color = '#4682B4';
+                    baseElement.width = 100;
+                    baseElement.height = 20;
+                    baseElement.moveAxis = 'x'; // 'x' or 'y'
+                    baseElement.moveRange = 100;
+                    baseElement.moveSpeed = 1;
+                    baseElement.initialX = baseElement.x; // Store initial position for movement calculation
+                    baseElement.initialY = baseElement.y;
+                    baseElement.direction = 1; // 1 or -1
+                    break;
+                case 'hazard':
+                    baseElement.color = '#FF0000';
+                    baseElement.width = 30;
+                    baseElement.height = 30;
+                    break;
+                case 'collectible':
+                    baseElement.color = '#FFD700';
+                    baseElement.width = 20;
+                    baseElement.height = 20;
+                    baseElement.scoreValue = 10;
+                    baseElement.active = true; // To track if collected
+                    break;
+                 case 'goal':
+                     baseElement.color = '#00FF00';
+                     baseElement.width = 40;
+                     baseElement.height = 40;
+                     break;
+                default:
+                    console.error("Unknown element type:", type);
+                    return null;
+            }
+            return baseElement;
+        }
+
+        // --- Properties Panel Logic ---
+        function updatePropertiesPanel(readFromElement = true) {
+            if (selectedElement) {
+                playerSettingsDiv.style.display = 'none';
+                elementSettingsDiv.style.display = 'block';
+                selectedInfoDiv.textContent = `Selected: ${selectedElement.type} (ID: ${selectedElement.id.toString().substring(0, 6)})`;
+
+                if (readFromElement) {
+                    document.getElementById('elem-x').value = selectedElement.x.toFixed(0);
+                    document.getElementById('elem-y').value = selectedElement.y.toFixed(0);
+                    document.getElementById('elem-width').value = selectedElement.width.toFixed(0);
+                    document.getElementById('elem-height').value = selectedElement.height.toFixed(0);
+                    document.getElementById('elem-color').value = selectedElement.color || '#000000'; // Fallback color
+                }
+
+                // Show/hide element-specific properties
+                document.getElementById('moving-platform-props').style.display = selectedElement.type === 'moving-platform' ? 'block' : 'none';
+                document.getElementById('hazard-props').style.display = selectedElement.type === 'hazard' ? 'block' : 'none';
+                document.getElementById('collectible-props').style.display = selectedElement.type === 'collectible' ? 'block' : 'none';
+                 document.getElementById('goal-props').style.display = selectedElement.type === 'goal' ? 'block' : 'none';
+
+
+                // Populate specific properties
+                 if (readFromElement) {
+                    if (selectedElement.type === 'moving-platform') {
+                        document.getElementById('elem-move-axis').value = selectedElement.moveAxis;
+                        document.getElementById('elem-move-range').value = selectedElement.moveRange;
+                        document.getElementById('elem-move-speed').value = selectedElement.moveSpeed;
+                    } else if (selectedElement.type === 'collectible') {
+                         document.getElementById('elem-score').value = selectedElement.scoreValue;
+                    }
+                 }
+
+            } else {
+                playerSettingsDiv.style.display = 'block';
+                elementSettingsDiv.style.display = 'none';
+                selectedInfoDiv.textContent = 'Select an element or edit player settings.';
+                // Ensure player settings inputs reflect current player object state
+                 if (readFromElement) {
+                    document.getElementById('player-width').value = player.width;
+                    document.getElementById('player-height').value = player.height;
+                    document.getElementById('player-speed').value = player.speed;
+                    document.getElementById('player-jump').value = player.jumpPower;
+                    document.getElementById('player-color').value = player.color;
+                 }
+            }
+        }
+
+        // --- Resize Handle Logic ---
+        function getResizeHandle(mouseX, mouseY) {
+             if (!selectedElement) return null;
+             const handleSize = 10; // Clickable area size for handles
+             const x = selectedElement.x;
+             const y = selectedElement.y;
+             const w = selectedElement.width;
+             const h = selectedElement.height;
+
+             // Corner Handles
+             if (mouseX >= x - handleSize/2 && mouseX <= x + handleSize/2 && mouseY >= y - handleSize/2 && mouseY <= y + handleSize/2) return 'top-left';
+             if (mouseX >= x + w - handleSize/2 && mouseX <= x + w + handleSize/2 && mouseY >= y - handleSize/2 && mouseY <= y + handleSize/2) return 'top-right';
+             if (mouseX >= x - handleSize/2 && mouseX <= x + handleSize/2 && mouseY >= y + h - handleSize/2 && mouseY <= y + h + handleSize/2) return 'bottom-left';
+             if (mouseX >= x + w - handleSize/2 && mouseX <= x + w + handleSize/2 && mouseY >= y + h - handleSize/2 && mouseY <= y + h + handleSize/2) return 'bottom-right';
+
+             // Side Handles (Optional - add if needed)
+             // if (mouseX >= x + w/2 - handleSize/2 && mouseX <= x + w/2 + handleSize/2 && mouseY >= y - handleSize/2 && mouseY <= y + handleSize/2) return 'top';
+             // ... etc for bottom, left, right
+
+             return null;
+        }
+
+         function getResizeCursor(handle) {
+             if (handle.includes('top') && handle.includes('left')) return 'nwse-resize';
+             if (handle.includes('top') && handle.includes('right')) return 'nesw-resize';
+             if (handle.includes('bottom') && handle.includes('left')) return 'nesw-resize';
+             if (handle.includes('bottom') && handle.includes('right')) return 'nwse-resize';
+             // Add more for side handles if implemented
+             return 'default';
+         }
+
+         function drawResizeHandles() {
+             if (!selectedElement || mode !== 'BUILD') return;
+             const handleSize = 8;
+             const x = selectedElement.x;
+             const y = selectedElement.y;
+             const w = selectedElement.width;
+             const h = selectedElement.height;
+
+             ctx.fillStyle = '#FFA500'; // Orange handles
+             ctx.strokeStyle = '#000000';
+             ctx.lineWidth = 1;
+
+             // Corners
+             ctx.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize); ctx.strokeRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+             ctx.fillRect(x + w - handleSize / 2, y - handleSize / 2, handleSize, handleSize); ctx.strokeRect(x + w - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+             ctx.fillRect(x - handleSize / 2, y + h - handleSize / 2, handleSize, handleSize); ctx.strokeRect(x - handleSize / 2, y + h - handleSize / 2, handleSize, handleSize);
+             ctx.fillRect(x + w - handleSize / 2, y + h - handleSize / 2, handleSize, handleSize); ctx.strokeRect(x + w - handleSize / 2, y + h - handleSize / 2, handleSize, handleSize);
+         }
+
+
+        // --- Game Loop ---
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Update Logic ---
+        function update() {
+            if (mode === 'PLAY') {
+                updatePlayer();
+                 updateMovingPlatforms();
+            } else if (mode === 'BUILD') {
+                 // Update moving platforms visually in build mode too
+                 updateMovingPlatforms();
+            }
+            // Element-specific updates can go here if needed (e.g., animations)
+        }
+
+        function updatePlayer() {
+            // Horizontal Movement
+            if (keys['ArrowLeft'] || keys['KeyA']) {
+                player.vx -= player.speed * 0.3; // Apply force
+            }
+            if (keys['ArrowRight'] || keys['KeyD']) {
+                player.vx += player.speed * 0.3; // Apply force
+            }
+
+            // Apply friction
+            player.vx *= friction;
+             // Clamp horizontal speed to max player speed
+            player.vx = Math.max(-player.speed, Math.min(player.speed, player.vx));
+             // Stop movement if speed is very low
+             if (Math.abs(player.vx) < 0.1) {
+                 player.vx = 0;
+             }
+
+
+            // Vertical Movement (Gravity)
+            player.vy += gravity;
+
+            // Jumping
+            if ((keys['ArrowUp'] || keys['KeyW'] || keys['Space']) && player.onGround) {
+                player.vy = -player.jumpPower;
+                player.onGround = false;
+            }
+
+             // Store potential next position
+             let nextX = player.x + player.vx;
+             let nextY = player.y + player.vy;
+             let originalVy = player.vy; // Store original vy for platform push check
+             let originalVx = player.vx; // Store original vx
+
+            player.onGround = false;
+            let onMovingPlatform = null;
+
+             // Collision Detection and Resolution
+             elements.forEach(elem => {
+                 if (!elem.active && elem.type === 'collectible') return; // Skip inactive collectibles
+
+                 // Check collision with the element at the player's *next* position
+                 if (nextX < elem.x + elem.width &&
+                     nextX + player.width > elem.x &&
+                     nextY < elem.y + elem.height &&
+                     nextY + player.height > elem.y)
+                 {
+                     // Collision occurred
+                     if (elem.type === 'platform' || elem.type === 'moving-platform') {
+                        // Simple AABB collision resolution
+                        // Check Y collision first (landing or hitting head)
+                        if (player.y + player.height <= elem.y && nextY + player.height > elem.y) { // Landed on top
+                             nextY = elem.y - player.height;
+                             player.vy = 0;
+                             player.onGround = true;
+                              if (elem.type === 'moving-platform') {
+                                 onMovingPlatform = elem; // Remember platform for movement transfer
+                             }
+                         } else if (player.y >= elem.y + elem.height && nextY < elem.y + elem.height) { // Hit head underneath
+                             nextY = elem.y + elem.height;
+                             player.vy = 0;
+                         }
+                         // Check X collision after resolving Y (hitting sides)
+                         else if (player.x + player.width <= elem.x && nextX + player.width > elem.x) { // Hit left side of element
+                             nextX = elem.x - player.width;
+                             player.vx = 0;
+                         } else if (player.x >= elem.x + elem.width && nextX < elem.x + elem.width) { // Hit right side of element
+                             nextX = elem.x + elem.width;
+                             player.vx = 0;
+                         } else {
+                              // Player might be inside, try pushing out based on velocity
+                              // This is a basic fix, can be complex
+                              if (originalVy > 0 && player.y < elem.y) { // Moving down, likely landed inside
+                                  nextY = elem.y - player.height;
+                                  player.vy = 0;
+                                  player.onGround = true;
+                                  if (elem.type === 'moving-platform') onMovingPlatform = elem;
+                              } else if (originalVy < 0 && player.y > elem.y) { // Moving up, likely hit head inside
+                                  nextY = elem.y + elem.height;
+                                  player.vy = 0;
+                              } else if (originalVx > 0 && player.x < elem.x) { // Moving right
+                                    nextX = elem.x - player.width;
+                                    player.vx = 0;
+                              } else if (originalVx < 0 && player.x > elem.x) { // Moving left
+                                    nextX = elem.x + elem.width;
+                                    player.vx = 0;
+                              }
+                         }
+                     } else if (elem.type === 'hazard') {
+                         console.log("Hit hazard!");
+                         resetPlayerState(); // Reset player on hazard collision
+                     } else if (elem.type === 'collectible') {
+                         if (elem.active) {
+                            console.log("Collected item!");
+                            player.score += elem.scoreValue || 0;
+                            elem.active = false; // Deactivate collectible
+                         }
+                     } else if (elem.type === 'goal') {
+                         console.log("Reached goal!");
+                         handleGoalReached();
+                     }
+                 }
+             });
+
+             // Apply movement from moving platform if standing on one
+            if (onMovingPlatform) {
+                 if (onMovingPlatform.moveAxis === 'x') {
+                    nextX += onMovingPlatform.moveSpeed * onMovingPlatform.direction;
+                 } else {
+                    // Apply vertical platform movement carefully to avoid pushing through floor
+                    // This needs more sophisticated handling in a real physics engine
+                    // For simplicity, we'll just add the speed, which might cause issues.
+                    // A better approach involves calculating relative movement.
+                    // nextY += onMovingPlatform.moveSpeed * onMovingPlatform.direction;
+
+                    // Simpler approach: ensure player stays *exactly* on top
+                    nextY = onMovingPlatform.y - player.height;
+                 }
+                 player.onGround = true; // Ensure onGround remains true
+             }
+
+
+             // Update player position
+             player.x = nextX;
+             player.y = nextY;
+
+            // Boundary checks
+            if (player.x < 0) { player.x = 0; player.vx = 0; }
+            if (player.x + player.width > canvas.width) { player.x = canvas.width - player.width; player.vx = 0;}
+            if (player.y < 0) { player.y = 0; player.vy = 0; }
+            if (player.y + player.height > canvas.height) {
+                // player.y = canvas.height - player.height;
+                // player.vy = 0;
+                // player.onGround = true;
+                 // Instead of landing on bottom, treat as falling out
+                 console.log("Fell out of bounds!");
+                 resetPlayerState();
+            }
+        }
+
+         function updateMovingPlatforms() {
+             elements.forEach(elem => {
+                 if (elem.type === 'moving-platform') {
+                    let currentPos, initialPos;
+                    if (elem.moveAxis === 'x') {
+                        currentPos = elem.x;
+                        initialPos = elem.initialX;
+                    } else {
+                        currentPos = elem.y;
+                        initialPos = elem.initialY;
+                    }
+
+                    const moveDist = elem.moveSpeed * elem.direction;
+                     const nextPos = currentPos + moveDist;
+
+                     // Check bounds and reverse direction
+                    if (elem.direction === 1 && nextPos > initialPos + elem.moveRange) {
+                        elem.direction = -1;
+                         if (elem.moveAxis === 'x') elem.x = initialPos + elem.moveRange; else elem.y = initialPos + elem.moveRange;
+                    } else if (elem.direction === -1 && nextPos < initialPos) {
+                         elem.direction = 1;
+                         if (elem.moveAxis === 'x') elem.x = initialPos; else elem.y = initialPos;
+                     } else {
+                        if (elem.moveAxis === 'x') elem.x = nextPos; else elem.y = nextPos;
+                    }
+                 }
+             });
+         }
+
+        function handleGoalReached() {
+             // Check if this is part of a multi-part level
+             if (levelPartData.totalParts > 1 && levelPartData.currentPart < levelPartData.totalParts) {
+                 // Load the next part
+                 alert(`Level part ${levelPartData.currentPart}/${levelPartData.totalParts} complete! Loading next part...`);
+                 window.location.href = levelPartData.nextLink; // Navigate to the next link
+             } else {
+                 // Last part or single part level completed
+                 alert(`Congratulations! You completed the level! Score: ${player.score}`);
+                 setMode('BUILD'); // Switch back to build mode after winning
+             }
+         }
+
+
+        // --- Drawing Logic ---
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#e0f7ff'; // Light blue background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw elements
+            elements.forEach(elem => {
+                drawElement(elem);
+                 // Draw selection outline in BUILD mode
+                 if (mode === 'BUILD' && selectedElement && elem.id === selectedElement.id) {
+                    ctx.strokeStyle = '#FFA500'; // Orange outline
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(elem.x, elem.y, elem.width, elem.height);
+                    drawResizeHandles();
+                 }
+            });
+
+             // Draw player
+             if (mode === 'BUILD' || mode === 'PLAY') { // Draw player in both modes
+                ctx.fillStyle = player.color;
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+             }
+
+             // Draw Score in PLAY mode
+             if (mode === 'PLAY') {
+                 ctx.fillStyle = 'black';
+                 ctx.font = '20px Arial';
+                 ctx.textAlign = 'left';
+                 ctx.fillText(`Score: ${player.score}`, 10, 25);
+
+                 // Display level part info if applicable
+                 if (levelPartData.totalParts > 1) {
+                     ctx.textAlign = 'right';
+                     ctx.fillText(`Part ${levelPartData.currentPart} / ${levelPartData.totalParts}`, canvas.width - 10, 25);
+                 }
+             }
+        }
+
+        function drawElement(elem) {
+             if (elem.type === 'collectible' && !elem.active && mode === 'PLAY') {
+                 return; // Don't draw collected items in play mode
+             }
+
+            ctx.fillStyle = elem.color || '#cccccc'; // Default color if undefined
+            ctx.strokeStyle = '#333333';
+            ctx.lineWidth = 1;
+
+            switch (elem.type) {
+                case 'platform':
+                case 'moving-platform':
+                 case 'goal':
+                    ctx.fillRect(elem.x, elem.y, elem.width, elem.height);
+                    ctx.strokeRect(elem.x, elem.y, elem.width, elem.height);
+                    break;
+                case 'hazard': // Draw as a triangle pointing up
+                     ctx.beginPath();
+                     ctx.moveTo(elem.x + elem.width / 2, elem.y); // Top point
+                     ctx.lineTo(elem.x + elem.width, elem.y + elem.height); // Bottom right
+                     ctx.lineTo(elem.x, elem.y + elem.height); // Bottom left
+                     ctx.closePath();
+                     ctx.fill();
+                     ctx.stroke();
+                    break;
+                case 'collectible': // Draw as a circle
+                     ctx.beginPath();
+                     ctx.arc(elem.x + elem.width / 2, elem.y + elem.height / 2, elem.width / 2, 0, Math.PI * 2);
+                     ctx.fill();
+                     ctx.stroke();
+                     // Draw faded if inactive in build mode
+                      if (!elem.active && mode === 'BUILD') {
+                         ctx.fillStyle = 'rgba(128, 128, 128, 0.5)';
+                         ctx.fill();
+                      }
+                    break;
+                 default: // Default rectangle
+                     ctx.fillRect(elem.x, elem.y, elem.width, elem.height);
+                     ctx.strokeRect(elem.x, elem.y, elem.width, elem.height);
+                     break;
+            }
+
+            // Draw movement path preview for moving platforms in BUILD mode
+             if (mode === 'BUILD' && elem.type === 'moving-platform') {
+                 ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                 ctx.lineWidth = 1;
+                 ctx.setLineDash([5, 5]);
+                 ctx.beginPath();
+                 if (elem.moveAxis === 'x') {
+                    ctx.moveTo(elem.initialX + elem.width / 2, elem.initialY + elem.height / 2);
+                    ctx.lineTo(elem.initialX + elem.moveRange + elem.width / 2, elem.initialY + elem.height / 2);
+                 } else {
+                     ctx.moveTo(elem.initialX + elem.width / 2, elem.initialY + elem.height / 2);
+                     ctx.lineTo(elem.initialX + elem.width / 2, elem.initialY + elem.moveRange + elem.height / 2);
+                 }
+                 ctx.stroke();
+                 ctx.setLineDash([]); // Reset line dash
+             }
+        }
+
+
+        // --- Sharing Logic ---
+        function generateShareLink() {
+            // Ensure all moving platforms have initial positions set correctly
+             elements.forEach(el => {
+                 if (el.type === 'moving-platform') {
+                    if (el.initialX === undefined) el.initialX = el.x;
+                    if (el.initialY === undefined) el.initialY = el.y;
+                    // Reset current position to initial position for saving consistency
+                    el.x = el.initialX;
+                    el.y = el.initialY;
+                    el.direction = 1; // Reset direction
+                 }
+                 if (el.type === 'collectible') {
+                     el.active = true; // Ensure collectibles are active when saving
+                 }
+             });
+
+
+            const levelData = {
+                player: { // Save player spawn settings
+                    baseX: player.baseX,
+                    baseY: player.baseY,
+                    width: player.width,
+                    height: player.height,
+                    speed: player.speed,
+                    jumpPower: player.jumpPower,
+                    color: player.color
+                },
+                elements: elements
+            };
+
+            try {
+                const dataString = JSON.stringify(levelData);
+                const encodedData = encodeURIComponent(dataString);
+                const baseURL = window.location.origin + window.location.pathname; // Use current page URL
+
+                shareLinkContainer.style.display = 'block';
+                shareLinksList.innerHTML = ''; // Clear previous links
+
+                if (encodedData.length <= MAX_SHARE_LENGTH) {
+                    // Single link
+                    const fullURL = `${baseURL}?data=${encodedData}`;
+                    shareLinkTextarea.value = fullURL;
+                    shareLinkTextarea.style.display = 'block'; // Show single textarea
+                    shareLinksList.style.display = 'none'; // Hide list
+
+                    // Add a copy button for convenience (optional)
+                     const listItem = document.createElement('li');
+                     const link = document.createElement('a');
+                     link.href = fullURL;
+                     link.textContent = "Copy Full Link";
+                     link.target = "_blank"; // Open in new tab for testing
+                     link.onclick = (e) => {
+                         e.preventDefault();
+                         navigator.clipboard.writeText(fullURL).then(() => alert('Link copied to clipboard!'), () => alert('Failed to copy link.'));
+                     };
+                     listItem.appendChild(link);
+                     shareLinksList.appendChild(listItem);
+                     shareLinksList.style.display = 'block'; // Show list even for single link for copy button
+                     shareLinkTextarea.style.display = 'none'; // Hide textarea if using the list item approach
+
+
+                } else {
+                    // Split into multiple links
+                    shareLinkTextarea.style.display = 'none'; // Hide single textarea
+                    shareLinksList.style.display = 'block'; // Show list
+
+                    // Very basic splitting: divide elements array
+                    // More complex splitting might try to pack more efficiently
+                    const numElements = elements.length;
+                    const approxCharsPerElement = encodedData.length / (numElements || 1);
+                    const elementsPerPart = Math.floor(MAX_SHARE_LENGTH / (approxCharsPerElement + 50)); // +50 for overhead (part=, total= etc)
+
+                     if (elementsPerPart <= 0) {
+                        alert("Error: A single element's data is too large to fit within the character limit. Cannot generate share links.");
+                        shareLinkContainer.style.display = 'none';
+                        return;
+                     }
+
+                    const numParts = Math.ceil(numElements / elementsPerPart);
+                    alert(`Level data is too long (${encodedData.length} chars). Splitting into ${numParts} parts.`);
+
+                    for (let i = 0; i < numParts; i++) {
+                        const start = i * elementsPerPart;
+                        const end = Math.min(start + elementsPerPart, numElements);
+                        const partElements = elements.slice(start, end);
+
+                        // Include player data only in the first part
+                        const partLevelData = {
+                             player: (i === 0) ? levelData.player : undefined, // Only first part has player spawn info
+                             elements: partElements
+                        };
+
+                         // Check if goal exists in this part; if not, add a temporary goal at the end
+                         let hasGoal = partElements.some(el => el.type === 'goal');
+                         if (!hasGoal && i < numParts - 1) { // Add temp goal if not the last part
+                             // Find rightmost element edge to place temp goal after it
+                             let maxX = canvas.width - 40;
+                             if(partElements.length > 0) {
+                                maxX = partElements.reduce((max, el) => Math.max(max, el.x + el.width), 0) + 20;
+                             }
+                             partLevelData.elements.push({
+                                 id: `temp_goal_${i}`, type: 'goal',
+                                 x: Math.min(maxX, canvas.width - 40), y: canvas.height - 60, // Place near bottom right of existing elements
+                                 width: 40, height: 40, color: '#00FF00', isTemporary: true
+                             });
+                         }
+
+                        const partDataString = JSON.stringify(partLevelData);
+                        const encodedPartData = encodeURIComponent(partDataString);
+                        const partURL = `${baseURL}?part=${i + 1}&total=${numParts}&data=${encodedPartData}`;
+
+                        if (partURL.length > MAX_SHARE_LENGTH + 100) { // Check individual part length with some buffer
+                             alert(`Error: Part ${i + 1} still exceeds character limit (${partURL.length}). Try reducing level complexity or number of elements per part.`);
+                             shareLinksList.innerHTML = '<li>Error generating links. Level too complex for splitting.</li>';
+                             return; // Stop generation
+                         }
+
+
+                        const listItem = document.createElement('li');
+                        const link = document.createElement('a');
+                        link.href = partURL;
+                        link.textContent = `Part ${i + 1} of ${numParts}`;
+                        link.target = "_blank"; // Open in new tab for testing
+                        link.onclick = (e) => {
+                            e.preventDefault(); // Prevent default navigation
+                             navigator.clipboard.writeText(partURL).then(() => alert(`Link for Part ${i + 1} copied!`), () => alert('Failed to copy link.'));
+                        };
+                        listItem.appendChild(link);
+                        shareLinksList.appendChild(listItem);
+                    }
+                }
+                 // Reset elements back to their current state if they were moving platforms
+                 elements.forEach(el => {
+                     if (el.type === 'moving-platform' && el._tempState) {
+                         el.x = el._tempState.x;
+                         el.y = el._tempState.y;
+                         el.direction = el._tempState.direction;
+                         delete el._tempState; // Clean up temporary state
+                     }
+                      // Remove temporary goals added during sharing
+                      if (el.isTemporary) {
+                          const index = elements.indexOf(el);
+                          if(index > -1) elements.splice(index, 1);
+                      }
+                 });
+
+
+            } catch (error) {
+                console.error("Error generating share link:", error);
+                alert("An error occurred while generating the share link.");
+                 shareLinkContainer.style.display = 'none';
+            }
+        }
+
+        // --- Loading Logic ---
+        function loadFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const dataParam = urlParams.get('data');
+            const partParam = urlParams.get('part');
+            const totalParam = urlParams.get('total');
+
+            if (dataParam) {
+                try {
+                    const decodedData = decodeURIComponent(dataParam);
+                    const loadedLevel = JSON.parse(decodedData);
+
+                     if (partParam && totalParam) { // Multi-part level
+                         levelPartData.currentPart = parseInt(partParam);
+                         levelPartData.totalParts = parseInt(totalParam);
+
+                         if (levelPartData.currentPart === 1 && loadedLevel.player) {
+                             // Load player settings only from part 1
+                             Object.assign(player, loadedLevel.player);
+                             // Set initial player state for starting the level
+                             resetPlayerState();
+                             player.score = 0; // Reset score for part 1
+                         } else if (levelPartData.currentPart > 1) {
+                             // Retrieve player state (like score) from previous part if possible
+                             // Simple approach: use sessionStorage or localStorage (but avoiding for this request)
+                             // For now, score might reset between parts without external storage.
+                             // OR, we could pass score in the URL, but that adds length.
+                             console.warn("Score might reset between level parts without persistent storage.");
+                              // Ensure player properties exist if not loaded from part 1 (use defaults)
+                              player.width = player.width || 30;
+                              player.height = player.height || 30;
+                              player.speed = player.speed || 3;
+                              player.jumpPower = player.jumpPower || 10;
+                              player.color = player.color || '#0000FF';
+                              player.baseX = player.baseX || 100; // Use existing or default spawn
+                              player.baseY = player.baseY || canvas.height - 60;
+                              resetPlayerState(); // Position player at start for the new part
+                         }
+
+
+                         elements = loadedLevel.elements || [];
+
+                         // Prepare link for the next part
+                         if (levelPartData.currentPart < levelPartData.totalParts) {
+                             // We need the *next* part's data to form the link, which we don't have here.
+                             // The sharing function needs to generate *all* links at once.
+                             // When loading, we only know the *current* part data.
+                             // The `handleGoalReached` function will need to redirect correctly.
+                             // We need to reconstruct the *next* URL based on parameters.
+                             const nextPartNum = levelPartData.currentPart + 1;
+                             const nextParams = new URLSearchParams(window.location.search); // Copy current params
+                             nextParams.set('part', nextPartNum);
+                             // data param will change, but we don't know it yet. The user *must* have the correct next link.
+                             // Let's assume the user clicks the correct link from the generated list.
+                             // We *can* store the base URL structure though.
+                             const baseURL = window.location.origin + window.location.pathname;
+                             // This is slightly imperfect as we don't have the next data segment here.
+                             levelPartData.nextLink = `${baseURL}?part=${nextPartNum}&total=${levelPartData.totalParts}&data=...`; // Placeholder data
+                             console.log(`Loaded part ${levelPartData.currentPart} of ${levelPartData.totalParts}. Goal will lead to next part.`);
+                         }
+                         alert(`Loaded Level Part ${levelPartData.currentPart}/${levelPartData.totalParts}`);
+
+                     } else { // Single part level
+                         levelPartData.currentPart = 1;
+                         levelPartData.totalParts = 1;
+                         levelPartData.nextLink = null;
+
+                         if (loadedLevel.player) {
+                             Object.assign(player, loadedLevel.player);
+                         }
+                         elements = loadedLevel.elements || [];
+                         resetPlayerState(); // Reset player for start
+                         player.score = 0; // Reset score
+                         alert("Level loaded successfully!");
+                     }
+
+
+                     // Post-load processing for elements (like initializing moving platforms)
+                     elements.forEach(elem => {
+                         if (elem.type === 'moving-platform') {
+                             // Ensure initial positions are set if loaded from older format
+                             if (elem.initialX === undefined) elem.initialX = elem.x;
+                             if (elem.initialY === undefined) elem.initialY = elem.y;
+                              // Reset current position to initial position on load
+                              elem.x = elem.initialX;
+                              elem.y = elem.initialY;
+                             elem.direction = 1; // Reset direction
+                         }
+                          if (elem.type === 'collectible') {
+                              elem.active = true; // Ensure collectibles are active on load
+                          }
+                     });
+
+                    // Automatically switch to play mode when loading from URL
+                    setMode('PLAY');
+
+                } catch (error) {
+                    console.error("Error loading level data from URL:", error);
+                    alert("Failed to load level data from URL. It might be corrupted or invalid.");
+                    // Load default empty state
+                     elements = [];
+                     resetPlayerToSpawn();
+                     setMode('BUILD'); // Default to build mode on error
+                }
+            } else {
+                 // No data in URL, start fresh in build mode
+                 setMode('BUILD');
+                 // Initialize with a default ground platform
+                 elements.push(createElement('platform', 0, canvas.height - 20));
+                 elements[0].width = canvas.width;
+                 elements[0].x = 0; // Align left
+                 resetPlayerToSpawn();
+            }
+             updateUI(); // Ensure UI reflects the loaded state/mode
+        }
+
+        // --- Start the application ---
+        init();
+
+    </script>
+
+</body>
+</html>

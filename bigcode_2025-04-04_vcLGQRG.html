@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abstract Platformer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #1a1a2e; /* Dark background inspired by covers */
+            color: #e0e0e0;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden; /* Hide scrollbars */
+        }
+        canvas {
+            border: 2px solid #f0f0f0;
+            background-color: #2a2a3e; /* Slightly lighter canvas bg */
+            display: block; /* Prevent extra space below canvas */
+            margin-bottom: 10px;
+        }
+        #controls {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        button {
+            padding: 8px 15px;
+            margin: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            background-color: #4a4a6a;
+            color: #e0e0e0;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        button:hover {
+            background-color: #6a6a8a;
+        }
+        #level-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 1.5em;
+            color: #f0f0f0;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="level-indicator">Level: 1</div>
+<canvas id="gameCanvas"></canvas>
+<div id="controls">Controls: [A] Left | [D] Right | [SPACE] Jump | [R] Reset Level</div>
+<button id="skipButton">Skip Level</button>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const levelIndicator = document.getElementById('level-indicator');
+    const skipButton = document.getElementById('skipButton');
+
+    // Game settings
+    const GRAVITY = 0.5;
+    const PLAYER_SPEED = 5;
+    const JUMP_FORCE = 11;
+    const PLAYER_SIZE = 20; // Using a square for the player 🟦
+    const TILE_SIZE = 40; // Base size for level elements
+
+    // Adjust canvas size (can be dynamic later if needed)
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let currentLevelIndex = 0;
+    let player;
+    let levels = []; // Array to hold all 50 level definitions
+    let keys = {}; // Keyboard input state
+    let camera = { x: 0, y: 0 };
+    let levelComplete = false;
+
+    // --- Player Class ---
+    class Player {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.width = PLAYER_SIZE;
+            this.height = PLAYER_SIZE;
+            this.vx = 0;
+            this.vy = 0;
+            this.onGround = false;
+            this.canWallJump = false;
+            this.wallJumpSide = null; // 'left' or 'right'
+            this.hasKey = false;
+            this.gravityMultiplier = 1;
+            this.canDoubleJump = false; // Mechanic
+            this.doubleJumpUsed = false; // Mechanic
+            this.higherJumpTimer = 0; // Mechanic timer
+        }
+
+        update(platforms, hazards, movingPlatforms, disappearingBlocks, keysList, doors, gravityZones, bouncyPads, powerUps, switches) {
+            // Horizontal Movement
+            if (keys['a']) {
+                this.vx = -PLAYER_SPEED;
+            } else if (keys['d']) {
+                this.vx = PLAYER_SPEED;
+            } else {
+                this.vx = 0;
+            }
+
+            // Apply Gravity
+            this.vy += GRAVITY * this.gravityMultiplier;
+            if (this.vy > 15) this.vy = 15; // Terminal velocity
+
+            // Reset states before collision checks
+            this.onGround = false;
+            this.canWallJump = false;
+
+            // Check vertical collisions first
+            let predictedY = this.y + this.vy;
+            let collisionY = false;
+
+            const allPlatforms = [...platforms, ...movingPlatforms, ...disappearingBlocks.filter(b => b.visible)];
+            for (let p of allPlatforms) {
+                if (this.x < p.x + p.width && this.x + this.width > p.x &&
+                    predictedY < p.y + p.height && predictedY + this.height > p.y) {
+                    // Collision detected vertically
+                    if (this.vy > 0 && this.y + this.height <= p.y) { // Landing on top
+                        this.y = p.y - this.height;
+                        this.vy = 0;
+                        this.onGround = true;
+                        this.doubleJumpUsed = false; // Reset double jump on landing
+                        collisionY = true;
+                    } else if (this.vy < 0 && this.y >= p.y + p.height) { // Hitting bottom
+                        this.y = p.y + p.height;
+                        this.vy = 0;
+                        collisionY = true;
+                    }
+                }
+            }
+            if (!collisionY) {
+                this.y = predictedY;
+            }
+
+
+            // Check horizontal collisions second
+            let predictedX = this.x + this.vx;
+            let collisionX = false;
+
+             // Check against normal platforms, moving platforms, disappearing blocks, doors
+            const collisionElements = [...platforms, ...movingPlatforms, ...disappearingBlocks.filter(b => b.visible), ...doors.filter(d => !d.isOpen)];
+            for (let p of collisionElements) {
+                if (predictedX < p.x + p.width && predictedX + this.width > p.x &&
+                    this.y < p.y + p.height && this.y + this.height > p.y) {
+                    // Collision detected horizontally
+                    if (this.vx > 0) { // Moving right
+                        this.x = p.x - this.width;
+                        this.vx = 0;
+                        if (!this.onGround && levels[currentLevelIndex].mechanics.wallJump) { this.canWallJump = true; this.wallJumpSide = 'right'; }
+                    } else if (this.vx < 0) { // Moving left
+                        this.x = p.x + p.width;
+                        this.vx = 0;
+                        if (!this.onGround && levels[currentLevelIndex].mechanics.wallJump) { this.canWallJump = true; this.wallJumpSide = 'left'; }
+                    }
+                    collisionX = true;
+                }
+            }
+             if (!collisionX) {
+                this.x = predictedX;
+            }
+
+            // Update position based on velocity if no collision happened in that axis
+            if (!collisionY) {
+                this.y += this.vy; // Already updated with predictedY if no collision
+            }
+             if (!collisionX) {
+                 this.x += this.vx; // Already updated with predictedX if no collision
+             }
+
+            // Hazard Collision
+             for (let h of hazards) {
+                if (this.x < h.x + h.width && this.x + this.width > h.x &&
+                    this.y < h.y + h.height && this.y + this.height > h.y) {
+                    resetLevel();
+                    return;
+                }
+            }
+
+            // Key Collection
+             for (let i = keysList.length - 1; i >= 0; i--) {
+                 let k = keysList[i];
+                 if (!k.collected && this.x < k.x + TILE_SIZE && this.x + this.width > k.x &&
+                    this.y < k.y + TILE_SIZE && this.y + this.height > k.y) {
+                    k.collected = true;
+                    this.hasKey = true; // Assuming one key per level for simplicity now
+                 }
+             }
+
+            // Door Interaction
+            for (let d of doors) {
+                 if (!d.isOpen && this.hasKey &&
+                    this.x < d.x + d.width && this.x + this.width > d.x &&
+                    this.y < d.y + d.height && this.y + this.height > d.y) {
+                    d.isOpen = true;
+                    this.hasKey = false; // Use the key
+                 }
+             }
+
+            // Gravity Zones
+            let inGravityZone = false;
+            for (let gz of gravityZones) {
+                if (this.x < gz.x + gz.width && this.x + this.width > gz.x &&
+                    this.y < gz.y + gz.height && this.y + this.height > gz.y) {
+                    this.gravityMultiplier = gz.direction; // -1 for up, 1 for down
+                    inGravityZone = true;
+                    break;
+                }
+            }
+            if (!inGravityZone) {
+                this.gravityMultiplier = 1; // Reset to normal gravity
+            }
+
+            // Bouncy Pads
+            for (let bp of bouncyPads) {
+                // Check collision specifically from the top
+                 if (this.vy > 0 &&
+                    this.x < bp.x + bp.width && this.x + this.width > bp.x &&
+                    this.y + this.height >= bp.y && this.y + this.height <= bp.y + bp.height / 2) { // Land on top part of pad
+                        this.y = bp.y - this.height;
+                        this.vy = -JUMP_FORCE * 1.5; // Bounce higher than normal jump
+                        this.onGround = false; // Technically bouncing, not grounded
+                        this.doubleJumpUsed = false; // Reset double jump on bounce
+                 }
+             }
+
+            // Power-Up Collection
+             for (let i = powerUps.length - 1; i >= 0; i--) {
+                 let pu = powerUps[i];
+                 if (!pu.collected && this.x < pu.x + TILE_SIZE && this.x + this.width > pu.x &&
+                    this.y < pu.y + TILE_SIZE && this.y + this.height > pu.y) {
+                    pu.collected = true;
+                    if (pu.type === 'higherJump') {
+                        this.higherJumpTimer = 300; // e.g., 5 seconds at 60fps
+                    }
+                    // Add other power-up types here
+                 }
+             }
+             if (this.higherJumpTimer > 0) {
+                 this.higherJumpTimer--;
+             }
+
+             // Switch Interaction
+             for (let sw of switches) {
+                 if (!sw.activated &&
+                    this.x < sw.x + TILE_SIZE && this.x + this.width > sw.x &&
+                    this.y < sw.y + TILE_SIZE && this.y + this.height > sw.y) {
+                     sw.activated = true;
+                     // Trigger associated actions (e.g., toggle platforms/doors)
+                     levels[currentLevelIndex].elements.movingPlatforms.forEach(mp => {
+                         if (mp.controlledBy === sw.id) mp.active = !mp.active; // Toggle moving platform
+                     });
+                      levels[currentLevelIndex].elements.doors.forEach(d => {
+                         if (d.controlledBy === sw.id) d.isOpen = !d.isOpen; // Toggle door
+                     });
+                      levels[currentLevelIndex].elements.disappearingBlocks.forEach(db => {
+                         if (db.controlledBy === sw.id) db.startVisible = !db.startVisible; // Toggle block state (might need reset logic)
+                     });
+                 }
+             }
+
+
+             // Keep player within canvas bounds (optional, level design should handle this)
+             // if (this.x < 0) this.x = 0;
+             // if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+             // if (this.y < 0) this.y = 0; // Prevent going off top
+             if (this.y > levels[currentLevelIndex].levelHeight) { // Fall death
+                 resetLevel();
+             }
+
+             // Check Goal Collision
+             const goal = levels[currentLevelIndex].elements.goal;
+             if (this.x < goal.x + TILE_SIZE && this.x + this.width > goal.x &&
+                 this.y < goal.y + TILE_SIZE && this.y + this.height > goal.y) {
+                 levelComplete = true;
+             }
+        }
+
+        jump() {
+            let effectiveJumpForce = (this.higherJumpTimer > 0) ? JUMP_FORCE * 1.4 : JUMP_FORCE;
+
+            if (this.onGround) {
+                this.vy = -effectiveJumpForce * this.gravityMultiplier; // Adjust jump direction for gravity zones
+                this.onGround = false;
+                this.doubleJumpUsed = false;
+            } else if (levels[currentLevelIndex].mechanics.doubleJump && !this.doubleJumpUsed) {
+                 this.vy = -effectiveJumpForce * this.gravityMultiplier * 0.9; // Slightly weaker double jump
+                 this.doubleJumpUsed = true;
+            } else if (this.canWallJump) {
+                 this.vy = -effectiveJumpForce * this.gravityMultiplier * 1.1; // Slightly stronger wall jump
+                 this.vx = this.wallJumpSide === 'left' ? PLAYER_SPEED * 1.2 : -PLAYER_SPEED * 1.2; // Push away from wall
+                 this.canWallJump = false;
+                 this.doubleJumpUsed = false; // Allow double jump after wall jump
+            }
+        }
+
+        draw(offsetX, offsetY) {
+            ctx.fillStyle = '#61dafb'; // Player color (React blue-ish)
+            ctx.fillRect(this.x - offsetX, this.y - offsetY, this.width, this.height);
+
+            // Indicate higher jump power-up
+            if (this.higherJumpTimer > 0) {
+                 ctx.fillStyle = 'rgba(255, 255, 0, 0.5)'; // Yellow glow
+                 ctx.beginPath();
+                 ctx.arc(this.x + this.width / 2 - offsetX, this.y + this.height / 2 - offsetY, this.width * 0.8, 0, Math.PI * 2);
+                 ctx.fill();
+            }
+             // Indicate collected key
+             if (this.hasKey) {
+                 ctx.fillStyle = '#ffd700'; // Gold
+                 ctx.font = '15px Arial';
+                 ctx.fillText('🔑', this.x - offsetX + this.width / 4, this.y - offsetY - 5);
+             }
+        }
+    }
+
+    // --- Level Element Classes ---
+    class Platform {
+        constructor(x, y, width, height, color = '#9575cd') { // Purpleish
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.color = color;
+        }
+        draw(offsetX, offsetY) {
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x - offsetX, this.y - offsetY, this.width, this.height);
+        }
+    }
+
+     class MovingPlatform extends Platform {
+        constructor(x, y, width, height, endX, endY, speed, controlledBy = null, active = true) {
+            super(x, y, width, height, '#f06292'); // Pinkish
+            this.startX = x;
+            this.startY = y;
+            this.endX = endX;
+            this.endY = endY;
+            this.speed = speed;
+            this.progress = 0; // 0 to 1
+            this.direction = 1;
+            this.controlledBy = controlledBy; // Switch ID
+            this.active = active; // Controlled by switch
+        }
+         update() {
+             if (!this.active) return;
+
+            this.progress += this.speed * this.direction;
+            if (this.progress >= 1) {
+                this.progress = 1;
+                this.direction = -1;
+            } else if (this.progress <= 0) {
+                this.progress = 0;
+                this.direction = 1;
+            }
+            const prevX = this.x;
+            const prevY = this.y;
+            this.x = this.startX + (this.endX - this.startX) * this.progress;
+            this.y = this.startY + (this.endY - this.startY) * this.progress;
+
+            // Move player with platform
+            if (player.onGround &&
+                player.x < this.x + this.width && player.x + player.width > this.x &&
+                player.y + player.height >= this.y && player.y + player.height <= this.y + 10) // Check if player is standing roughly on top
+            {
+                 const dx = this.x - prevX;
+                 const dy = this.y - prevY;
+                 player.x += dx;
+                 // Only adjust player Y if platform moves up AND player isn't jumping off
+                 if (dy < 0 && player.vy >= 0) {
+                    player.y = this.y - player.height;
+                    player.vy = 0; // Ensure player stays grounded if platform moves up fast
+                 } else if (dy > 0) {
+                     // Allow normal gravity if platform moves down
+                 }
+
+                 // Check for horizontal push (crude version)
+                 if (dx !== 0) {
+                    // Check if player would collide with something else due to platform movement
+                    const nextPlayerX = player.x + dx;
+                    let pushedIntoObstacle = false;
+                    const obstacles = levels[currentLevelIndex].elements.platforms; // Only static for this check
+                    for (const obs of obstacles) {
+                        if (nextPlayerX < obs.x + obs.width && nextPlayerX + player.width > obs.x &&
+                            player.y < obs.y + obs.height && player.y + player.height > obs.y) {
+                            pushedIntoObstacle = true;
+                            break;
+                        }
+                    }
+                    if (!pushedIntoObstacle) {
+                        player.x = nextPlayerX;
+                    } else {
+                        // Player gets squished or blocked - could implement different behaviors
+                        // For now, just stop the player movement caused by the platform
+                        player.x -= dx;
+                    }
+                 }
+            }
+        }
+    }
+
+    class DisappearingBlock extends Platform {
+        constructor(x, y, width, height, duration, delay, startVisible = true, controlledBy = null) {
+            super(x, y, width, height, '#80cbc4'); // Teal-ish
+            this.duration = duration; // Time visible/invisible
+            this.delay = delay; // Initial delay before first change
+            this.timer = this.delay;
+            this.visible = startVisible;
+            this.startVisible = startVisible; // Store initial state for reset/switch
+            this.controlledBy = controlledBy;
+        }
+        update() {
+            this.timer--;
+            if (this.timer <= 0) {
+                this.visible = !this.visible;
+                this.timer = this.duration;
+            }
+        }
+        draw(offsetX, offsetY) {
+            if (this.visible) {
+                const alpha = Math.max(0.2, Math.min(1, this.timer / (this.duration * 0.5))); // Fade out
+                ctx.globalAlpha = this.visible ? alpha : 1.0; // Fade in is instant for now
+                super.draw(offsetX, offsetY);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+         reset() {
+            this.visible = this.startVisible;
+            this.timer = this.delay;
+         }
+    }
+
+     class Hazard {
+         constructor(x, y, width, height) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+         }
+         draw(offsetX, offsetY) {
+             ctx.fillStyle = '#e57373'; // Reddish for hazard ❌🔥
+             ctx.fillRect(this.x - offsetX, this.y - offsetY, this.width, this.height);
+             ctx.fillStyle = '#ff0000';
+             ctx.font = `${this.width * 0.8}px Arial`;
+             ctx.textAlign = 'center';
+             ctx.textBaseline = 'middle';
+             ctx.fillText('❌', this.x + this.width / 2 - offsetX, this.y + this.height / 2 - offsetY);
+             ctx.textAlign = 'left'; // Reset alignment
+             ctx.textBaseline = 'alphabetic'; // Reset baseline
+         }
+     }
+
+    class Key {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.collected = false;
+        }
+        draw(offsetX, offsetY) {
+            if (!this.collected) {
+                ctx.fillStyle = '#ffd700'; // Gold 🔑
+                ctx.font = `${TILE_SIZE * 0.8}px Arial`;
+                 ctx.fillText('🔑', this.x - offsetX, this.y + TILE_SIZE * 0.8 - offsetY);
+            }
+        }
+    }
+
+     class Door {
+        constructor(x, y, width, height, controlledBy = null) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.isOpen = false;
+            this.controlledBy = controlledBy;
+        }
+        draw(offsetX, offsetY) {
+            ctx.fillStyle = this.isOpen ? '#795548' : '#a1887f'; // Brownish, lighter when open 🚪
+            ctx.fillRect(this.x - offsetX, this.y - offsetY, this.width, this.height);
+            ctx.fillStyle = '#000';
+            ctx.font = `${this.height * 0.8}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(this.isOpen ? '' : '🚪', this.x + this.width/2 - offsetX, this.y + this.height / 2 - offsetY);
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+
+             if (!this.isOpen) {
+                 ctx.strokeStyle = '#5d4037';
+                 ctx.lineWidth = 2;
+                 ctx.strokeRect(this.x - offsetX, this.y - offsetY, this.width, this.height);
+                 ctx.lineWidth = 1; // Reset line width
+             }
+        }
+         reset() {
+             this.isOpen = false; // Doors reset to closed state
+         }
+    }
+
+    class GravityZone {
+        constructor(x, y, width, height, direction = -1) { // -1 flips gravity
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.direction = direction; // -1 for up, 1 for normal (though usually just flip)
+        }
+        draw(offsetX, offsetY) {
+            ctx.fillStyle = this.direction === -1 ? 'rgba(100, 100, 255, 0.2)' : 'rgba(255, 100, 100, 0.2)'; // Blue for flip, red for normal (if needed)
+            ctx.fillRect(this.x - offsetX, this.y - offsetY, this.width, this.height);
+            ctx.fillStyle = this.direction === -1 ? '#ccf' : '#fcc';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(this.direction === -1 ? '⬆️ Gravity ⬆️' : '⬇️ Gravity ⬇️', this.x + this.width / 2 - offsetX, this.y + 30 - offsetY);
+            ctx.textAlign = 'left';
+        }
+    }
+
+    class BouncyPad {
+        constructor(x, y, width, height) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+        }
+        draw(offsetX, offsetY) {
+            ctx.fillStyle = '#4caf50'; // Green 🤸
+            ctx.fillRect(this.x - offsetX, this.y - offsetY, this.width, this.height);
+            // Draw spring-like lines
+            ctx.strokeStyle = '#388e3c';
+            ctx.lineWidth = 3;
+            for (let i = 1; i < 4; i++) {
+                 ctx.beginPath();
+                 ctx.moveTo(this.x + (this.width / 4) * i - offsetX, this.y - offsetY);
+                 ctx.lineTo(this.x + (this.width / 4) * i - offsetX, this.y + this.height - offsetY);
+                 ctx.stroke();
+            }
+            ctx.lineWidth = 1; // Reset
+        }
+    }
+
+     class PowerUp {
+         constructor(x, y, type) {
+            this.x = x;
+            this.y = y;
+            this.type = type; // e.g., 'higherJump'
+            this.collected = false;
+         }
+         draw(offsetX, offsetY) {
+             if (!this.collected) {
+                 ctx.fillStyle = '#ffeb3b'; // Yellow for powerup 🚀
+                 ctx.font = `${TILE_SIZE * 0.8}px Arial`;
+                 let emoji = '?';
+                 if (this.type === 'higherJump') emoji = '🚀';
+                 ctx.fillText(emoji, this.x - offsetX, this.y + TILE_SIZE * 0.8 - offsetY);
+             }
+         }
+     }
+
+      class Switch {
+         constructor(x, y, id) {
+            this.x = x;
+            this.y = y;
+            this.id = id; // To link with controllable elements
+            this.activated = false;
+         }
+         draw(offsetX, offsetY) {
+             ctx.fillStyle = this.activated ? '#76ff03' : '#bdbdbd'; // Green when active, grey otherwise 🔘
+             ctx.beginPath();
+             ctx.arc(this.x + TILE_SIZE / 2 - offsetX, this.y + TILE_SIZE / 2 - offsetY, TILE_SIZE * 0.4, 0, Math.PI * 2);
+             ctx.fill();
+             ctx.strokeStyle = '#555';
+             ctx.lineWidth = 2;
+             ctx.stroke();
+             ctx.lineWidth = 1;
+         }
+          reset() {
+              this.activated = false; // Switches reset
+          }
+     }
+
+
+    // --- Level Definition Function ---
+    // This is where the 50 levels will be defined.
+    // Due to the extreme length, this will be heavily abbreviated and patterned.
+    // A real implementation would need vastly more detail and unique design per level.
+    function defineLevels() {
+        levels = [];
+        let levelWidth = 1600; // Example starting width
+        let levelHeight = 1200; // Example starting height
+
+        for (let i = 0; i < 50; i++) {
+            let level = {
+                levelWidth: levelWidth + i * 100, // Gradually make levels wider
+                levelHeight: levelHeight + i * 50, // Gradually make levels taller
+                startPos: { x: 100, y: levelHeight - 100 },
+                mechanics: { // Enable mechanics based on level index
+                    movingPlatforms: i >= 5,
+                    disappearingBlocks: i >= 10,
+                    keysDoors: i >= 15,
+                    hazards: i >= 20,
+                    wallJump: i >= 25,
+                    gravityZones: i >= 30,
+                    bouncyPads: i >= 35,
+                    powerUps: i >= 40,
+                    switches: i >= 45,
+                    doubleJump: i >= 10 // Introduce double jump earlier maybe
+                },
+                elements: {
+                    platforms: [],
+                    movingPlatforms: [],
+                    disappearingBlocks: [],
+                    hazards: [],
+                    keys: [],
+                    doors: [],
+                    gravityZones: [],
+                    bouncyPads: [],
+                    powerUps: [],
+                    switches: [],
+                    goal: { x: levelWidth + i * 100 - 150, y: 100 } // Goal position often high up or far right
+                }
+            };
+
+            // --- Procedural/Patterned Level Generation (Simplified) ---
+            // This is a placeholder for actual unique level design.
+
+            // Base Floor
+            level.elements.platforms.push(new Platform(0, level.levelHeight - TILE_SIZE, level.levelWidth, TILE_SIZE, '#4db6ac')); // Base floor color
+
+            // Add basic platforms (example pattern)
+            for (let p = 0; p < 5 + i / 2; p++) {
+                const px = TILE_SIZE * 5 + Math.random() * (level.levelWidth - TILE_SIZE * 10);
+                const py = level.levelHeight - TILE_SIZE * (2 + Math.random() * (5 + i / 5));
+                const pw = TILE_SIZE * (3 + Math.random() * 3);
+                level.elements.platforms.push(new Platform(px, py, pw, TILE_SIZE));
+            }
+
+             // Add Mechanics based on level index (Examples)
+            if (level.mechanics.movingPlatforms) {
+                 for (let mp = 0; mp < 1 + Math.floor(i / 6); mp++) {
+                     const mpx = TILE_SIZE * 2 + Math.random() * (level.levelWidth - TILE_SIZE * 15);
+                     const mpy = level.levelHeight - TILE_SIZE * (4 + Math.random() * (3 + i / 8));
+                     const isVertical = Math.random() < 0.5;
+                     const moveDist = TILE_SIZE * (3 + Math.random() * 3);
+                     const mpendX = mpx + (isVertical ? 0 : moveDist);
+                     const mpendY = mpy + (isVertical ? moveDist : 0);
+                     const speed = 0.005 + Math.random() * 0.01;
+                     level.elements.movingPlatforms.push(new MovingPlatform(mpx, mpy, TILE_SIZE * 4, TILE_SIZE / 2, mpendX, mpendY, speed));
+                 }
+             }
+
+             if (level.mechanics.disappearingBlocks) {
+                 for (let db = 0; db < 1 + Math.floor(i / 8); db++) {
+                    const dbx = TILE_SIZE * 4 + Math.random() * (level.levelWidth - TILE_SIZE * 10);
+                    const dby = level.levelHeight - TILE_SIZE * (3 + Math.random() * (4 + i / 10));
+                    const duration = 60 + Math.random() * 60; // 1-2 seconds
+                    const delay = Math.random() * 120; // 0-2 seconds initial delay
+                    level.elements.disappearingBlocks.push(new DisappearingBlock(dbx, dby, TILE_SIZE * 2, TILE_SIZE, duration, delay, Math.random() > 0.5));
+                 }
+             }
+
+            if (level.mechanics.keysDoors && i >= 15) { // Ensure enough space/platforms exist
+                 // Add a key (position needs careful placement)
+                 level.elements.keys.push(new Key(level.levelWidth / 3 + Math.random() * TILE_SIZE * 2, level.levelHeight / 2 + Math.random() * TILE_SIZE * 2));
+                 // Add a door blocking the path (e.g., near goal or midpoint)
+                 const doorX = level.levelWidth * (0.7 + Math.random() * 0.1);
+                 const doorY = level.levelHeight * (0.3 + Math.random() * 0.4);
+                 // Ensure door blocks a path - requires better placement logic
+                 level.elements.platforms.push(new Platform(doorX - TILE_SIZE * 2, doorY + TILE_SIZE*2, TILE_SIZE * 2, TILE_SIZE)); // Platform before door
+                 level.elements.platforms.push(new Platform(doorX + TILE_SIZE, doorY + TILE_SIZE*2, TILE_SIZE * 2, TILE_SIZE)); // Platform after door
+                 level.elements.doors.push(new Door(doorX, doorY, TILE_SIZE, TILE_SIZE*2));
+             }
+
+            if (level.mechanics.hazards) {
+                 for (let hz = 0; hz < 2 + Math.floor(i / 7); hz++) {
+                    const hx = TILE_SIZE * 3 + Math.random() * (level.levelWidth - TILE_SIZE * 6);
+                    const hy = level.levelHeight - TILE_SIZE * (1.5 + Math.random() * (5 + i / 9));
+                    // Avoid placing directly on start platform
+                    if (Math.abs(hx - level.startPos.x) > TILE_SIZE * 3 || hy < level.startPos.y - TILE_SIZE * 2) {
+                       level.elements.hazards.push(new Hazard(hx, hy, TILE_SIZE, TILE_SIZE / 2)); // Short spike
+                    }
+                 }
+                  // Sometimes add floor hazard
+                  if (Math.random() < 0.1 + i * 0.005) {
+                      const floorHazardX = level.levelWidth * (0.2 + Math.random() * 0.6);
+                      level.elements.hazards.push(new Hazard(floorHazardX, level.levelHeight - TILE_SIZE * 1.5, TILE_SIZE * 5, TILE_SIZE * 1.5));
+                  }
+             }
+
+             // Wall Jump (Mechanic enabled, level design should facilitate it)
+             if (level.mechanics.wallJump) {
+                 // Add vertical shafts or close walls
+                 const shaftX = level.levelWidth * (0.3 + Math.random() * 0.4);
+                 const shaftTopY = TILE_SIZE * 5;
+                 const shaftHeight = level.levelHeight - TILE_SIZE * 7;
+                 level.elements.platforms.push(new Platform(shaftX, shaftTopY, TILE_SIZE, shaftHeight));
+                 level.elements.platforms.push(new Platform(shaftX + TILE_SIZE * 4, shaftTopY, TILE_SIZE, shaftHeight));
+             }
+
+            if (level.mechanics.gravityZones) {
+                 const gzX = level.levelWidth * (0.2 + Math.random() * 0.6);
+                 const gzY = TILE_SIZE * 2 + Math.random() * (level.levelHeight / 3);
+                 level.elements.gravityZones.push(new GravityZone(gzX, gzY, TILE_SIZE * 8, TILE_SIZE * 4, -1));
+             }
+
+            if (level.mechanics.bouncyPads) {
+                 const bpX = TILE_SIZE * 5 + Math.random() * (level.levelWidth - TILE_SIZE * 10);
+                 const bpY = level.levelHeight - TILE_SIZE * (2 + Math.random() * 3);
+                 // Place it where a jump might be needed
+                 level.elements.bouncyPads.push(new BouncyPad(bpX, bpY, TILE_SIZE * 2, TILE_SIZE / 2));
+             }
+
+            if (level.mechanics.powerUps) {
+                 const puX = level.levelWidth * 0.1 + Math.random() * level.levelWidth * 0.7;
+                 const puY = level.levelHeight * 0.2 + Math.random() * level.levelHeight * 0.6;
+                 level.elements.powerUps.push(new PowerUp(puX, puY, 'higherJump'));
+             }
+
+            if (level.mechanics.switches) {
+                 const swX = TILE_SIZE * 2 + Math.random() * (level.levelWidth * 0.3);
+                 const swY = level.levelHeight - TILE_SIZE * (2 + Math.random() * 2);
+                 const switchId = `sw-${i}-${level.elements.switches.length}`;
+                 level.elements.switches.push(new Switch(swX, swY, switchId));
+
+                 // Link the switch to something (e.g., a moving platform or door later in the level)
+                 // Create a platform controlled by this switch
+                 const controlledMpX = level.levelWidth * (0.6 + Math.random() * 0.2);
+                 const controlledMpY = level.levelHeight * (0.4 + Math.random() * 0.3);
+                 level.elements.movingPlatforms.push(new MovingPlatform(controlledMpX, controlledMpY, TILE_SIZE * 5, TILE_SIZE / 2, controlledMpX, controlledMpY - TILE_SIZE * 4, 0.01, switchId, false)); // Start inactive
+             }
+
+
+            // Ensure goal is reachable (very basic check - needs real pathfinding/design)
+            // Add a platform near the goal if none exist
+            level.elements.platforms.push(new Platform(level.elements.goal.x - TILE_SIZE * 2, level.elements.goal.y + TILE_SIZE * 2, TILE_SIZE * 3, TILE_SIZE));
+
+
+            // Level 50: Combine mechanics (Crude example)
+            if (i === 49) {
+                level.levelWidth = 4000;
+                level.levelHeight = 2000;
+                level.startPos = { x: 100, y: level.levelHeight - 100 };
+                level.elements.goal = { x: level.levelWidth - 150, y: 100 };
+                 // Add more instances of all mechanics
+                 // Section 1: Moving platforms + hazards
+                 // Section 2: Disappearing blocks + wall jump section
+                 // Section 3: Gravity zone + bouncy pads + key/door
+                 // Section 4: Switches controlling multiple elements + powerup needed
+                 // ... This requires significant manual design ...
+                 level.elements.platforms = [new Platform(0, level.levelHeight - TILE_SIZE, level.levelWidth, TILE_SIZE)]; // Reset platforms for clarity
+                 // Add many more elements combining all learned mechanics...
+                 // (This part is highly complex to auto-generate well)
+                 level.elements.platforms.push(new Platform(200, level.levelHeight - 200, 100, 20));
+                 level.elements.movingPlatforms.push(new MovingPlatform(400, level.levelHeight - 250, 80, 20, 600, level.levelHeight - 250, 0.01));
+                 level.elements.hazards.push(new Hazard(450, level.levelHeight - 230, 150, 20));
+                 level.elements.disappearingBlocks.push(new DisappearingBlock(700, level.levelHeight - 300, 80, 20, 60, 0));
+                 level.elements.keys.push(new Key(900, level.levelHeight - 400));
+                 level.elements.doors.push(new Door(1100, level.levelHeight - 480, 40, 80));
+                 level.elements.platforms.push(new Platform(1000, level.levelHeight - 400, 200, 20)); // Platfor for door
+                 level.elements.platforms.push(new Platform(1300, level.levelHeight - 500, 40, 150)); // Wall jump surface 1
+                 level.elements.platforms.push(new Platform(1450, level.levelHeight - 500, 40, 150)); // Wall jump surface 2
+                 level.elements.gravityZones.push(new GravityZone(1600, level.levelHeight - 600, 300, 200, -1));
+                 level.elements.bouncyPads.push(new BouncyPad(1700, level.levelHeight - 400, 80, 20)); // Inside gravity zone (tricky!)
+                 level.elements.powerUps.push(new PowerUp(2000, level.levelHeight - 700, 'higherJump'));
+                 level.elements.switches.push(new Switch(2200, level.levelHeight - 150, 'final_switch'));
+                 level.elements.movingPlatforms.push(new MovingPlatform(2500, level.levelHeight - 800, 100, 20, 2500, level.levelHeight - 900, 0.02, 'final_switch', false));
+                 level.elements.platforms.push(new Platform(level.elements.goal.x - 100, level.elements.goal.y + 100, 100, 20)); // Final platform
+            }
+
+
+            levels.push(level);
+        }
+    }
+
+    // --- Game Initialization ---
+    function initLevel(levelIndex) {
+        if (levelIndex >= levels.length) {
+            console.log("Game Complete!");
+            // Display win message or restart game
+            alert("Congratulations! You completed all levels!");
+            currentLevelIndex = 0; // Restart from level 1
+            initLevel(currentLevelIndex);
+            return;
+        }
+
+        const level = levels[levelIndex];
+        player = new Player(level.startPos.x, level.startPos.y);
+        player.hasKey = false; // Reset key status
+        levelComplete = false;
+        levelIndicator.textContent = `Level: ${levelIndex + 1}`;
+
+        // Reset stateful level elements
+        level.elements.doors.forEach(d => d.reset());
+        level.elements.switches.forEach(s => s.reset());
+        level.elements.disappearingBlocks.forEach(db => db.reset());
+         level.elements.movingPlatforms.forEach(mp => { // Reset active state if controlled
+             if(mp.controlledBy) mp.active = false; // Assuming switches start things as inactive
+             // Reset position (might be needed depending on design)
+             // mp.x = mp.startX; mp.y = mp.startY; mp.progress = 0; mp.direction = 1;
+         });
+         level.elements.keys.forEach(k => k.collected = false);
+         level.elements.powerUps.forEach(p => p.collected = false);
+
+         // Adjust canvas virtual size if level size changes drastically (simple approach)
+         // A more robust camera would handle world bounds better
+         // canvas.width = Math.max(800, level.levelWidth);
+         // canvas.height = Math.max(600, level.levelHeight);
+    }
+
+    function resetLevel() {
+        initLevel(currentLevelIndex);
+    }
+
+    function nextLevel() {
+        currentLevelIndex++;
+        initLevel(currentLevelIndex);
+    }
+
+    // --- Camera Update ---
+    function updateCamera() {
+        const level = levels[currentLevelIndex];
+        // Center camera on player horizontally, with limits
+        camera.x = player.x - canvas.width / 2;
+        camera.y = player.y - canvas.height / 1.8; // Keep player slightly lower than center
+
+        // Clamp camera to level boundaries
+        camera.x = Math.max(0, Math.min(camera.x, level.levelWidth - canvas.width));
+        camera.y = Math.max(0, Math.min(camera.y, level.levelHeight - canvas.height));
+    }
+
+
+    // --- Game Loop ---
+    function gameLoop() {
+        // Update game state
+        const level = levels[currentLevelIndex];
+        const elements = level.elements;
+
+        // Update moving platforms first
+        elements.movingPlatforms.forEach(mp => mp.update());
+        // Update disappearing blocks
+        elements.disappearingBlocks.forEach(db => db.update());
+
+        player.update(
+             elements.platforms,
+             elements.hazards,
+             elements.movingPlatforms,
+             elements.disappearingBlocks,
+             elements.keys,
+             elements.doors,
+             elements.gravityZones,
+             elements.bouncyPads,
+             elements.powerUps,
+             elements.switches
+        );
+
+        updateCamera();
+
+
+        // Draw everything
+        // Clear canvas
+        ctx.fillStyle = '#2a2a3e'; // Background color
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw elements relative to camera
+        const drawables = [
+             ...elements.platforms, ...elements.hazards, ...elements.keys,
+             ...elements.doors, ...elements.gravityZones, ...elements.bouncyPads,
+             ...elements.powerUps, ...elements.switches, ...elements.movingPlatforms,
+             ...elements.disappearingBlocks // Draw these last or based on visibility? Depends on effect
+        ];
+
+        // Draw goal ⭐
+        ctx.fillStyle = '#ffcc00'; // Goal color
+        ctx.font = `${TILE_SIZE}px Arial`;
+        ctx.fillText('⭐', elements.goal.x - camera.x, elements.goal.y + TILE_SIZE - camera.y);
+
+
+        drawables.forEach(el => {
+            // Basic culling: Only draw elements potentially visible in the camera view
+             if (el.x + (el.width || TILE_SIZE) > camera.x && el.x < camera.x + canvas.width &&
+                el.y + (el.height || TILE_SIZE) > camera.y && el.y < camera.y + canvas.height) {
+                 el.draw(camera.x, camera.y);
+             }
+        });
+
+         // Draw player last
+        player.draw(camera.x, camera.y);
+
+        // Check for level completion
+        if (levelComplete) {
+            nextLevel();
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // --- Event Listeners ---
+    window.addEventListener('keydown', (e) => {
+        keys[e.key.toLowerCase()] = true;
+        // Handle jump separately to prevent repeated jumps while holding space
+        if (e.key === ' ' || e.key.toLowerCase() === 'w') { // Allow W or Space for jump
+             e.preventDefault(); // Prevent page scrolling
+            player.jump();
+        }
+        if (e.key.toLowerCase() === 'r') {
+            resetLevel();
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        keys[e.key.toLowerCase()] = false;
+    });
+
+    skipButton.addEventListener('click', () => {
+        if (currentLevelIndex < levels.length -1) {
+             nextLevel();
+        } else {
+            alert("You can't skip the final level!");
+        }
+    });
+
+    // --- Start Game ---
+    defineLevels();
+    if (levels.length > 0) {
+        initLevel(currentLevelIndex);
+        gameLoop();
+    } else {
+        console.error("No levels defined!");
+        alert("Error: Levels could not be loaded.");
+    }
+
+</script>
+
+</body>
+</html>

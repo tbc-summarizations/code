@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Masterpieces Platformer</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #f0f0f0; }
+  canvas { display: block; background-color: #cc0000; }
+  #skipButton {
+    position: absolute; top: 10px; left: 10px; padding: 10px;
+    background-color: #eee; border: 1px solid #ccc; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<button id="skipButton">Skip Level</button>
+<canvas id="gameCanvas"></canvas>
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 800;
+  canvas.height = 600;
+
+  let currentLevel = 0;
+  let levels = [];
+
+  function createLevel1() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 200, height: 50},
+        {x: 300, y: 550, width: 500, height: 50},
+        {x: 700, y: 400, width: 100, height: 50},
+        {x: 200, y: 300, width: 100, height: 50},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 350},
+      mechanicDescription: "Basic Jumps"
+    };
+  }
+
+  function createLevel2() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 150, height: 50},
+        {x: 200, y: 550, width: 200, height: 50},
+        {x: 450, y: 550, width: 350, height: 50},
+        {x: 200, y: 400, width: 100, height: 20, moving: {amplitude: 50, period: 2, axis: 'y'}},
+        {x: 500, y: 300, width: 100, height: 20, moving: {amplitude: 100, period: 3, axis: 'x'}},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 500},
+      mechanicDescription: "Moving Platforms"
+    };
+  }
+
+    function createLevel3() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 150, height: 50},
+        {x: 200, y: 550, width: 200, height: 50},
+        {x: 450, y: 550, width: 350, height: 50},
+        {x: 200, y: 400, width: 50, height: 20, jumpPad: true},
+        {x: 600, y: 400, width: 100, height: 20},
+        {x: 700, y: 250, width: 100, height: 20},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 200},
+      mechanicDescription: "Jump Pads"
+    };
+  }
+
+  function createLevel4() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 200, height: 50},
+        {x: 300, y: 550, width: 500, height: 50},
+        {x: 200, y: 400, width: 100, height: 50, portal: {targetLevel: 5, targetSpawn: {x: 50, y: 500}}},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 500},
+      mechanicDescription: "Portals (to Level 5)"
+    };
+  }
+
+  function createLevel5() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 800, height: 50},
+        {x: 100, y: 400, width: 100, height: 50, gravitySwitch: true},
+        {x: 600, y: 200, width: 100, height: 50},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 150},
+      mechanicDescription: "Gravity Switch"
+    };
+  }
+
+  function createLevel6() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 800, height: 50},
+        {x: 100, y: 400, width: 100, height: 20, timed: true, timedDuration: 2},
+        {x: 300, y: 400, width: 100, height: 20, timed: true, timedDuration: 2, timedDelay: 2},
+        {x: 500, y: 400, width: 100, height: 20, timed: true, timedDuration: 2, timedDelay: 4},
+        {x: 700, y: 400, width: 100, height: 20, timed: true, timedDuration: 2, timedDelay: 6},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 350},
+      mechanicDescription: "Timed Platforms"
+    };
+  }
+
+  function createLevel7() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 800, height: 50},
+        {x: 100, y: 400, width: 100, height: 20, falling: true},
+        {x: 300, y: 400, width: 100, height: 20, falling: true, fallDelay: 1},
+        {x: 500, y: 400, width: 100, height: 20, falling: true, fallDelay: 2},
+        {x: 700, y: 400, width: 100, height: 20, falling: true, fallDelay: 3},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 350},
+      mechanicDescription: "Falling Platforms"
+    };
+  }
+
+  function createLevel8() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 800, height: 50},
+        {x: 100, y: 400, width: 100, height: 20, moving: {amplitude: 50, period: 2, axis: 'y'}},
+        {x: 300, y: 400, width: 100, height: 20, falling: true, fallDelay: 1},
+        {x: 500, y: 400, width: 100, height: 20, jumpPad: true},
+        {x: 700, y: 400, width: 100, height: 20, timed: true, timedDuration: 2, timedDelay: 2},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 350},
+      mechanicDescription: "Combined Mechanics 1"
+    };
+  }
+
+    function createLevel9() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 800, height: 50},
+        {x: 100, y: 400, width: 100, height: 20, moving: {amplitude: 70, period: 3, axis: 'x'}},
+        {x: 300, y: 300, width: 100, height: 20, falling: true, fallDelay: 0.5},
+        {x: 500, y: 200, width: 100, height: 20, jumpPad: true},
+        {x: 700, y: 100, width: 100, height: 20, timed: true, timedDuration: 1, timedDelay: 1},
+        {x: 400, y: 500, width: 50, height: 50, portal: {targetLevel: 10, targetSpawn: {x: 50, y: 500}}},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 50},
+      mechanicDescription: "Combined Mechanics 2 + Portal to Level 10"
+    };
+  }
+
+  function createLevel10() {
+    return {
+      platforms: [
+        {x: 0, y: 550, width: 800, height: 50},
+        {x: 50, y: 450, width: 100, height: 20, moving: {amplitude: 50, period: 2, axis: 'y'}},
+        {x: 200, y: 450, width: 100, height: 20, falling: true, fallDelay: 0.3},
+        {x: 350, y: 450, width: 100, height: 20, jumpPad: true},
+        {x: 500, y: 450, width: 100, height: 20, timed: true, timedDuration: 0.8, timedDelay: 0.8},
+        {x: 650, y: 450, width: 100, height: 20, gravitySwitch: true},
+
+        {x: 100, y: 300, width: 100, height: 20, moving: {amplitude: 70, period: 2.5, axis: 'x'}},
+        {x: 300, y: 300, width: 100, height: 20, falling: true, fallDelay: 0.6},
+        {x: 500, y: 300, width: 100, height: 20, jumpPad: true},
+        {x: 700, y: 300, width: 100, height: 20, timed: true, timedDuration: 0.5, timedDelay: 1.5},
+
+        {x: 50, y: 150, width: 100, height: 20, moving: {amplitude: 60, period: 3, axis: 'y'}},
+        {x: 250, y: 150, width: 100, height: 20, falling: true, fallDelay: 0.9},
+        {x: 450, y: 150, width: 100, height: 20, jumpPad: true},
+        {x: 650, y: 150, width: 100, height: 20, timed: true, timedDuration: 0.3, timedDelay: 2},
+      ],
+      playerSpawn: {x: 50, y: 500},
+      goal: {x: 750, y: 100},
+      mechanicDescription: "Final Challenge - All Mechanics!"
+    };
+  }
+
+
+  levels = [
+    createLevel1(), createLevel2(), createLevel3(), createLevel4(), createLevel5(),
+    createLevel6(), createLevel7(), createLevel8(), createLevel9(), createLevel10()
+  ];
+
+  let player = {
+    x: levels[currentLevel].playerSpawn.x,
+    y: levels[currentLevel].playerSpawn.y,
+    width: 20,
+    height: 20,
+    velocityY: 0,
+    velocityX: 0,
+    gravity: 0.5,
+    jumpStrength: -10,
+    isOnGround: false,
+    isGravityNormal: true
+  };
+
+  let camera = {
+    x: 0,
+    y: 0
+  };
+
+  let keys = {};
+  let time = 0;
+  let timedPlatformTimers = {};
+
+  document.addEventListener('keydown', function(e) {
+    keys[e.key] = true;
+    if (e.key === 'r') {
+      resetPlayerPosition();
+    }
+  });
+  document.addEventListener('keyup', function(e) {
+    keys[e.key] = false;
+  });
+
+  document.getElementById('skipButton').addEventListener('click', function() {
+    if (currentLevel < levels.length - 1) {
+      currentLevel++;
+      resetLevel();
+    }
+  });
+
+  function resetLevel() {
+    player.x = levels[currentLevel].playerSpawn.x;
+    player.y = levels[currentLevel].playerSpawn.y;
+    player.velocityY = 0;
+    player.velocityX = 0;
+    camera.x = 0;
+    camera.y = 0;
+    timedPlatformTimers = {};
+  }
+
+  function resetPlayerPosition() {
+    player.x = levels[currentLevel].playerSpawn.x;
+    player.y = levels[currentLevel].playerSpawn.y;
+    player.velocityY = 0;
+    player.velocityX = 0;
+    player.isGravityNormal = true;
+  }
+
+
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function update() {
+    time += 1/60;
+
+    // Player movement
+    player.velocityX = 0;
+    if (keys['a'] || keys['ArrowLeft']) {
+      player.velocityX = -5;
+    }
+    if (keys['d'] || keys['ArrowRight']) {
+      player.velocityX = 5;
+    }
+    if ((keys['w'] || keys['ArrowUp'] || keys[' ') && player.isOnGround) {
+      player.velocityY = player.jumpStrength * (player.isGravityNormal ? 1 : -1);
+      player.isOnGround = false;
+    }
+
+    player.velocityY += player.gravity * (player.isGravityNormal ? 1 : -1);
+    player.x += player.velocityX;
+    player.y += player.velocityY;
+    player.isOnGround = false;
+
+
+    // Platform interactions and collision
+    let currentLevelData = levels[currentLevel];
+    for (let i = 0; i < currentLevelData.platforms.length; i++) {
+      let platform = currentLevelData.platforms[i];
+
+      // Moving Platforms
+      if (platform.moving) {
+        let movement = platform.moving;
+        if (movement.axis === 'y') {
+          platform.y = currentLevelData.platforms[i].originalY + Math.sin(time / movement.period) * movement.amplitude;
+        } else if (movement.axis === 'x') {
+          platform.x = currentLevelData.platforms[i].originalX + Math.sin(time / movement.period) * movement.amplitude;
+        }
+      }
+
+      let collisionSide = checkCollision(player, platform);
+      if (collisionSide) {
+        if (collisionSide === 'bottom' && player.velocityY > 0 && player.isGravityNormal) {
+          player.y = platform.y - player.height;
+          player.velocityY = 0;
+          player.isOnGround = true;
+        } else if (collisionSide === 'top' && player.velocityY < 0 && !player.isGravityNormal) {
+          player.y = platform.y + platform.height;
+          player.velocityY = 0;
+        } else if (collisionSide === 'left' && player.velocityX > 0) {
+          player.x = platform.x - player.width;
+          player.velocityX = 0;
+        } else if (collisionSide === 'right' && player.velocityX < 0) {
+          player.x = platform.x + platform.width;
+          player.velocityX = 0;
+        } else if (collisionSide === 'top' && player.velocityY < 0 && player.isGravityNormal) {
+          player.y = platform.y + platform.height;
+          player.velocityY = 0;
+        } else if (collisionSide === 'bottom' && player.velocityY > 0 && !player.isGravityNormal) {
+          player.y = platform.y - player.height;
+          player.velocityY = 0;
+        }
+
+        // Jump Pad
+        if (platform.jumpPad && collisionSide === 'bottom' && player.velocityY >= 0 && player.isGravityNormal) {
+          player.velocityY = player.jumpStrength * 2;
+          player.isOnGround = false;
+        }
+
+        // Portal
+        if (platform.portal && collisionSide) {
+          currentLevel = platform.portal.targetLevel -1; // Adjust to 0-based index
+          resetLevel();
+          player.x = levels[currentLevel].playerSpawn.x;
+          player.y = levels[currentLevel].playerSpawn.y;
+        }
+
+        // Gravity Switch
+        if (platform.gravitySwitch && collisionSide) {
+          player.isGravityNormal = !player.isGravityNormal;
+           player.gravity = Math.abs(player.gravity) * (player.isGravityNormal ? 1 : -1);
+           player.jumpStrength = Math.abs(player.jumpStrength) * (player.isGravityNormal ? 1 : -1);
+        }
+
+        // Timed Platforms
+        if (platform.timed) {
+          if (!timedPlatformTimers[i]) {
+            timedPlatformTimers[i] = 0;
+          }
+          timedPlatformTimers[i] += 1/60;
+          if (timedPlatformTimers[i] >= (platform.timedDelay || 0) ) {
+            if (timedPlatformTimers[i] <= (platform.timedDelay || 0) + platform.timedDuration) {
+               if (collisionSide) {
+                  // Player on platform, keep it solid
+               }
+            } else {
+              if (!checkCollision(player, platform)) {
+                continue; // Platform disappears if player is not on it
+              }
+            }
+          } else {
+            continue; // Platform is not yet active
+          }
+        }
+
+        // Falling Platforms
+        if (platform.falling && collisionSide === 'bottom' && player.velocityY >= 0 && player.isGravityNormal) {
+          if (!platform.fallingTimer) {
+            platform.fallingTimer = 0;
+          }
+          platform.fallingTimer += 1/60;
+          if (platform.fallingTimer >= (platform.fallDelay || 0.5)) {
+            currentLevelData.platforms.splice(i, 1);
+            i--; // Adjust index after removing platform
+          }
+        }
+      }
+    }
+
+    // Goal Check
+    if (player.x < currentLevelData.goal.x + currentLevelData.goal.width &&
+        player.x + player.width > currentLevelData.goal.x &&
+        player.y < currentLevelData.goal.y + currentLevelData.goal.height &&
+        player.y + player.height > currentLevelData.goal.y) {
+      if (currentLevel < levels.length - 1) {
+        currentLevel++;
+        resetLevel();
+      } else {
+        currentLevel = 0; //Restart game for now
+        resetLevel();
+        alert("You Win! Game Restarting.");
+      }
+    }
+
+
+    // Camera follow player (horizontal only)
+    camera.x = player.x - canvas.width / 2;
+    if (camera.x < 0) camera.x = 0;
+    if (camera.x > 800 * 3 - canvas.width) camera.x = 800 * 3 - canvas.width; // Assuming level width, adjust as needed
+    camera.y = 0; // Keep camera vertical at top for simplicity
+
+     // Keep player within vertical bounds
+    if (player.y > canvas.height * 2 || player.y < -canvas.height) {
+        resetPlayerPosition();
+        player.x = levels[currentLevel].playerSpawn.x;
+        player.y = levels[currentLevel].playerSpawn.y;
+    }
+  }
+
+
+  function checkCollision(rect1, rect2) {
+    if (rect1.x < rect2.x + rect2.width &&
+        rect1.x + rect1.width > rect2.x &&
+        rect1.y < rect2.y + rect2.height &&
+        rect1.y + rect1.height > rect2.y) {
+
+      let dx = (rect1.x + rect1.width / 2) - (rect2.x + rect2.width / 2);
+      let dy = (rect1.y + rect1.height / 2) - (rect2.y + rect2.height / 2);
+      let width = (rect1.width + rect2.width) / 2;
+      let height = (rect1.height + rect2.height) / 2;
+      let crossWidth = width * dy;
+      let crossHeight = height * dx;
+
+      if (Math.abs(dx) <= width && Math.abs(dy) <= height) {
+        if (crossWidth > crossHeight) {
+          return (crossWidth > (-crossHeight)) ? 'bottom' : 'left';
+        } else {
+          return (crossWidth > - (crossHeight)) ? 'right' : 'top';
+        }
+      }
+      return false;
+    }
+    return false;
+  }
+
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+
+    // Draw platforms
+    let currentLevelData = levels[currentLevel];
+    for (let platform of currentLevelData.platforms) {
+      ctx.fillStyle = '#000';
+      if (platform.timed) ctx.fillStyle = 'rgba(0,0,0,0.5)'; // Dimmed when timed out
+      if (platform.falling) ctx.fillStyle = '#333';
+      if (platform.jumpPad) ctx.fillStyle = 'yellow';
+      if (platform.portal) ctx.fillStyle = 'purple';
+      if (platform.gravitySwitch) ctx.fillStyle = 'lightblue';
+
+      ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+    }
+
+    // Draw goal
+    ctx.fillStyle = 'green';
+    ctx.fillRect(currentLevelData.goal.x, currentLevelData.goal.y, 50, 50);
+    ctx.fillStyle = 'white';
+    ctx.fillText("Goal", currentLevelData.goal.x + 10, currentLevelData.goal.y + 30);
+
+
+    // Draw player
+    ctx.fillStyle = 'blue';
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    // Level Mechanic Description
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.fillText(`Level ${currentLevel + 1}: ${currentLevelData.mechanicDescription}`, camera.x + 10, 30);
+
+
+    ctx.restore();
+  }
+
+
+  // Initialize original platform positions for moving platforms
+  levels.forEach(level => {
+    level.platforms.forEach(platform => {
+      platform.originalX = platform.x;
+      platform.originalY = platform.y;
+    });
+  });
+
+
+  resetLevel();
+  gameLoop();
+</script>
+</body>
+</html>

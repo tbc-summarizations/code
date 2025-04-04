@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parker Platformer</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(to right, #FFEB3B 50%, #F44336 50%); /* Split background like album */
+            font-family: 'Courier New', Courier, monospace;
+            color: #000;
+            overflow: hidden; /* Prevent scrollbars */
+        }
+        canvas {
+            border: 5px solid black;
+            background-color: #f0f0f0; /* Light background for contrast */
+            display: block;
+        }
+        #controls {
+             margin-top: 10px;
+             background-color: rgba(255, 255, 255, 0.7);
+             padding: 10px;
+             border-radius: 5px;
+             border: 2px solid black;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #000;
+            color: #fff;
+            border: 2px solid #fff;
+            font-family: 'Courier New', Courier, monospace;
+            margin-left: 10px;
+        }
+        button:hover {
+            background-color: #333;
+        }
+        h1, h2 {
+            margin: 5px 0;
+            text-align: center;
+            color: #000; /* Make text black for visibility on yellow/red */
+        }
+        #levelInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+         #mechanicInfo {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 14px;
+            max-width: 150px;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 24px;
+            text-align: center;
+            display: none; /* Hidden by default */
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Charlie Parker Platformer</h1>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="controls">
+        <span>Controls: A/D or ←/→ = Move, W or ↑ or Space = Jump, R = Reset Level</span>
+        <button id="skipLevelBtn">Skip Level</button>
+    </div>
+    <div id="levelInfo">Level: 1/10</div>
+    <div id="mechanicInfo">Mechanic: Move & Jump</div>
+    <div id="message"></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const skipLevelBtn = document.getElementById('skipLevelBtn');
+        const levelInfoDiv = document.getElementById('levelInfo');
+        const mechanicInfoDiv = document.getElementById('mechanicInfo');
+        const messageDiv = document.getElementById('message');
+
+        // Game Settings
+        const gravity = 0.5;
+        const playerSpeed = 5;
+        const jumpStrength = 12;
+        const wallJumpStrengthX = 7;
+        const wallJumpStrengthY = 10;
+        const friction = 0.8;
+
+        // Player State
+        let player = {
+            x: 100,
+            y: 400,
+            width: 30,
+            height: 45, // Taller rectangle
+            vx: 0,
+            vy: 0,
+            color: 'black',
+            isGrounded: false,
+            canWallJump: false,
+            onWall: null, // 'left' or 'right'
+            hasKey: false,
+            keysCollected: 0,
+            requiredKeys: 0
+        };
+
+        // Camera State
+        let camera = {
+            x: 0,
+            y: 0, // Vertical camera movement might be added later if needed
+            width: canvas.width,
+            height: canvas.height,
+            levelWidth: 0, // To be set by level data
+            levelHeight: canvas.height // Keep height fixed for now
+        };
+
+        // Input State
+        let keys = {
+            a: false,
+            d: false,
+            w: false,
+            space: false,
+        };
+
+        // Level Data
+        let currentLevelIndex = 0;
+        let levelData = []; // Will be populated by defineLevels()
+        let currentPlatforms = [];
+        let currentHazards = [];
+        let currentMovingPlatforms = [];
+        let currentBouncyPlatforms = [];
+        let currentTimedPlatforms = [];
+        let currentLowGravityZones = [];
+        let currentCollectibles = [];
+        let currentGoal = null;
+        let playerSpawn = { x: 100, y: 400 };
+
+        let gameTime = 0; // For timed platforms
+
+        const mechanics = [
+            "Move & Jump: Use A/D (or ←/→) to move, W (or ↑ or Space) to jump.",
+            "Moving Platforms: Platforms that move horizontally or vertically.",
+            "Precision Jumping: Smaller platforms require careful jumps.",
+            "Bouncy Platforms: Jump higher off these!",
+            "Timed Platforms: Platforms that appear and disappear.",
+            "Hazards: Avoid the red triangles!",
+            "Keys & Goal: Collect keys (🔑) to unlock the goal (🏁).",
+            "Low Gravity: Jump higher and fall slower in these zones (☁️).",
+            "Wall Jump: Jump off walls when touching them in the air.",
+            "Master Challenge: Combine all learned skills!"
+        ];
+
+        // --- Level Definitions ---
+        function defineLevels() {
+            levelData = [
+                // Level 1: Basic Movement and Jumping
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 1200,
+                    platforms: [
+                        { x: 0, y: 450, width: 300, height: 50, color: '#FFEB3B' },
+                        { x: 350, y: 400, width: 150, height: 100, color: '#F44336' },
+                        { x: 550, y: 350, width: 200, height: 150, color: '#FFEB3B' },
+                        { x: 800, y: 450, width: 400, height: 50, color: '#F44336' },
+                    ],
+                    goal: { x: 1100, y: 400, width: 50, height: 50 }
+                },
+                // Level 2: Moving Platforms
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 1600,
+                    platforms: [
+                        { x: 0, y: 450, width: 150, height: 50, color: '#FFEB3B' },
+                        { x: 800, y: 450, width: 150, height: 50, color: '#FFEB3B' },
+                        { x: 1450, y: 450, width: 150, height: 50, color: '#FFEB3B' },
+                    ],
+                    movingPlatforms: [
+                        // Horizontal
+                        { x: 250, y: 400, width: 100, height: 20, color: '#F44336', speed: 1.5, range: 150, direction: 'horizontal', startPos: 250 },
+                        // Vertical
+                        { x: 950, y: 300, width: 100, height: 20, color: '#F44336', speed: 1, range: 100, direction: 'vertical', startPos: 300 },
+                         // Horizontal (faster)
+                        { x: 1150, y: 350, width: 150, height: 20, color: '#FFEB3B', speed: 2.5, range: 200, direction: 'horizontal', startPos: 1150 },
+                    ],
+                    goal: { x: 1500, y: 400, width: 50, height: 50 }
+                },
+                // Level 3: Precision Jumping
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 1800,
+                    platforms: [
+                        { x: 0, y: 450, width: 100, height: 50, color: '#FFEB3B' },
+                        { x: 200, y: 420, width: 50, height: 80, color: '#F44336' },
+                        { x: 350, y: 380, width: 40, height: 120, color: '#FFEB3B' },
+                        { x: 500, y: 430, width: 30, height: 70, color: '#F44336' },
+                        { x: 650, y: 400, width: 60, height: 100, color: '#FFEB3B' },
+                        { x: 800, y: 350, width: 50, height: 150, color: '#F44336' },
+                        { x: 950, y: 300, width: 40, height: 200, color: '#FFEB3B' },
+                        { x: 1100, y: 380, width: 30, height: 120, color: '#F44336' },
+                        { x: 1250, y: 420, width: 70, height: 80, color: '#FFEB3B' },
+                        { x: 1450, y: 450, width: 100, height: 50, color: '#F44336' },
+                        { x: 1650, y: 450, width: 150, height: 50, color: '#FFEB3B' },
+                    ],
+                    goal: { x: 1700, y: 400, width: 50, height: 50 }
+                },
+                // Level 4: Bouncy Platforms
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 2000,
+                    platforms: [
+                        { x: 0, y: 450, width: 150, height: 50, color: '#FFEB3B' },
+                        { x: 400, y: 450, width: 100, height: 50, color: '#F44336' },
+                        { x: 700, y: 450, width: 100, height: 50, color: '#FFEB3B' },
+                         { x: 900, y: 300, width: 200, height: 20, color: '#F44336' }, // High platform
+                         { x: 1400, y: 450, width: 150, height: 50, color: '#FFEB3B' },
+                         { x: 1850, y: 450, width: 150, height: 50, color: '#FFEB3B' },
+                    ],
+                     bouncyPlatforms: [
+                        { x: 250, y: 430, width: 80, height: 20, color: '#4CAF50' }, // Green for bouncy
+                        { x: 550, y: 400, width: 80, height: 20, color: '#4CAF50' },
+                        { x: 1200, y: 430, width: 100, height: 20, color: '#4CAF50' },
+                        { x: 1650, y: 200, width: 100, height: 20, color: '#4CAF50' }, // High bounce to goal
+                    ],
+                    goal: { x: 1900, y: 150, width: 50, height: 50 } // Goal is high up
+                },
+                // Level 5: Timed Platforms
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 2200,
+                    platforms: [
+                        { x: 0, y: 450, width: 100, height: 50, color: '#FFEB3B' },
+                        { x: 1000, y: 450, width: 200, height: 50, color: '#F44336' },
+                        { x: 2100, y: 450, width: 100, height: 50, color: '#FFEB3B' },
+                    ],
+                    timedPlatforms: [
+                        // Simple on/off
+                        { x: 250, y: 400, width: 100, height: 20, color: '#9E9E9E', interval: 120, duration: 60, offset: 0 }, // Grey for timed
+                        { x: 450, y: 350, width: 100, height: 20, color: '#9E9E9E', interval: 120, duration: 60, offset: 60 }, // Alternating
+                        { x: 650, y: 400, width: 100, height: 20, color: '#9E9E9E', interval: 120, duration: 60, offset: 0 },
+                        // Faster sequence
+                         { x: 1300, y: 400, width: 80, height: 20, color: '#9E9E9E', interval: 90, duration: 40, offset: 0 },
+                         { x: 1450, y: 380, width: 80, height: 20, color: '#9E9E9E', interval: 90, duration: 40, offset: 30 },
+                         { x: 1600, y: 400, width: 80, height: 20, color: '#9E9E9E', interval: 90, duration: 40, offset: 60 },
+                         { x: 1750, y: 380, width: 80, height: 20, color: '#9E9E9E', interval: 90, duration: 40, offset: 0 },
+                         { x: 1900, y: 400, width: 80, height: 20, color: '#9E9E9E', interval: 90, duration: 40, offset: 30 },
+                    ],
+                    goal: { x: 2130, y: 400, width: 50, height: 50 }
+                },
+                // Level 6: Hazards
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 2400,
+                    platforms: [
+                        { x: 0, y: 450, width: 2400, height: 50, color: '#FFEB3B' }, // Long floor
+                        { x: 300, y: 350, width: 100, height: 20, color: '#F44336'},
+                        { x: 500, y: 250, width: 100, height: 20, color: '#FFEB3B'},
+                        { x: 900, y: 350, width: 400, height: 20, color: '#F44336'}, // Platform over spikes
+                        { x: 1500, y: 300, width: 100, height: 20, color: '#FFEB3B'},
+                        { x: 1700, y: 200, width: 100, height: 20, color: '#F44336'},
+                        { x: 2000, y: 300, width: 300, height: 20, color: '#FFEB3B'}, // Platform before goal
+                    ],
+                    hazards: [
+                        // Floor spikes
+                        { type: 'triangle', x: 700, y: 430, size: 20, color: 'red' },
+                        { type: 'triangle', x: 730, y: 430, size: 20, color: 'red' },
+                        { type: 'triangle', x: 760, y: 430, size: 20, color: 'red' },
+                        { type: 'triangle', x: 950, y: 430, size: 20, color: 'red' },
+                        { type: 'triangle', x: 980, y: 430, size: 20, color: 'red' },
+                        { type: 'triangle', x: 1010, y: 430, size: 20, color: 'red' },
+                        { type: 'triangle', x: 1040, y: 430, size: 20, color: 'red' },
+                        { type: 'triangle', x: 1070, y: 430, size: 20, color: 'red' },
+                        { type: 'triangle', x: 1100, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1130, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1160, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1190, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1220, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1250, y: 430, size: 20, color: 'red' },
+                         // Ceiling hazard
+                         { type: 'triangle', x: 1725, y: 220, size: 20, color: 'red', orientation: 'down' },
+                         { type: 'triangle', x: 1755, y: 220, size: 20, color: 'red', orientation: 'down' },
+                    ],
+                     movingPlatforms: [ // Add some movement
+                        { x: 2100, y: 400, width: 100, height: 20, color: '#F44336', speed: 1, range: 100, direction: 'vertical', startPos: 400 },
+                     ],
+                    goal: { x: 2300, y: 250, width: 50, height: 50 }
+                },
+                 // Level 7: Keys and Goal
+                {
+                    spawn: { x: 50, y: 100 },
+                     width: 2000,
+                     platforms: [
+                        { x: 0, y: 150, width: 150, height: 350, color: '#FFEB3B' }, // Start platform
+                        { x: 300, y: 450, width: 400, height: 50, color: '#F44336' },
+                        { x: 800, y: 350, width: 100, height: 150, color: '#FFEB3B' },
+                        { x: 1000, y: 250, width: 100, height: 250, color: '#F44336' },
+                        { x: 1200, y: 450, width: 300, height: 50, color: '#FFEB3B' },
+                        { x: 1600, y: 300, width: 100, height: 200, color: '#F44336' },
+                        { x: 1800, y: 150, width: 200, height: 350, color: '#FFEB3B' }, // Goal platform
+                     ],
+                     collectibles: [
+                         { type: 'key', x: 500, y: 410, size: 20, collected: false }, // Key 1 (Bottom mid)
+                         { type: 'key', x: 1025, y: 210, size: 20, collected: false }, // Key 2 (High mid)
+                         { type: 'key', x: 1625, y: 260, size: 20, collected: false }, // Key 3 (Right mid)
+                     ],
+                     requiredKeys: 3,
+                     hazards: [
+                         { type: 'triangle', x: 820, y: 330, size: 20, color: 'red' },
+                         { type: 'triangle', x: 850, y: 330, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1250, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1300, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1350, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1400, y: 430, size: 20, color: 'red' },
+                     ],
+                     goal: { x: 1900, y: 100, width: 50, height: 50, locked: true }
+                },
+                // Level 8: Low Gravity Zones
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 2600,
+                    platforms: [
+                        { x: 0, y: 450, width: 300, height: 50, color: '#FFEB3B' },
+                        // Gap requiring low-G jump
+                        { x: 900, y: 450, width: 500, height: 50, color: '#F44336' },
+                         // High platform reachable only via low-G
+                        { x: 1600, y: 200, width: 200, height: 300, color: '#FFEB3B' },
+                        { x: 2000, y: 450, width: 600, height: 50, color: '#F44336' }, // Floor after high platform
+                    ],
+                    lowGravityZones: [
+                        // Zone to cross the first gap
+                        { x: 400, y: 0, width: 400, height: 500, color: 'rgba(173, 216, 230, 0.3)' }, // Light blue overlay
+                        // Zone to reach the high platform
+                        { x: 1400, y: 0, width: 150, height: 500, color: 'rgba(173, 216, 230, 0.3)' },
+                         // Zone with hazards inside
+                         { x: 2100, y: 0, width: 300, height: 450, color: 'rgba(173, 216, 230, 0.3)' },
+                    ],
+                    hazards: [
+                        // Hazards within low G zone require careful floating
+                         { type: 'triangle', x: 2150, y: 300, size: 20, color: 'red' },
+                         { type: 'triangle', x: 2250, y: 150, size: 20, color: 'red' },
+                         { type: 'triangle', x: 2350, y: 350, size: 20, color: 'red' },
+                    ],
+                     movingPlatforms: [ // Add movement within low-G
+                        { x: 1000, y: 300, width: 100, height: 20, color: '#FFEB3B', speed: 1, range: 150, direction: 'vertical', startPos: 300 },
+                     ],
+                    goal: { x: 2500, y: 400, width: 50, height: 50 }
+                },
+                 // Level 9: Wall Jumping
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 2800,
+                    platforms: [
+                        { x: 0, y: 450, width: 100, height: 50, color: '#FFEB3B' },
+                        // First wall jump shaft
+                        { x: 250, y: 100, width: 50, height: 400, color: '#F44336' }, // Left wall
+                        { x: 450, y: 200, width: 50, height: 300, color: '#F44336' }, // Right wall (higher start)
+                        // Platform after first shaft
+                        { x: 450, y: 200, width: 200, height: 50, color: '#FFEB3B' },
+                        // Second, wider shaft with hazard
+                        { x: 800, y: 0, width: 50, height: 500, color: '#F44336' }, // Left wall
+                        { x: 1150, y: 0, width: 50, height: 500, color: '#F44336' }, // Right wall
+                        // Platform after second shaft
+                        { x: 1150, y: 400, width: 200, height: 100, color: '#FFEB3B' },
+                         // Tall wall to climb
+                         { x: 1500, y: 50, width: 50, height: 450, color: '#F44336' },
+                         // Series of small platforms requiring wall jumps between them
+                         { x: 1700, y: 350, width: 30, height: 150, color: '#FFEB3B' },
+                         { x: 1850, y: 250, width: 30, height: 250, color: '#F44336' },
+                         { x: 2000, y: 150, width: 30, height: 350, color: '#FFEB3B' },
+                         // Final platform
+                        { x: 2200, y: 450, width: 600, height: 50, color: '#F44336' },
+                    ],
+                    hazards: [
+                        // Spike at the bottom of the second shaft
+                        { type: 'triangle', x: 900, y: 480, size: 20, color: 'red' },
+                        { type: 'triangle', x: 950, y: 480, size: 20, color: 'red' },
+                        { type: 'triangle', x: 1000, y: 480, size: 20, color: 'red' },
+                        { type: 'triangle', x: 1050, y: 480, size: 20, color: 'red' },
+                         // Spike on a wall
+                         { type: 'triangle', x: 1550, y: 200, size: 20, color: 'red', orientation: 'left' },
+                    ],
+                     bouncyPlatforms: [ // Add bounce for variety
+                        { x: 500, y: 180, width: 80, height: 20, color: '#4CAF50' },
+                     ],
+                    goal: { x: 2700, y: 400, width: 50, height: 50 }
+                },
+                // Level 10: Master Challenge (Combine All) - Very Long
+                {
+                    spawn: { x: 50, y: 400 },
+                    width: 5000, // Much longer level
+                    platforms: [
+                        // Start Section (Basic + Precision)
+                        { x: 0, y: 450, width: 150, height: 50, color: '#FFEB3B' },
+                        { x: 250, y: 420, width: 40, height: 80, color: '#F44336' },
+                        { x: 380, y: 380, width: 30, height: 120, color: '#FFEB3B' },
+                        // Moving Platform Section (with Hazards)
+                        { x: 500, y: 450, width: 100, height: 50, color: '#F44336' }, // Entry platform
+                        { x: 1100, y: 450, width: 100, height: 50, color: '#FFEB3B' }, // Exit platform
+                         // Wall Jump Section (over Hazards)
+                         { x: 1300, y: 100, width: 50, height: 400, color: '#F44336' },
+                         { x: 1550, y: 150, width: 50, height: 350, color: '#FFEB3B' },
+                         { x: 1550, y: 150, width: 200, height: 50, color: '#FFEB3B' }, // Platform after wall jump
+                         // Low Gravity + Timed Platform Section
+                         { x: 1800, y: 450, width: 100, height: 50, color: '#F44336' }, // Entry
+                         { x: 2800, y: 450, width: 100, height: 50, color: '#FFEB3B' }, // Exit
+                         // Key Collection Section (using various mechanics)
+                         { x: 3000, y: 450, width: 100, height: 50, color: '#F44336' },
+                         { x: 3300, y: 100, width: 50, height: 400, color: '#FFEB3B' }, // High wall for key
+                         { x: 3600, y: 300, width: 150, height: 200, color: '#F44336' }, // Platform for key
+                         { x: 4000, y: 450, width: 100, height: 50, color: '#FFEB3B' }, // Near bouncy section for key
+                         // Final Gauntlet (Bouncy, Moving, Hazards)
+                         { x: 4300, y: 450, width: 100, height: 50, color: '#F44336' },
+                         { x: 4900, y: 200, width: 100, height: 300, color: '#FFEB3B' }, // Goal Platform
+                    ],
+                     movingPlatforms: [
+                        { x: 650, y: 400, width: 100, height: 20, color: '#FFEB3B', speed: 2, range: 200, direction: 'horizontal', startPos: 650 },
+                        { x: 900, y: 250, width: 80, height: 20, color: '#F44336', speed: 1.5, range: 150, direction: 'vertical', startPos: 250 },
+                        // In final gauntlet
+                        { x: 4550, y: 350, width: 100, height: 20, color: '#FFEB3B', speed: 2.5, range: 150, direction: 'horizontal', startPos: 4550 },
+                        { x: 4750, y: 150, width: 80, height: 20, color: '#F44336', speed: 2, range: 100, direction: 'vertical', startPos: 150 },
+                     ],
+                     timedPlatforms: [
+                         { x: 2000, y: 400, width: 100, height: 20, color: '#9E9E9E', interval: 100, duration: 50, offset: 0 },
+                         { x: 2200, y: 350, width: 100, height: 20, color: '#9E9E9E', interval: 100, duration: 50, offset: 50 },
+                         { x: 2400, y: 400, width: 100, height: 20, color: '#9E9E9E', interval: 100, duration: 50, offset: 0 },
+                         { x: 2600, y: 350, width: 100, height: 20, color: '#9E9E9E', interval: 100, duration: 50, offset: 50 },
+                     ],
+                     bouncyPlatforms: [
+                         { x: 4150, y: 430, width: 80, height: 20, color: '#4CAF50' }, // To get key/progress
+                         { x: 4450, y: 430, width: 80, height: 20, color: '#4CAF50' }, // In final gauntlet
+                     ],
+                     lowGravityZones: [
+                         { x: 1850, y: 0, width: 1000, height: 450, color: 'rgba(173, 216, 230, 0.3)' }, // Section with timed platforms
+                     ],
+                     hazards: [
+                         // Moving platform section
+                         { type: 'triangle', x: 680, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 780, y: 430, size: 20, color: 'red' },
+                         // Wall jump section
+                         { type: 'triangle', x: 1375, y: 480, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1425, y: 480, size: 20, color: 'red' },
+                         { type: 'triangle', x: 1475, y: 480, size: 20, color: 'red' },
+                         // Low G section
+                         { type: 'triangle', x: 2100, y: 100, size: 20, color: 'red', orientation: 'down' },
+                         { type: 'triangle', x: 2500, y: 200, size: 20, color: 'red' },
+                         // Key section hazards
+                         { type: 'triangle', x: 3650, y: 280, size: 20, color: 'red' },
+                         // Final gauntlet
+                         { type: 'triangle', x: 4350, y: 430, size: 20, color: 'red' },
+                         { type: 'triangle', x: 4600, y: 330, size: 20, color: 'red' },
+                         { type: 'triangle', x: 4800, y: 130, size: 20, color: 'red', orientation: 'down' },
+                         { type: 'triangle', x: 4800, y: 480, size: 20, color: 'red' },
+
+                     ],
+                     collectibles: [
+                         { type: 'key', x: 3400, y: 80, size: 20, collected: false },  // High wall jump key
+                         { type: 'key', x: 3700, y: 260, size: 20, collected: false }, // On platform key
+                         { type: 'key', x: 4100, y: 150, size: 20, collected: false }, // Requires bounce key
+                     ],
+                     requiredKeys: 3,
+                     goal: { x: 4925, y: 150, width: 50, height: 50, locked: true }
+                }
+            ];
+        }
+
+        // --- Game Functions ---
+
+        function resetPlayer(levelConf) {
+            player.x = levelConf.spawn.x;
+            player.y = levelConf.spawn.y;
+            player.vx = 0;
+            player.vy = 0;
+            player.isGrounded = false;
+            player.canWallJump = false;
+            player.onWall = null;
+            player.hasKey = false; // Reset key status specifically for key levels
+            player.keysCollected = 0;
+
+             // Reset collectibles state for the current level
+             if (currentCollectibles) {
+                currentCollectibles.forEach(c => c.collected = false);
+            }
+             // Relock goal if needed
+             if (currentGoal && currentGoal.initiallyLocked) {
+                 currentGoal.locked = true;
+             }
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levelData.length) {
+                displayMessage("YOU WIN!");
+                // Optional: Stop game loop or add a restart button
+                return; // Or loop back to level 1: currentLevelIndex = 0;
+            }
+            const level = levelData[levelIndex];
+            playerSpawn = level.spawn;
+            currentPlatforms = level.platforms || [];
+            currentHazards = level.hazards || [];
+            currentMovingPlatforms = JSON.parse(JSON.stringify(level.movingPlatforms || [])); // Deep copy to reset positions
+             // Initialize startPos if missing for moving platforms
+             currentMovingPlatforms.forEach(p => {
+                 if (p.direction === 'horizontal' && p.startPos === undefined) p.startPos = p.x;
+                 if (p.direction === 'vertical' && p.startPos === undefined) p.startPos = p.y;
+             });
+            currentBouncyPlatforms = level.bouncyPlatforms || [];
+            currentTimedPlatforms = level.timedPlatforms || [];
+            currentLowGravityZones = level.lowGravityZones || [];
+            currentCollectibles = JSON.parse(JSON.stringify(level.collectibles || [])); // Deep copy
+            currentGoal = level.goal ? { ...level.goal } : null; // Shallow copy is fine for goal
+            if (currentGoal && level.requiredKeys > 0) {
+                currentGoal.locked = true;
+                currentGoal.initiallyLocked = true; // Mark that it starts locked
+            } else if (currentGoal) {
+                currentGoal.locked = false;
+                currentGoal.initiallyLocked = false;
+            }
+
+            player.requiredKeys = level.requiredKeys || 0;
+
+
+            resetPlayer(level);
+            camera.levelWidth = level.width || canvas.width; // Set level bounds for camera
+            camera.levelHeight = level.height || canvas.height;
+            camera.x = 0; // Reset camera position
+             gameTime = 0; // Reset game time for timed platforms
+
+             levelInfoDiv.textContent = `Level: ${levelIndex + 1}/${levelData.length}`;
+             mechanicInfoDiv.textContent = `Mechanic: ${mechanics[levelIndex]}`;
+             messageDiv.style.display = 'none'; // Hide any previous messages
+        }
+
+         function nextLevel() {
+            currentLevelIndex++;
+            if (currentLevelIndex < levelData.length) {
+                loadLevel(currentLevelIndex);
+            } else {
+                 displayMessage("CONGRATULATIONS!\nYou've mastered the strings!");
+                // Optionally disable skip button etc.
+            }
+        }
+
+        function displayMessage(text) {
+            messageDiv.textContent = text;
+            messageDiv.style.display = 'block';
+            // Optional: Add a timeout to hide it or wait for user input
+        }
+
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+         function checkPointCollision(pointX, pointY, rect) {
+             return pointX > rect.x && pointX < rect.x + rect.width &&
+                    pointY > rect.y && pointY < rect.y + rect.height;
+         }
+
+        function handleCollisions() {
+            player.isGrounded = false;
+            player.canWallJump = false;
+            player.onWall = null;
+            let onMovingPlatform = null;
+            let currentGrav = gravity; // Assume normal gravity
+
+            // Check low gravity zones first
+            for (const zone of currentLowGravityZones) {
+                if (checkCollision(player, zone)) {
+                    currentGrav = gravity * 0.4; // Significantly lower gravity
+                    break; // Only apply one zone's effect
+                }
+            }
+
+             // Apply gravity
+            player.vy += currentGrav;
+
+
+            // --- Platform Collisions (Static, Moving, Bouncy, Timed) ---
+            const allPlatforms = [
+                 ...currentPlatforms,
+                 ...currentMovingPlatforms,
+                 ...currentBouncyPlatforms,
+                 ...currentTimedPlatforms.filter(p => { // Only check active timed platforms
+                     const cycleTime = gameTime % p.interval;
+                     return cycleTime >= p.offset && cycleTime < p.offset + p.duration;
+                 })
+             ];
+
+            // Horizontal Collision Check
+            player.x += player.vx;
+             for (const platform of allPlatforms) {
+                 if (checkCollision(player, platform)) {
+                     if (player.vx > 0) { // Moving right
+                         player.x = platform.x - player.width;
+                         if (player.vy > 0 && currentLevelIndex >= 8) { // Allow wall jump (Level 9+) only if moving downwards slightly
+                             player.canWallJump = true;
+                             player.onWall = 'right';
+                         }
+                     } else if (player.vx < 0) { // Moving left
+                         player.x = platform.x + platform.width;
+                         if (player.vy > 0 && currentLevelIndex >= 8) { // Allow wall jump (Level 9+)
+                             player.canWallJump = true;
+                             player.onWall = 'left';
+                         }
+                     }
+                     player.vx = 0; // Stop horizontal movement
+                 }
+             }
+
+
+            // Vertical Collision Check
+            player.y += player.vy;
+             for (const platform of allPlatforms) {
+                if (checkCollision(player, platform)) {
+                    if (player.vy > 0) { // Moving down
+                        player.y = platform.y - player.height;
+                        player.vy = 0;
+                        player.isGrounded = true;
+
+                         // Check if it's a bouncy platform
+                         if (currentBouncyPlatforms.includes(platform)) {
+                             player.vy = -jumpStrength * 1.6; // Extra bounce
+                             player.isGrounded = false; // Not truly grounded, just bounced
+                         }
+                         // Check if it's a moving platform to inherit its velocity
+                         else if (currentMovingPlatforms.includes(platform)) {
+                             onMovingPlatform = platform;
+                         }
+
+                    } else if (player.vy < 0) { // Moving up
+                        player.y = platform.y + platform.height;
+                        player.vy = 0;
+                    }
+                }
+            }
+
+             // Stick to moving platform if landed on it
+             if (onMovingPlatform) {
+                 if (onMovingPlatform.direction === 'horizontal') {
+                     player.x += onMovingPlatform.vx || 0; // Add platform's horizontal velocity
+                 }
+                 // Note: Vertical sticking happens naturally due to landing, but careful jumps are needed
+             }
+
+
+            // --- Hazard Collision ---
+             for (const hazard of currentHazards) {
+                 let collided = false;
+                 if (hazard.type === 'triangle') {
+                     // Simple bounding box check for triangle hazards for performance
+                     const hazardRect = {
+                         x: hazard.x,
+                         y: (hazard.orientation === 'down' || hazard.orientation === 'left' || hazard.orientation === 'right') ? hazard.y : hazard.y - hazard.size, // Adjust y based on point direction
+                         width: (hazard.orientation === 'left' || hazard.orientation === 'right') ? hazard.size * 0.5 : hazard.size,
+                         height: (hazard.orientation === 'down' || hazard.orientation === 'up' || !hazard.orientation) ? hazard.size : hazard.size * 0.5 // Rough bounding box
+                     };
+                     if (hazard.orientation === 'left') hazardRect.x = hazard.x - hazard.size * 0.5;
+                     if (checkCollision(player, hazardRect)) {
+                        collided = true;
+                     }
+                 } // Add other hazard types here if needed
+
+                 if (collided) {
+                    resetPlayer(levelData[currentLevelIndex]);
+                    return; // Exit collision check early on reset
+                 }
+             }
+
+            // --- Collectible Collision ---
+            for (let i = currentCollectibles.length - 1; i >= 0; i--) {
+                const collectible = currentCollectibles[i];
+                if (!collectible.collected) {
+                    const colRect = { x: collectible.x, y: collectible.y, width: collectible.size, height: collectible.size };
+                    if (checkCollision(player, colRect)) {
+                        if (collectible.type === 'key') {
+                            collectible.collected = true;
+                            player.keysCollected++;
+                            // Check if goal should be unlocked
+                            if (currentGoal && currentGoal.locked && player.keysCollected >= player.requiredKeys) {
+                                currentGoal.locked = false;
+                            }
+                        }
+                        // Could remove collected items visually: currentCollectibles.splice(i, 1);
+                        // Or just mark as collected and don't draw later
+                    }
+                }
+            }
+
+
+            // --- Goal Collision ---
+             if (currentGoal && !currentGoal.locked && checkCollision(player, currentGoal)) {
+                 nextLevel();
+                 return; // Exit collision check early on level change
+             }
+
+
+            // --- Canvas Edge Collisions ---
+            // Prevent going off the left edge of the level
+            if (player.x < 0) {
+                player.x = 0;
+                player.vx = 0;
+                 if (player.vy > 0 && currentLevelIndex >= 8) { // Allow wall jump off level boundary? Maybe not.
+                     // player.canWallJump = true;
+                     // player.onWall = 'left';
+                 }
+            }
+            // Prevent going off the right edge of the level (based on camera.levelWidth)
+             if (player.x + player.width > camera.levelWidth) {
+                 player.x = camera.levelWidth - player.width;
+                 player.vx = 0;
+                  if (player.vy > 0 && currentLevelIndex >= 8) { // Allow wall jump off level boundary? Maybe not.
+                    // player.canWallJump = true;
+                    // player.onWall = 'right';
+                 }
+             }
+            // Fall off bottom - reset level
+            if (player.y > canvas.height + 100) { // Give some leeway
+                resetPlayer(levelData[currentLevelIndex]);
+                return;
+            }
+
+        }
+
+        function updatePlayer() {
+            // Apply horizontal movement based on keys
+            if (keys.a) {
+                player.vx = -playerSpeed;
+            } else if (keys.d) {
+                player.vx = playerSpeed;
+            } else {
+                // Apply friction only when grounded or not trying to move
+                if (player.isGrounded) {
+                     player.vx *= friction;
+                 } else {
+                     player.vx *= 0.95; // Less friction in air
+                 }
+                 // Stop movement if velocity is very small
+                 if (Math.abs(player.vx) < 0.1) {
+                     player.vx = 0;
+                 }
+            }
+
+            // Jumping
+             if ((keys.w || keys.space) && player.isGrounded) {
+                 player.vy = -jumpStrength;
+                 player.isGrounded = false;
+             }
+
+            // Wall Jumping (Level 9+)
+             if (currentLevelIndex >= 8 && (keys.w || keys.space) && player.canWallJump && !player.isGrounded) {
+                 if (player.onWall === 'left') {
+                     player.vx = wallJumpStrengthX; // Jump away from wall
+                 } else if (player.onWall === 'right') {
+                     player.vx = -wallJumpStrengthX; // Jump away from wall
+                 }
+                 player.vy = -wallJumpStrengthY; // Jump upwards
+                 player.canWallJump = false; // Can only wall jump once per touch
+                 player.onWall = null;
+             }
+
+            handleCollisions(); // Apply physics and check collisions
+        }
+
+
+        function updateMovingPlatforms() {
+            currentMovingPlatforms.forEach(p => {
+                 let targetPos;
+                 if (p.direction === 'horizontal') {
+                     targetPos = p.startPos + p.range;
+                     p.vx = p.speed * (p.movingTowardsTarget !== false ? 1 : -1); // Use !== false to default to true
+                     p.x += p.vx;
+                     if ((p.movingTowardsTarget !== false && p.x >= targetPos) || (p.movingTowardsTarget === false && p.x <= p.startPos)) {
+                         p.movingTowardsTarget = !(p.movingTowardsTarget !== false);
+                         p.x = Math.max(p.startPos, Math.min(p.x, targetPos)); // Clamp position
+                     }
+                 } else { // Vertical
+                     targetPos = p.startPos + p.range;
+                     p.vy = p.speed * (p.movingTowardsTarget !== false ? 1 : -1);
+                     p.y += p.vy;
+                      if ((p.movingTowardsTarget !== false && p.y >= targetPos) || (p.movingTowardsTarget === false && p.y <= p.startPos)) {
+                         p.movingTowardsTarget = !(p.movingTowardsTarget !== false);
+                          p.y = Math.max(p.startPos, Math.min(p.y, targetPos)); // Clamp position
+                     }
+                 }
+             });
+        }
+
+        function updateCamera() {
+            // Target camera position to keep player somewhat centered horizontally
+            const targetCameraX = player.x - canvas.width / 3;
+
+            // Smoothly interpolate camera position towards the target
+            const smoothing = 0.1; // Adjust for faster/slower camera movement
+            camera.x += (targetCameraX - camera.x) * smoothing;
+
+
+            // Clamp camera position to level bounds
+            camera.x = Math.max(0, Math.min(camera.x, camera.levelWidth - camera.width));
+            // Vertical clamping (if ever implemented)
+            // camera.y = Math.max(0, Math.min(camera.y, camera.levelHeight - camera.height));
+        }
+
+
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Apply camera transformation
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // --- Draw Game Elements ---
+
+            // Draw Low Gravity Zones (behind platforms)
+            currentLowGravityZones.forEach(zone => {
+                ctx.fillStyle = zone.color;
+                ctx.fillRect(zone.x, zone.y, zone.width, zone.height);
+                // Draw cloud emoji inside zone for clarity
+                ctx.font = '30px Arial';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.fillText('☁️', zone.x + zone.width / 2 - 15, zone.y + zone.height / 2 + 10);
+            });
+
+            // Draw Platforms (Static)
+            currentPlatforms.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+                 ctx.strokeStyle = 'black';
+                 ctx.lineWidth = 1;
+                 ctx.strokeRect(p.x, p.y, p.width, p.height);
+            });
+
+             // Draw Moving Platforms
+             currentMovingPlatforms.forEach(p => {
+                 ctx.fillStyle = p.color;
+                 ctx.fillRect(p.x, p.y, p.width, p.height);
+                 ctx.strokeStyle = 'black';
+                 ctx.lineWidth = 1;
+                 ctx.strokeRect(p.x, p.y, p.width, p.height);
+             });
+
+             // Draw Bouncy Platforms
+            currentBouncyPlatforms.forEach(p => {
+                 ctx.fillStyle = p.color;
+                 ctx.fillRect(p.x, p.y, p.width, p.height);
+                 // Add visual indicator (e.g., arrow)
+                 ctx.fillStyle = 'white';
+                 ctx.font = '14px Arial';
+                 ctx.fillText('↑↑', p.x + p.width/2 - 10, p.y + p.height/2 + 5);
+                 ctx.strokeStyle = 'black';
+                 ctx.lineWidth = 1;
+                 ctx.strokeRect(p.x, p.y, p.width, p.height);
+             });
+
+             // Draw Timed Platforms
+             currentTimedPlatforms.forEach(p => {
+                 const cycleTime = gameTime % p.interval;
+                 const isVisible = cycleTime >= p.offset && cycleTime < p.offset + p.duration;
+                 if (isVisible) {
+                     // Fade effect for appearing/disappearing
+                     const timeIntoVisibility = cycleTime - p.offset;
+                     const timeUntilHidden = (p.offset + p.duration) - cycleTime;
+                     const fadeDuration = 15; // frames for fade in/out
+                     let alpha = 1.0;
+                     if (timeIntoVisibility < fadeDuration) {
+                         alpha = timeIntoVisibility / fadeDuration;
+                     } else if (timeUntilHidden < fadeDuration) {
+                         alpha = timeUntilHidden / fadeDuration;
+                     }
+
+                     ctx.globalAlpha = alpha * 0.8 + 0.2; // Ensure minimum visibility
+                     ctx.fillStyle = p.color;
+                     ctx.fillRect(p.x, p.y, p.width, p.height);
+                      ctx.strokeStyle = `rgba(0, 0, 0, ${alpha})`;
+                      ctx.lineWidth = 1;
+                      ctx.strokeRect(p.x, p.y, p.width, p.height);
+                     ctx.globalAlpha = 1.0; // Reset alpha
+                 }
+             });
+
+
+            // Draw Hazards
+            currentHazards.forEach(h => {
+                if (h.type === 'triangle') {
+                    ctx.fillStyle = h.color;
+                    ctx.beginPath();
+                    if (h.orientation === 'down') {
+                        ctx.moveTo(h.x, h.y);
+                        ctx.lineTo(h.x + h.size, h.y);
+                        ctx.lineTo(h.x + h.size / 2, h.y + h.size);
+                    } else if (h.orientation === 'left') {
+                         ctx.moveTo(h.x, h.y);
+                         ctx.lineTo(h.x - h.size * 0.5, h.y - h.size*0.5); // Point left
+                         ctx.lineTo(h.x - h.size * 0.5, h.y + h.size*0.5);
+                    } else if (h.orientation === 'right') {
+                         ctx.moveTo(h.x, h.y);
+                         ctx.lineTo(h.x + h.size * 0.5, h.y - h.size*0.5); // Point right
+                         ctx.lineTo(h.x + h.size * 0.5, h.y + h.size*0.5);
+                    }
+                    else { // Default upward
+                        ctx.moveTo(h.x, h.y);
+                        ctx.lineTo(h.x + h.size, h.y);
+                        ctx.lineTo(h.x + h.size / 2, h.y - h.size);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            });
+
+             // Draw Collectibles (Keys)
+             currentCollectibles.forEach(c => {
+                 if (!c.collected) {
+                     ctx.fillStyle = '#FFD700'; // Gold color for key
+                     ctx.font = `${c.size * 1.5}px Arial`; // Use emoji
+                     ctx.fillText('🔑', c.x, c.y + c.size * 1.2); // Adjust position for emoji rendering
+                     // Draw simple rect as fallback / hitbox vis
+                     // ctx.fillRect(c.x, c.y, c.size, c.size);
+                 }
+             });
+
+            // Draw Goal
+            if (currentGoal) {
+                 // Use flag emoji 🏁
+                 ctx.font = `${currentGoal.height}px Arial`;
+                 if (currentGoal.locked) {
+                    ctx.globalAlpha = 0.5; // Dim locked goal
+                    ctx.fillText('🏁', currentGoal.x, currentGoal.y + currentGoal.height * 0.8);
+                    ctx.globalAlpha = 1.0;
+                    // Draw lock icon over it
+                    ctx.font = `20px Arial`;
+                    ctx.fillStyle = 'black';
+                     ctx.fillText('🔒', currentGoal.x + currentGoal.width/2 - 10, currentGoal.y - 5);
+                 } else {
+                     ctx.fillText('🏁', currentGoal.x, currentGoal.y + currentGoal.height * 0.8);
+                 }
+            }
+
+
+            // Draw Player
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.strokeStyle = '#FFEB3B'; // Yellow outline
+            ctx.lineWidth = 2;
+            ctx.strokeRect(player.x, player.y, player.width, player.height);
+
+            // Restore camera transformation
+            ctx.restore();
+
+             // --- Draw UI Elements (not affected by camera) ---
+             // Draw collected keys count if applicable
+             if (player.requiredKeys > 0) {
+                 ctx.fillStyle = 'black';
+                 ctx.font = '18px Courier New';
+                 ctx.fillText(`🔑 ${player.keysCollected} / ${player.requiredKeys}`, canvas.width - 100, 30);
+             }
+        }
+
+        function gameLoop() {
+            gameTime++;
+            updateMovingPlatforms();
+            updatePlayer();
+            updateCamera();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('keydown', (e) => {
+            switch (e.key.toLowerCase()) {
+                case 'a':
+                case 'arrowleft':
+                    keys.a = true;
+                    break;
+                case 'd':
+                case 'arrowright':
+                    keys.d = true;
+                    break;
+                case 'w':
+                case 'arrowup':
+                    keys.w = true;
+                    break;
+                case ' ': // Spacebar
+                    keys.space = true;
+                    break;
+                case 'r':
+                    resetPlayer(levelData[currentLevelIndex]);
+                    break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+             switch (e.key.toLowerCase()) {
+                case 'a':
+                case 'arrowleft':
+                    keys.a = false;
+                    break;
+                case 'd':
+                case 'arrowright':
+                    keys.d = false;
+                    break;
+                case 'w':
+                case 'arrowup':
+                    keys.w = false;
+                    break;
+                case ' ': // Spacebar
+                    keys.space = false;
+                    break;
+            }
+        });
+
+        skipLevelBtn.addEventListener('click', () => {
+            nextLevel();
+        });
+
+        // --- Initialize Game ---
+        defineLevels();
+        loadLevel(currentLevelIndex);
+        requestAnimationFrame(gameLoop);
+
+    </script>
+
+</body>
+</html>

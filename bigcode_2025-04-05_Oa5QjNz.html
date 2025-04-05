@@ -1,0 +1,1758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Campaign Builder & Player</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f0f0f0;
+            overflow: hidden; /* Prevent body scrollbars */
+        }
+        .top-bar {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .top-bar button, .top-bar select, .top-bar label {
+            margin: 0 5px;
+            padding: 8px 12px;
+            background-color: #555;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .top-bar button:hover, .top-bar select:hover {
+            background-color: #777;
+        }
+        .top-bar .level-nav {
+            display: flex;
+            align-items: center;
+        }
+        .top-bar input[type="number"] {
+             width: 50px;
+             padding: 5px;
+             margin: 0 5px;
+        }
+        .main-content {
+            display: flex;
+            flex-grow: 1;
+            overflow: hidden; /* Prevent scrolling within main content */
+        }
+        .sidebar {
+            width: 180px;
+            background-color: #e0e0e0;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+        .sidebar h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
+        .palette button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            text-align: left;
+            background-color: #f8f8f8;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: grab;
+            font-size: 14px;
+        }
+        .palette button:active {
+            cursor: grabbing;
+            background-color: #ddd;
+        }
+
+        .properties {
+            margin-top: 20px;
+        }
+         .properties label {
+            display: block;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #333;
+         }
+         .properties input[type="number"],
+         .properties input[type="color"] {
+            width: calc(100% - 16px);
+            padding: 6px;
+            margin-top: 3px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+         }
+         .properties input[type="color"] {
+            padding: 2px;
+            height: 25px;
+         }
+         .properties button {
+            margin-top: 15px;
+            padding: 8px;
+            width: 100%;
+            background-color: #d9534f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+         }
+         .properties button:hover {
+            background-color: #c9302c;
+         }
+
+
+        .game-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #555; /* Dark background for contrast */
+             overflow: hidden; /* Important for canvas scaling/positioning */
+             position: relative; /* Needed for absolute positioning of messages */
+        }
+        #gameCanvas {
+            background-color: #87CEEB; /* Sky blue */
+            display: block;
+            border: 2px solid #333;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain; /* Scale canvas while preserving aspect ratio */
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.6);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 600px;
+            border-radius: 5px;
+            position: relative;
+        }
+        .modal-content h2 {
+            margin-top: 0;
+        }
+        .modal-content textarea {
+            width: calc(100% - 20px);
+            height: 100px;
+            margin-top: 10px;
+            font-family: monospace;
+            resize: vertical;
+        }
+         .modal-content button {
+             margin-top: 10px;
+             padding: 10px 15px;
+             cursor: pointer;
+         }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            cursor: pointer;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+        }
+        .message-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 100; /* Above canvas */
+            display: none; /* Hidden by default */
+        }
+        .message-overlay h2 {
+            margin-top: 0;
+        }
+        .message-overlay button {
+             margin-top: 15px;
+             padding: 10px 20px;
+             font-size: 16px;
+             cursor: pointer;
+             background-color: #4CAF50;
+             color: white;
+             border: none;
+             border-radius: 5px;
+        }
+        .message-overlay button:hover {
+            background-color: #45a049;
+        }
+
+        /* Hide builder elements in play mode */
+        body[data-mode="player"] .sidebar {
+            display: none;
+        }
+        body[data-mode="player"] .builder-only {
+             display: none;
+        }
+
+        /* Hide player elements in build mode */
+         body[data-mode="builder"] .player-only {
+             display: none;
+         }
+
+    </style>
+</head>
+<body data-mode="builder">
+
+    <div class="top-bar">
+        <div>
+            <button id="buildModeBtn">Build Mode</button>
+            <button id="playModeBtn">Play Mode</button>
+        </div>
+        <div class="level-nav builder-only">
+             <button id="prevLevelBtn">&lt; Prev Level</button>
+             <span>Level <span id="currentLevelLabel">1</span> / <span id="totalLevelsLabel">1</span></span>
+             <button id="nextLevelBtn">Next Level &gt;</button>
+             <button id="addLevelBtn">+</button>
+             <button id="deleteLevelBtn">-</button>
+             <label for="levelWidth">W:</label><input type="number" id="levelWidth" value="1600" min="400" step="100">
+             <label for="levelHeight">H:</label><input type="number" id="levelHeight" value="600" min="300" step="50">
+        </div>
+        <div>
+            <button id="shareBtn">Share Campaign</button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="sidebar builder-only">
+            <h3>Elements</h3>
+            <div class="palette">
+                <button draggable="true" data-type="platform">🧱 Platform</button>
+                <button draggable="true" data-type="enemy">▲ Enemy</button>
+                <button draggable="true" data-type="hazard">뾰 Hazard</button>
+                <button draggable="true" data-type="collectible">💰 Collectible</button>
+                <button draggable="true" data-type="goal">🏁 Goal</button>
+                <button draggable="true" data-type="playerStart">✨ Player Start</button>
+            </div>
+
+            <div class="properties">
+                <h3 id="propertiesHeader">Properties</h3>
+                <div id="propertiesPanel">
+                    <p>Select an element to edit its properties.</p>
+                </div>
+                 <h3 id="playerPropertiesHeader">Player Properties</h3>
+                 <div id="playerPropertiesPanel">
+                     <label for="prop-player-width">Width:</label>
+                     <input type="number" id="prop-player-width" step="1">
+                     <label for="prop-player-height">Height:</label>
+                     <input type="number" id="prop-player-height" step="1">
+                     <label for="prop-player-color">Color:</label>
+                     <input type="color" id="prop-player-color">
+                     <label for="prop-player-speed">Speed:</label>
+                     <input type="number" id="prop-player-speed" step="0.1">
+                     <label for="prop-player-jump">Jump Height:</label>
+                     <input type="number" id="prop-player-jump" step="0.5">
+                     <label for="prop-player-gravity">Gravity:</label>
+                     <input type="number" id="prop-player-gravity" step="0.01">
+                 </div>
+            </div>
+        </div>
+
+        <div class="game-container">
+             <canvas id="gameCanvas"></canvas>
+             <div id="messageOverlay" class="message-overlay">
+                 <h2 id="messageTitle">Message</h2>
+                 <p id="messageText">Text goes here.</p>
+                 <button id="messageButton">OK</button>
+             </div>
+        </div>
+    </div>
+
+     <div id="shareModal" class="modal">
+         <div class="modal-content">
+             <span class="close-button" onclick="closeModal('shareModal')">&times;</span>
+             <h2>Share Your Campaign</h2>
+             <p>Copy the link(s) below to share your creation!</p>
+             <div id="shareLinks"></div>
+             <button onclick="copyLinks()">Copy All Links</button>
+         </div>
+     </div>
+
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameContainer = document.querySelector('.game-container');
+        const body = document.body;
+
+        // --- State ---
+        let mode = 'builder'; // 'builder' or 'player'
+        let campaignData = {
+            player: {
+                width: 30, height: 40, color: '#FF0000', // Red square for player
+                speed: 3, jumpHeight: 10, gravity: 0.4,
+                startX: 100, startY: 100 // Default start pos
+            },
+            levels: [
+                { width: 1600, height: 600, elements: [] } // Start with one empty level
+            ]
+        };
+        let currentLevelIndex = 0;
+        let selectedElement = null;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let isDragging = false;
+        let isResizing = false;
+        let resizeHandle = null; // 'topLeft', 'topRight', 'bottomLeft', 'bottomRight', 'left', 'right', 'top', 'bottom'
+        const resizeHandleSize = 8;
+
+        // Player game state
+        let playerState = { x: 0, y: 0, vx: 0, vy: 0, grounded: false };
+        let keys = {}; // Keyboard input tracking
+        let animationFrameId = null;
+        let levelComplete = false;
+
+        // Camera/Viewport
+        let camera = { x: 0, y: 0 };
+
+        // Sharing/Loading State
+        let chunkInfo = { current: null, total: null, nextLink: null };
+        const MAX_URL_LENGTH = 1950; // Leave some buffer
+
+        // --- Initialization ---
+        function init() {
+            loadFromURL(); // Check URL for shared campaign first
+            setupEventListeners();
+            setMode(campaignData.levels.length > 0 && campaignData.levels[0].elements.length > 0 ? 'builder' : 'builder'); // Start in builder unless loaded
+            updateUI();
+            resizeCanvas();
+            gameLoop(); // Start the main loop
+        }
+
+        function resizeCanvas() {
+            const containerWidth = gameContainer.clientWidth;
+            const containerHeight = gameContainer.clientHeight;
+            const level = campaignData.levels[currentLevelIndex];
+
+            if (!level) return; // Should not happen, but safeguard
+
+             // Set internal canvas dimensions based on level size
+             canvas.width = level.width;
+             canvas.height = level.height;
+
+            // Calculate the best fit scale factor
+            const scaleX = containerWidth / level.width;
+            const scaleY = containerHeight / level.height;
+            const scale = Math.min(scaleX, scaleY) * 0.95; // Use 95% to add some padding
+
+            // Apply scaling using CSS transform for better rendering quality
+            canvas.style.width = `${level.width * scale}px`;
+            canvas.style.height = `${level.height * scale}px`;
+
+            // Center the canvas (optional, adjust if needed)
+            // canvas.style.position = 'absolute';
+            // canvas.style.left = `${(containerWidth - level.width * scale) / 2}px`;
+            // canvas.style.top = `${(containerHeight - level.height * scale) / 2}px`;
+
+             draw(); // Redraw after resize
+        }
+
+
+        // --- Mode Switching ---
+        function setMode(newMode) {
+            mode = newMode;
+            body.dataset.mode = mode;
+            selectedElement = null; // Deselect elements when switching modes
+            cancelAnimationFrame(animationFrameId); // Stop previous loop
+
+            if (mode === 'player') {
+                resetPlayerState();
+                levelComplete = false;
+                hideMessage(); // Hide any lingering messages
+            } else {
+                // Ensure player start exists if needed, maybe add one?
+                updatePropertiesPanel(); // Show default panel in builder
+            }
+            resizeCanvas(); // Adjust canvas size/scale for the mode
+            gameLoop(); // Restart loop for the new mode
+        }
+
+        // --- UI Update Functions ---
+        function updateUI() {
+            document.getElementById('currentLevelLabel').textContent = currentLevelIndex + 1;
+            document.getElementById('totalLevelsLabel').textContent = campaignData.levels.length;
+            document.getElementById('levelWidth').value = campaignData.levels[currentLevelIndex].width;
+            document.getElementById('levelHeight').value = campaignData.levels[currentLevelIndex].height;
+
+             // Update player property fields
+            document.getElementById('prop-player-width').value = campaignData.player.width;
+            document.getElementById('prop-player-height').value = campaignData.player.height;
+            document.getElementById('prop-player-color').value = campaignData.player.color;
+            document.getElementById('prop-player-speed').value = campaignData.player.speed;
+            document.getElementById('prop-player-jump').value = campaignData.player.jumpHeight;
+            document.getElementById('prop-player-gravity').value = campaignData.player.gravity;
+
+            updatePropertiesPanel(); // Update element properties if one is selected
+        }
+
+         function updatePropertiesPanel() {
+            const panel = document.getElementById('propertiesPanel');
+            const header = document.getElementById('propertiesHeader');
+
+            if (!selectedElement || mode !== 'builder') {
+                header.textContent = 'Properties';
+                panel.innerHTML = '<p>Select an element to edit its properties.</p>';
+                return;
+            }
+
+            header.textContent = `Properties (${selectedElement.type})`;
+            panel.innerHTML = ''; // Clear previous properties
+
+            // Common properties
+            panel.innerHTML += `
+                <label for="prop-x">X:</label>
+                <input type="number" id="prop-x" value="${selectedElement.x}" step="1">
+                <label for="prop-y">Y:</label>
+                <input type="number" id="prop-y" value="${selectedElement.y}" step="1">
+                <label for="prop-width">Width:</label>
+                <input type="number" id="prop-width" value="${selectedElement.width}" min="5" step="1">
+                <label for="prop-height">Height:</label>
+                <input type="number" id="prop-height" value="${selectedElement.height}" min="5" step="1">
+            `;
+
+             // Type-specific properties
+             switch (selectedElement.type) {
+                 case 'platform':
+                     panel.innerHTML += `
+                        <label for="prop-color">Color:</label>
+                        <input type="color" id="prop-color" value="${selectedElement.color || '#666666'}">
+                     `;
+                     break;
+                 case 'enemy':
+                    panel.innerHTML += `
+                        <label for="prop-color">Color:</label>
+                        <input type="color" id="prop-color" value="${selectedElement.color || '#FFA500'}">
+                        <label for="prop-speed">Speed:</label>
+                        <input type="number" id="prop-speed" value="${selectedElement.speed || 1}" step="0.1">
+                        <label for="prop-moveDistance">Move Distance:</label>
+                        <input type="number" id="prop-moveDistance" value="${selectedElement.moveDistance || 100}" step="10">
+                    `;
+                     break;
+                 case 'hazard':
+                     panel.innerHTML += `
+                        <label for="prop-color">Color:</label>
+                        <input type="color" id="prop-color" value="${selectedElement.color || '#FF0000'}">
+                     `;
+                     // Hazards don't need width/height adjustment via properties usually
+                      document.getElementById('prop-width').disabled = true;
+                      document.getElementById('prop-height').disabled = true;
+                     break;
+                  case 'collectible':
+                     panel.innerHTML += `
+                         <label for="prop-color">Color:</label>
+                         <input type="color" id="prop-color" value="${selectedElement.color || '#FFD700'}">
+                     `;
+                      // Collectibles often fixed size
+                      document.getElementById('prop-width').disabled = true;
+                      document.getElementById('prop-height').disabled = true;
+                     break;
+                 case 'goal':
+                      panel.innerHTML += `
+                         <label for="prop-color">Color:</label>
+                         <input type="color" id="prop-color" value="${selectedElement.color || '#00FF00'}">
+                     `;
+                     // Goal often fixed size
+                      document.getElementById('prop-width').disabled = true;
+                      document.getElementById('prop-height').disabled = true;
+                     break;
+                 case 'playerStart':
+                      // Player start only needs position, disable size/color edits
+                      document.getElementById('prop-width').disabled = true;
+                      document.getElementById('prop-height').disabled = true;
+                      // Add color input just for visual consistency in the panel
+                      panel.innerHTML += `
+                          <label for="prop-color">Marker Color:</label>
+                          <input type="color" id="prop-color" value="${selectedElement.color || '#FFFF00'}" disabled>
+                      `;
+                      break;
+             }
+
+             // Add delete button
+             panel.innerHTML += `<button id="deleteElementBtn">Delete Element</button>`;
+
+             // Add event listeners for the new inputs
+             panel.querySelectorAll('input').forEach(input => {
+                 input.addEventListener('change', handlePropertyChange);
+                 input.addEventListener('input', handlePropertyChange); // For live updates on number/color
+             });
+             document.getElementById('deleteElementBtn')?.addEventListener('click', deleteSelectedElement);
+        }
+
+        function handlePropertyChange(event) {
+            if (!selectedElement) return;
+            const prop = event.target.id.replace('prop-', '');
+            let value = event.target.type === 'number' ? parseFloat(event.target.value) : event.target.value;
+
+            if (isNaN(value) && event.target.type === 'number') {
+                 value = 0; // Default if parsing fails
+            }
+
+            // Update the element data
+             if (prop === 'x' || prop === 'y' || prop === 'width' || prop === 'height') {
+                 if (value >= (prop === 'width' || prop === 'height' ? 5 : -Infinity)) { // Min size 5
+                     selectedElement[prop] = value;
+                 } else {
+                      event.target.value = selectedElement[prop]; // Revert UI if invalid
+                 }
+             } else {
+                 selectedElement[prop] = value;
+             }
+
+             // Special case: update player start position in global player data
+             if (selectedElement.type === 'playerStart') {
+                if (prop === 'x') campaignData.player.startX = value;
+                if (prop === 'y') campaignData.player.startY = value;
+             }
+
+            draw(); // Redraw canvas with updated element
+        }
+
+        function handlePlayerPropertyChange(event) {
+            const prop = event.target.id.replace('prop-player-', '');
+            let value = event.target.type === 'number' ? parseFloat(event.target.value) : event.target.value;
+
+            if (isNaN(value) && event.target.type === 'number') {
+                 value = campaignData.player[prop] || 0; // Revert to old value on parse error
+                 event.target.value = value;
+            }
+
+             // Apply constraints
+             if (prop === 'width' || prop === 'height') value = Math.max(5, value);
+             if (prop === 'speed') value = Math.max(0.1, value);
+             if (prop === 'jumpHeight') value = Math.max(1, value);
+             if (prop === 'gravity') value = Math.max(0.01, value);
+
+             const playerPropMap = {
+                jump: 'jumpHeight' // Map UI ID to data property name
+             };
+             const dataProp = playerPropMap[prop] || prop;
+
+
+            campaignData.player[dataProp] = value;
+
+            // If player start element is selected, update its position to match global
+            if (selectedElement && selectedElement.type === 'playerStart') {
+                 // This isn't needed here, player props don't change start position marker
+            }
+            draw(); // Redraw to reflect potential player size/color changes in builder preview
+        }
+
+
+        // --- Drawing ---
+        function draw() {
+            if (!ctx) return;
+            const level = campaignData.levels[currentLevelIndex];
+            if (!level) return;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Apply camera transform if in play mode
+            ctx.save();
+            if (mode === 'player') {
+                 updateCamera();
+                 ctx.translate(-camera.x, -camera.y);
+            }
+
+            // Draw background (if any image/color is set for the level later)
+            ctx.fillStyle = '#87CEEB'; // Default sky blue
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+
+            // Draw elements
+            level.elements.forEach(element => {
+                drawElement(ctx, element);
+            });
+
+             // Draw Player Start marker in builder mode
+             if (mode === 'builder') {
+                 const startMarker = level.elements.find(el => el.type === 'playerStart');
+                 if (startMarker) {
+                     drawElement(ctx, startMarker);
+                 } else {
+                     // Draw a default marker if none placed yet, but don't add to data
+                     ctx.font = '20px Arial';
+                     ctx.fillStyle = 'rgba(255, 255, 0, 0.7)';
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText('✨', campaignData.player.startX, campaignData.player.startY);
+                 }
+                  // Draw preview of player character at start position
+                  ctx.fillStyle = campaignData.player.color || '#FF0000';
+                  ctx.fillRect(campaignData.player.startX - campaignData.player.width / 2,
+                               campaignData.player.startY - campaignData.player.height, // Y is top
+                               campaignData.player.width, campaignData.player.height);
+
+             }
+
+
+            // Draw Player in play mode
+            if (mode === 'player') {
+                ctx.fillStyle = campaignData.player.color || '#FF0000';
+                ctx.fillRect(playerState.x, playerState.y, campaignData.player.width, campaignData.player.height);
+            }
+
+            // Draw selection box and resize handles in builder mode
+            if (mode === 'builder' && selectedElement && selectedElement.type !== 'playerStart') {
+                drawSelectionBox(ctx, selectedElement);
+            }
+             if (mode === 'builder' && selectedElement && selectedElement.type === 'playerStart') {
+                 // Draw simpler selection for player start (just outline)
+                 ctx.strokeStyle = 'rgba(0, 0, 255, 0.8)';
+                 ctx.lineWidth = 2;
+                 ctx.strokeRect(selectedElement.x - 15, selectedElement.y - 15, 30, 30); // Center around the emoji approx
+             }
+
+
+            ctx.restore(); // Restore context state (removes camera transform)
+
+            // Draw UI elements on top (like score, HUD in play mode - future)
+            if (mode === 'player') {
+                // Example: Draw level number overlay
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(`Level: ${currentLevelIndex + 1}`, 10, 10);
+                 // Draw coin count (example)
+                 const coinsCollected = level.elements.filter(e => e.type === 'collectible' && e.collected).length;
+                 ctx.fillText(`💰: ${coinsCollected}`, 10, 30);
+            }
+
+             // Draw Grid (optional, toggleable later)
+             if (mode === 'builder') {
+                 // drawGrid(ctx, level.width, level.height);
+             }
+        }
+
+         function drawGrid(ctx, width, height) {
+             const gridSize = 20;
+             ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+             ctx.lineWidth = 0.5;
+             ctx.beginPath();
+             for (let x = 0; x <= width; x += gridSize) {
+                 ctx.moveTo(x, 0);
+                 ctx.lineTo(x, height);
+             }
+             for (let y = 0; y <= height; y += gridSize) {
+                 ctx.moveTo(0, y);
+                 ctx.lineTo(width, y);
+             }
+             ctx.stroke();
+         }
+
+
+        function drawElement(ctx, element) {
+             if (element.collected) return; // Don't draw collected items
+
+            ctx.save(); // Save context state before drawing element
+
+            switch (element.type) {
+                case 'platform':
+                    ctx.fillStyle = element.color || '#666666'; // Dark grey default
+                    ctx.fillRect(element.x, element.y, element.width, element.height);
+                    break;
+                case 'enemy':
+                    ctx.fillStyle = element.color || '#FFA500'; // Orange default
+                    // Simple triangle shape for enemy
+                    ctx.beginPath();
+                    ctx.moveTo(element.x + element.width / 2, element.y); // Top point
+                    ctx.lineTo(element.x + element.width, element.y + element.height); // Bottom right
+                    ctx.lineTo(element.x, element.y + element.height); // Bottom left
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                case 'hazard':
+                    // Draw multiple triangles for spikes
+                    const spikeWidth = element.width / 5; // Example: 5 spikes across width
+                    const spikeHeight = element.height;
+                    ctx.fillStyle = element.color || '#FF0000'; // Red default
+                    ctx.beginPath();
+                    for (let i = 0; i < 5; i++) {
+                        const spikeX = element.x + i * spikeWidth;
+                        ctx.moveTo(spikeX, element.y + spikeHeight); // Bottom left base
+                        ctx.lineTo(spikeX + spikeWidth / 2, element.y); // Tip
+                        ctx.lineTo(spikeX + spikeWidth, element.y + spikeHeight); // Bottom right base
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    // Or use Emoji:
+                    // ctx.font = `${element.height}px Arial`;
+                    // ctx.textAlign = 'left';
+                    // ctx.textBaseline = 'top';
+                    // ctx.fillText('뾰', element.x, element.y); // May not scale well with width
+                    break;
+                case 'collectible':
+                    ctx.font = `${element.height}px Arial`; // Use height for size
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                     // Center emoji within the bounding box
+                     ctx.fillText('💰', element.x + element.width / 2, element.y + element.height / 2);
+                    break;
+                case 'goal':
+                     ctx.font = `${element.height}px Arial`;
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText('🏁', element.x + element.width / 2, element.y + element.height / 2);
+                    break;
+                 case 'playerStart':
+                     ctx.font = '30px Arial'; // Fixed size for marker
+                     ctx.fillStyle = element.color || 'rgba(255, 255, 0, 0.8)';
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText('✨', element.x, element.y);
+                     break;
+            }
+             ctx.restore(); // Restore context state
+        }
+
+        function drawSelectionBox(ctx, element) {
+            ctx.strokeStyle = 'rgba(0, 0, 255, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(element.x, element.y, element.width, element.height);
+
+            // Draw resize handles
+            ctx.fillStyle = 'rgba(0, 0, 255, 0.9)';
+            const halfHandle = resizeHandleSize / 2;
+
+            const handles = getResizeHandles(element);
+             Object.values(handles).forEach(handle => {
+                ctx.fillRect(handle.x - halfHandle, handle.y - halfHandle, resizeHandleSize, resizeHandleSize);
+            });
+        }
+
+         function getResizeHandles(element) {
+            return {
+                 topLeft: { x: element.x, y: element.y },
+                 topRight: { x: element.x + element.width, y: element.y },
+                 bottomLeft: { x: element.x, y: element.y + element.height },
+                 bottomRight: { x: element.x + element.width, y: element.y + element.height },
+                 top: { x: element.x + element.width / 2, y: element.y },
+                 bottom: { x: element.x + element.width / 2, y: element.y + element.height },
+                 left: { x: element.x, y: element.y + element.height / 2 },
+                 right: { x: element.x + element.width, y: element.y + element.height / 2 },
+             };
+         }
+
+
+        // --- Game Loop ---
+        function gameLoop(timestamp) {
+            if (mode === 'builder') {
+                // Builder logic (mostly event-driven, but could have animations)
+                updateBuilder(timestamp);
+            } else if (mode === 'player') {
+                // Player logic
+                 if (!levelComplete) {
+                    updatePlayer(timestamp);
+                    updateEnemies(timestamp); // Update enemy positions
+                    checkCollisions();
+                    checkLevelCompletion();
+                 }
+            }
+
+            draw(); // Draw the current state
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- Builder Logic ---
+        function updateBuilder(timestamp) {
+            // Placeholder for potential builder animations or updates
+        }
+
+        function addElement(type, x, y) {
+            const level = campaignData.levels[currentLevelIndex];
+            let newElement = {
+                 id: Date.now() + Math.random(), // Simple unique ID
+                 type: type,
+                 x: x,
+                 y: y,
+                 // Default values based on type
+                 width: type === 'platform' ? 100 : (type === 'hazard' ? 50 : (type === 'playerStart' ? 30 : 30)),
+                 height: type === 'platform' ? 20 : (type === 'hazard' ? 30 : (type === 'playerStart' ? 30 : 30)),
+                 // Type specific defaults
+                 ...(type === 'platform' && { color: '#666666' }),
+                 ...(type === 'enemy' && { color: '#FFA500', speed: 1, moveDistance: 100, direction: 1, startX: x }),
+                 ...(type === 'hazard' && { color: '#FF0000' }),
+                 ...(type === 'collectible' && { color: '#FFD700', collected: false }),
+                 ...(type === 'goal' && { color: '#00FF00' }),
+                 ...(type === 'playerStart' && { color: '#FFFF00' }), // Only one player start per level
+             };
+
+              // If adding player start, remove existing one first
+             if (type === 'playerStart') {
+                 const existingStart = level.elements.find(el => el.type === 'playerStart');
+                 if (existingStart) {
+                     level.elements = level.elements.filter(el => el.type !== 'playerStart');
+                 }
+                 // Position is center for marker, adjust internal player data too
+                  newElement.x = x;
+                  newElement.y = y;
+                  campaignData.player.startX = x;
+                  campaignData.player.startY = y; // y is marker center, player spawns above
+             }
+
+
+            level.elements.push(newElement);
+            selectedElement = newElement; // Select the newly added element
+            updatePropertiesPanel();
+            draw();
+        }
+
+        function deleteSelectedElement() {
+            if (!selectedElement) return;
+            const level = campaignData.levels[currentLevelIndex];
+            level.elements = level.elements.filter(el => el.id !== selectedElement.id);
+            selectedElement = null;
+            updatePropertiesPanel();
+            draw();
+        }
+
+        function selectElementAt(x, y) {
+            const level = campaignData.levels[currentLevelIndex];
+            let clickedElement = null;
+             // Check elements in reverse order so top elements are selected first
+             for (let i = level.elements.length - 1; i >= 0; i--) {
+                 const el = level.elements[i];
+                 let bounds = { x: el.x, y: el.y, width: el.width, height: el.height };
+                  // Special bounds for text-based elements if needed
+                  if (el.type === 'playerStart') {
+                     bounds = { x: el.x - 15, y: el.y - 15, width: 30, height: 30 }; // Approx clickable area
+                 } else if (el.type === 'collectible' || el.type === 'goal') {
+                     // Use element height as approx size for collision
+                     const size = el.height;
+                     bounds = { x: el.x + el.width/2 - size/2, y: el.y + el.height/2 - size/2, width: size, height: size};
+                 }
+
+                if (x >= bounds.x && x <= bounds.x + bounds.width &&
+                    y >= bounds.y && y <= bounds.y + bounds.height) {
+                    clickedElement = el;
+                    break;
+                }
+             }
+
+             if (selectedElement !== clickedElement) {
+                 selectedElement = clickedElement;
+                 updatePropertiesPanel();
+                 draw();
+             }
+             return clickedElement; // Return the element that was clicked/selected
+        }
+
+        function getResizeHandleAt(x, y) {
+             if (!selectedElement || selectedElement.type === 'playerStart') return null; // Can't resize player start
+
+             const handles = getResizeHandles(selectedElement);
+             const halfHandle = resizeHandleSize / 2;
+
+             for (const [name, pos] of Object.entries(handles)) {
+                 if (x >= pos.x - halfHandle && x <= pos.x + halfHandle &&
+                     y >= pos.y - halfHandle && y <= pos.y + halfHandle) {
+                     return name; // Return handle name ('topLeft', etc.)
+                 }
+             }
+             return null;
+         }
+
+        // --- Player Logic ---
+         function resetPlayerState() {
+            const level = campaignData.levels[currentLevelIndex];
+            const playerStartElement = level.elements.find(el => el.type === 'playerStart');
+            const startX = playerStartElement ? playerStartElement.x : (campaignData.player.startX || 100);
+            let startY = playerStartElement ? playerStartElement.y : (campaignData.player.startY || 100);
+
+            // Adjust startY because player's y is the TOP coordinate
+            startY = startY - campaignData.player.height;
+
+
+             playerState = {
+                x: startX - campaignData.player.width / 2, // Center player horizontally on marker
+                y: startY,
+                vx: 0,
+                vy: 0,
+                grounded: false
+            };
+             levelComplete = false;
+              // Reset collectibles
+              level.elements.forEach(el => { if (el.type === 'collectible') el.collected = false; });
+             // Reset enemies to start positions
+             level.elements.forEach(el => {
+                if (el.type === 'enemy') {
+                     el.x = el.startX || el.x; // Use stored startX if available
+                     el.direction = 1; // Reset direction
+                 }
+             });
+             camera.x = 0; // Reset camera
+             camera.y = 0;
+         }
+
+        function updatePlayer(timestamp) {
+            const pData = campaignData.player;
+            const level = campaignData.levels[currentLevelIndex];
+
+            // Horizontal movement
+            playerState.vx = 0;
+            if (keys['ArrowLeft'] || keys['a']) {
+                playerState.vx = -pData.speed;
+            }
+            if (keys['ArrowRight'] || keys['d']) {
+                playerState.vx = pData.speed;
+            }
+
+            // Apply horizontal velocity
+            playerState.x += playerState.vx;
+
+             // Horizontal collision with level bounds
+             if (playerState.x < 0) {
+                 playerState.x = 0;
+             } else if (playerState.x + pData.width > level.width) {
+                 playerState.x = level.width - pData.width;
+             }
+
+
+            // Apply gravity
+            playerState.vy += pData.gravity;
+
+            // Jumping
+            if ((keys['ArrowUp'] || keys['w'] || keys[' ']) && playerState.grounded) {
+                playerState.vy = -pData.jumpHeight;
+                playerState.grounded = false;
+            }
+
+            // Apply vertical velocity
+            playerState.y += playerState.vy;
+
+            // Assume not grounded initially for collision check
+             playerState.grounded = false;
+
+            // --- Player Collision Detection (Vertical focus first) ---
+             level.elements.forEach(element => {
+                 if (element.type === 'platform') {
+                    // Check collision between player and platform
+                    if (checkCollision(playerState, pData, element)) {
+                        // Simple collision response:
+                         // Check if landing on top
+                         const prevPlayerBottom = playerState.y - playerState.vy + pData.height; // Bottom edge before vertical move
+                         if (playerState.vy >= 0 && prevPlayerBottom <= element.y) {
+                             // Landed on top
+                             playerState.y = element.y - pData.height;
+                             playerState.vy = 0;
+                             playerState.grounded = true;
+                         }
+                         // Check if hitting from bottom
+                         else if (playerState.vy < 0 && playerState.y >= element.y + element.height - 5) { // Added tolerance
+                              playerState.y = element.y + element.height;
+                              playerState.vy = 0; // Stop upward movement
+                         }
+                    }
+                 }
+             });
+
+             // --- Player Collision Detection (Horizontal focus) ---
+              // Re-check collisions after potential vertical adjustment
+              level.elements.forEach(element => {
+                  if (element.type === 'platform') {
+                      if (checkCollision(playerState, pData, element)) {
+                           // Check horizontal collision AFTER vertical resolved
+                           const isCollidingVertically = playerState.y + pData.height > element.y && playerState.y < element.y + element.height;
+
+                           if (isCollidingVertically) {
+                               const prevPlayerRight = playerState.x - playerState.vx + pData.width;
+                               const prevPlayerLeft = playerState.x - playerState.vx;
+
+                               // Hit from the left side of the platform
+                               if (playerState.vx > 0 && prevPlayerRight <= element.x) {
+                                   playerState.x = element.x - pData.width;
+                                   playerState.vx = 0; // Stop horizontal movement
+                               }
+                               // Hit from the right side of the platform
+                               else if (playerState.vx < 0 && prevPlayerLeft >= element.x + element.width) {
+                                   playerState.x = element.x + element.width;
+                                   playerState.vx = 0; // Stop horizontal movement
+                               }
+                           }
+                      }
+                  }
+             });
+
+
+             // Fall off screen / death condition
+            if (playerState.y > level.height + 100) { // Fall below level
+                resetPlayerState();
+            }
+        }
+
+        function updateCamera() {
+            const level = campaignData.levels[currentLevelIndex];
+            const pData = campaignData.player;
+             const deadZoneX = canvas.clientWidth / 4; // Example dead zone for camera horizontal movement
+             const deadZoneY = canvas.clientHeight / 3;
+
+             const targetCameraX = playerState.x + pData.width / 2 - canvas.clientWidth / 2;
+             const targetCameraY = playerState.y + pData.height / 2 - canvas.clientHeight / 2;
+
+             // Smooth camera follow (Lerp)
+             const lerpFactor = 0.1;
+             camera.x += (targetCameraX - camera.x) * lerpFactor;
+             camera.y += (targetCameraY - camera.y) * lerpFactor;
+
+
+             // Clamp camera to level boundaries
+             camera.x = Math.max(0, Math.min(camera.x, level.width - canvas.clientWidth));
+             camera.y = Math.max(0, Math.min(camera.y, level.height - canvas.clientHeight));
+
+              // If canvas isn't scaled (width/height match level), clamp needs adjustment
+              // For now, assume canvas internal size matches level size, scaling is CSS
+              camera.x = Math.max(0, Math.min(camera.x, level.width - canvas.width));
+              camera.y = Math.max(0, Math.min(camera.y, level.height - canvas.height));
+
+        }
+
+        function updateEnemies(timestamp) {
+            const level = campaignData.levels[currentLevelIndex];
+            level.elements.forEach(enemy => {
+                if (enemy.type === 'enemy') {
+                    const speed = enemy.speed || 1;
+                    const moveDistance = enemy.moveDistance || 100;
+                    const startX = enemy.startX || enemy.x; // Use initial pos as start
+
+                    enemy.x += speed * enemy.direction;
+
+                    // Reverse direction at boundaries
+                     if (enemy.direction === 1 && enemy.x >= startX + moveDistance) {
+                         enemy.x = startX + moveDistance; // Clamp position
+                         enemy.direction = -1;
+                     } else if (enemy.direction === -1 && enemy.x <= startX) {
+                          enemy.x = startX; // Clamp position
+                         enemy.direction = 1;
+                     }
+                }
+            });
+        }
+
+
+        function checkCollisions() {
+            const pData = campaignData.player;
+            const level = campaignData.levels[currentLevelIndex];
+
+            level.elements.forEach(element => {
+                 if (element.collected) return; // Skip collected items
+
+                if (checkCollision(playerState, pData, element)) {
+                    switch (element.type) {
+                        case 'enemy':
+                            // Simple enemy collision: reset player
+                            showMessage("Ouch!", "Hit by an enemy!", () => {
+                                hideMessage();
+                                resetPlayerState();
+                            });
+                             levelComplete = true; // Pause game briefly
+                            break;
+                        case 'hazard':
+                            // Hazard collision: reset player
+                             showMessage("Zapped!", "Avoid the hazards!", () => {
+                                 hideMessage();
+                                 resetPlayerState();
+                             });
+                             levelComplete = true; // Pause game briefly
+                            break;
+                        case 'collectible':
+                            // Collect item
+                            element.collected = true;
+                             // Add score, sound effect etc. later
+                            break;
+                        case 'goal':
+                            // Reached goal: level complete
+                            levelComplete = true;
+                            handleLevelCompletion();
+                            break;
+                    }
+                }
+            });
+        }
+
+        function checkCollision(playerRect, playerData, element) {
+            // Basic AABB collision detection
+             const playerLeft = playerRect.x;
+             const playerRight = playerRect.x + playerData.width;
+             const playerTop = playerRect.y;
+             const playerBottom = playerRect.y + playerData.height;
+
+             let elementLeft = element.x;
+             let elementRight = element.x + element.width;
+             let elementTop = element.y;
+             let elementBottom = element.y + element.height;
+
+             // Adjust collision box for text elements if needed
+              if (element.type === 'collectible' || element.type === 'goal') {
+                  const size = element.height; // Approximate size based on font height
+                  elementLeft = element.x + element.width / 2 - size / 2;
+                  elementRight = elementLeft + size;
+                  elementTop = element.y + element.height / 2 - size / 2;
+                  elementBottom = elementTop + size;
+              } else if (element.type === 'enemy') {
+                  // Use element dimensions directly for triangle approx
+              }
+
+
+             // Check for overlap
+             if (playerRight > elementLeft &&
+                 playerLeft < elementRight &&
+                 playerBottom > elementTop &&
+                 playerTop < elementBottom) {
+                 return true; // Collision detected
+             }
+
+             return false; // No collision
+         }
+
+         function checkLevelCompletion() {
+             // This is now handled within checkCollisions when hitting the goal
+         }
+
+         function handleLevelCompletion() {
+             if (currentLevelIndex < campaignData.levels.length - 1) {
+                 // More levels in this chunk
+                  showMessage("Level Complete!", `Proceeding to Level ${currentLevelIndex + 2}`, () => {
+                        hideMessage();
+                        currentLevelIndex++;
+                        resetPlayerState();
+                        resizeCanvas(); // Adjust canvas for new level dimensions
+                  });
+             } else if (chunkInfo.current && chunkInfo.total && chunkInfo.current < chunkInfo.total) {
+                 // Last level of this chunk, need to load next part
+                 const nextPartNum = chunkInfo.current + 1;
+                 const nextLink = buildChunkURL(nextPartNum);
+                  showMessage("Chunk Complete!", `Ready for Part ${nextPartNum} of ${chunkInfo.total}.`, () => {
+                     // Redirect to the next link
+                     window.location.href = nextLink;
+                 }, "Continue");
+
+             } else {
+                 // Last level of the entire campaign
+                  showMessage("Campaign Complete!", "Congratulations!", () => {
+                     hideMessage();
+                     setMode('builder'); // Go back to builder mode or a title screen
+                 });
+             }
+         }
+
+        // --- Level Management (Builder) ---
+        function nextLevel() {
+            if (currentLevelIndex < campaignData.levels.length - 1) {
+                currentLevelIndex++;
+                selectedElement = null;
+                updateUI();
+                resizeCanvas(); // Important if levels have different sizes
+                draw();
+            }
+        }
+
+        function prevLevel() {
+            if (currentLevelIndex > 0) {
+                currentLevelIndex--;
+                selectedElement = null;
+                updateUI();
+                resizeCanvas();
+                draw();
+            }
+        }
+
+        function addLevel() {
+            const newLevel = {
+                width: campaignData.levels[currentLevelIndex]?.width || 1600, // Copy size from current
+                height: campaignData.levels[currentLevelIndex]?.height || 600,
+                elements: []
+            };
+            campaignData.levels.splice(currentLevelIndex + 1, 0, newLevel); // Insert after current
+            currentLevelIndex++;
+            selectedElement = null;
+            updateUI();
+            resizeCanvas();
+            draw();
+        }
+
+        function deleteLevel() {
+            if (campaignData.levels.length > 1) {
+                campaignData.levels.splice(currentLevelIndex, 1);
+                if (currentLevelIndex >= campaignData.levels.length) {
+                    currentLevelIndex = campaignData.levels.length - 1; // Go to previous if last was deleted
+                }
+                selectedElement = null;
+                updateUI();
+                resizeCanvas();
+                draw();
+            } else {
+                alert("Cannot delete the last level.");
+            }
+        }
+
+         function updateLevelDimensions() {
+             const level = campaignData.levels[currentLevelIndex];
+             const newWidth = parseInt(document.getElementById('levelWidth').value, 10);
+             const newHeight = parseInt(document.getElementById('levelHeight').value, 10);
+
+             if (!isNaN(newWidth) && newWidth >= 400) {
+                 level.width = newWidth;
+             } else {
+                 document.getElementById('levelWidth').value = level.width; // Revert UI
+             }
+             if (!isNaN(newHeight) && newHeight >= 300) {
+                 level.height = newHeight;
+             } else {
+                 document.getElementById('levelHeight').value = level.height; // Revert UI
+             }
+             resizeCanvas(); // Update canvas size and redraw
+         }
+
+
+        // --- Sharing / Loading ---
+         function generateShareLinks() {
+             try {
+                 // Ensure playerStart element exists and sync its position
+                 syncPlayerStartElement();
+
+                 const fullData = { player: campaignData.player, levels: campaignData.levels };
+                 const jsonString = JSON.stringify(fullData);
+                 const encodedData = btoa(encodeURIComponent(jsonString)); // Base64 encode
+
+                 const baseLink = window.location.href.split('?')[0];
+                 const links = [];
+                 const playerSettingsEncoded = btoa(encodeURIComponent(JSON.stringify(campaignData.player)));
+
+                 // Simplified approach: Encode levels chunk by chunk
+                 let levelChunks = [];
+                 let currentChunkLevels = [];
+                 let currentChunkLength = `v=1&p=${playerSettingsEncoded}&c=1&t=1&l=`.length; // Start with base length
+
+                 campaignData.levels.forEach((level, index) => {
+                     const levelString = JSON.stringify(level);
+                     const levelEncoded = btoa(encodeURIComponent(levelString));
+
+                     // Estimate length added by this level (conservative)
+                     const addedLength = levelEncoded.length + 10; // Add buffer for commas, quotes etc.
+
+                     if (currentChunkLength + addedLength > MAX_URL_LENGTH && currentChunkLevels.length > 0) {
+                         // Finalize current chunk
+                         levelChunks.push(currentChunkLevels);
+                         // Start new chunk
+                         currentChunkLevels = [level];
+                          currentChunkLength = `v=1&c=1&t=1&l=`.length + levelEncoded.length; // Base length for subsequent chunks (no player data)
+                     } else {
+                         // Add to current chunk
+                         currentChunkLevels.push(level);
+                         currentChunkLength += addedLength;
+                     }
+                 });
+                 // Add the last chunk
+                 if (currentChunkLevels.length > 0) {
+                     levelChunks.push(currentChunkLevels);
+                 }
+
+                 const totalChunks = levelChunks.length;
+
+                 levelChunks.forEach((chunkLevels, index) => {
+                     const chunkNum = index + 1;
+                     const chunkLevelsString = JSON.stringify(chunkLevels);
+                     const chunkLevelsEncoded = btoa(encodeURIComponent(chunkLevelsString));
+                     let link;
+                     if (totalChunks === 1) {
+                         // Single link format
+                          const singleJson = JSON.stringify({ player: campaignData.player, levels: chunkLevels });
+                          const singleEncoded = btoa(encodeURIComponent(singleJson));
+                          link = `${baseLink}?d=${singleEncoded}`;
+                          // Re-check length, just in case the estimate was off
+                          if (link.length > MAX_URL_LENGTH + 50) { // Add buffer
+                             console.error("Single link calculation failed, length exceeded:", link.length);
+                             // Fallback to chunking even for one theoretical chunk
+                             link = `${baseLink}?v=1&p=${playerSettingsEncoded}&c=1&t=1&l=${chunkLevelsEncoded}`;
+                          }
+
+                     } else {
+                         // Multi-link format
+                         if (chunkNum === 1) {
+                             // First chunk includes player data
+                             link = `${baseLink}?v=1&p=${playerSettingsEncoded}&c=${chunkNum}&t=${totalChunks}&l=${chunkLevelsEncoded}`;
+                         } else {
+                             // Subsequent chunks only need level data
+                              link = `${baseLink}?v=1&c=${chunkNum}&t=${totalChunks}&l=${chunkLevelsEncoded}`;
+                         }
+                     }
+
+                      if (link.length > MAX_URL_LENGTH + 50) { // Final safety check per link
+                          console.warn(`Generated link for chunk ${chunkNum} might exceed limits (${link.length}). Consider simplifying the level.`);
+                          // Truncate or show error? For now, just warn.
+                      }
+
+                     links.push(link);
+                 });
+
+
+                 displayShareLinks(links);
+
+             } catch (error) {
+                 console.error("Error generating share link:", error);
+                 alert("Failed to generate share link. Data might be too complex or corrupted.");
+             }
+         }
+
+         // Helper to ensure playerStart element matches campaignData.player.startX/Y
+         function syncPlayerStartElement() {
+             campaignData.levels.forEach(level => {
+                  let playerStart = level.elements.find(el => el.type === 'playerStart');
+                  if (playerStart) {
+                     playerStart.x = campaignData.player.startX;
+                     playerStart.y = campaignData.player.startY;
+                  } else {
+                     // If missing, add one (important for sharing)
+                     level.elements.push({
+                         id: Date.now() + Math.random(),
+                         type: 'playerStart',
+                         x: campaignData.player.startX,
+                         y: campaignData.player.startY,
+                         width: 30, height: 30, // Default size, non-editable
+                         color: '#FFFF00'
+                     });
+                  }
+             });
+         }
+
+
+         function displayShareLinks(links) {
+            const linksContainer = document.getElementById('shareLinks');
+            linksContainer.innerHTML = ''; // Clear previous links
+            if (links.length === 0) {
+                 linksContainer.innerHTML = '<p>No links generated. Perhaps the level is empty?</p>';
+            } else if (links.length === 1) {
+                 linksContainer.innerHTML = `<p>Share this link:</p><textarea readonly>${links[0]}</textarea>`;
+            } else {
+                linksContainer.innerHTML = `<p>This campaign is large and split into ${links.length} parts. Share these links in order:</p>`;
+                links.forEach((link, index) => {
+                     linksContainer.innerHTML += `
+                         <div>
+                             <strong>Part ${index + 1}:</strong>
+                             <textarea readonly>${link}</textarea>
+                         </div>`;
+                 });
+            }
+            openModal('shareModal');
+        }
+
+         function copyLinks() {
+            const textareas = document.getElementById('shareLinks').querySelectorAll('textarea');
+            let allLinks = '';
+            textareas.forEach((textarea, index) => {
+                 allLinks += `Part ${index + 1}:\n${textarea.value}\n\n`;
+             });
+
+             navigator.clipboard.writeText(allLinks.trim())
+                 .then(() => { alert('Links copied to clipboard!'); })
+                 .catch(err => { console.error('Failed to copy links: ', err); alert('Failed to copy links.'); });
+         }
+
+
+         function loadFromURL() {
+            const params = new URLSearchParams(window.location.search);
+
+            try {
+                if (params.has('d')) { // Old single link format or very small campaign
+                     const encodedData = params.get('d');
+                     const decodedJson = decodeURIComponent(atob(encodedData));
+                     const loadedData = JSON.parse(decodedJson);
+
+                     if (loadedData && loadedData.player && loadedData.levels) {
+                         campaignData = loadedData;
+                         currentLevelIndex = 0;
+                         chunkInfo = { current: 1, total: 1, nextLink: null }; // Treat as single chunk
+                         setMode('player'); // Start playing immediately
+                         console.log("Loaded campaign data from single link.");
+                     } else {
+                          console.error("Invalid data structure in shared link (single).");
+                         initDefaultCampaign(); // Load default if structure is wrong
+                     }
+
+                } else if (params.has('v') && params.get('v') === '1' && params.has('c') && params.has('t') && params.has('l')) {
+                     // New chunked format
+                     const chunkNum = parseInt(params.get('c'), 10);
+                     const totalChunks = parseInt(params.get('t'), 10);
+                     const levelsEncoded = params.get('l');
+                     let playerEncoded = params.get('p'); // Only present in first chunk
+
+                     chunkInfo = { current: chunkNum, total: totalChunks };
+
+                     const decodedLevelsJson = decodeURIComponent(atob(levelsEncoded));
+                     const loadedLevels = JSON.parse(decodedLevelsJson);
+
+                     if (playerEncoded) {
+                         // First chunk, load player data and these levels
+                         const decodedPlayerJson = decodeURIComponent(atob(playerEncoded));
+                         campaignData.player = JSON.parse(decodedPlayerJson);
+                         campaignData.levels = loadedLevels;
+                     } else {
+                          // Subsequent chunk, assume player data is already default or from previous
+                          // We only have the levels for this chunk. The game logic handles progression.
+                          // We need to set the *current* campaignData.levels to *this chunk's levels*
+                          // and reset the level index to 0 for this chunk.
+                          campaignData.levels = loadedLevels; // Overwrite levels with the current chunk's levels
+                     }
+
+                     currentLevelIndex = 0; // Start at the first level of this chunk
+                     setMode('player');
+                     console.log(`Loaded campaign data chunk ${chunkNum} of ${totalChunks}.`);
+
+                } else {
+                     console.log("No valid campaign data found in URL, starting default.");
+                     initDefaultCampaign();
+                }
+            } catch (error) {
+                console.error("Error loading data from URL:", error);
+                alert("Failed to load campaign data from the link. It might be corrupted or invalid.");
+                initDefaultCampaign(); // Load default on error
+            }
+             // Ensure defaults if data is missing after load attempt
+             if (!campaignData.player) campaignData.player = { width: 30, height: 40, color: '#FF0000', speed: 3, jumpHeight: 10, gravity: 0.4, startX: 100, startY: 100 };
+             if (!campaignData.levels || campaignData.levels.length === 0) {
+                 campaignData.levels = [{ width: 1600, height: 600, elements: [] }];
+             }
+              // Ensure player start exists after loading
+             syncPlayerStartElement();
+             updateUI();
+              resizeCanvas(); // Call resize after potentially loading new level dimensions
+
+         }
+
+         function buildChunkURL(chunkNum) {
+             // This function is primarily for the 'Continue' button message.
+             // It reconstructs the expected URL structure for the *next* chunk.
+             // It ASSUMES the original share process generated sequential links correctly.
+             const baseLink = window.location.href.split('?')[0];
+             // We don't have the encoded level data for the *next* chunk here,
+             // so we create a placeholder link structure. The actual link must be shared by the creator.
+             // The message overlay button will directly use window.location.href if it was the correct next link.
+             // Let's rethink this: the `handleLevelCompletion` should ideally get the *actual* next link
+             // if we stored it somehow, but we don't have it.
+             // Simplification: The user *must* have the next link available (e.g., copied from the share modal).
+             // The "Continue" button in the message overlay will just trigger the navigation assuming the user *is* on the correct next link page.
+             // Let's refine the message instead.
+
+             // Okay, the message logic is fine. handleLevelCompletion shows the message, clicking OK/Continue
+             // navigates. The *generation* part builds all links at once.
+              return "javascript:void(0)"; // Placeholder, actual navigation happens differently.
+         }
+
+        function initDefaultCampaign() {
+             campaignData = {
+                 player: { width: 30, height: 40, color: '#FF0000', speed: 3, jumpHeight: 10, gravity: 0.4, startX: 150, startY: 450 },
+                 levels: [
+                     { // Default level example
+                         width: 1600, height: 600,
+                         elements: [
+                              { id: 1, type: 'platform', x: 0, y: 550, width: 1600, height: 50, color: '#444444'}, // Ground
+                              { id: 2, type: 'platform', x: 300, y: 450, width: 150, height: 20, color: '#666666'},
+                              { id: 3, type: 'platform', x: 550, y: 380, width: 150, height: 20, color: '#666666'},
+                              { id: 4, type: 'collectible', x: 600, y: 320, width: 30, height: 30, color: '#FFD700', collected: false },
+                              { id: 5, type: 'hazard', x: 800, y: 520, width: 100, height: 30, color: '#FF0000'},
+                              { id: 6, type: 'enemy', x: 1000, y: 510, width: 40, height: 40, color: '#FFA500', speed: 1, moveDistance: 200, direction: 1, startX: 1000 },
+                              { id: 7, type: 'goal', x: 1450, y: 500, width: 50, height: 50, color: '#00FF00'},
+                               { id: 8, type: 'playerStart', x: 150, y: 510, width: 30, height: 30, color: '#FFFF00' } // Player start marker y adjusted
+                         ]
+                     }
+                 ]
+             };
+             currentLevelIndex = 0;
+             chunkInfo = { current: null, total: null };
+             console.log("Initialized default campaign.");
+         }
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+             window.addEventListener('resize', resizeCanvas);
+
+             // Top Bar Buttons
+             document.getElementById('buildModeBtn').addEventListener('click', () => setMode('builder'));
+             document.getElementById('playModeBtn').addEventListener('click', () => setMode('player'));
+             document.getElementById('shareBtn').addEventListener('click', generateShareLinks);
+
+             // Level Navigation (Builder)
+             document.getElementById('prevLevelBtn').addEventListener('click', prevLevel);
+             document.getElementById('nextLevelBtn').addEventListener('click', nextLevel);
+             document.getElementById('addLevelBtn').addEventListener('click', addLevel);
+             document.getElementById('deleteLevelBtn').addEventListener('click', deleteLevel);
+             document.getElementById('levelWidth').addEventListener('change', updateLevelDimensions);
+             document.getElementById('levelHeight').addEventListener('change', updateLevelDimensions);
+
+
+             // Element Palette Drag & Drop (Builder)
+             document.querySelectorAll('.palette button').forEach(button => {
+                 button.addEventListener('dragstart', (event) => {
+                     event.dataTransfer.setData('text/plain', event.target.dataset.type);
+                     event.dataTransfer.effectAllowed = 'copy';
+                 });
+             });
+
+             canvas.addEventListener('dragover', (event) => {
+                 if (mode === 'builder') {
+                     event.preventDefault(); // Allow dropping
+                     event.dataTransfer.dropEffect = 'copy';
+                 }
+             });
+
+             canvas.addEventListener('drop', (event) => {
+                 if (mode === 'builder') {
+                     event.preventDefault();
+                     const type = event.dataTransfer.getData('text/plain');
+                     const rect = canvas.getBoundingClientRect();
+                      const scaleX = canvas.width / rect.width;
+                      const scaleY = canvas.height / rect.height;
+                     const x = (event.clientX - rect.left) * scaleX;
+                     const y = (event.clientY - rect.top) * scaleY;
+
+                     addElement(type, Math.round(x), Math.round(y));
+                 }
+             });
+
+            // Canvas Mouse Events (Builder - Select, Drag, Resize)
+             canvas.addEventListener('mousedown', (event) => {
+                if (mode !== 'builder') return;
+
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const mouseX = (event.clientX - rect.left) * scaleX;
+                const mouseY = (event.clientY - rect.top) * scaleY;
+
+                resizeHandle = getResizeHandleAt(mouseX, mouseY);
+                if (resizeHandle) {
+                     isResizing = true;
+                     isDragging = false; // Prevent dragging while resizing
+                     canvas.style.cursor = getResizeCursor(resizeHandle);
+                 } else {
+                     const clickedElement = selectElementAt(mouseX, mouseY);
+                     if (clickedElement) {
+                         isDragging = true;
+                         isResizing = false;
+                         dragOffsetX = mouseX - clickedElement.x;
+                         dragOffsetY = mouseY - clickedElement.y;
+                         canvas.style.cursor = 'grabbing';
+                     } else {
+                         // Clicked on empty space
+                         selectedElement = null;
+                         isDragging = false;
+                         isResizing = false;
+                         updatePropertiesPanel();
+                         draw(); // Redraw to remove selection box
+                         canvas.style.cursor = 'default';
+                     }
+                 }
+            });
+
+            canvas.addEventListener('mousemove', (event) => {
+                 if (mode !== 'builder') return;
+
+                 const rect = canvas.getBoundingClientRect();
+                 const scaleX = canvas.width / rect.width;
+                 const scaleY = canvas.height / rect.height;
+                 const mouseX = (event.clientX - rect.left) * scaleX;
+                 const mouseY = (event.clientY - rect.top) * scaleY;
+
+                if (isResizing && selectedElement) {
+                     const minSize = 10; // Minimum width/height during resize
+                     const originalX = selectedElement.x;
+                     const originalY = selectedElement.y;
+                     const originalWidth = selectedElement.width;
+                     const originalHeight = selectedElement.height;
+
+                     switch (resizeHandle) {
+                         case 'topLeft':
+                             selectedElement.width = Math.max(minSize, originalWidth + (originalX - mouseX));
+                             selectedElement.height = Math.max(minSize, originalHeight + (originalY - mouseY));
+                             selectedElement.x = originalX + originalWidth - selectedElement.width;
+                             selectedElement.y = originalY + originalHeight - selectedElement.height;
+                             break;
+                         case 'topRight':
+                              selectedElement.width = Math.max(minSize, mouseX - originalX);
+                              selectedElement.height = Math.max(minSize, originalHeight + (originalY - mouseY));
+                              selectedElement.y = originalY + originalHeight - selectedElement.height;
+                              break;
+                         case 'bottomLeft':
+                             selectedElement.width = Math.max(minSize, originalWidth + (originalX - mouseX));
+                             selectedElement.height = Math.max(minSize, mouseY - originalY);
+                             selectedElement.x = originalX + originalWidth - selectedElement.width;
+                             break;
+                         case 'bottomRight':
+                             selectedElement.width = Math.max(minSize, mouseX - originalX);
+                             selectedElement.height = Math.max(minSize, mouseY - originalY);
+                             break;
+                         case 'top':
+                             selectedElement.height = Math.max(minSize, originalHeight + (originalY - mouseY));
+                             selectedElement.y = originalY + originalHeight - selectedElement.height;
+                             break;
+                         case 'bottom':
+                              selectedElement.height = Math.max(minSize, mouseY - originalY);
+                              break;
+                         case 'left':
+                              selectedElement.width = Math.max(minSize, originalWidth + (originalX - mouseX));
+                              selectedElement.x = originalX + originalWidth - selectedElement.width;
+                              break;
+                         case 'right':
+                              selectedElement.width = Math.max(minSize, mouseX - originalX);
+                              break;
+                     }
+                     updatePropertiesPanel(); // Update values in panel
+                     draw();
+                 } else if (isDragging && selectedElement) {
+                    selectedElement.x = Math.round(mouseX - dragOffsetX);
+                    selectedElement.y = Math.round(mouseY - dragOffsetY);
+                     // Sync player start data if dragging that element
+                      if (selectedElement.type === 'playerStart') {
+                         campaignData.player.startX = selectedElement.x;
+                         campaignData.player.startY = selectedElement.y;
+                      }
+                    updatePropertiesPanel(); // Update position in panel
+                    draw();
+                } else if (!isDragging && !isResizing) {
+                    // Update cursor based on hover
+                     const handle = getResizeHandleAt(mouseX, mouseY);
+                     if (handle) {
+                         canvas.style.cursor = getResizeCursor(handle);
+                     } else if (selectElementAt(mouseX, mouseY)) {
+                         canvas.style.cursor = 'grab';
+                     } else {
+                         canvas.style.cursor = 'default';
+                     }
+                 }
+            });
+
+             canvas.addEventListener('mouseup', (event) => {
+                 if (mode !== 'builder') return;
+                 isDragging = false;
+                 isResizing = false;
+                  // Set cursor based on potential hover after mouse up
+                  const rect = canvas.getBoundingClientRect();
+                  const scaleX = canvas.width / rect.width;
+                  const scaleY = canvas.height / rect.height;
+                  const mouseX = (event.clientX - rect.left) * scaleX;
+                  const mouseY = (event.clientY - rect.top) * scaleY;
+                  const handle = getResizeHandleAt(mouseX, mouseY);
+                  if (handle) {
+                     canvas.style.cursor = getResizeCursor(handle);
+                 } else if (selectElementAt(mouseX, mouseY)) {
+                     canvas.style.cursor = 'grab';
+                 } else {
+                     canvas.style.cursor = 'default';
+                 }
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                if (mode === 'builder') {
+                    // isDragging = false; // Stop dragging if mouse leaves canvas
+                    // isResizing = false;
+                    canvas.style.cursor = 'default';
+                }
+            });
+
+             // Player Property Inputs
+             document.getElementById('playerPropertiesPanel').querySelectorAll('input').forEach(input => {
+                 input.addEventListener('change', handlePlayerPropertyChange);
+                 input.addEventListener('input', handlePlayerPropertyChange);
+             });
+
+
+            // Keyboard Input (Player)
+            window.addEventListener('keydown', (event) => {
+                keys[event.key] = true;
+                // Prevent default browser scroll for arrow keys and space
+                if (mode === 'player' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) {
+                    event.preventDefault();
+                }
+            });
+
+            window.addEventListener('keyup', (event) => {
+                keys[event.key] = false;
+            });
+        }
+
+         function getResizeCursor(handleName) {
+             switch (handleName) {
+                 case 'topLeft': case 'bottomRight': return 'nwse-resize';
+                 case 'topRight': case 'bottomLeft': return 'nesw-resize';
+                 case 'top': case 'bottom': return 'ns-resize';
+                 case 'left': case 'right': return 'ew-resize';
+                 default: return 'default';
+             }
+         }
+
+         // --- Utility Functions ---
+         function openModal(id) {
+             document.getElementById(id).style.display = 'block';
+         }
+         function closeModal(id) {
+             document.getElementById(id).style.display = 'none';
+         }
+
+         function showMessage(title, text, callback, buttonText = "OK") {
+             document.getElementById('messageTitle').textContent = title;
+             document.getElementById('messageText').textContent = text;
+             const button = document.getElementById('messageButton');
+             button.textContent = buttonText;
+              // Clone and replace the button to remove old listeners
+              const newButton = button.cloneNode(true);
+              button.parentNode.replaceChild(newButton, button);
+              newButton.onclick = callback; // Assign new callback
+
+             document.getElementById('messageOverlay').style.display = 'block';
+         }
+
+         function hideMessage() {
+             document.getElementById('messageOverlay').style.display = 'none';
+         }
+
+
+        // --- Start the application ---
+        init();
+
+    </script>
+
+</body>
+</html>

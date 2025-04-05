@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protect the Children</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .game-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .game-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .action-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        .action-button:hover {
+            background-color: #45a049;
+        }
+        .game-area {
+            width: 300px;
+            height: 200px;
+            border: 1px solid #ccc;
+            margin-bottom: 20px;
+            position: relative;
+            background-color: #e0e0e0;
+        }
+        .child {
+            width: 20px;
+            height: 20px;
+            background-color: blue;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 20%;
+            transform: translate(-50%, -50%);
+        }
+        .henry {
+            width: 30px;
+            height: 30px;
+            background-color: red;
+            position: absolute;
+            top: 50%;
+            right: 10%;
+            transform: translate(50%, -50%);
+        }
+        .safe-zone {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 50px;
+            height: 100%;
+            background-color: green;
+        }
+        .message-box {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 class="game-title">Protect the Children</h1>
+        <div class="game-area">
+            <div class="safe-zone"></div>
+            <div class="child"></div>
+            <div class="henry"></div>
+            <p class="message-box"></p>
+        </div>
+        <div>
+            <button class="action-button">Act</button>
+            <button class="action-button">Intervene</button>
+            <button class="action-button">Help</button>
+        </div>
+    </div>
+    <script>
+        const messageBox = document.querySelector('.message-box');
+        const henry = document.querySelector('.henry');
+        const child = document.querySelector('.child');
+        const safeZone = document.querySelector('.safe-zone');
+        const gameArea = document.querySelector('.game-area');
+        const actionButtons = document.querySelectorAll('.action-button');
+
+        actionButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                messageBox.textContent = `Action taken: ${button.textContent}`;
+            });
+        });
+
+        function getRandomPosition() {
+            const areaWidth = gameArea.offsetWidth;
+            const areaHeight = gameArea.offsetHeight;
+            const henryWidth = henry.offsetWidth;
+            const henryHeight = henry.offsetHeight;
+
+            let newX, newY;
+            do {
+                newX = Math.random() * (areaWidth - henryWidth);
+                newY = Math.random() * (areaHeight - henryHeight);
+            } while (newX < safeZone.offsetWidth); // Keep Henry outside safe zone
+
+            return { x: newX, y: newY };
+        }
+
+        setInterval(() => {
+            const newPos = getRandomPosition();
+            henry.style.left = `${newPos.x}px`;
+            henry.style.top = `${newPos.y}px`;
+
+            const childRect = child.getBoundingClientRect();
+            const henryRect = henry.getBoundingClientRect();
+            const safeZoneRect = safeZone.getBoundingClientRect();
+
+            if (henryRect.intersects(childRect)) {
+                messageBox.textContent = "Danger!";
+                messageBox.style.color = 'red';
+            } else if (childRect.left <= safeZoneRect.right) {
+                messageBox.textContent = "Child is safe.";
+                messageBox.style.color = 'green';
+            } else {
+                messageBox.textContent = "";
+                messageBox.style.color = 'black';
+            }
+
+
+            if (childRect.left <= safeZoneRect.right) {
+                child.style.backgroundColor = 'green';
+            } else {
+                child.style.backgroundColor = 'blue';
+            }
+        }, 2000);
+
+
+        Element.prototype.intersects = function(other) {
+            const rect1 = this.getBoundingClientRect();
+            const rect2 = other.getBoundingClientRect();
+            return !(
+                rect1.top > rect2.bottom ||
+                rect1.right < rect2.left ||
+                rect1.bottom < rect2.top ||
+                rect1.left > rect2.right
+            );
+        };
+
+
+    </script>
+</body>
+</html>

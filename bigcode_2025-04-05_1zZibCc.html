@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Campaign Builder & Player</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; background-color: #f0f0f0; }
+        #controls, #player-settings, #element-properties, #share-section { background-color: #ddd; padding: 10px; margin: 5px; border-radius: 5px; width: 95%; max-width: 800px; }
+        #controls button, #player-settings button, #share-section button { margin: 2px 5px; padding: 5px 10px; cursor: pointer; }
+        #canvas { border: 1px solid black; background-color: #87CEEB; cursor: crosshair; margin-top: 10px; }
+        #element-properties label, #player-settings label { margin-right: 5px; display: inline-block; min-width: 80px; }
+        #element-properties input, #player-settings input { margin-bottom: 5px; width: 60px; }
+        .hidden { display: none; }
+        #share-links { margin-top: 10px; background-color: #eee; padding: 10px; border-radius: 3px; max-height: 150px; overflow-y: auto; }
+        #share-links p { margin: 5px 0; word-break: break-all; font-size: 0.9em;}
+        .selected-tool { background-color: #a0a0ff; border: 2px solid blue; }
+        #level-tabs { margin-top: 5px; }
+        #level-tabs button { background-color: #eee; border: 1px solid #ccc; }
+        #level-tabs button.active-level { background-color: #fff; border-bottom-color: #fff; font-weight: bold; }
+        #game-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.7); color: white; padding: 20px; border-radius: 10px; text-align: center; font-size: 1.5em; z-index: 100; }
+    </style>
+</head>
+<body>
+
+    <h1>Platformer Campaign Builder & Player</h1>
+
+    <div id="mode-selector">
+        <button id="builder-mode-btn">Builder Mode</button>
+        <button id="player-mode-btn" class="hidden">Play Current Campaign</button>
+         <span id="loading-info" style="margin-left: 20px;"></span>
+    </div>
+
+    <div id="builder-ui">
+        <div id="controls">
+            <span>Tool:</span>
+            <button id="tool-select" data-tool="select">Select</button>
+            <button id="tool-platform" data-tool="platform">⬛ Platform</button>
+            <button id="tool-enemy" data-tool="enemy">😈 Enemy</button>
+            <button id="tool-coin" data-tool="coin">💰 Coin</button>
+            <button id="tool-hazard" data-tool="hazard">🔺 Hazard</button>
+            <button id="tool-goal" data-tool="goal">✅ Goal</button>
+            <button id="tool-playerStart" data-tool="playerStart">🧍 Player Start</button>
+            <button id="delete-element-btn" class="hidden" style="float: right; background-color: #ffaaaa;">Delete Selected</button>
+        </div>
+
+        <div id="level-management">
+             <div id="level-tabs">
+                 <!-- Level tabs will be generated here -->
+             </div>
+             <button id="add-level-btn">+</button>
+             <button id="delete-level-btn">-</button> (Deletes current level)
+        </div>
+
+
+        <div id="player-settings">
+            <h4>Player Settings (Applied to whole campaign)</h4>
+            <label for="player-width">Width:</label>
+            <input type="number" id="player-width" value="30">
+            <label for="player-height">Height:</label>
+            <input type="number" id="player-height" value="40">
+            <label for="player-speed">Speed:</label>
+            <input type="number" id="player-speed" step="0.1" value="3">
+            <label for="player-jump">Jump Force:</label>
+            <input type="number" id="player-jump" step="0.1" value="10">
+            <button id="update-player-settings">Update Player</button>
+        </div>
+
+        <div id="element-properties" class="hidden">
+            <h4>Element Properties</h4>
+            <div id="common-props">
+                 <label for="elem-x">X:</label>
+                 <input type="number" id="elem-x">
+                 <label for="elem-y">Y:</label>
+                 <input type="number" id="elem-y">
+                 <label for="elem-w">Width:</label>
+                 <input type="number" id="elem-w">
+                 <label for="elem-h">Height:</label>
+                 <input type="number" id="elem-h">
+            </div>
+            <div id="specific-props">
+                <!-- Specific properties based on element type -->
+            </div>
+             <button id="update-element-btn">Update Element</button>
+        </div>
+
+         <div id="share-section">
+            <button id="share-btn">Share Campaign</button>
+            <div id="share-links" class="hidden">
+                <p>Share these links:</p>
+                <!-- Links will appear here -->
+            </div>
+         </div>
+    </div>
+
+    <div id="game-container" style="position: relative;">
+         <canvas id="canvas" width="800" height="400"></canvas>
+         <div id="game-message" class="hidden"></div>
+    </div>
+
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // --- State Variables ---
+        let mode = 'builder'; // 'builder' or 'player'
+        let campaignData = {
+            player: { w: 30, h: 40, speed: 3, jumpHeight: 10, color: '#00f' },
+            levels: [ { elements: [] } ] // Start with one empty level
+        };
+        let currentLevelIndex = 0;
+        let selectedElementIndex = -1;
+        let currentTool = 'select';
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let dragElementStart = { x: 0, y: 0 };
+        let resizeHandle = null; // null, 'tl', 'tr', 'bl', 'br', 't', 'b', 'l', 'r'
+        let isResizing = false;
+
+        // Player state (for player mode)
+        let player = { x: 50, y: 300, w: 30, h: 40, vx: 0, vy: 0, onGround: false, speed: 3, jumpHeight: 10, color: '#00f', lives: 3, score: 0 };
+        let gameElements = []; // Elements for the current level being played
+        let playerStartX = 50;
+        let playerStartY = 300;
+        let keys = {};
+        let gameOver = false;
+        let levelComplete = false;
+        let currentCampaignPart = 1;
+        let totalCampaignParts = 1;
+        let campaignLoadedFromURL = false;
+
+        const GRAVITY = 0.5;
+        const MAX_URL_LENGTH = 1950; // Leave some buffer
+
+        // --- UI Elements ---
+        const builderUI = document.getElementById('builder-ui');
+        const gameContainer = document.getElementById('game-container');
+        const modeSelector = document.getElementById('mode-selector');
+        const builderModeBtn = document.getElementById('builder-mode-btn');
+        const playerModeBtn = document.getElementById('player-mode-btn');
+        const controlsDiv = document.getElementById('controls');
+        const toolButtons = controlsDiv.querySelectorAll('button[data-tool]');
+        const elementPropertiesDiv = document.getElementById('element-properties');
+        const commonPropsDiv = document.getElementById('common-props');
+        const specificPropsDiv = document.getElementById('specific-props');
+        const updateElementBtn = document.getElementById('update-element-btn');
+        const deleteElementBtn = document.getElementById('delete-element-btn');
+        const playerSettingsDiv = document.getElementById('player-settings');
+        const playerWidthInput = document.getElementById('player-width');
+        const playerHeightInput = document.getElementById('player-height');
+        const playerSpeedInput = document.getElementById('player-speed');
+        const playerJumpInput = document.getElementById('player-jump');
+        const updatePlayerSettingsBtn = document.getElementById('update-player-settings');
+        const shareBtn = document.getElementById('share-btn');
+        const shareLinksDiv = document.getElementById('share-links');
+        const addLevelBtn = document.getElementById('add-level-btn');
+        const deleteLevelBtn = document.getElementById('delete-level-btn');
+        const levelTabsDiv = document.getElementById('level-tabs');
+        const gameMessageDiv = document.getElementById('game-message');
+        const loadingInfoSpan = document.getElementById('loading-info');
+
+        // --- Initialization ---
+        function init() {
+            setupEventListeners();
+            loadFromURL(); // Check URL parameters first
+            if (!campaignLoadedFromURL) {
+                setMode('builder');
+            }
+            updatePlayerSettingsUI();
+            updateLevelTabs();
+            setActiveTool('select');
+            gameLoop();
+        }
+
+        function setMode(newMode) {
+            mode = newMode;
+            gameOver = false;
+            levelComplete = false;
+            hideGameMessage();
+            if (mode === 'builder') {
+                builderUI.style.display = 'block';
+                modeSelector.style.display = 'flex'; // Show mode selector always if builder is possible
+                builderModeBtn.style.fontWeight = 'bold';
+                playerModeBtn.style.fontWeight = 'normal';
+                canvas.style.cursor = 'crosshair';
+                playerModeBtn.classList.remove('hidden'); // Show play button
+                selectedElementIndex = -1; // Deselect on mode change
+                hideElementProperties();
+                updateLevelTabs(); // Ensure tabs are correct
+            } else { // player mode
+                builderUI.style.display = 'none';
+                modeSelector.style.display = 'flex';
+                builderModeBtn.style.fontWeight = 'normal';
+                playerModeBtn.style.fontWeight = 'bold';
+                canvas.style.cursor = 'default';
+                startGame();
+            }
+        }
+
+        function updatePlayerSettingsUI() {
+            playerWidthInput.value = campaignData.player.w;
+            playerHeightInput.value = campaignData.player.h;
+            playerSpeedInput.value = campaignData.player.speed;
+            playerJumpInput.value = campaignData.player.jumpHeight;
+        }
+
+        function updateLevelTabs() {
+            levelTabsDiv.innerHTML = '';
+            campaignData.levels.forEach((level, index) => {
+                const btn = document.createElement('button');
+                btn.textContent = `Level ${index + 1}`;
+                btn.onclick = () => switchLevel(index);
+                if (index === currentLevelIndex) {
+                    btn.classList.add('active-level');
+                }
+                levelTabsDiv.appendChild(btn);
+            });
+            deleteLevelBtn.disabled = campaignData.levels.length <= 1;
+        }
+
+        function switchLevel(index) {
+             if (mode === 'builder' && index >= 0 && index < campaignData.levels.length) {
+                 currentLevelIndex = index;
+                 selectedElementIndex = -1;
+                 hideElementProperties();
+                 updateLevelTabs();
+             }
+        }
+
+        function addLevel() {
+             if (mode === 'builder') {
+                 campaignData.levels.push({ elements: [] });
+                 switchLevel(campaignData.levels.length - 1);
+             }
+        }
+
+        function deleteCurrentLevel() {
+             if (mode === 'builder' && campaignData.levels.length > 1) {
+                 campaignData.levels.splice(currentLevelIndex, 1);
+                 if (currentLevelIndex >= campaignData.levels.length) {
+                     currentLevelIndex = campaignData.levels.length - 1;
+                 }
+                 switchLevel(currentLevelIndex); // Will update tabs
+             }
+        }
+
+
+        // --- Builder Mode Logic ---
+
+        function setActiveTool(tool) {
+            currentTool = tool;
+            toolButtons.forEach(btn => {
+                if (btn.dataset.tool === tool) {
+                    btn.classList.add('selected-tool');
+                } else {
+                    btn.classList.remove('selected-tool');
+                }
+            });
+             if (tool !== 'select') {
+                 selectedElementIndex = -1; // Deselect when changing to a placement tool
+                 hideElementProperties();
+             }
+             canvas.style.cursor = (tool === 'select') ? 'default' : 'crosshair';
+        }
+
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: evt.clientX - rect.left,
+                y: evt.clientY - rect.top
+            };
+        }
+
+        function handleCanvasMouseDown(e) {
+            if (mode !== 'builder') return;
+            const pos = getMousePos(e);
+            isDragging = false; // Reset dragging state
+            isResizing = false;
+            resizeHandle = null;
+
+            if (currentTool === 'select') {
+                // Check for resize handle clicks first
+                if (selectedElementIndex !== -1) {
+                    const elem = campaignData.levels[currentLevelIndex].elements[selectedElementIndex];
+                    const handles = getResizeHandles(elem);
+                    for (const handleName in handles) {
+                        const handle = handles[handleName];
+                        if (pos.x >= handle.x && pos.x <= handle.x + handle.w &&
+                            pos.y >= handle.y && pos.y <= handle.y + handle.h) {
+                            isResizing = true;
+                            resizeHandle = handleName;
+                            dragStart = pos;
+                            dragElementStart = { x: elem.x, y: elem.y, w: elem.w, h: elem.h };
+                            canvas.style.cursor = getResizeCursor(handleName);
+                            return;
+                        }
+                    }
+                }
+
+                // Check for element selection/drag start
+                let foundIndex = -1;
+                // Iterate backwards to select topmost element
+                for (let i = campaignData.levels[currentLevelIndex].elements.length - 1; i >= 0; i--) {
+                    const elem = campaignData.levels[currentLevelIndex].elements[i];
+                    if (pos.x >= elem.x && pos.x <= elem.x + elem.w &&
+                        pos.y >= elem.y && pos.y <= elem.y + elem.h) {
+                        foundIndex = i;
+                        break;
+                    }
+                }
+
+                if (foundIndex !== -1) {
+                    selectedElementIndex = foundIndex;
+                    isDragging = true;
+                    dragStart = pos;
+                    const elem = campaignData.levels[currentLevelIndex].elements[selectedElementIndex];
+                    dragElementStart = { x: elem.x, y: elem.y };
+                    showElementProperties(elem);
+                     canvas.style.cursor = 'move';
+                } else {
+                    selectedElementIndex = -1;
+                    hideElementProperties();
+                     canvas.style.cursor = 'default';
+                }
+
+            } else { // Placement tools
+                const newElement = createElement(currentTool, pos.x, pos.y);
+                if (newElement) {
+                    // Ensure only one playerStart and one goal per level
+                    if (newElement.type === 'playerStart' || newElement.type === 'goal') {
+                        const existingIndex = campaignData.levels[currentLevelIndex].elements.findIndex(el => el.type === newElement.type);
+                        if (existingIndex !== -1) {
+                            campaignData.levels[currentLevelIndex].elements.splice(existingIndex, 1);
+                        }
+                    }
+                    campaignData.levels[currentLevelIndex].elements.push(newElement);
+                    selectedElementIndex = campaignData.levels[currentLevelIndex].elements.length - 1;
+                    isDragging = true; // Immediately allow dragging/resizing the new element
+                    dragStart = pos;
+                    dragElementStart = { x: newElement.x, y: newElement.y };
+                    showElementProperties(newElement);
+                    setActiveTool('select'); // Switch back to select after placing
+                    canvas.style.cursor = 'move';
+                }
+            }
+        }
+
+        function handleCanvasMouseMove(e) {
+            if (mode !== 'builder') return;
+            const pos = getMousePos(e);
+
+             if (isResizing && selectedElementIndex !== -1) {
+                const elem = campaignData.levels[currentLevelIndex].elements[selectedElementIndex];
+                const dx = pos.x - dragStart.x;
+                const dy = pos.y - dragStart.y;
+                let newX = elem.x, newY = elem.y, newW = elem.w, newH = elem.h;
+
+                if (resizeHandle.includes('l')) { newX = dragElementStart.x + dx; newW = dragElementStart.w - dx; }
+                if (resizeHandle.includes('r')) { newW = dragElementStart.w + dx; }
+                if (resizeHandle.includes('t')) { newY = dragElementStart.y + dy; newH = dragElementStart.h - dy; }
+                if (resizeHandle.includes('b')) { newH = dragElementStart.h + dy; }
+
+                // Prevent negative width/height
+                const minSize = 10;
+                 if (newW >= minSize) { elem.x = newX; elem.w = newW; }
+                 if (newH >= minSize) { elem.y = newY; elem.h = newH; }
+
+                updateElementPropertyInputs(elem); // Update UI while resizing
+            } else if (isDragging && selectedElementIndex !== -1) {
+                const elem = campaignData.levels[currentLevelIndex].elements[selectedElementIndex];
+                const dx = pos.x - dragStart.x;
+                const dy = pos.y - dragStart.y;
+                elem.x = dragElementStart.x + dx;
+                elem.y = dragElementStart.y + dy;
+                updateElementPropertyInputs(elem); // Update UI while dragging
+            } else if (currentTool === 'select' && selectedElementIndex !== -1) {
+                 // Update cursor when hovering over resize handles even when not dragging
+                 const elem = campaignData.levels[currentLevelIndex].elements[selectedElementIndex];
+                 const handles = getResizeHandles(elem);
+                 let hoveringHandle = false;
+                 for (const handleName in handles) {
+                     const handle = handles[handleName];
+                     if (pos.x >= handle.x && pos.x <= handle.x + handle.w &&
+                         pos.y >= handle.y && pos.y <= handle.y + handle.h) {
+                         canvas.style.cursor = getResizeCursor(handleName);
+                         hoveringHandle = true;
+                         break;
+                     }
+                 }
+                 if (!hoveringHandle) {
+                      // Check if hovering over the element itself
+                     if (pos.x >= elem.x && pos.x <= elem.x + elem.w &&
+                         pos.y >= elem.y && pos.y <= elem.y + elem.h) {
+                         canvas.style.cursor = 'move';
+                     } else {
+                         canvas.style.cursor = 'default';
+                     }
+                 }
+            } else if (currentTool !== 'select') {
+                canvas.style.cursor = 'crosshair';
+            } else {
+                canvas.style.cursor = 'default'; // Default cursor for select tool when not hovering
+            }
+        }
+
+        function handleCanvasMouseUp(e) {
+            if (mode !== 'builder') return;
+             if (isDragging || isResizing) {
+                 isDragging = false;
+                 isResizing = false;
+                 resizeHandle = null;
+                 if (selectedElementIndex !== -1) {
+                    // Snap to grid? (Optional)
+                    // const elem = campaignData.levels[currentLevelIndex].elements[selectedElementIndex];
+                    // elem.x = Math.round(elem.x / 10) * 10;
+                    // elem.y = Math.round(elem.y / 10) * 10;
+                    // elem.w = Math.round(elem.w / 10) * 10;
+                    // elem.h = Math.round(elem.h / 10) * 10;
+                    // Update properties after potential snapping/final position
+                     showElementProperties(campaignData.levels[currentLevelIndex].elements[selectedElementIndex]);
+                 }
+                 canvas.style.cursor = 'default'; // Reset cursor after drag/resize
+             }
+        }
+
+         function handleCanvasMouseLeave(e) {
+             // Optional: Stop dragging/resizing if mouse leaves canvas
+             if (mode === 'builder' && (isDragging || isResizing)) {
+                 isDragging = false;
+                 isResizing = false;
+                 resizeHandle = null;
+                 canvas.style.cursor = (currentTool === 'select') ? 'default' : 'crosshair';
+                 // Optionally revert position/size or just keep the last valid one
+             }
+         }
+
+        function createElement(type, x, y) {
+            const defaultSize = { w: 50, h: 50 };
+            const element = {
+                type: type,
+                x: x - defaultSize.w / 2, // Center on cursor
+                y: y - defaultSize.h / 2,
+                w: defaultSize.w,
+                h: defaultSize.h,
+                properties: {}
+            };
+
+            switch (type) {
+                case 'platform':
+                    element.w = 100; element.h = 20;
+                    element.x = x - element.w / 2; element.y = y - element.h / 2;
+                    break;
+                case 'enemy':
+                    element.w = 30; element.h = 30;
+                    element.x = x - element.w / 2; element.y = y - element.h / 2;
+                    element.properties = { speed: 1, range: 50, direction: 1, startX: element.x }; // Add default properties
+                    break;
+                case 'coin':
+                    element.w = 20; element.h = 20;
+                     element.x = x - element.w / 2; element.y = y - element.h / 2;
+                    break;
+                case 'hazard':
+                    element.w = 30; element.h = 30;
+                     element.x = x - element.w / 2; element.y = y - element.h / 2;
+                    break;
+                case 'goal':
+                    element.w = 40; element.h = 40;
+                     element.x = x - element.w / 2; element.y = y - element.h / 2;
+                    break;
+                 case 'playerStart':
+                    element.w = campaignData.player.w; // Use current player size
+                    element.h = campaignData.player.h;
+                    element.x = x - element.w / 2; element.y = y - element.h / 2;
+                    break;
+                default:
+                    return null; // Unknown type
+            }
+             // Ensure minimum size
+             element.w = Math.max(10, element.w);
+             element.h = Math.max(10, element.h);
+            return element;
+        }
+
+        function showElementProperties(elem) {
+            if (!elem) {
+                hideElementProperties();
+                return;
+            }
+            elementPropertiesDiv.classList.remove('hidden');
+            deleteElementBtn.classList.remove('hidden');
+
+            // Common properties
+            document.getElementById('elem-x').value = Math.round(elem.x);
+            document.getElementById('elem-y').value = Math.round(elem.y);
+            document.getElementById('elem-w').value = Math.round(elem.w);
+            document.getElementById('elem-h').value = Math.round(elem.h);
+
+            // Specific properties
+            specificPropsDiv.innerHTML = ''; // Clear previous
+            if (elem.type === 'enemy') {
+                specificPropsDiv.innerHTML = `
+                    <label for="prop-speed">Speed:</label>
+                    <input type="number" id="prop-speed" step="0.1" value="${elem.properties.speed || 1}"><br>
+                    <label for="prop-range">Patrol Range:</label>
+                    <input type="number" id="prop-range" value="${elem.properties.range || 50}">`;
+            }
+            // Add more specific properties for other types if needed
+        }
+
+        function updateElementPropertyInputs(elem) {
+            // Only update inputs if the panel is visible for the current element
+             if (!elementPropertiesDiv.classList.contains('hidden') && selectedElementIndex !== -1 &&
+                 campaignData.levels[currentLevelIndex].elements[selectedElementIndex] === elem) {
+                document.getElementById('elem-x').value = Math.round(elem.x);
+                document.getElementById('elem-y').value = Math.round(elem.y);
+                document.getElementById('elem-w').value = Math.round(elem.w);
+                document.getElementById('elem-h').value = Math.round(elem.h);
+             }
+        }
+
+        function hideElementProperties() {
+            elementPropertiesDiv.classList.add('hidden');
+            deleteElementBtn.classList.add('hidden');
+        }
+
+        function updateElementFromProperties() {
+            if (selectedElementIndex === -1) return;
+            const elem = campaignData.levels[currentLevelIndex].elements[selectedElementIndex];
+
+            // Update common properties
+            elem.x = parseFloat(document.getElementById('elem-x').value) || elem.x;
+            elem.y = parseFloat(document.getElementById('elem-y').value) || elem.y;
+            elem.w = Math.max(10, parseFloat(document.getElementById('elem-w').value) || elem.w); // Ensure min size
+            elem.h = Math.max(10, parseFloat(document.getElementById('elem-h').value) || elem.h); // Ensure min size
+
+            // Update specific properties
+            if (elem.type === 'enemy') {
+                elem.properties.speed = parseFloat(document.getElementById('prop-speed').value) || 1;
+                elem.properties.range = parseFloat(document.getElementById('prop-range').value) || 50;
+                // Reset enemy position/state based on properties if needed
+                elem.properties.startX = elem.x; // Update startX if position changed
+                elem.properties.direction = 1; // Reset direction maybe?
+            }
+            // Add logic for other types if they get specific properties
+        }
+
+        function deleteSelectedElement() {
+             if (selectedElementIndex !== -1) {
+                 campaignData.levels[currentLevelIndex].elements.splice(selectedElementIndex, 1);
+                 selectedElementIndex = -1;
+                 hideElementProperties();
+             }
+        }
+
+        function updatePlayerFromSettings() {
+            campaignData.player.w = Math.max(10, parseFloat(playerWidthInput.value) || 30);
+            campaignData.player.h = Math.max(10, parseFloat(playerHeightInput.value) || 40);
+            campaignData.player.speed = parseFloat(playerSpeedInput.value) || 3;
+            campaignData.player.jumpHeight = parseFloat(playerJumpInput.value) || 10;
+
+            // Update playerStart elements in all levels to match new size
+             campaignData.levels.forEach(level => {
+                 const playerStart = level.elements.find(el => el.type === 'playerStart');
+                 if (playerStart) {
+                     playerStart.w = campaignData.player.w;
+                     playerStart.h = campaignData.player.h;
+                 }
+             });
+        }
+
+        // --- Player Mode Logic ---
+
+        function startGame() {
+            currentLevelIndex = 0; // Start from the first level of the loaded campaign part
+            player.score = 0; // Reset score for new game/part
+            loadLevel(currentLevelIndex);
+        }
+
+        function loadLevel(levelIndex) {
+             if (levelIndex < 0 || levelIndex >= campaignData.levels.length) {
+                 console.error("Invalid level index:", levelIndex);
+                 // Maybe show campaign complete message or handle error
+                 if (campaignLoadedFromURL && currentCampaignPart < totalCampaignParts) {
+                     showGameMessage(`Part ${currentCampaignPart}/${totalCampaignParts} complete!\nPlease use the next link to continue.`);
+                     // Stop the game loop or prevent further updates
+                     gameOver = true; // Use gameOver state to halt player logic
+                 } else {
+                      showGameMessage("Campaign Complete!");
+                      gameOver = true; // Use gameOver state to halt player logic
+                 }
+                 return;
+             }
+
+            currentLevelIndex = levelIndex; // Ensure currentLevelIndex is updated
+            const level = campaignData.levels[currentLevelIndex];
+            gameElements = JSON.parse(JSON.stringify(level.elements)); // Deep copy elements for gameplay
+
+            // Find player start position or use default
+            const playerStartElement = gameElements.find(el => el.type === 'playerStart');
+            playerStartX = playerStartElement ? playerStartElement.x : 50;
+            playerStartY = playerStartElement ? playerStartElement.y : canvas.height - 50 - campaignData.player.h; // Place on ground if no start defined
+
+            resetPlayerState();
+
+            // Initialize enemies
+            gameElements.filter(el => el.type === 'enemy').forEach(enemy => {
+                enemy.properties.startX = enemy.x; // Store initial X for patrol
+                enemy.properties.direction = 1; // Initial move direction
+            });
+
+            gameOver = false;
+            levelComplete = false;
+            hideGameMessage();
+        }
+
+         function resetPlayerState() {
+            player.w = campaignData.player.w;
+            player.h = campaignData.player.h;
+            player.speed = campaignData.player.speed;
+            player.jumpHeight = campaignData.player.jumpHeight;
+            player.color = campaignData.player.color;
+            player.x = playerStartX;
+            player.y = playerStartY;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            player.lives = 3; // Reset lives per level? Or per campaign? Let's say per level for now.
+            // player.score = 0; // Score persists across levels in a campaign part
+         }
+
+        function updatePlayer() {
+            if (gameOver || levelComplete) return;
+
+            // Horizontal Movement
+            player.vx = 0;
+            if (keys['ArrowLeft'] || keys['a']) {
+                player.vx = -player.speed;
+            }
+            if (keys['ArrowRight'] || keys['d']) {
+                player.vx = player.speed;
+            }
+
+            // Apply horizontal velocity
+            player.x += player.vx;
+
+            // Horizontal Collision with platforms
+            gameElements.filter(el => el.type === 'platform').forEach(platform => {
+                if (checkCollision(player, platform)) {
+                    if (player.vx > 0) { // Moving right
+                        player.x = platform.x - player.w;
+                    } else if (player.vx < 0) { // Moving left
+                        player.x = platform.x + platform.w;
+                    }
+                    player.vx = 0;
+                }
+            });
+
+
+            // Vertical Movement (Gravity)
+            player.vy += GRAVITY;
+            player.y += player.vy;
+            player.onGround = false;
+
+            // Vertical Collision with platforms
+            gameElements.filter(el => el.type === 'platform').forEach(platform => {
+                if (checkCollision(player, platform)) {
+                    if (player.vy > 0) { // Moving down
+                        player.y = platform.y - player.h;
+                        player.vy = 0;
+                        player.onGround = true;
+                    } else if (player.vy < 0) { // Moving up (hitting underside)
+                        player.y = platform.y + platform.h;
+                        player.vy = 0;
+                    }
+                }
+            });
+
+            // Jumping
+            if ((keys['ArrowUp'] || keys['w'] || keys[' ']) && player.onGround) {
+                player.vy = -player.jumpHeight;
+                player.onGround = false;
+            }
+
+            // World bounds
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
+            if (player.y > canvas.height) { // Fell off bottom
+                 handlePlayerDeath();
+            }
+
+             // Check other collisions
+             checkGameElementCollisions();
+        }
+
+         function updateEnemies() {
+             gameElements.filter(el => el.type === 'enemy').forEach(enemy => {
+                 const props = enemy.properties;
+                 enemy.x += props.speed * props.direction;
+
+                 // Patrol logic
+                 if (props.direction === 1 && enemy.x >= props.startX + props.range) {
+                     props.direction = -1;
+                      enemy.x = props.startX + props.range; // Clamp position
+                 } else if (props.direction === -1 && enemy.x <= props.startX) {
+                     props.direction = 1;
+                      enemy.x = props.startX; // Clamp position
+                 }
+
+                 // Simple collision with platforms (stop horizontal movement) - basic
+                 gameElements.filter(el => el.type === 'platform').forEach(platform => {
+                     if (checkCollision(enemy, platform)) {
+                         // This basic check isn't great for AI, could make them reverse etc.
+                         // For now, just stop them if they embed. A better way is needed.
+                          if (props.direction > 0) enemy.x = platform.x - enemy.w;
+                          else if (props.direction < 0) enemy.x = platform.x + platform.w;
+                          props.direction *= -1; // Reverse direction on hit
+                     }
+                 });
+             });
+         }
+
+         function checkGameElementCollisions() {
+             for (let i = gameElements.length - 1; i >= 0; i--) {
+                 const elem = gameElements[i];
+                 if (checkCollision(player, elem)) {
+                     switch(elem.type) {
+                         case 'enemy':
+                         case 'hazard':
+                             handlePlayerDeath();
+                             break;
+                         case 'coin':
+                             player.score += 10;
+                             gameElements.splice(i, 1); // Remove collected coin
+                             break;
+                         case 'goal':
+                             handleLevelComplete();
+                             break;
+                     }
+                 }
+             }
+         }
+
+         function handlePlayerDeath() {
+             // For simplicity, just restart the level on death. Could add lives later.
+             console.log("Player died!");
+             gameOver = true; // Set game over state
+             showGameMessage("You Died! Retry?", () => {
+                 // Reset level state on retry
+                 loadLevel(currentLevelIndex);
+             });
+         }
+
+         function handleLevelComplete() {
+             console.log("Level Complete!");
+             levelComplete = true; // Set level complete state
+             showGameMessage(`Level ${currentLevelIndex + 1} Complete! Score: ${player.score}`, () => {
+                 // Proceed to the next level
+                 loadLevel(currentLevelIndex + 1);
+             });
+         }
+
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.w &&
+                   rect1.x + rect1.w > rect2.x &&
+                   rect1.y < rect2.y + rect2.h &&
+                   rect1.y + rect1.h > rect2.y;
+        }
+
+         function showGameMessage(text, buttonAction = null) {
+             gameMessageDiv.innerHTML = `<p>${text}</p>`;
+             if (buttonAction) {
+                 const btn = document.createElement('button');
+                 btn.textContent = 'OK'; // Or 'Next Level', 'Retry'
+                 btn.onclick = () => {
+                     hideGameMessage();
+                     buttonAction();
+                 };
+                 gameMessageDiv.appendChild(btn);
+             }
+             gameMessageDiv.classList.remove('hidden');
+         }
+
+         function hideGameMessage() {
+             gameMessageDiv.classList.add('hidden');
+         }
+
+        // --- Drawing ---
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#87CEEB'; // Sky blue background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (mode === 'builder') {
+                drawBuilder();
+            } else { // player mode
+                drawPlayer();
+                 // Draw score/UI
+                 ctx.fillStyle = '#000';
+                 ctx.font = '16px sans-serif';
+                 ctx.fillText(`Level: ${currentLevelIndex + 1}${totalCampaignParts > 1 ? ` (Part ${currentCampaignPart}/${totalCampaignParts})` : ''} Score: ${player.score}`, 10, 20);
+            }
+
+             requestAnimationFrame(draw);
+        }
+
+        function drawBuilder() {
+            const level = campaignData.levels[currentLevelIndex];
+            if (!level) return; // Should not happen, but safety check
+
+            level.elements.forEach((elem, index) => {
+                drawElement(elem);
+                if (index === selectedElementIndex) {
+                    drawSelectionBox(elem);
+                    drawResizeHandles(elem);
+                }
+            });
+        }
+
+        function drawPlayer() {
+            // Draw game elements
+            gameElements.forEach(elem => drawElement(elem));
+
+            // Draw Player
+             if (!gameOver) { // Don't draw player if game over message is up (unless maybe a death animation)
+                drawElement({ // Draw player using the element drawing function
+                     type: 'player',
+                     x: player.x,
+                     y: player.y,
+                     w: player.w,
+                     h: player.h,
+                     color: player.color
+                 });
+             }
+        }
+
+        function drawElement(elem) {
+            ctx.save(); // Save context state
+
+             // Base shape and color
+             switch (elem.type) {
+                case 'platform':
+                    ctx.fillStyle = '#654321'; // Brown
+                    ctx.fillRect(elem.x, elem.y, elem.w, elem.h);
+                    ctx.strokeStyle = '#000'; // Black outline
+                     ctx.strokeRect(elem.x, elem.y, elem.w, elem.h);
+                    break;
+                case 'enemy':
+                    ctx.fillStyle = '#FF0000'; // Red
+                    // Draw a simple "devil" face emoji or shape
+                    ctx.font = `${Math.min(elem.w, elem.h) * 0.8}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('😈', elem.x + elem.w / 2, elem.y + elem.h / 2);
+                    break;
+                case 'coin':
+                     ctx.fillStyle = '#FFD700'; // Gold
+                     // Draw emoji or shape
+                     ctx.font = `${Math.min(elem.w, elem.h) * 0.8}px sans-serif`;
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText('💰', elem.x + elem.w / 2, elem.y + elem.h / 2);
+                    break;
+                case 'hazard':
+                    ctx.fillStyle = '#FFA500'; // Orange
+                    // Draw emoji or shape (triangle)
+                     ctx.font = `${Math.min(elem.w, elem.h) * 0.8}px sans-serif`;
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText('🔺', elem.x + elem.w / 2, elem.y + elem.h / 2);
+                     // Or draw a triangle manually:
+                     // ctx.beginPath();
+                     // ctx.moveTo(elem.x + elem.w / 2, elem.y);
+                     // ctx.lineTo(elem.x + elem.w, elem.y + elem.h);
+                     // ctx.lineTo(elem.x, elem.y + elem.h);
+                     // ctx.closePath();
+                     // ctx.fill();
+                     // ctx.stroke();
+                    break;
+                case 'goal':
+                    ctx.fillStyle = '#00FF00'; // Green
+                    // Draw emoji or shape
+                     ctx.font = `${Math.min(elem.w, elem.h) * 0.8}px sans-serif`;
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText('✅', elem.x + elem.w / 2, elem.y + elem.h / 2);
+                    break;
+                 case 'playerStart':
+                     ctx.fillStyle = 'rgba(0, 0, 255, 0.3)'; // Semi-transparent blue
+                     ctx.fillRect(elem.x, elem.y, elem.w, elem.h);
+                     ctx.strokeStyle = '#0000FF';
+                     ctx.strokeRect(elem.x, elem.y, elem.w, elem.h);
+                     ctx.font = `${Math.min(elem.w, elem.h) * 0.5}px sans-serif`;
+                     ctx.fillStyle = '#0000FF';
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText('Start', elem.x + elem.w / 2, elem.y + elem.h / 2);
+                    break;
+                 case 'player': // Used only in player mode draw
+                     ctx.fillStyle = elem.color || '#0000FF';
+                      // Draw emoji or shape
+                     ctx.font = `${Math.min(elem.w, elem.h) * 0.9}px sans-serif`;
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+                     ctx.fillText('🧍', elem.x + elem.w / 2, elem.y + elem.h / 2 + (elem.h*0.05) /* Adjust baseline slightly */);
+                     // Or draw a rectangle:
+                     // ctx.fillRect(elem.x, elem.y, elem.w, elem.h);
+                    break;
+            }
+
+            ctx.restore(); // Restore context state
+        }
+
+        function drawSelectionBox(elem) {
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 3]); // Dashed line
+            ctx.strokeRect(elem.x - 2, elem.y - 2, elem.w + 4, elem.h + 4);
+            ctx.setLineDash([]); // Reset line dash
+             ctx.lineWidth = 1;
+        }
+
+         const handleSize = 8;
+         function getResizeHandles(elem) {
+             const hw = handleSize / 2;
+             return {
+                 'tl': { x: elem.x - hw, y: elem.y - hw, w: handleSize, h: handleSize },
+                 'tr': { x: elem.x + elem.w - hw, y: elem.y - hw, w: handleSize, h: handleSize },
+                 'bl': { x: elem.x - hw, y: elem.y + elem.h - hw, w: handleSize, h: handleSize },
+                 'br': { x: elem.x + elem.w - hw, y: elem.y + elem.h - hw, w: handleSize, h: handleSize },
+                 't': { x: elem.x + elem.w / 2 - hw, y: elem.y - hw, w: handleSize, h: handleSize },
+                 'b': { x: elem.x + elem.w / 2 - hw, y: elem.y + elem.h - hw, w: handleSize, h: handleSize },
+                 'l': { x: elem.x - hw, y: elem.y + elem.h / 2 - hw, w: handleSize, h: handleSize },
+                 'r': { x: elem.x + elem.w - hw, y: elem.y + elem.h / 2 - hw, w: handleSize, h: handleSize },
+             };
+         }
+
+         function drawResizeHandles(elem) {
+             ctx.fillStyle = 'blue';
+             const handles = getResizeHandles(elem);
+             for (const handleName in handles) {
+                 const handle = handles[handleName];
+                 ctx.fillRect(handle.x, handle.y, handle.w, handle.h);
+             }
+         }
+
+         function getResizeCursor(handleName) {
+             switch (handleName) {
+                 case 'tl': case 'br': return 'nwse-resize';
+                 case 'tr': case 'bl': return 'nesw-resize';
+                 case 't': case 'b': return 'ns-resize';
+                 case 'l': case 'r': return 'ew-resize';
+                 default: return 'default';
+             }
+         }
+
+        // --- Game Loop ---
+        function gameLoop() {
+            if (mode === 'player' && !gameOver && !levelComplete) {
+                updatePlayer();
+                updateEnemies(); // Update enemy positions
+            }
+            // Drawing is handled by the continuous requestAnimationFrame loop started in init()
+            // No need to call draw() here, but logic update is needed.
+            // For builder mode, updates happen via events, not continuously like player physics.
+
+            // Re-queue the logic loop for player mode updates
+            // Use setTimeout for logic updates to decouple from drawing framerate slightly
+             setTimeout(gameLoop, 1000 / 60); // Aim for ~60 FPS logic updates
+        }
+
+
+        // --- Input Handling ---
+        function setupEventListeners() {
+            canvas.addEventListener('mousedown', handleCanvasMouseDown);
+            canvas.addEventListener('mousemove', handleCanvasMouseMove);
+            canvas.addEventListener('mouseup', handleCanvasMouseUp);
+             canvas.addEventListener('mouseleave', handleCanvasMouseLeave); // Handle mouse leaving
+
+            // Builder Tools
+            toolButtons.forEach(btn => {
+                btn.addEventListener('click', () => setActiveTool(btn.dataset.tool));
+            });
+             updateElementBtn.addEventListener('click', updateElementFromProperties);
+             deleteElementBtn.addEventListener('click', deleteSelectedElement);
+
+             // Player Settings
+             updatePlayerSettingsBtn.addEventListener('click', updatePlayerFromSettings);
+
+             // Level Management
+             addLevelBtn.addEventListener('click', addLevel);
+             deleteLevelBtn.addEventListener('click', deleteCurrentLevel);
+
+             // Mode Switching
+             builderModeBtn.addEventListener('click', () => setMode('builder'));
+             playerModeBtn.addEventListener('click', () => setMode('player'));
+
+             // Sharing
+             shareBtn.addEventListener('click', generateShareLinks);
+
+            // Keyboard Input (for player mode)
+            window.addEventListener('keydown', (e) => { keys[e.key] = true; });
+            window.addEventListener('keyup', (e) => { keys[e.key] = false; });
+        }
+
+         // --- Sharing and Loading ---
+         function generateShareLinks() {
+             console.log("Generating share links...");
+             shareLinksDiv.innerHTML = '<p>Generating...</p>';
+             shareLinksDiv.classList.remove('hidden');
+
+             try {
+                 const campaignStr = JSON.stringify(campaignData);
+                 const encodedBase = encodeURIComponent(campaignStr);
+                 const baseLink = window.location.href.split('?')[0]; // Get URL without existing params
+
+                 console.log(`Total encoded length: ${encodedBase.length}`);
+
+                 if (encodedBase.length <= MAX_URL_LENGTH) {
+                     // Fits in one link
+                     const finalLink = `${baseLink}?data=${encodedBase}`;
+                     shareLinksDiv.innerHTML = `<p>Share this link:</p><p><a href="${finalLink}" target="_blank">${finalLink}</a></p>`;
+                 } else {
+                     // Needs splitting
+                     console.log("Splitting required.");
+                     const links = [];
+                     let currentPart = 1;
+                     let levelStartIndex = 0;
+                     const totalLevels = campaignData.levels.length;
+
+                     while (levelStartIndex < totalLevels) {
+                         let levelEndIndex = levelStartIndex;
+                         let chunkData;
+                         let encodedChunk;
+                         let currentChunkLevels = [];
+
+                         // Try adding levels one by one until the limit is reached
+                         while (levelEndIndex < totalLevels) {
+                             const levelsForChunk = campaignData.levels.slice(levelStartIndex, levelEndIndex + 1);
+                             const tempChunk = {
+                                 player: campaignData.player,
+                                 levels: levelsForChunk,
+                                 part: currentPart, // Placeholder, will be updated later
+                                 totalParts: 999 // Placeholder
+                             };
+                             const tempChunkStr = JSON.stringify(tempChunk);
+                             const tempEncoded = encodeURIComponent(tempChunkStr);
+
+                             if (tempEncoded.length <= MAX_URL_LENGTH) {
+                                 // This level fits, store it and try the next
+                                 encodedChunk = tempEncoded; // Store the last successful encoding
+                                 currentChunkLevels = levelsForChunk;
+                                 levelEndIndex++;
+                             } else {
+                                 // This level makes it too large, stop here
+                                 if (currentChunkLevels.length === 0) {
+                                     // Error: A single level is too large to fit!
+                                     console.error("Error: A single level's data exceeds the URL length limit.");
+                                     shareLinksDiv.innerHTML = `<p>Error: Level ${levelStartIndex + 1} is too complex to share. Try simplifying it.</p>`;
+                                     return;
+                                 }
+                                 break; // Finalize the chunk with levels up to levelEndIndex - 1
+                             }
+                         }
+
+                         // We have the levels for the current chunk (currentChunkLevels)
+                         // encodedChunk contains the encoded data for these levels + player + placeholders
+                         // Now finalize the chunk data with correct part numbers later
+                          links.push({ encoded: encodedChunk, levelsIncluded: currentChunkLevels.length });
+
+                         levelStartIndex = levelEndIndex; // Start next chunk from here
+                         currentPart++;
+                     }
+
+                     // Now update part/totalParts and generate final links
+                     const totalParts = links.length;
+                      let finalLinksHTML = `<p>Campaign split into ${totalParts} parts. Share these links in order:</p>`;
+                      currentPart = 1;
+                      levelStartIndex = 0;
+
+                      links.forEach(linkInfo => {
+                           // Need to re-serialize with correct part/totalParts
+                           const levelsForThisChunk = campaignData.levels.slice(levelStartIndex, levelStartIndex + linkInfo.levelsIncluded);
+                           const finalChunkData = {
+                               player: campaignData.player,
+                               levels: levelsForThisChunk,
+                               part: currentPart,
+                               totalParts: totalParts
+                           };
+                            const finalChunkStr = JSON.stringify(finalChunkData);
+                            const finalEncodedChunk = encodeURIComponent(finalChunkStr);
+                            const finalLink = `${baseLink}?data=${finalEncodedChunk}`;
+                            finalLinksHTML += `<p><b>Part ${currentPart}/${totalParts}:</b> <a href="${finalLink}" target="_blank">${finalLink}</a></p>`;
+
+                            levelStartIndex += linkInfo.levelsIncluded;
+                            currentPart++;
+                      });
+
+
+                     shareLinksDiv.innerHTML = finalLinksHTML;
+
+                 }
+             } catch (error) {
+                 console.error("Error generating share links:", error);
+                 shareLinksDiv.innerHTML = '<p>Error creating share link. Campaign might be too complex or contain invalid data.</p>';
+                 shareLinksDiv.classList.remove('hidden'); // Ensure error is visible
+             }
+         }
+
+         function loadFromURL() {
+             const urlParams = new URLSearchParams(window.location.search);
+             const dataParam = urlParams.get('data');
+
+             if (dataParam) {
+                 try {
+                     const decodedData = decodeURIComponent(dataParam);
+                     const loadedCampaign = JSON.parse(decodedData);
+
+                     // Validate loaded data structure (basic check)
+                     if (loadedCampaign && loadedCampaign.player && loadedCampaign.levels) {
+                         campaignData = loadedCampaign; // Overwrite default data
+                         campaignLoadedFromURL = true;
+
+                         // Extract part info if present
+                         currentCampaignPart = loadedCampaign.part || 1;
+                         totalCampaignParts = loadedCampaign.totalParts || 1;
+
+                         console.log(`Loaded campaign from URL. Part ${currentCampaignPart}/${totalCampaignParts}`);
+                         loadingInfoSpan.textContent = `Playing Campaign (Part ${currentCampaignPart}/${totalCampaignParts})`;
+
+
+                         // Apply loaded settings and start game
+                         updatePlayerSettingsUI(); // Update builder UI inputs even if hidden
+                         setMode('player'); // Directly enter player mode
+                         playerModeBtn.classList.add('hidden'); // Hide play button when loaded from URL
+                         builderModeBtn.textContent = "Exit to Editor (Lose Progress)"; // Change button text
+                         builderModeBtn.onclick = () => { // Change action to confirm leaving
+                              if (confirm("Exit player mode? This will discard the loaded campaign link.")) {
+                                  window.location.href = window.location.href.split('?')[0]; // Reload without params
+                              }
+                         };
+
+
+                     } else {
+                         console.error("Invalid data structure in URL parameter.");
+                         loadingInfoSpan.textContent = "Error: Invalid link data.";
+                     }
+                 } catch (error) {
+                     console.error("Error decoding or parsing URL data:", error);
+                     loadingInfoSpan.textContent = "Error: Could not load link data.";
+                 }
+             } else {
+                 // No data in URL, proceed with default builder mode
+                 console.log("No campaign data in URL, starting builder.");
+             }
+         }
+
+        // --- Start the application ---
+        init();
+
+    </script>
+
+</body>
+</html>

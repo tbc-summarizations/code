@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Audio Recreation</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #222;
+            color: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            font-style: italic;
+            color: #aaa;
+        }
+        .shape-container {
+            margin-top: 30px;
+            display: flex;
+            gap: 10px;
+            height: 50px; /* Visual feedback area */
+        }
+        .shape {
+            width: 20px;
+            height: 20px;
+            transition: transform 0.1s ease, background-color 0.1s ease;
+        }
+        .kick-shape { background-color: red; width: 30px; height: 30px; border-radius: 50%; align-self: flex-end; }
+        .snare-shape { background-color: blue; clip-path: polygon(50% 0%, 100% 100%, 0% 100%); width: 30px; height: 30px; align-self: center;} /* Triangle */
+        .hat-shape { background-color: yellow; width: 15px; height: 15px; align-self: flex-start; }
+        .bass-shape { background-color: purple; width: 10px; height: 40px; align-self: center;}
+        .melody-shape { background-color: cyan; width: 25px; height: 10px; align-self: flex-start; }
+    </style>
+</head>
+<body>
+
+    <h1>HTML Sound Recreation</h1>
+    <button id="playButton">▶ Play Track</button>
+    <div id="status">Click Play to start the audio generation.</div>
+    <div class="shape-container">
+        <div class="shape kick-shape" id="kick-viz"></div>
+        <div class="shape snare-shape" id="snare-viz"></div>
+        <div class="shape hat-shape" id="hat-viz"></div>
+        <div class="shape bass-shape" id="bass-viz"></div>
+        <div class="shape melody-shape" id="melody-viz"></div>
+    </div>
+
+    <script>
+        const playButton = document.getElementById('playButton');
+        const statusDiv = document.getElementById('status');
+        const kickViz = document.getElementById('kick-viz');
+        const snareViz = document.getElementById('snare-viz');
+        const hatViz = document.getElementById('hat-viz');
+        const bassViz = document.getElementById('bass-viz');
+        const melodyViz = document.getElementById('melody-viz');
+
+        let audioContext;
+        let scheduler;
+        let isPlaying = false;
+        let nextNoteTime = 0.0; // Time for the next note to be scheduled
+        const lookahead = 25.0; // How frequently to call scheduling function (in milliseconds)
+        const scheduleAheadTime = 0.1; // How far ahead to schedule audio (sec)
+
+        const tempo = 125; // Beats per minute
+        const secondsPerBeat = 60.0 / tempo;
+        const noteLength16th = secondsPerBeat / 4; // Duration of a 16th note
+
+        // --- Sound Definitions ---
+
+        function createKick(time) {
+            if (!audioContext) return;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.frequency.setValueAtTime(150, time);
+            osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.1); // Pitch drop
+            gain.gain.setValueAtTime(1, time);
+            gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15); // Decay
+
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            osc.start(time);
+            osc.stop(time + 0.15);
+            visualize(kickViz, 0.15);
+        }
+
+        function createSnare(time) {
+            if (!audioContext) return;
+            // Noise component
+            const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.2, audioContext.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < noiseBuffer.length; i++) {
+                output[i] = (Math.random() * 2 - 1) * 0.5; // White noise
+            }
+            const noiseSource = audioContext.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+
+            const noiseFilter = audioContext.createBiquadFilter();
+            noiseFilter.type = 'highpass';
+            noiseFilter.frequency.setValueAtTime(1000, time);
+
+            const noiseGain = audioContext.createGain();
+            noiseGain.gain.setValueAtTime(1, time);
+            noiseGain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+
+            noiseSource.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(audioContext.destination);
+
+            // Tone component (optional 'snap')
+            const osc = audioContext.createOscillator();
+            const oscGain = audioContext.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(180, time);
+            oscGain.gain.setValueAtTime(0.7, time);
+            oscGain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+
+            osc.connect(oscGain);
+            oscGain.connect(audioContext.destination);
+
+            noiseSource.start(time);
+            osc.start(time);
+            noiseSource.stop(time + 0.2);
+            osc.stop(time + 0.1);
+            visualize(snareViz, 0.15);
+        }
+
+        function createHiHat(time) {
+            if (!audioContext) return;
+            const noiseBuffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.1, audioContext.sampleRate);
+            const output = noiseBuffer.getChannelData(0);
+            for (let i = 0; i < noiseBuffer.length; i++) {
+                output[i] = (Math.random() * 2 - 1) * 0.3; // Quieter noise
+            }
+            const noiseSource = audioContext.createBufferSource();
+            noiseSource.buffer = noiseBuffer;
+
+            const noiseFilter = audioContext.createBiquadFilter();
+            noiseFilter.type = 'highpass';
+            noiseFilter.frequency.setValueAtTime(7000, time); // High frequency for hi-hat
+
+            const noiseGain = audioContext.createGain();
+            noiseGain.gain.setValueAtTime(1, time);
+            noiseGain.gain.exponentialRampToValueAtTime(0.01, time + 0.05); // Very short decay
+
+            noiseSource.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(audioContext.destination);
+            noiseSource.start(time);
+            noiseSource.stop(time + 0.05);
+            visualize(hatViz, 0.05);
+        }
+
+        function createBassNote(time, frequency = 55, duration = noteLength16th * 2) {
+             if (!audioContext) return;
+             const osc = audioContext.createOscillator();
+             const gain = audioContext.createGain();
+             const filter = audioContext.createBiquadFilter();
+
+             osc.type = 'sawtooth';
+             osc.frequency.setValueAtTime(frequency, time);
+
+             filter.type = 'lowpass';
+             filter.frequency.setValueAtTime(400, time); // Cut off high frequencies
+             filter.Q.setValueAtTime(5, time); // Resonance peak
+
+             gain.gain.setValueAtTime(0.001, time); // Start quiet
+             gain.gain.linearRampToValueAtTime(0.4, time + 0.01); // Quick attack
+             gain.gain.linearRampToValueAtTime(0.001, time + duration); // Decay/Release
+
+             osc.connect(filter);
+             filter.connect(gain);
+             gain.connect(audioContext.destination);
+
+             osc.start(time);
+             osc.stop(time + duration);
+             visualize(bassViz, duration);
+        }
+
+        function createMelodyNote(time, frequency = 440, duration = noteLength16th) {
+            if (!audioContext) return;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+
+            osc.type = 'sine'; // Simple tone
+            osc.frequency.setValueAtTime(frequency, time);
+
+            gain.gain.setValueAtTime(0.001, time);
+            gain.gain.linearRampToValueAtTime(0.3, time + 0.02); // Slightly slower attack
+            gain.gain.exponentialRampToValueAtTime(0.01, time + duration * 0.9); // Decay
+             gain.gain.linearRampToValueAtTime(0.001, time + duration); // Ensure silence
+
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+
+            osc.start(time);
+            osc.stop(time + duration);
+            visualize(melodyViz, duration);
+        }
+
+        // --- Sequencing Logic ---
+
+        let current16thNote = 0;
+        const sequenceLength = 16; // 1 bar of 16th notes
+
+        // Example Sequences (0 = off, 1 = on)
+        const kickPattern   = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0];
+        const snarePattern  = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0];
+        const hiHatPattern  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]; // Constant 16ths
+        // Bass notes (Hz) - Simple pattern A1, C2, G1, A1
+        const bassNotes = [55, 0, 0, 0, 65.41, 0, 0, 0, 48.99, 0, 0, 0, 55, 0, 0, 0];
+        // Melody notes (Hz) - Simple arpeggio C4, E4, G4, C5
+        const melodyNotes = [0, 0, 261.63, 0, 0, 0, 329.63, 0, 0, 0, 392.00, 0, 0, 0, 523.25, 0];
+
+
+        function scheduleNotes() {
+            while (nextNoteTime < audioContext.currentTime + scheduleAheadTime) {
+                // Schedule visual cue slightly ahead
+                 setTimeout(() => scheduleVisuals(current16thNote), (nextNoteTime - audioContext.currentTime) * 1000);
+
+                // Schedule sounds
+                if (kickPattern[current16thNote] === 1) {
+                    createKick(nextNoteTime);
+                }
+                if (snarePattern[current16thNote] === 1) {
+                    createSnare(nextNoteTime);
+                }
+                if (hiHatPattern[current16thNote] === 1) {
+                    // Make some hats slightly shorter/quieter for dynamics (optional)
+                    createHiHat(nextNoteTime);
+                }
+                if (bassNotes[current16thNote] > 0) {
+                    createBassNote(nextNoteTime, bassNotes[current16thNote]);
+                }
+                 if (melodyNotes[current16thNote] > 0) {
+                    createMelodyNote(nextNoteTime, melodyNotes[current16thNote]);
+                }
+
+                // Advance time and sequence position
+                nextNoteTime += noteLength16th;
+                current16thNote = (current16thNote + 1) % sequenceLength;
+            }
+        }
+
+         function scheduleVisuals(noteIndex) {
+            // This function is called closer to the actual play time for visuals
+            if (!isPlaying) return; // Don't show if stopped
+            if (kickPattern[noteIndex] === 1) visualize(kickViz, 0.15);
+            if (snarePattern[noteIndex] === 1) visualize(snareViz, 0.15);
+            if (hiHatPattern[noteIndex] === 1) visualize(hatViz, 0.05);
+            if (bassNotes[noteIndex] > 0) visualize(bassViz, noteLength16th * 2);
+            if (melodyNotes[noteIndex] > 0) visualize(melodyViz, noteLength16th);
+        }
+
+
+        function visualize(element, durationSeconds) {
+            if(!element) return;
+            element.style.transform = 'scale(1.3)';
+            element.style.opacity = '1';
+            setTimeout(() => {
+                element.style.transform = 'scale(1)';
+                 element.style.opacity = '0.6';
+            }, durationSeconds * 1000 * 0.9); // Reset slightly before note ends
+        }
+
+        function resetVisuals() {
+             [kickViz, snareViz, hatViz, bassViz, melodyViz].forEach(el => {
+                if(el) {
+                    el.style.transform = 'scale(1)';
+                    el.style.opacity = '0.6';
+                }
+            });
+        }
+
+
+        function startPlayback() {
+            if (isPlaying) return;
+            if (!audioContext) {
+                try {
+                    window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioContext = new AudioContext();
+                     // Check if context is suspended (autoplay policies)
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+                    statusDiv.textContent = 'AudioContext created.';
+                } catch (e) {
+                    statusDiv.textContent = 'Web Audio API is not supported in this browser.';
+                    alert('Web Audio API is not supported in this browser.');
+                    playButton.disabled = true;
+                    return;
+                }
+            }
+
+             // Resume context if it was suspended
+            if (audioContext.state === 'suspended') {
+                 audioContext.resume().then(() => {
+                    console.log("AudioContext resumed!");
+                    actuallyStart();
+                 });
+            } else {
+                 actuallyStart();
+            }
+        }
+
+        function actuallyStart() {
+             isPlaying = true;
+             current16thNote = 0; // Reset sequence position
+             nextNoteTime = audioContext.currentTime + 0.1; // Start scheduling shortly after clicking play
+             statusDiv.textContent = 'Playing... Tempo: ' + tempo + ' BPM';
+             playButton.textContent = '◼ Stop Track';
+             resetVisuals(); // Clear any leftover visuals
+             scheduler = setInterval(scheduleNotes, lookahead); // Start the scheduling loop
+        }
+
+
+        function stopPlayback() {
+            if (!isPlaying) return;
+            isPlaying = false;
+            clearInterval(scheduler); // Stop the scheduling loop
+
+            // While we can't easily stop scheduled notes beyond the current time,
+            // we can stop the loop from scheduling *new* notes.
+            // For a cleaner stop, one might need to track all active nodes and call stop() - more complex.
+
+            playButton.textContent = '▶ Play Track';
+            statusDiv.textContent = 'Stopped.';
+            resetVisuals(); // Reset visuals immediately
+             // Optionally close the context if done, or keep it for next play
+             // audioContext.close();
+             // audioContext = null;
+        }
+
+        playButton.addEventListener('click', () => {
+            if (isPlaying) {
+                stopPlayback();
+            } else {
+                startPlayback();
+            }
+        });
+
+        // Initial visual state
+        resetVisuals();
+
+    </script>
+
+</body>
+</html>

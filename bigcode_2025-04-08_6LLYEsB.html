@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Audio Recreation</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .controls {
+            text-align: center;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        p {
+            margin-top: 15px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h1>Audio Synthesis</h1>
+        <button id="playButton">▶️ Play Track</button>
+        <p id="status">Click Play to start the audio synthesis.</p>
+    </div>
+
+    <script>
+        const playButton = document.getElementById('playButton');
+        const statusElement = document.getElementById('status');
+        let audioContext;
+        let isPlaying = false;
+        let schedulerInterval; // To keep track of sequence scheduling
+
+        // --- Parameters ---
+        const bpm = 128;
+        const secondsPerBeat = 60.0 / bpm;
+        const barDuration = secondsPerBeat * 4; // Assuming 4/4 time
+
+        // --- Note Frequencies (Hz) ---
+        const Notes = {
+            'C4': 261.63, 'Db4': 277.18, 'D4': 293.66, 'Eb4': 311.13, 'E4': 329.63, 'F4': 349.23,
+            'Gb4': 369.99, 'G4': 392.00, 'Ab4': 415.30, 'A4': 440.00, 'Bb4': 466.16, 'B4': 493.88,
+            'C5': 523.25, 'Db5': 554.37, 'D5': 587.33, 'Eb5': 622.25, 'E5': 659.25, 'F5': 698.46,
+            'Gb5': 739.99, 'G5': 783.99, 'Ab5': 830.61, 'A5': 880.00, 'Bb5': 932.33, 'B5': 987.77,
+            'C3': 130.81, 'G3': 196.00, 'Eb3': 155.56, 'F3': 174.61 // Bass notes
+            // Add more octaves if needed
+        };
+
+        // --- Helper Functions ---
+        function initAudio() {
+            if (!audioContext) {
+                try {
+                    window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioContext = new AudioContext();
+                    statusElement.textContent = 'Audio Context Ready.';
+                } catch (e) {
+                    statusElement.textContent = 'Web Audio API is not supported in this browser.';
+                    playButton.disabled = true;
+                    console.error(e);
+                }
+            }
+        }
+
+        function createGain(startTime, duration, volume = 0.5, attack = 0.01, decay = 0.05, sustainLevel = 0.7, release = 0.1) {
+            const gainNode = audioContext.createGain();
+            const now = startTime;
+            const peakTime = now + attack;
+            const sustainTime = peakTime + decay;
+            const releaseStartTime = now + duration - release; // Start release before the note ends
+
+            gainNode.gain.setValueAtTime(0, now); // Start silent
+            gainNode.gain.linearRampToValueAtTime(volume, peakTime); // Attack
+            gainNode.gain.linearRampToValueAtTime(volume * sustainLevel, sustainTime); // Decay to sustain
+            gainNode.gain.setValueAtTime(volume * sustainLevel, releaseStartTime); // Hold sustain
+            gainNode.gain.linearRampToValueAtTime(0, now + duration); // Release
+
+            gainNode.connect(audioContext.destination);
+            return gainNode;
+        }
+
+        // --- Instrument Definitions ---
+
+        // Kick Drum
+        function playKick(time, volume = 0.8) {
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.type = 'sine'; // Deep sine for the body
+
+            const now = time;
+            const attack = 0.005;
+            const decay = 0.15;
+            const endPitch = 40; // Ending freq
+            const startPitch = 150; // Starting freq
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(volume, now + attack);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + decay); // Quick decay
+
+            osc.frequency.setValueAtTime(startPitch, now);
+            osc.frequency.exponentialRampToValueAtTime(endPitch, now + decay * 0.8); // Pitch drop
+
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+
+            osc.start(now);
+            osc.stop(now + decay + 0.1); // Stop shortly after decay
+        }
+
+        // Snare Drum
+        function playSnare(time, volume = 0.6) {
+            const noise = audioContext.createBufferSource();
+            const bufferSize = audioContext.sampleRate * 0.2; // 0.2 seconds buffer
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const output = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = (Math.random() * 2 - 1) * 0.8; // White noise
+            }
+            noise.buffer = buffer;
+
+            const noiseFilter = audioContext.createBiquadFilter();
+            noiseFilter.type = 'bandpass'; // Focus on mid frequencies
+            noiseFilter.frequency.value = 1500;
+            noiseFilter.Q.value = 1.5;
+
+            const gain = audioContext.createGain();
+            const now = time;
+            const attack = 0.002;
+            const decay = 0.15;
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(volume, now + attack);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + decay);
+
+            noise.connect(noiseFilter);
+            noiseFilter.connect(gain);
+            gain.connect(audioContext.destination);
+
+            noise.start(now);
+            noise.stop(now + decay + 0.05);
+        }
+
+        // Hi-Hat
+        function playHiHat(time, volume = 0.3) {
+            const noise = audioContext.createBufferSource();
+            const bufferSize = audioContext.sampleRate * 0.1; // Short buffer
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const output = buffer.getChannelData(0);
+
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1; // White noise
+            }
+            noise.buffer = buffer;
+
+            const noiseFilter = audioContext.createBiquadFilter();
+            noiseFilter.type = 'highpass'; // Only high frequencies
+            noiseFilter.frequency.value = 7000;
+
+            const gain = audioContext.createGain();
+            const now = time;
+            const decay = 0.05; // Very short decay
+
+            gain.gain.setValueAtTime(volume, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + decay);
+
+            noise.connect(noiseFilter);
+            noiseFilter.connect(gain);
+            gain.connect(audioContext.destination);
+
+            noise.start(now);
+            noise.stop(now + decay + 0.02);
+        }
+
+        // Bass Synth
+        function playBassNote(note, time, duration, volume = 0.5) {
+            const osc = audioContext.createOscillator();
+            const filter = audioContext.createBiquadFilter();
+            const gain = audioContext.createGain();
+
+            osc.type = 'sawtooth';
+            osc.frequency.value = Notes[note] || 220; // Default if note not found
+
+            filter.type = 'lowpass';
+            filter.frequency.value = 600; // Cut off highs
+            filter.Q.value = 5; // Slight resonance
+
+            const now = time;
+            const attack = 0.02;
+            const decay = 0.1;
+            const sustainLevel = 0.7;
+            const release = 0.15;
+            const sustainStartTime = now + attack + decay;
+            const releaseStartTime = Math.max(sustainStartTime, now + duration - release); // Ensure release starts after attack/decay
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(volume, now + attack);
+            gain.gain.linearRampToValueAtTime(volume * sustainLevel, sustainStartTime);
+            gain.gain.setValueAtTime(volume * sustainLevel, releaseStartTime);
+            gain.gain.linearRampToValueAtTime(0, now + duration);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioContext.destination);
+
+            osc.start(now);
+            osc.stop(now + duration + 0.01); // Allow release tail
+        }
+
+        // Lead Synth
+        function playLeadNote(note, time, duration, volume = 0.4) {
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+
+            osc.type = 'square'; // Brighter square wave
+            osc.frequency.value = Notes[note] || 440;
+
+            const now = time;
+            const attack = 0.01;
+            const decay = 0.1;
+            const sustainLevel = 0.8;
+            const release = 0.1;
+            const sustainStartTime = now + attack + decay;
+            const releaseStartTime = Math.max(sustainStartTime, now + duration - release);
+
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(volume, now + attack);
+            gain.gain.linearRampToValueAtTime(volume * sustainLevel, sustainStartTime);
+            gain.gain.setValueAtTime(volume * sustainLevel, releaseStartTime);
+            gain.gain.linearRampToValueAtTime(0, now + duration);
+
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+
+            osc.start(now);
+            osc.stop(now + duration + 0.01);
+        }
+
+
+        // --- Song Structure & Sequencing ---
+
+        // Define sequences (patterns)
+        // Times are relative offsets within a bar (in beats)
+        const kickPattern = [0, 2]; // On beats 1 and 3
+        const snarePattern = [1, 3]; // On beats 2 and 4
+        const hiHatPattern = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]; // 8th notes
+
+        const bassSequence = [ // Notes and their duration in beats
+            { note: 'C3', start: 0, duration: 3.5 },
+            { note: 'G3', start: 4, duration: 3.5 },
+            { note: 'Eb3', start: 8, duration: 3.5 },
+            { note: 'F3', start: 12, duration: 3.5 }
+        ]; // Repeats every 4 bars (16 beats)
+
+        const leadSequence = [ // Simple melody during 'chorus' bars
+            // Bar 1
+            { note: 'C5', start: 0, duration: 0.75 },
+            { note: 'Eb5', start: 1, duration: 0.75 },
+            { note: 'G5', start: 2, duration: 0.75 },
+            { note: 'Eb5', start: 3, duration: 0.75 },
+            // Bar 2
+            { note: 'F5', start: 4, duration: 1.75 },
+            { note: 'Eb5', start: 6, duration: 1.75 },
+            // Bar 3 (same as 1)
+            { note: 'C5', start: 8, duration: 0.75 },
+            { note: 'Eb5', start: 9, duration: 0.75 },
+            { note: 'G5', start: 10, duration: 0.75 },
+            { note: 'Eb5', start: 11, duration: 0.75 },
+            // Bar 4
+            { note: 'D5', start: 12, duration: 1.75 },
+            { note: 'C5', start: 14, duration: 1.75 },
+        ]; // Repeats every 4 bars (16 beats)
+
+        const totalBars = 16; // Length of the piece
+
+        function scheduleTrack() {
+            const startTime = audioContext.currentTime + 0.1; // Start scheduling slightly ahead
+            statusElement.textContent = 'Scheduling audio...';
+
+            for (let bar = 0; bar < totalBars; bar++) {
+                const barStartTime = startTime + bar * barDuration;
+
+                // Schedule Drums for this bar
+                kickPattern.forEach(beat => playKick(barStartTime + beat * secondsPerBeat));
+                snarePattern.forEach(beat => playSnare(barStartTime + beat * secondsPerBeat));
+                hiHatPattern.forEach(beat => playHiHat(barStartTime + beat * secondsPerBeat));
+
+                // Schedule Bassline for this bar (loops every 4 bars)
+                const bassBarOffset = (bar % 4) * 4; // 0, 4, 8, 12
+                bassSequence.forEach(item => {
+                    if (item.start >= bassBarOffset && item.start < bassBarOffset + 4) {
+                         playBassNote(item.note, barStartTime + (item.start - bassBarOffset) * secondsPerBeat, item.duration * secondsPerBeat);
+                    }
+                });
+
+                 // Schedule Lead Melody (only during bars 4-7 and 12-15 as an example 'chorus')
+                 if ((bar >= 4 && bar < 8) || (bar >= 12 && bar < 16)) {
+                    const leadBarOffset = ((bar - 4) % 4) * 4; // Offset within the 4-bar lead pattern
+                     leadSequence.forEach(item => {
+                         if (item.start >= leadBarOffset && item.start < leadBarOffset + 4) {
+                            playLeadNote(item.note, barStartTime + (item.start - leadBarOffset) * secondsPerBeat, item.duration * secondsPerBeat);
+                         }
+                     });
+                 }
+            }
+
+            // Simple way to detect end of playback for UI update
+            // Clear any previous timeout
+            if (schedulerInterval) clearTimeout(schedulerInterval);
+            schedulerInterval = setTimeout(() => {
+                isPlaying = false;
+                playButton.textContent = '▶️ Play Track';
+                playButton.disabled = false;
+                statusElement.textContent = 'Playback finished. Click Play to start again.';
+                // Re-enable button after playback finishes
+                 if (audioContext.state === 'running') {
+                    audioContext.close().then(() => {
+                         audioContext = null; // Reset context
+                         console.log("AudioContext closed.");
+                    });
+                }
+            }, (startTime + totalBars * barDuration - audioContext.currentTime + 0.5) * 1000); // Timeout slightly after expected end
+
+             statusElement.textContent = 'Playback started.';
+        }
+
+        // --- Event Listener ---
+        playButton.addEventListener('click', () => {
+            if (isPlaying) {
+                // Stop logic (simple version: close context and reset)
+                if (audioContext && audioContext.state === 'running') {
+                    audioContext.close().then(() => {
+                        audioContext = null;
+                        isPlaying = false;
+                        playButton.textContent = '▶️ Play Track';
+                        playButton.disabled = false;
+                        statusElement.textContent = 'Playback stopped. Click Play to start again.';
+                        if (schedulerInterval) clearTimeout(schedulerInterval);
+                        console.log("AudioContext closed manually.");
+                    });
+                } else {
+                    // Fallback if context is already closed or in unexpected state
+                    audioContext = null;
+                    isPlaying = false;
+                    playButton.textContent = '▶️ Play Track';
+                    playButton.disabled = false;
+                     statusElement.textContent = 'Click Play to start again.';
+                     if (schedulerInterval) clearTimeout(schedulerInterval);
+                }
+            } else {
+                 // Play logic
+                initAudio(); // Ensure context exists
+                 if (!audioContext) return; // Exit if context creation failed
+
+                // Resume context if needed (e.g., after user interaction)
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+
+                isPlaying = true;
+                playButton.textContent = '⏹️ Stop Track';
+                //playButton.disabled = true; // Disable button while scheduling/playing
+                statusElement.textContent = 'Starting playback...';
+                scheduleTrack();
+            }
+        });
+
+    </script>
+</body>
+</html>

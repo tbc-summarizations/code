@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physics Cube Launcher</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #a8c0ff, #3ab7bf); /* More modern gradient */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff; /* White text for better contrast */
+        }
+        canvas {
+            display: block;
+            border: none; /* Removed harsh border */
+            background-color: #e0f7fa; /* Very light background for canvas */
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2); /* Softer, deeper shadow */
+            border-radius: 12px;
+        }
+        #ui-container {
+            position: absolute;
+            top: 30px; /* Slightly more top spacing */
+            left: 30px; /* Slightly more left spacing */
+            background-color: rgba(255, 255, 255, 0.85); /* Slightly transparent white UI */
+            padding: 18px 25px; /* More padding */
+            border-radius: 15px; /* More rounded UI */
+            box-shadow: 0 5px 12px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+        }
+        #ui-container > * {
+            margin-right: 20px; /* More spacing in UI */
+        }
+        #ui-container > *:last-child {
+            margin-right: 0;
+        }
+        #level-display {
+            font-size: 1.2em; /* Slightly larger level number */
+            font-weight: bold;
+            color: #2979ff; /* Vibrant blue for level number */
+            text-shadow: 1px 1px 0 rgba(0,0,0,0.1); /* Subtle text shadow */
+        }
+        #skip-level-button {
+            padding: 10px 20px; /* Larger button */
+            font-size: 1em;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px; /* More rounded button */
+            background-color: #ffca28; /* Brighter, more appealing button color */
+            color: #333; /* Dark text on button */
+            transition: background-color 0.3s ease, transform 0.2s ease; /* Added transform for button feedback */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+        }
+        #skip-level-button:hover {
+            background-color: #ffb300; /* Darker hover color */
+            transform: scale(1.05); /* Slight scale up on hover */
+        }
+        #skip-level-button:active {
+            transform: scale(0.98); /* Slight scale down on click */
+        }
+        #win-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 188, 140, 0.97); /*  Vibrant Teal win message background */
+            color: white;
+            padding: 50px 70px; /* Larger win message box */
+            border-radius: 25px; /* More rounded win message */
+            font-size: 2.8em; /* Larger win text */
+            text-align: center;
+            display: none; /* Hidden by default */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); /* Deeper shadow for win message */
+            font-family: 'Nunito', sans-serif; /* Modern font for win message */
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.3); /* Text shadow on win message */
+        }
+        #win-message button {
+            margin-top: 30px; /* More space above button in win message */
+            padding: 15px 30px; /* Larger button in win message */
+            font-size: 0.6em; /* Scaled down button text in win message */
+            cursor: pointer;
+            border: none;
+            border-radius: 10px; /* More rounded button in win message */
+            background-color: #eee;
+            color: #333;
+            font-family: inherit;
+            transition: background-color 0.3s ease, transform 0.2s ease; /* Added transform for win message button */
+            box-shadow: 0 3px 7px rgba(0,0,0,0.2);
+        }
+         #win-message button:hover {
+             background-color: #ddd;
+             transform: scale(1.03);
+         }
+         #win-message button:active {
+             transform: scale(0.97);
+         }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="ui-container">
+        <div>Level: <span id="level-display">1</span> / 100</div>
+        <button id="skip-level-button">Skip Level</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="win-message">
+        Level Complete! ⭐<br>
+        <button id="next-level-button">Next Level</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('level-display');
+        const winMessageDiv = document.getElementById('win-message');
+        const nextLevelButton = document.getElementById('next-level-button');
+        const skipLevelButton = document.getElementById('skip-level-button');
+
+        let canvasWidth = Math.min(window.innerWidth * 0.95, 900); /* Slightly wider canvas */
+        let canvasHeight = Math.min(window.innerHeight * 0.95, 700); /* Slightly taller canvas */
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        // Game Constants & Variables
+        const gravity = 0.5;
+        const dragFactor = 0.995;
+        const bounceFactor = 0.5;
+        const pullPowerMultiplier = 0.2;
+        const groundHeight = 30;
+
+        let cube = {
+            x: 100, y: canvasHeight - groundHeight - 30,
+            width: 35, height: 35, /* Slightly larger cube */
+            vx: 0, vy: 0,
+            color: '#FF7043', /* Brighter tomato color */
+            isDragging: false,
+            isFlying: false,
+            startX: 0, startY: 0
+        };
+
+        let star = {
+            x: canvasWidth - 100, y: canvasHeight - groundHeight - 50,
+            size: 35, /* Slightly larger star */
+            emoji: '🌟' /* More visually appealing star emoji */
+        };
+
+        let obstacles = [];
+
+        let levels = [];
+        let currentLevel = 0;
+        let isMouseDown = false;
+        let mouseStartX = 0, mouseStartY = 0;
+        let mouseCurrentX = 0, mouseCurrentY = 0;
+
+        // --- Level Generation ---
+        function generateLevels() {
+            levels = [];
+            for (let i = 0; i < 100; i++) {
+                let levelData = {
+                    cubePos: { x: 50 + Math.random() * 50, y: canvasHeight - groundHeight - 30 - Math.random() * 50 },
+                    starPos: { x: canvasWidth * 0.6 + Math.random() * (canvasWidth * 0.3), y: 50 + Math.random() * (canvasHeight - groundHeight - 100) },
+                    obstacles: []
+                };
+
+                let numObstacles = Math.floor(i / 5);
+                for (let j = 0; j < numObstacles; j++) {
+                    let obsWidth = 25 + Math.random() * 90; /* Slightly wider obstacles */
+                    let obsHeight = 55 + Math.random() * 160; /* Slightly taller obstacles */
+                    let obsX, obsY;
+                    let attempts = 0;
+                    do {
+                        obsX = canvasWidth * 0.2 + Math.random() * (canvasWidth * 0.6);
+                        obsY = Math.random() * (canvasHeight - groundHeight - obsHeight - 60) + 60; /* More spacing from edges */
+                        attempts++;
+                    } while (attempts < 10 && (
+                             (Math.abs(obsX + obsWidth/2 - levelData.cubePos.x) < 110 && Math.abs(obsY + obsHeight/2 - levelData.cubePos.y) < 110) ||
+                             (Math.abs(obsX + obsWidth/2 - levelData.starPos.x) < 60 && Math.abs(obsY + obsHeight/2 - levelData.starPos.y) < 60)
+                            ));
+
+                     if (Math.random() < 0.2 && i > 10) {
+                         let temp = obsWidth;
+                         obsWidth = obsHeight;
+                         obsHeight = temp > 60 ? 25 : temp;
+                         obsY = Math.random() * (canvasHeight - groundHeight - obsHeight - 160) + 120; /* Higher platforms */
+                     }
+
+
+                    levelData.obstacles.push({
+                        x: obsX,
+                        y: obsY,
+                        width: Math.max(25, obsWidth),
+                        height: Math.max(25, obsHeight),
+                        color: `hsl(${Math.random() * 360}, 65%, 55%)` /* More saturated obstacle colors */
+                    });
+                }
+                levels.push(levelData);
+            }
+            levels[0] = {
+                cubePos: { x: 100, y: canvasHeight - groundHeight - 30 },
+                starPos: { x: canvasWidth - 150, y: canvasHeight - groundHeight - 50 },
+                obstacles: []
+            };
+            levels[9] = {
+                cubePos: { x: 50, y: canvasHeight - groundHeight - 30 },
+                starPos: { x: canvasWidth - 80, y: 80 },
+                 obstacles: [
+                    {x: canvasWidth/2 - 50, y: canvasHeight - groundHeight - 150, width: 100, height: 25, color: '#a1887f'}, /* Muted brown platform */
+                    {x: canvasWidth * 0.7, y: 150, width: 25, height: canvasHeight - groundHeight - 200, color: '#bcaaa4'}  /* Light grey-brown wall */
+                 ]
+            };
+        }
+
+        // --- Game Functions ---
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                winMessageDiv.innerHTML = `🎉 You Won All Levels! 🎉<br><button onclick="resetGame()">Play Again?</button>`;
+                winMessageDiv.style.backgroundColor = 'rgba(0, 172, 193, 0.97)'; /* Teal win background */
+                winMessageDiv.style.display = 'block';
+                currentLevel = levels.length -1;
+                return;
+            }
+
+            const levelData = levels[levelIndex];
+            cube.x = levelData.cubePos.x;
+            cube.y = levelData.cubePos.y;
+            cube.vx = 0;
+            cube.vy = 0;
+            cube.isFlying = false;
+            cube.isDragging = false;
+            cube.startX = cube.x;
+            cube.startY = cube.y;
+
+            star.x = levelData.starPos.x;
+            star.y = levelData.starPos.y;
+
+            obstacles = levelData.obstacles.map(obs => ({ ...obs }));
+
+            levelDisplay.textContent = `${levelIndex + 1}`;
+            winMessageDiv.style.display = 'none';
+        }
+
+        function resetCurrentLevel() { /* Renamed function to reset current level */
+            loadLevel(currentLevel);
+        }
+
+        function drawCube() {
+            ctx.fillStyle = cube.color;
+            ctx.fillRect(cube.x - cube.width / 2, cube.y - cube.height / 2, cube.width, cube.height);
+             ctx.fillStyle = 'white';
+             ctx.fillRect(cube.x - cube.width * 0.2, cube.y - cube.height * 0.2, 6, 6); /* Slightly larger eyes */
+             ctx.fillRect(cube.x + cube.width * 0.2 - 6, cube.y - cube.height * 0.2, 6, 6);
+             ctx.fillStyle = 'black';
+             ctx.fillRect(cube.x - 2, cube.y + cube.height * 0.15, 5, 5); /* Slightly larger mouth */
+        }
+
+        function drawStar() {
+            ctx.font = `${star.size}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(star.emoji, star.x, star.y);
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(obs => {
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                ctx.strokeStyle = 'rgba(0,0,0,0.2)'; /* Slightly darker border */
+                ctx.lineWidth = 1;
+                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+            });
+        }
+
+        function drawGround() {
+            ctx.fillStyle = '#c8e6c9'; /* Light pastel green ground */
+            ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, groundHeight);
+             ctx.strokeStyle = '#81c784'; /* Darker pastel green lines */
+             ctx.lineWidth = 2; /* Thicker ground lines */
+             for(let i = 0; i < canvasWidth; i+= 20) { /* Wider spacing for ground lines */
+                 ctx.beginPath();
+                 ctx.moveTo(i, canvasHeight - groundHeight + 7 + Math.random() * 8); /* Adjusted line position */
+                 ctx.lineTo(i + 7 + Math.random() * 7, canvasHeight - groundHeight + 7 + Math.random() * 8);
+                 ctx.stroke();
+             }
+        }
+
+        function drawPullLine() {
+            if (isMouseDown && !cube.isFlying) {
+                const dx = cube.startX - mouseCurrentX;
+                const dy = cube.startY - mouseCurrentY;
+                let dist = Math.sqrt(dx * dx + dy * dy); /* Max distance removed */
+                const angle = Math.atan2(dy, dx);
+
+
+                const pullX = cube.startX - Math.cos(angle) * dist;
+                const pullY = cube.startY - Math.sin(angle) * dist;
+
+                ctx.beginPath();
+                ctx.moveTo(cube.startX, cube.startY);
+                ctx.lineTo(pullX, pullY);
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.6);' /* Slightly darker pull line */
+                ctx.lineWidth = 4; /* Slightly thicker pull line */
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.setLineDash([7, 7]); /* Adjusted dash size */
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.7);' /* Brighter red prediction line */
+                ctx.lineWidth = 3; /* Slightly thicker prediction line */
+
+                let tempX = cube.startX;
+                let tempY = cube.startY;
+                let tempVX = Math.cos(angle) * dist * pullPowerMultiplier;
+                let tempVY = Math.sin(angle) * dist * pullPowerMultiplier;
+                ctx.moveTo(tempX, tempY);
+
+                for (let i = 0; i < 100; i++) {
+                    tempVY += gravity * 0.1;
+                    tempX += tempVX * 0.5;
+                    tempY += tempVY * 0.5;
+                    ctx.lineTo(tempX, tempY);
+                    if (tempY > canvasHeight - groundHeight - cube.height / 2 || tempX < 0 || tempX > canvasWidth) break;
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+
+        function updatePhysics() {
+            if (!cube.isFlying) return;
+
+
+            cube.vy += gravity;
+
+
+            cube.vx *= dragFactor;
+            cube.vy *= dragFactor;
+
+
+            cube.x += cube.vx;
+            cube.y += cube.vy;
+
+
+            if (cube.y + cube.height / 2 > canvasHeight - groundHeight) {
+                cube.y = canvasHeight - groundHeight - cube.height / 2;
+                cube.vy *= -bounceFactor;
+                cube.vx *= 0.9;
+
+                if (Math.abs(cube.vy) < 1 && Math.abs(cube.vx) < 0.5) {
+                     setTimeout(() => {
+                         if (cube.isFlying) {
+                           resetCurrentLevel(); /* Reset to current level on ground */
+                         }
+                     }, 1500);
+                }
+            }
+
+
+            if (cube.x - cube.width / 2 < 0) {
+                cube.x = cube.width / 2;
+                cube.vx *= -bounceFactor;
+            }
+            if (cube.x + cube.width / 2 > canvasWidth) {
+                cube.x = canvasWidth - cube.width / 2;
+                cube.vx *= -bounceFactor;
+            }
+
+
+             if (cube.y - cube.height / 2 < 0) {
+                 cube.y = cube.height / 2;
+                 cube.vy *= -bounceFactor;
+             }
+
+
+
+            obstacles.forEach(obs => {
+                const cubeLeft = cube.x - cube.width / 2;
+                const cubeRight = cube.x + cube.width / 2;
+                const cubeTop = cube.y - cube.height / 2;
+                const cubeBottom = cube.y + cube.height / 2;
+
+                const obsLeft = obs.x;
+                const obsRight = obs.x + obs.width;
+                const obsTop = obs.y;
+                const obsBottom = obs.y + obs.height;
+
+                if (cubeRight > obsLeft && cubeLeft < obsRight && cubeBottom > obsTop && cubeTop < obsBottom) {
+
+                    const overlapX = Math.min(cubeRight, obsRight) - Math.max(cubeLeft, obsLeft);
+                    const overlapY = Math.min(cubeBottom, obsBottom) - Math.max(cubeTop, obsTop);
+
+                    if (overlapX < overlapY) {
+                        if (cube.x < obs.x + obs.width / 2) {
+                            cube.x = obsLeft - cube.width / 2;
+                        } else {
+                            cube.x = obsRight + cube.width / 2;
+                        }
+                        cube.vx *= -bounceFactor;
+                    } else {
+                        if (cube.y < obs.y + obs.height / 2) {
+                            cube.y = obsTop - cube.height / 2;
+                        } else {
+                            cube.y = obsBottom + cube.height / 2;
+                        }
+                         cube.vy *= -bounceFactor;
+                         if (Math.abs(cube.vx) > 0.1) cube.vx *= 0.95;
+                    }
+                     cube.vx *= 0.9;
+                     cube.vy *= 0.9;
+                }
+            });
+
+
+             const dxStar = cube.x - star.x;
+             const dyStar = cube.y - star.y;
+             const distStar = Math.sqrt(dxStar*dxStar + dyStar*dyStar);
+             if (distStar < (cube.width / 2 + star.size / 2)) {
+                 winLevel();
+             }
+
+
+
+            if (cube.y > canvasHeight + 200 || cube.x < -100 || cube.x > canvasWidth + 100) {
+                resetCurrentLevel(); /* Reset to current level if off-screen */
+            }
+        }
+
+        function winLevel() {
+            cube.isFlying = false;
+            cube.vx = 0;
+            cube.vy = 0;
+            winMessageDiv.style.display = 'block';
+        }
+
+        function gameLoop() {
+
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+
+            drawGround();
+
+
+            drawObstacles();
+            drawStar();
+            drawCube();
+
+
+            drawPullLine();
+
+
+            updatePhysics();
+
+
+            requestAnimationFrame(gameLoop);
+        }
+
+
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: evt.clientX - rect.left,
+                y: evt.clientY - rect.top
+            };
+        }
+        function getTouchPos(evt) {
+             const rect = canvas.getBoundingClientRect();
+             const touch = evt.touches[0];
+             return {
+                 x: touch.clientX - rect.left,
+                 y: touch.clientY - rect.top
+             };
+         }
+
+
+        function handleStart(pos) {
+            const distToCube = Math.sqrt((pos.x - cube.x)**2 + (pos.y - cube.y)**2);
+            if (!cube.isFlying && distToCube < cube.width * 1.5) {
+                 isMouseDown = true;
+                 cube.isDragging = true;
+                 mouseStartX = pos.x;
+                 mouseStartY = pos.y;
+                 mouseCurrentX = pos.x;
+                 mouseCurrentY = pos.y;
+                 cube.startX = cube.x;
+                 cube.startY = cube.y;
+            }
+        }
+
+        function handleMove(pos) {
+            if (isMouseDown && cube.isDragging) {
+                 mouseCurrentX = pos.x;
+                 mouseCurrentY = pos.y;
+             }
+        }
+
+        function handleEnd() {
+             if (isMouseDown && cube.isDragging) {
+                 isMouseDown = false;
+                 cube.isDragging = false;
+
+                 const dx = cube.startX - mouseCurrentX;
+                 const dy = cube.startY - mouseCurrentY;
+                 let dist = Math.sqrt(dx * dx + dy * dy); /* Max distance removed */
+                 const angle = Math.atan2(dy, dx);
+
+
+                 if (dist > 10) {
+                     cube.vx = Math.cos(angle) * dist * pullPowerMultiplier;
+                     cube.vy = Math.sin(angle) * dist * pullPowerMultiplier;
+                     cube.isFlying = true;
+                 }
+             }
+             isMouseDown = false;
+             cube.isDragging = false;
+         }
+
+        canvas.addEventListener('mousedown', (e) => handleStart(getMousePos(e)));
+        canvas.addEventListener('mousemove', (e) => handleMove(getMousePos(e)));
+        canvas.addEventListener('mouseup', handleEnd);
+        canvas.addEventListener('mouseleave', handleEnd);
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleStart(getTouchPos(e));
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+             e.preventDefault();
+             handleMove(getTouchPos(e));
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+             e.preventDefault();
+             handleEnd();
+        });
+         canvas.addEventListener('touchcancel', (e) => {
+             e.preventDefault();
+             handleEnd();
+        });
+
+        nextLevelButton.addEventListener('click', () => {
+            currentLevel++;
+            loadLevel(currentLevel);
+        });
+
+        skipLevelButton.addEventListener('click', () => {
+            currentLevel++;
+            loadLevel(currentLevel);
+        });
+
+        function resetGame() {
+             currentLevel = 0;
+             loadLevel(currentLevel);
+        }
+
+        document.addEventListener('keydown', function(event) { /* Reset level on 'R' press */
+            if (event.key === 'r' || event.key === 'R') {
+                resetCurrentLevel();
+            }
+        });
+
+
+        generateLevels();
+        loadLevel(currentLevel);
+        gameLoop();
+
+
+        window.addEventListener('resize', () => {
+            canvasWidth = Math.min(window.innerWidth * 0.95, 900);
+            canvasHeight = Math.min(window.innerHeight * 0.95, 700);
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            generateLevels();
+             loadLevel(currentLevel);
+        });
+
+    </script>
+</body>
+</html>

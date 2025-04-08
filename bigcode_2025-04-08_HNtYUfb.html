@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Remake</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: #212121;
+            color: #ffffff;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #333333;
+        }
+
+        #visualizer {
+            width: 80%;
+            height: 100px;
+            border: 1px solid #555;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .bar {
+            position: absolute;
+            bottom: 0;
+            width: 5px;
+            background-color: #f0f0f0;
+            transform-origin: bottom;
+        }
+
+        .emoji-display {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .slider-label {
+            margin-bottom: 5px;
+        }
+
+        input[type="range"] {
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="emoji-display">🎵🎶🔊</div>
+    <div id="visualizer"></div>
+    <div class="controls">
+        <button onclick="playSound('sine')">Sine</button>
+        <button onclick="playSound('square')">Square</button>
+        <button onclick="playSound('triangle')">Triangle</button>
+        <button onclick="playSound('sawtooth')">Sawtooth</button>
+        <button onclick="stopSound()">Stop</button>
+    </div>
+
+    <div class="slider-container">
+        <label for="frequency" class="slider-label">Frequency</label>
+        <input type="range" id="frequency" min="50" max="1000" value="440" oninput="updateFrequency(this.value)">
+    </div>
+    <div class="slider-container">
+        <label for="volume" class="slider-label">Volume</label>
+        <input type="range" id="volume" min="0" max="1" value="0.5" step="0.01" oninput="updateVolume(this.value)">
+    </div>
+
+    <script>
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        let oscillator;
+        let gainNode;
+        let currentWaveType = 'sine';
+        let frequencyControl = document.getElementById('frequency');
+        let volumeControl = document.getElementById('volume');
+        let visualizer = document.getElementById('visualizer');
+        let bars = [];
+
+        function setupVisualizer() {
+            for (let i = 0; i < 100; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'bar';
+                bar.style.left = `${(visualizer.offsetWidth / 100) * i}px`;
+                bar.style.height = '10px'; // Initial height
+                visualizer.appendChild(bar);
+                bars.push(bar);
+            }
+        }
+
+        setupVisualizer();
+
+        function updateVisualizer(volumeLevel) {
+            bars.forEach(bar => {
+                const randomHeight = Math.random() * volumeLevel * 80; // Scale height by volume
+                bar.style.height = `${10 + randomHeight}px`; // Minimum 10px height
+                bar.style.transform = `scaleY(${1 + volumeLevel/2})`; // Scale Y for visual effect
+                bar.style.backgroundColor = `hsl(${volumeLevel * 360}, 100%, 50%)`; // Color based on volume
+            });
+        }
+
+
+        function playSound(waveType) {
+            currentWaveType = waveType;
+            startOscillator();
+        }
+
+        function stopSound() {
+            if (oscillator) {
+                oscillator.stop();
+                oscillator = null;
+                updateVisualizer(0); // Reset visualizer when stopped
+            }
+        }
+
+        function startOscillator() {
+            stopSound(); // Stop any existing sound
+
+            oscillator = audioContext.createOscillator();
+            gainNode = audioContext.createGain();
+
+            oscillator.type = currentWaveType;
+            oscillator.frequency.setValueAtTime(frequencyControl.value, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(volumeControl.value, audioContext.currentTime);
+
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.start();
+            visualizeSound();
+        }
+
+
+        function updateFrequency(freq) {
+            if (oscillator) {
+                oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+            }
+        }
+
+        function updateVolume(vol) {
+            if (gainNode) {
+                gainNode.gain.setValueAtTime(vol, audioContext.currentTime);
+            }
+            updateVisualizer(vol); // Update visualizer based on volume
+        }
+
+
+        function visualizeSound() {
+            if (!oscillator) return;
+
+            function animationFrame() {
+                if (!oscillator) return; // Stop if oscillator is stopped
+
+                let currentVolume = gainNode.gain.value;
+                updateVisualizer(currentVolume);
+                requestAnimationFrame(animationFrame);
+            }
+
+            animationFrame();
+        }
+
+
+        updateVisualizer(volumeControl.value); // Initial visualizer state based on default volume
+
+
+    </script>
+</body>
+</html>

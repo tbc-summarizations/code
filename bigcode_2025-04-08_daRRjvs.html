@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drag Star Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+            touch-action: none; /* Prevent default touch actions like scrolling */
+            overflow: hidden; /* Prevent scrolling */
+            flex-direction: column;
+        }
+        #game-container {
+            position: relative;
+            width: 600px;
+            height: 400px;
+            background-color: #fff;
+            border: 2px solid #333;
+            overflow: hidden; /* Keep elements inside */
+            cursor: grab;
+        }
+        #player {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: #007bff;
+            cursor: grab;
+            user-select: none; /* Prevent text selection during drag */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+         #player::before { /* Triangle 'pull' indicator */
+            content: '';
+            position: absolute;
+            left: -15px; /* Position left of the square */
+            top: 50%;
+            transform: translateY(-50%);
+            width: 0;
+            height: 0;
+            border-top: 8px solid transparent;
+            border-bottom: 8px solid transparent;
+            border-right: 12px solid #555; /* Triangle color */
+        }
+
+        #player:active {
+            cursor: grabbing;
+            background-color: #0056b3;
+        }
+        #target {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            font-size: 35px; /* Emoji size */
+            line-height: 40px;
+            text-align: center;
+            user-select: none;
+        }
+        .obstacle {
+            position: absolute;
+            background-color: #8b4513; /* Brownish color for obstacles */
+            border: 1px solid #5a2d0c;
+        }
+        #level-display {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+         #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 255, 0, 0.8);
+            color: black;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 1.5em;
+            text-align: center;
+            display: none; /* Hidden by default */
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="level-display">Level: 1</div>
+    <div id="game-container">
+        <div id="player"></div>
+        <div id="target">⭐</div>
+        <div id="obstacles-container"></div>
+         <div id="message"></div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const player = document.getElementById('player');
+        const target = document.getElementById('target');
+        const obstaclesContainer = document.getElementById('obstacles-container');
+        const levelDisplay = document.getElementById('level-display');
+        const message = document.getElementById('message');
+        const containerRect = gameContainer.getBoundingClientRect();
+
+        let isDragging = false;
+        let currentLevel = 0;
+        let startX, startY;
+        let initialPlayerX, initialPlayerY; // Store initial position within the element
+
+        // --- Level Data ---
+        const levels = [];
+        const numLevels = 100;
+
+        // Generate 100 levels programmatically
+        for (let i = 0; i < numLevels; i++) {
+            const levelData = {
+                start: { x: 20 + (i % 5) * 10, y: 20 + Math.floor(i / 10) * 5 },
+                target: { x: 550 - (i % 8) * 15, y: 350 - Math.floor(i / 5) * 10 },
+                obstacles: []
+            };
+
+            // Add obstacles based on level number
+            const obstacleCount = Math.min(5, Math.floor(i / 10)); // Increase obstacles slowly
+            for (let j = 0; j < obstacleCount; j++) {
+                const obsWidth = 10 + Math.random() * 80;
+                const obsHeight = 10 + Math.random() * 80;
+                let obsX, obsY;
+                let attempts = 0;
+                let validPosition = false;
+
+                // Try to place obstacles somewhat randomly, avoiding start/target
+                while (!validPosition && attempts < 20) {
+                    obsX = 50 + Math.random() * (containerRect.width - 100 - obsWidth);
+                    obsY = 50 + Math.random() * (containerRect.height - 100 - obsHeight);
+
+                    // Basic check: Not too close to start or target
+                    const startDist = Math.hypot(obsX - levelData.start.x, obsY - levelData.start.y);
+                    const targetDist = Math.hypot(obsX - levelData.target.x, obsY - levelData.target.y);
+
+                    if (startDist > 50 && targetDist > 50) {
+                       validPosition = true;
+                       // Check overlap with existing obstacles (simple bounding box)
+                        for(const existingObs of levelData.obstacles) {
+                            if (
+                                obsX < existingObs.x + existingObs.width &&
+                                obsX + obsWidth > existingObs.x &&
+                                obsY < existingObs.y + existingObs.height &&
+                                obsY + obsHeight > existingObs.y
+                            ) {
+                                validPosition = false;
+                                break;
+                            }
+                        }
+                    }
+                    attempts++;
+                }
+
+                 if (validPosition) {
+                    levelData.obstacles.push({
+                        x: obsX,
+                        y: obsY,
+                        width: obsWidth,
+                        height: obsHeight
+                    });
+                }
+            }
+             // Ensure start/target are not inside generated obstacles
+            levelData.start.x = Math.max(10, Math.min(levelData.start.x, containerRect.width - 40));
+            levelData.start.y = Math.max(10, Math.min(levelData.start.y, containerRect.height - 40));
+            levelData.target.x = Math.max(10, Math.min(levelData.target.x, containerRect.width - 50));
+            levelData.target.y = Math.max(10, Math.min(levelData.target.y, containerRect.height - 50));
+
+
+            levels.push(levelData);
+        }
+
+        // --- Game Logic ---
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                showMessage("Congratulations! You beat all levels!");
+                // Optionally reset or disable game
+                player.style.display = 'none';
+                target.style.display = 'none';
+                obstaclesContainer.innerHTML = '';
+                levelDisplay.textContent = `Game Complete! (${numLevels} Levels)`;
+                return;
+            }
+
+            const level = levels[levelIndex];
+            levelDisplay.textContent = `Level: ${levelIndex + 1}`;
+            message.style.display = 'none'; // Hide any previous message
+
+            // Reset player position
+            player.style.left = `${level.start.x}px`;
+            player.style.top = `${level.start.y}px`;
+            player.style.display = 'flex'; // Ensure player is visible
+
+            // Set target position
+            target.style.left = `${level.target.x}px`;
+            target.style.top = `${level.target.y}px`;
+            target.style.display = 'block'; // Ensure target is visible
+
+            // Clear old obstacles and create new ones
+            obstaclesContainer.innerHTML = '';
+            level.obstacles.forEach(obs => {
+                const obstacleElement = document.createElement('div');
+                obstacleElement.classList.add('obstacle');
+                obstacleElement.style.left = `${obs.x}px`;
+                obstacleElement.style.top = `${obs.y}px`;
+                obstacleElement.style.width = `${obs.width}px`;
+                obstacleElement.style.height = `${obs.height}px`;
+                obstaclesContainer.appendChild(obstacleElement);
+            });
+        }
+
+        function resetLevel() {
+             const level = levels[currentLevel];
+             player.style.transition = 'left 0.3s ease, top 0.3s ease'; // Smooth reset
+             player.style.left = `${level.start.x}px`;
+             player.style.top = `${level.start.y}px`;
+             // Remove transition after animation
+             setTimeout(() => {
+                 player.style.transition = '';
+             }, 300);
+        }
+
+         function showMessage(text, duration = 2000) {
+            message.textContent = text;
+            message.style.display = 'block';
+             if (duration > 0) {
+                setTimeout(() => {
+                    message.style.display = 'none';
+                }, duration);
+             }
+        }
+
+        function checkCollision(rect1, rect2) {
+            return (
+                rect1.left < rect2.right &&
+                rect1.right > rect2.left &&
+                rect1.top < rect2.bottom &&
+                rect1.bottom > rect2.top
+            );
+        }
+
+        function handleMove(clientX, clientY) {
+            if (!isDragging) return;
+
+            // Calculate new position relative to the container
+            let newX = clientX - containerRect.left - initialPlayerX;
+            let newY = clientY - containerRect.top - initialPlayerY;
+
+            // Constrain player within the game container boundaries
+            const playerWidth = player.offsetWidth;
+            const playerHeight = player.offsetHeight;
+            newX = Math.max(0, Math.min(newX, containerRect.width - playerWidth));
+            newY = Math.max(0, Math.min(newY, containerRect.height - playerHeight));
+
+            player.style.left = `${newX}px`;
+            player.style.top = `${newY}px`;
+
+            // Collision Detection
+            const playerRect = player.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+
+            // Check collision with target
+            if (checkCollision(playerRect, targetRect)) {
+                isDragging = false; // Stop dragging immediately
+                currentLevel++;
+                showMessage(`Level ${currentLevel} Complete!`, 1000);
+                setTimeout(() => loadLevel(currentLevel), 1000); // Load next level after a short delay
+                return; // Prevent further checks after winning
+            }
+
+            // Check collision with obstacles
+            const obstacleElements = obstaclesContainer.querySelectorAll('.obstacle');
+            for (const obstacle of obstacleElements) {
+                const obsRect = obstacle.getBoundingClientRect();
+                if (checkCollision(playerRect, obsRect)) {
+                    isDragging = false; // Stop dragging
+                    showMessage("Hit an obstacle! Try again.", 1000);
+                    resetLevel(); // Reset to level start
+                    return; // Stop checking other obstacles
+                }
+            }
+        }
+
+        // --- Event Listeners ---
+
+        // Mouse Events
+        player.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            player.style.cursor = 'grabbing';
+            gameContainer.style.cursor = 'grabbing'; // Change container cursor too
+            // Calculate offset from top-left corner of player element
+            const playerRect = player.getBoundingClientRect();
+            initialPlayerX = e.clientX - playerRect.left;
+            initialPlayerY = e.clientY - playerRect.top;
+            player.style.transition = ''; // Remove transition during drag
+        });
+
+        document.addEventListener('mousemove', (e) => {
+             // Prevent default only if dragging started on the player
+            if (isDragging) {
+                 e.preventDefault();
+                handleMove(e.clientX, e.clientY);
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                player.style.cursor = 'grab';
+                gameContainer.style.cursor = 'grab';
+            }
+        });
+
+         // Touch Events
+        player.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                // e.preventDefault(); // Prevent scrolling/zooming ONLY when touch starts on player
+                isDragging = true;
+                player.style.cursor = 'grabbing'; // Less relevant on touch but keeps state consistent
+                gameContainer.style.cursor = 'grabbing';
+                const touch = e.touches[0];
+                const playerRect = player.getBoundingClientRect();
+                initialPlayerX = touch.clientX - playerRect.left;
+                initialPlayerY = touch.clientY - playerRect.top;
+                player.style.transition = '';
+            }
+        }, { passive: false }); // Need passive: false to call preventDefault if needed
+
+        document.addEventListener('touchmove', (e) => {
+             if (isDragging && e.touches.length === 1) {
+                // We prevent default here inside the move *if* dragging is active
+                // This allows normal page scroll if touch starts outside the player
+                e.preventDefault();
+                const touch = e.touches[0];
+                handleMove(touch.clientX, touch.clientY);
+            }
+        }, { passive: false }); // Need passive: false to call preventDefault
+
+        document.addEventListener('touchend', (e) => {
+             if (isDragging) {
+                // Check if the touch ending corresponds to the one that started the drag
+                // (though typically only one touch is involved here)
+                isDragging = false;
+                player.style.cursor = 'grab';
+                gameContainer.style.cursor = 'grab';
+            }
+        });
+
+         // Prevent scrolling on the container itself sometimes helps
+         gameContainer.addEventListener('touchstart', (e) => {
+             // Allow touch start if it's on the player, otherwise maybe prevent?
+             // Careful not to block player interaction. Best handled by player listener.
+         });
+         gameContainer.addEventListener('touchmove', (e) => {
+             // Only prevent default if dragging is active (handled in document listener)
+             // e.preventDefault(); // Maybe too aggressive?
+         }, { passive: false });
+
+
+        // --- Initialization ---
+        loadLevel(currentLevel);
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physics Cube Launcher</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(to bottom, #a8c0ff, #fcca3c); /* Modern gradient */
+            font-family: ' sleek Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #2d3436; /* Dark grey text */
+        }
+        canvas {
+            display: block;
+            border-radius: 12px; /* Rounded canvas */
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2); /* Deeper shadow */
+            background-color: #ffffff;
+            transition: box-shadow 0.3s ease;
+        }
+        canvas:hover {
+            box-shadow: 0 12px 32px rgba(0,0,0,0.3); /* Hover effect shadow */
+        }
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.92); /* Slightly transparent UI */
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 5px 12px rgba(0,0,0,0.15);
+            display: flex;
+            align-items: center;
+            gap: 10px; /* Spacing between UI elements */
+        }
+        #level-display {
+            font-size: 1.15em;
+            font-weight: 500; /* Medium font weight */
+            color: #3867d6; /* Vibrant level number color */
+        }
+        #skip-level-button, #reset-level-button {
+            padding: 9px 18px;
+            font-size: 0.95em;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            background-color: #ff7675; /* Playful red for reset */
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #skip-level-button {
+            background-color: #00b894; /*  Teal color for skip */
+        }
+        #skip-level-button:hover, #reset-level-button:hover {
+            background-color: #00a382;
+            transform: translateY(-1px); /* Slight lift on hover */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        #win-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(100, 200, 120, 0.96); /*  Soft green win message */
+            color: white;
+            padding: 45px 70px;
+            border-radius: 24px;
+            font-size: 2.8em;
+            text-align: center;
+            display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            font-family: 'Nunito', sans-serif;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+        #win-message button {
+            margin-top: 25px;
+            padding: 14px 30px;
+            font-size: 0.55em;
+            cursor: pointer;
+            border: none;
+            border-radius: 10px;
+            background-color: #fff;
+            color: #2d3436;
+            font-family: inherit;
+            font-weight: 600;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 3px 7px rgba(0,0,0,0.15);
+        }
+         #win-message button:hover {
+             background-color: #f0f0f0;
+             transform: translateY(-1px);
+             box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+         }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="ui-container">
+        <div>Level: <span id="level-display">1</span> / 100</div>
+        <button id="skip-level-button">Skip Level</button>
+        <button id="reset-level-button">Reset Level</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="win-message">
+        Level Complete! ✨<br>
+        <button id="next-level-button">Next Level</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('level-display');
+        const winMessageDiv = document.getElementById('win-message');
+        const nextLevelButton = document.getElementById('next-level-button');
+        const skipLevelButton = document.getElementById('skip-level-button');
+        const resetLevelButton = document.getElementById('reset-level-button');
+
+        let canvasWidth = Math.min(window.innerWidth * 0.95, 900); // Increased max width
+        let canvasHeight = Math.min(window.innerHeight * 0.9, 700); // Increased max height
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+
+        // Game Constants & Variables
+        const gravity = 0.5;
+        const dragFactor = 0.995;
+        const bounceFactor = 0.5;
+        const pullPowerMultiplier = 0.2;
+        const groundHeight = 35; // Slightly thicker ground
+
+        let cube = {
+            x: 100, y: canvasHeight - groundHeight - 30,
+            width: 30, height: 30,
+            vx: 0, vy: 0,
+            color: '#e74c3c', //  Vibrant red cube
+            isDragging: false,
+            isFlying: false,
+            startX: 0, startY: 0
+        };
+
+        let star = {
+            x: canvasWidth - 100, y: canvasHeight - groundHeight - 50,
+            size: 35, // Slightly larger star
+            emoji: '🌟'
+        };
+
+        let obstacles = [];
+
+        let levels = [];
+        let currentLevel = 0;
+        let isMouseDown = false;
+        let mouseStartX = 0, mouseStartY = 0;
+        let mouseCurrentX = 0, mouseCurrentY = 0;
+
+        // --- Level Generation ---
+        function generateLevels() {
+            levels = [];
+            for (let i = 0; i < 100; i++) {
+                let levelData = {
+                    cubePos: { x: 50 + Math.random() * 60, y: canvasHeight - groundHeight - 30 - Math.random() * 60 },
+                    starPos: { x: canvasWidth * 0.6 + Math.random() * (canvasWidth * 0.35), y: 60 + Math.random() * (canvasHeight - groundHeight - 120) },
+                    obstacles: []
+                };
+
+                let numObstacles = Math.floor(i / 4); // Increased obstacle frequency
+                for (let j = 0; j < numObstacles; j++) {
+                    let obsWidth = 25 + Math.random() * 90;
+                    let obsHeight = 60 + Math.random() * 160;
+
+                    let obsX, obsY;
+                    let attempts = 0;
+                    do {
+                        obsX = canvasWidth * 0.2 + Math.random() * (canvasWidth * 0.6);
+                        obsY = Math.random() * (canvasHeight - groundHeight - obsHeight - 60) + 60;
+                        attempts++;
+                    } while (attempts < 10 && (
+                             (Math.abs(obsX + obsWidth/2 - levelData.cubePos.x) < 110 && Math.abs(obsY + obsHeight/2 - levelData.cubePos.y) < 110) ||
+                             (Math.abs(obsX + obsWidth/2 - levelData.starPos.x) < 60 && Math.abs(obsY + obsHeight/2 - levelData.starPos.y) < 60)
+                            ));
+
+
+                     if (Math.random() < 0.25 && i > 8) { // Increased platform chance
+                         let temp = obsWidth;
+                         obsWidth = obsHeight;
+                         obsHeight = temp > 60 ? 25 : temp;
+                         obsY = Math.random() * (canvasHeight - groundHeight - obsHeight - 160) + 110;
+                     }
+
+
+                    levelData.obstacles.push({
+                        x: obsX,
+                        y: obsY,
+                        width: Math.max(25, obsWidth),
+                        height: Math.max(25, obsHeight),
+                        color: `hsl(${Math.random() * 360}, 65%, 55%)` // More saturated obstacle colors
+                    });
+                }
+                levels.push(levelData);
+            }
+
+            levels[0] = {
+                cubePos: { x: 100, y: canvasHeight - groundHeight - 30 },
+                starPos: { x: canvasWidth - 180, y: canvasHeight - groundHeight - 60 },
+                obstacles: []
+            };
+
+            levels[9] = {
+                cubePos: { x: 50, y: canvasHeight - groundHeight - 30 },
+                starPos: { x: canvasWidth - 90, y: 90 },
+                 obstacles: [
+                    {x: canvasWidth/2 - 60, y: canvasHeight - groundHeight - 160, width: 120, height: 25, color: '#776e65'},
+                    {x: canvasWidth * 0.7, y: 160, width: 25, height: canvasHeight - groundHeight - 220, color: '#776e65'}
+                 ]
+            };
+        }
+
+        // --- Game Functions ---
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                winMessageDiv.innerHTML = `🎉 You Completed All Levels! 🎉<br><button onclick="resetGame()">Play Again?</button>`;
+                winMessageDiv.style.backgroundColor = 'rgba(52, 152, 219, 0.95)'; //  Blue win message
+                winMessageDiv.style.display = 'block';
+                currentLevel = levels.length -1;
+                return;
+            }
+
+            const levelData = levels[levelIndex];
+            cube.x = levelData.cubePos.x;
+            cube.y = levelData.cubePos.y;
+            cube.vx = 0;
+            cube.vy = 0;
+            cube.isFlying = false;
+            cube.isDragging = false;
+            cube.startX = cube.x;
+            cube.startY = cube.y;
+
+            star.x = levelData.starPos.x;
+            star.y = levelData.starPos.y;
+
+            obstacles = levelData.obstacles.map(obs => ({ ...obs }));
+
+            levelDisplay.textContent = `${levelIndex + 1}`;
+            winMessageDiv.style.display = 'none';
+        }
+
+        function resetCube() {
+            cube.x = cube.startX;
+            cube.y = cube.startY;
+            cube.vx = 0;
+            cube.vy = 0;
+            cube.isFlying = false;
+            cube.isDragging = false;
+        }
+
+        function drawCube() {
+            ctx.fillStyle = cube.color;
+            ctx.fillRect(cube.x - cube.width / 2, cube.y - cube.height / 2, cube.width, cube.height);
+             ctx.fillStyle = 'white';
+             ctx.fillRect(cube.x - cube.width * 0.2, cube.y - cube.height * 0.2, 5, 5);
+             ctx.fillRect(cube.x + cube.width * 0.2 - 5, cube.y - cube.height * 0.2, 5, 5);
+             ctx.fillStyle = 'black';
+             ctx.fillRect(cube.x - 2, cube.y + cube.height * 0.1, 4, 4);
+        }
+
+        function drawStar() {
+            ctx.font = `${star.size}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(star.emoji, star.x, star.y);
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(obs => {
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                ctx.strokeStyle = 'rgba(0,0,0,0.35)'; // Slightly darker border
+                ctx.lineWidth = 1;
+                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+            });
+        }
+
+        function drawGround() {
+            ctx.fillStyle = '#badc58'; //  Fresh green ground
+            ctx.fillRect(0, canvasHeight - groundHeight, canvasWidth, groundHeight);
+             ctx.strokeStyle = '#82b33a';
+             ctx.lineWidth = 1;
+             for(let i = 0; i < canvasWidth; i+= 15) {
+                 ctx.beginPath();
+                 ctx.moveTo(i, canvasHeight - groundHeight + 6 + Math.random() * 12);
+                 ctx.lineTo(i + 6 + Math.random() * 6, canvasHeight - groundHeight + 6 + Math.random() * 12);
+                 ctx.stroke();
+             }
+        }
+
+        function simulatePhysicsStep(obj) {
+            obj.vy += gravity;
+            obj.vx *= dragFactor;
+            obj.vy *= dragFactor;
+            obj.x += obj.vx;
+            obj.y += obj.vy;
+
+            // Ground collision for prediction cube
+            if (obj.y + cube.height / 2 > canvasHeight - groundHeight) {
+                obj.y = canvasHeight - groundHeight - cube.height / 2;
+                obj.vy *= -bounceFactor;
+                obj.vx *= 0.9;
+            }
+            if (obj.x - cube.width / 2 < 0) {
+                obj.x = cube.width / 2;
+                obj.vx *= -bounceFactor;
+            }
+            if (obj.x + cube.width / 2 > canvasWidth) {
+                obj.x = canvasWidth - cube.width / 2;
+                obj.vx *= -bounceFactor;
+            }
+            if (obj.y - cube.height / 2 < 0) {
+                 obj.y = cube.height / 2;
+                 obj.vy *= -bounceFactor;
+             }
+
+            // Obstacle collision for prediction cube
+            obstacles.forEach(obs => {
+                const cubeLeft = obj.x - cube.width / 2;
+                const cubeRight = obj.x + cube.width / 2;
+                const cubeTop = obj.y - cube.height / 2;
+                const cubeBottom = obj.y + cube.height / 2;
+
+                const obsLeft = obs.x;
+                const obsRight = obs.x + obs.width;
+                const obsTop = obs.y;
+                const obsBottom = obs.y + obs.height;
+
+                if (cubeRight > obsLeft && cubeLeft < obsRight && cubeBottom > obsTop && cubeTop < obsBottom) {
+                    const overlapX = Math.min(cubeRight, obsRight) - Math.max(cubeLeft, obsLeft);
+                    const overlapY = Math.min(cubeBottom, obsBottom) - Math.max(cubeTop, obsTop);
+
+                    if (overlapX < overlapY) {
+                        if (obj.x < obs.x + obs.width / 2) {
+                            obj.x = obsLeft - cube.width / 2;
+                        } else {
+                            obj.x = obsRight + cube.width / 2;
+                        }
+                        obj.vx *= -bounceFactor;
+                    } else {
+                        if (obj.y < obs.y + obs.height / 2) {
+                            obj.y = obsTop - cube.height / 2;
+                        } else {
+                            obj.y = obsBottom + cube.height / 2;
+                        }
+                         obj.vy *= -bounceFactor;
+                         if (Math.abs(obj.vx) > 0.1) obj.vx *= 0.95;
+                    }
+                     obj.vx *= 0.9;
+                     obj.vy *= 0.9;
+                }
+            });
+        }
+
+
+        function drawPullLine() {
+            if (isMouseDown && !cube.isFlying) {
+                const dx = cube.startX - mouseCurrentX;
+                const dy = cube.startY - mouseCurrentY;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx);
+
+                const pullX = cube.startX - Math.cos(angle) * dist;
+                const pullY = cube.startY - Math.sin(angle) * dist;
+
+                ctx.beginPath();
+                ctx.moveTo(cube.startX, cube.startY);
+                ctx.lineTo(pullX, pullY);
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.6);'; // Slightly darker line
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Accurate Prediction
+                ctx.beginPath();
+                ctx.setLineDash([5, 5]);
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)'; // Brighter prediction line
+                ctx.lineWidth = 2;
+
+                let predictionCube = { ...cube }; // Copy current cube state for prediction
+                predictionCube.vx = Math.cos(angle) * dist * pullPowerMultiplier;
+                predictionCube.vy = Math.sin(angle) * dist * pullPowerMultiplier;
+
+                ctx.moveTo(predictionCube.x, predictionCube.y);
+
+                for (let i = 0; i < 500; i++) { // Simulate for more steps for accuracy
+                    simulatePhysicsStep(predictionCube);
+                    ctx.lineTo(predictionCube.x, predictionCube.y);
+                     if (Math.abs(predictionCube.vx) < 0.05 && Math.abs(predictionCube.vy) < 0.05 && predictionCube.y > canvasHeight - groundHeight - cube.height/2 + 1 ) { // Stop predicting when almost stopped on ground
+                        break;
+                    }
+                    if (predictionCube.y > canvasHeight + 200 || predictionCube.x < -100 || predictionCube.x > canvasWidth + 100) {
+                        break; // Stop if goes off screen
+                    }
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+
+        function updatePhysics() {
+            if (!cube.isFlying) return;
+            simulatePhysicsStep(cube);
+
+
+            // Star Collision Detection
+             const dxStar = cube.x - star.x;
+             const dyStar = cube.y - star.y;
+             const distStar = Math.sqrt(dxStar*dxStar + dyStar*dyStar);
+             if (distStar < (cube.width / 2 + star.size / 2)) {
+                 winLevel();
+             }
+
+            if (cube.y > canvasHeight + 200 || cube.x < -100 || cube.x > canvasWidth + 100) {
+                resetCube();
+            }
+        }
+
+        function winLevel() {
+            cube.isFlying = false;
+            cube.vx = 0;
+            cube.vy = 0;
+            winMessageDiv.style.display = 'block';
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            drawGround();
+            drawObstacles();
+            drawStar();
+            drawCube();
+            drawPullLine();
+            updatePhysics();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Event Listeners ---
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: evt.clientX - rect.left,
+                y: evt.clientY - rect.top
+            };
+        }
+        function getTouchPos(evt) {
+             const rect = canvas.getBoundingClientRect();
+             const touch = evt.touches[0];
+             return {
+                 x: touch.clientX - rect.left,
+                 y: touch.clientY - rect.top
+             };
+         }
+
+
+        function handleStart(pos) {
+            const distToCube = Math.sqrt((pos.x - cube.x)**2 + (pos.y - cube.y)**2);
+            if (!cube.isFlying && distToCube < cube.width * 1.5) {
+                 isMouseDown = true;
+                 cube.isDragging = true;
+                 mouseStartX = pos.x;
+                 mouseStartY = pos.y;
+                 mouseCurrentX = pos.x;
+                 mouseCurrentY = pos.y;
+                 cube.startX = cube.x;
+                 cube.startY = cube.y;
+            }
+        }
+
+        function handleMove(pos) {
+            if (isMouseDown && cube.isDragging) {
+                 mouseCurrentX = pos.x;
+                 mouseCurrentY = pos.y;
+             }
+        }
+
+        function handleEnd() {
+             if (isMouseDown && cube.isDragging) {
+                 isMouseDown = false;
+                 cube.isDragging = false;
+
+                 const dx = cube.startX - mouseCurrentX;
+                 const dy = cube.startY - mouseCurrentY;
+                 let dist = Math.sqrt(dx * dx + dy * dy);
+                 const angle = Math.atan2(dy, dx);
+
+
+                 if (dist > 10) {
+                     cube.vx = Math.cos(angle) * dist * pullPowerMultiplier;
+                     cube.vy = Math.sin(angle) * dist * pullPowerMultiplier;
+                     cube.isFlying = true;
+                 }
+             }
+             isMouseDown = false;
+             cube.isDragging = false;
+         }
+
+        canvas.addEventListener('mousedown', (e) => handleStart(getMousePos(e)));
+        canvas.addEventListener('mousemove', (e) => handleMove(getMousePos(e)));
+        canvas.addEventListener('mouseup', handleEnd);
+        canvas.addEventListener('mouseleave', handleEnd);
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleStart(getTouchPos(e));
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+             e.preventDefault();
+             handleMove(getTouchPos(e));
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+             e.preventDefault();
+             handleEnd();
+        });
+         canvas.addEventListener('touchcancel', (e) => {
+             e.preventDefault();
+             handleEnd();
+        });
+
+        nextLevelButton.addEventListener('click', () => {
+            currentLevel++;
+            loadLevel(currentLevel);
+        });
+
+        skipLevelButton.addEventListener('click', () => {
+            currentLevel++;
+            loadLevel(currentLevel);
+        });
+        resetLevelButton.addEventListener('click', () => {
+            resetLevel();
+        });
+
+        function resetLevel() {
+             loadLevel(currentLevel);
+        }
+
+
+        function resetGame() {
+             currentLevel = 0;
+             loadLevel(currentLevel);
+        }
+
+
+        generateLevels();
+        loadLevel(currentLevel);
+        gameLoop();
+
+
+        window.addEventListener('resize', () => {
+            canvasWidth = Math.min(window.innerWidth * 0.95, 900);
+            canvasHeight = Math.min(window.innerHeight * 0.9, 700);
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            generateLevels();
+             loadLevel(currentLevel);
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'r' || event.key === 'R') {
+                resetLevel();
+            }
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soundscape</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #f0f0f0;
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        #container {
+            text-align: center;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+        button:hover {
+            background-color: #367c39;
+        }
+        #visualizer {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        .bar {
+            width: 10px;
+            background-color: #f0f0f0;
+            animation: visualize 1s linear infinite alternate;
+            border-radius: 4px;
+        }
+        @keyframes visualize {
+            0% {
+                height: 20px;
+                opacity: 0.5;
+            }
+            100% {
+                height: 80px;
+                opacity: 1;
+            }
+        }
+        .bar:nth-child(2) { animation-delay: 0.1s; }
+        .bar:nth-child(3) { animation-delay: 0.3s; }
+        .bar:nth-child(4) { animation-delay: 0.2s; }
+        .bar:nth-child(5) { animation-delay: 0.4s; }
+
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Soundscape Generator</h1>
+        <button id="startButton">Start Sound</button>
+        <button id="stopButton" disabled>Stop Sound</button>
+        <div id="visualizer">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+        </div>
+    </div>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const bars = document.querySelectorAll('.bar');
+        let audioContext;
+        let isPlaying = false;
+        let intervalId;
+
+        function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function createKick(time) {
+            const osc = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            osc.frequency.setValueAtTime(150, time);
+            osc.frequency.exponentialRampToValueAtTime(50, time + 0.1);
+
+            gainNode.gain.setValueAtTime(1, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+
+            osc.start(time);
+            osc.stop(time + 0.2);
+        }
+
+        function createSnare(time) {
+            const noise = audioContext.createBufferSource();
+            const buffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.3, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < buffer.length; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            noise.buffer = buffer;
+
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.value = 1000;
+
+            const gainNode = audioContext.createGain();
+            noise.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            gainNode.gain.setValueAtTime(0.8, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
+
+            noise.start(time);
+            noise.stop(time + 0.3);
+        }
+
+        function createHihat(time) {
+            const noise = audioContext.createBufferSource();
+            const buffer = audioContext.createBuffer(1, audioContext.sampleRate * 0.1, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < buffer.length; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            noise.buffer = buffer;
+
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.value = 8000;
+
+            const gainNode = audioContext.createGain();
+            noise.connect(filter);
+            filter.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            gainNode.gain.setValueAtTime(0.5, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+
+            noise.start(time);
+            noise.stop(time + 0.1);
+        }
+
+        function createBass(time, note) {
+            const osc = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(note, time);
+
+            gainNode.gain.setValueAtTime(0.6, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+
+            osc.start(time);
+            osc.stop(time + 0.5);
+        }
+
+        function createMelody(time, note) {
+            const osc = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(note, time);
+
+            gainNode.gain.setValueAtTime(0.4, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 1);
+
+            osc.start(time);
+            osc.stop(time + 1);
+        }
+
+
+        function playSound() {
+            if (!audioContext) {
+                initAudio();
+            }
+            if (isPlaying) return;
+            isPlaying = true;
+            startButton.disabled = true;
+            stopButton.disabled = false;
+
+            let tempo = 120; // BPM
+            let beatTime = 60 / tempo;
+            let startTime = audioContext.currentTime;
+            let barCount = 0;
+
+
+            intervalId = setInterval(() => {
+                let currentTime = startTime + barCount * beatTime;
+
+                // Kick on every beat
+                createKick(currentTime);
+
+                // Snare on beats 2 and 4
+                if ((barCount % 4) === 1 || (barCount % 4) === 3) {
+                    createSnare(currentTime);
+                }
+
+                // Hi-hat on every half beat
+                createHihat(currentTime);
+                createHihat(currentTime + beatTime / 2);
+
+                // Bassline and Melody (simple example)
+                if ((barCount % 4) === 0) {
+                    createBass(currentTime, 110); // A2
+                    createMelody(currentTime, 440); // A4
+                }
+                if ((barCount % 4) === 2) {
+                    createBass(currentTime, 147); // D3
+                    createMelody(currentTime, 587); // D5
+                }
+
+
+                barCount++;
+                bars.forEach(bar => bar.style.animationPlayState = 'running');
+
+
+            }, beatTime * 500); // Adjust interval to be in milliseconds
+        }
+
+        function stopSound() {
+            if (!isPlaying) return;
+            isPlaying = false;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            clearInterval(intervalId);
+            bars.forEach(bar => bar.style.animationPlayState = 'paused');
+        }
+
+
+        startButton.addEventListener('click', playSound);
+        stopButton.addEventListener('click', stopSound);
+    </script>
+</body>
+</html>

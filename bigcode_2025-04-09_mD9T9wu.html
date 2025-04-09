@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PenguinAI Playground</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #f0f4f8;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+        h1 {
+            color: #1a237e;
+            margin-bottom: 20px;
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            width: 100%;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .controls label {
+            font-weight: bold;
+            color: #3f51b5;
+        }
+        .controls select,
+        .controls button {
+            padding: 10px 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+        .controls select {
+            flex-grow: 1;
+            min-width: 150px;
+        }
+        .controls button {
+            background-color: #3f51b5;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .controls button:hover {
+            background-color: #303f9f;
+        }
+        .controls button:disabled {
+            background-color: #aaa;
+            cursor: not-allowed;
+        }
+        .chat-area {
+            flex-grow: 1;
+            width: 100%;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow-y: auto;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+        .message.user {
+            background-color: #e3f2fd;
+            color: #1e88e5;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+            text-align: right;
+        }
+        .message.assistant {
+            background-color: #f1f8e9;
+            color: #558b2f;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+        }
+        .message-sender {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        .input-area {
+            display: flex;
+            width: 100%;
+            gap: 10px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-area textarea {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: none;
+            font-size: 1em;
+            height: 40px; /* Start small, can grow */
+        }
+        .input-area button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4caf50;
+            color: white;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+        .input-area button:hover {
+            background-color: #388e3c;
+        }
+         .input-area button:disabled {
+            background-color: #aaa;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 10px;
+            font-style: italic;
+            color: #666;
+            height: 20px; /* Reserve space */
+            text-align: center;
+        }
+        .error {
+             color: #d32f2f;
+             font-weight: bold;
+             background-color: #ffebee;
+             padding: 10px;
+             border: 1px solid #d32f2f;
+             border-radius: 4px;
+             margin-top: 10px;
+             text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🐧 PenguinAI Playground</h1>
+
+    <div class="controls">
+        <label for="model-select">Select Model:</label>
+        <select id="model-select" name="model">
+            <option value="">Loading models...</option>
+        </select>
+        <button id="clear-chat-btn">Clear Chat</button>
+    </div>
+
+    <div class="chat-area" id="chat-area">
+        <!-- Chat messages will appear here -->
+        <div class="message assistant">
+             <div class="message-sender">🐧 PenguinAI</div>
+             Hi there! Select a model and send me a message to get started.
+        </div>
+    </div>
+
+    <div class="input-area">
+        <textarea id="message-input" placeholder="Enter your message here..."></textarea>
+        <button id="send-button" disabled>Send</button>
+    </div>
+
+    <div class="status" id="status">Select a model to enable sending.</div>
+    <div id="error-display"></div>
+
+    <script>
+        const modelSelect = document.getElementById('model-select');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const chatArea = document.getElementById('chat-area');
+        const statusDiv = document.getElementById('status');
+        const errorDiv = document.getElementById('error-display');
+        const clearChatButton = document.getElementById('clear-chat-btn');
+
+        const API_BASE_URL = 'https://penguinai.derpygamer2142.com/v1';
+        let conversationHistory = []; // Stores messages for context { role: 'user'/'assistant', content: '...' }
+
+        // --- Fetch Models ---
+        async function fetchModels() {
+            statusDiv.textContent = '🔄 Loading available models...';
+            errorDiv.innerHTML = ''; // Clear previous errors
+            try {
+                const response = await fetch(`${API_BASE_URL}/models`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                populateModels(data.data); // Assuming the list is in data.data based on OpenAI format
+                statusDiv.textContent = '✅ Models loaded. Select one.';
+            } catch (error) {
+                console.error('Error fetching models:', error);
+                statusDiv.textContent = '❌ Error loading models.';
+                errorDiv.innerHTML = `<div class="error">Failed to load models: ${error.message}. Check console for details. Make sure the API is running and CORS is configured.</div>`;
+                modelSelect.innerHTML = '<option value="">Failed to load</option>';
+            }
+        }
+
+        // --- Populate Model Selector ---
+        function populateModels(models) {
+            modelSelect.innerHTML = '<option value="">-- Select a Model --</option>'; // Placeholder
+            if (models && Array.isArray(models)) {
+                 models.sort((a, b) => a.id.localeCompare(b.id)).forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.id; // Display model ID
+                    modelSelect.appendChild(option);
+                });
+            } else {
+                 console.warn('Models data is not in the expected array format:', models);
+                 statusDiv.textContent = '⚠️ Models data format issue.';
+                 errorDiv.innerHTML = '<div class="error">Received unexpected format for models list.</div>';
+            }
+            checkSendButtonState(); // Enable send button if a model is selected
+        }
+
+        // --- Add Message to Chat Display ---
+        function displayMessage(sender, messageContent) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender); // sender should be 'user' or 'assistant'
+
+            const senderSpan = document.createElement('div');
+            senderSpan.classList.add('message-sender');
+            senderSpan.textContent = sender === 'user' ? '👤 You' : '🐧 PenguinAI';
+
+            const contentSpan = document.createElement('span');
+            // Basic sanitization to prevent HTML injection - replace < and >
+            // For production, use a proper sanitizer library if complex HTML is possible
+            contentSpan.textContent = messageContent;
+
+            messageDiv.appendChild(senderSpan);
+            messageDiv.appendChild(contentSpan);
+            chatArea.appendChild(messageDiv);
+
+            // Scroll to the bottom
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        // --- Send Message to API ---
+        async function sendMessage() {
+            const selectedModel = modelSelect.value;
+            const userMessage = messageInput.value.trim();
+
+            if (!selectedModel || !userMessage) {
+                errorDiv.innerHTML = '<div class="error">Please select a model and enter a message.</div>';
+                return;
+            }
+
+            // Add user message to display and history
+            displayMessage('user', userMessage);
+            conversationHistory.push({ role: 'user', content: userMessage });
+
+            // Clear input and disable send button
+            messageInput.value = '';
+            sendButton.disabled = true;
+            modelSelect.disabled = true; // Prevent changing model during request
+            statusDiv.textContent = 'Thinking... ⏳';
+            errorDiv.innerHTML = ''; // Clear previous errors
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Add Authorization header if needed:
+                        // 'Authorization': `Bearer YOUR_API_KEY`
+                    },
+                    body: JSON.stringify({
+                        model: selectedModel,
+                        messages: conversationHistory // Send entire history
+                        // stream: false // Explicitly asking for non-streaming response
+                    }),
+                });
+
+                if (!response.ok) {
+                     let errorBody = 'Could not read error details.';
+                     try {
+                         errorBody = await response.text(); // Try to get more info
+                     } catch (e) {}
+                    throw new Error(`API request failed: ${response.status} ${response.statusText}. ${errorBody}`);
+                }
+
+                const data = await response.json();
+
+                // Extract assistant's response
+                let assistantMessage = 'Sorry, I could not process that.'; // Default message
+                if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
+                    assistantMessage = data.choices[0].message.content.trim();
+                } else {
+                    console.warn("Unexpected response structure:", data);
+                }
+
+                // Add assistant message to display and history
+                displayMessage('assistant', assistantMessage);
+                conversationHistory.push({ role: 'assistant', content: assistantMessage });
+
+                statusDiv.textContent = 'Ready.';
+
+            } catch (error) {
+                console.error('Error sending message:', error);
+                statusDiv.textContent = '❌ Error sending message.';
+                errorDiv.innerHTML = `<div class="error">Failed to get response: ${error.message}. Check console for details.</div>`;
+                // Optionally remove the last user message from history if the request failed fundamentally
+                // conversationHistory.pop();
+                displayMessage('assistant', `System Error: ${error.message}`); // Show error in chat
+            } finally {
+                // Re-enable controls
+                 checkSendButtonState(); // Re-evaluates based on input and model selection
+                 modelSelect.disabled = false;
+            }
+        }
+
+        // --- Clear Chat ---
+        function clearChat() {
+            chatArea.innerHTML = `
+                <div class="message assistant">
+                     <div class="message-sender">🐧 PenguinAI</div>
+                     Chat cleared. Select a model and send a message.
+                </div>`;
+            conversationHistory = []; // Reset history
+            messageInput.value = '';
+            statusDiv.textContent = 'Chat cleared. Ready.';
+            errorDiv.innerHTML = '';
+            checkSendButtonState();
+        }
+
+
+        // --- Enable/Disable Send Button ---
+        function checkSendButtonState() {
+            const modelSelected = modelSelect.value !== "";
+            const messageEntered = messageInput.value.trim() !== "";
+            // Only enable if a model is selected AND there is text in the input
+            sendButton.disabled = !(modelSelected && messageEntered);
+
+            if (!modelSelected) {
+                statusDiv.textContent = "Select a model to enable sending.";
+            } else if (!messageEntered) {
+                 statusDiv.textContent = "Enter a message to send.";
+            } else {
+                 statusDiv.textContent = "Ready.";
+            }
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', fetchModels);
+
+        modelSelect.addEventListener('change', checkSendButtonState);
+
+        messageInput.addEventListener('input', checkSendButtonState);
+        messageInput.addEventListener('keypress', (e) => {
+            // Send message on Enter key press (Shift+Enter for new line)
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // Prevent default newline behavior
+                if (!sendButton.disabled) {
+                    sendMessage();
+                }
+            }
+        });
+
+        sendButton.addEventListener('click', sendMessage);
+        clearChatButton.addEventListener('click', clearChat);
+
+        // Initial check
+        checkSendButtonState();
+
+    </script>
+
+</body>
+</html>

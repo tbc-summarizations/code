@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Dynamic Dictionary 📖</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #5a5a5a;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        h1::before { content: "📖 "; }
+        h2::before { content: "✏️ "; }
+        #dictionary-display ul {
+            list-style: none;
+            padding: 0;
+        }
+        #dictionary-display li {
+            background: #e9e9e9;
+            margin-bottom: 10px;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #dictionary-display li:hover {
+            background-color: #dcdcdc;
+        }
+        #dictionary-display strong {
+            color: #007bff;
+        }
+        #edit-section {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f0f8ff;
+            border-radius: 5px;
+            border: 1px solid #cce5ff;
+        }
+        #edit-section label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        #edit-word-display {
+            font-size: 1.2em;
+            color: #0056b3;
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #edit-meaning {
+            width: 95%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            min-height: 80px;
+            resize: vertical;
+        }
+        #save-button {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+        #save-button:hover {
+            background-color: #218838;
+        }
+        #save-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #simulation-result {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #fffbe6;
+            border: 1px solid #ffeeba;
+            border-radius: 5px;
+            min-height: 50px;
+        }
+        #simulation-result h3::before { content: "🌍 "; }
+         #simulation-result h3 {
+             margin-top: 0;
+             color: #856404;
+         }
+        #loading-indicator {
+            display: none;
+            text-align: center;
+            margin: 15px 0;
+            font-style: italic;
+            color: #555;
+        }
+         #loading-indicator::before { content: "⏳ "; }
+        #error-message {
+            display: none;
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            border-radius: 4px;
+            text-align: center;
+        }
+        #error-message::before { content: "🔺 "; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>The Dynamic Dictionary</h1>
+    <p style="text-align: center;">Click a word to edit its meaning and see how the change ripples through the world!</p>
+
+    <div id="dictionary-display">
+        <h2>Current Dictionary</h2>
+        <ul>
+            <!-- Dictionary entries will be loaded here by JavaScript -->
+        </ul>
+    </div>
+
+    <div id="edit-section">
+        <h2>Edit Word Meaning</h2>
+        <form id="edit-form">
+            <label for="edit-word-display">Word:</label>
+            <div id="edit-word-display">Select a word from the list above</div>
+            <input type="hidden" id="edit-word-input">
+
+            <label for="edit-meaning">New Meaning:</label>
+            <textarea id="edit-meaning" name="meaning" rows="4" required disabled></textarea>
+
+            <button type="button" id="save-button" disabled>Save & Simulate World Effect</button>
+        </form>
+    </div>
+
+    <div id="loading-indicator">Simulating effect on the world...</div>
+    <div id="error-message"></div>
+
+    <div id="simulation-result">
+        <h3>World Effect Simulation</h3>
+        <p>Edit a word's meaning and click 'Save' to see the simulated consequences here.</p>
+    </div>
+</div>
+
+<script>
+    // Initial Dictionary Data
+    let dictionary = {
+      "Hope": "A feeling of expectation and desire for a certain thing to happen.",
+      "Time": "The indefinite continued progress of existence and events in the past, present, and future regarded as a whole.",
+      "Communication": "The imparting or exchanging of information or news.",
+      "Freedom": "The power or right to act, speak, or think as one wants without hindrance or restraint.",
+      "Reality": "The state of things as they actually exist, as opposed to an idealistic or imaginary view of them."
+    };
+
+    const dictionaryDisplay = document.getElementById('dictionary-display').querySelector('ul');
+    const editWordDisplay = document.getElementById('edit-word-display');
+    const editWordInput = document.getElementById('edit-word-input');
+    const editMeaningTextarea = document.getElementById('edit-meaning');
+    const saveButton = document.getElementById('save-button');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const errorMessageDiv = document.getElementById('error-message');
+    const simulationResultDiv = document.getElementById('simulation-result');
+    const editForm = document.getElementById('edit-form');
+
+    const API_URL = 'http://penguinai.derpygamer2142.com/v1/chat/completions';
+    const MODEL_ID = 'llama-3.1-8b-instruct'; // Use the specified model
+
+    // Function to display the dictionary
+    function displayDictionary() {
+        dictionaryDisplay.innerHTML = ''; // Clear current list
+        Object.keys(dictionary).sort().forEach(word => {
+            const listItem = document.createElement('li');
+            listItem.innerHTML = `<strong>${word}:</strong> ${dictionary[word]}`;
+            listItem.dataset.word = word; // Store word in data attribute
+            listItem.addEventListener('click', () => populateEditForm(word));
+            dictionaryDisplay.appendChild(listItem);
+        });
+    }
+
+    // Function to populate the edit form when a word is clicked
+    function populateEditForm(word) {
+        editWordDisplay.textContent = word;
+        editWordInput.value = word;
+        editMeaningTextarea.value = dictionary[word];
+        editMeaningTextarea.disabled = false;
+        saveButton.disabled = false;
+        errorMessageDiv.style.display = 'none'; // Hide previous errors
+        simulationResultDiv.innerHTML = '<h3>World Effect Simulation</h3><p>Ready to simulate the effect for the new meaning of "' + word + '".</p>'; // Reset simulation div
+    }
+
+    // Function to generate the AI prompt
+    function generatePrompt(word, newMeaning) {
+      // Instruction for the model
+      return `You are simulating the immediate societal and cultural impact of a fundamental change in the meaning of a common word.
+The dictionary definition for the word '${word}' has been officially and universally changed to: '${newMeaning}'.
+Analyze and describe the plausible, direct consequences of this specific semantic shift. Focus on how this change might alter conversations, laws, relationships, technology, art, or daily routines. Avoid generic statements; be specific to the new meaning provided. Keep the description concise, around 100-150 words. Describe the ripple effects in the world.`;
+    }
+
+    // Function to call the PenguinAI API
+    async function callAI(word, newMeaning) {
+        showLoading(true);
+        errorMessageDiv.style.display = 'none';
+        simulationResultDiv.innerHTML = '<h3>World Effect Simulation</h3><p>Calculating the impact...</p>';
+
+        const prompt = generatePrompt(word, newMeaning);
+        const requestBody = {
+            model: MODEL_ID,
+            messages: [
+                {
+                    role: "user",
+                    content: prompt
+                }
+            ]
+            // Add parameters like max_tokens if needed, though the prompt asks for length.
+            // max_tokens: 200 // Example limit
+        };
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // Add any other necessary headers like Authorization if required by the proxy
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: response.statusText }));
+                throw new Error(`API Error (${response.status}): ${errorData.message || 'Unknown error'}`);
+            }
+
+            const data = await response.json();
+
+            if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
+                updateSimulationResult(data.choices[0].message.content.trim());
+            } else {
+                throw new Error("Invalid response structure from API.");
+            }
+
+        } catch (error) {
+            console.error('API Call Failed:', error);
+            showError(`Failed to get simulation: ${error.message}`);
+            simulationResultDiv.innerHTML = '<h3>World Effect Simulation</h3><p>Could not simulate the effect due to an error.</p>';
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // Function to update the simulation result display
+    function updateSimulationResult(text) {
+        simulationResultDiv.innerHTML = `<h3>World Effect Simulation</h3><p>${text}</p>`;
+    }
+
+    // Function to show/hide loading indicator
+    function showLoading(isLoading) {
+        loadingIndicator.style.display = isLoading ? 'block' : 'none';
+        saveButton.disabled = isLoading; // Disable button while loading
+    }
+
+    // Function to display error messages
+    function showError(message) {
+        errorMessageDiv.textContent = `🔺 ${message}`;
+        errorMessageDiv.style.display = 'block';
+    }
+
+    // Event listener for the save button
+    saveButton.addEventListener('click', () => {
+        const word = editWordInput.value;
+        const newMeaning = editMeaningTextarea.value.trim();
+
+        if (!word) {
+            showError("Please select a word from the list first.");
+            return;
+        }
+        if (newMeaning === "") {
+            showError("Please provide a new meaning for the word.");
+            return;
+        }
+
+        // Update the dictionary in memory
+        dictionary[word] = newMeaning;
+
+        // Update the display
+        displayDictionary();
+
+        // Call the AI to simulate the effect
+        callAI(word, newMeaning);
+    });
+
+    // Initial display of the dictionary on page load
+    document.addEventListener('DOMContentLoaded', displayDictionary);
+
+</script>
+
+</body>
+</html>

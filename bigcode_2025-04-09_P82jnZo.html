@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy Checker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1, h2 {
+            color: #0056b3;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: white;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+        }
+        .status-working {
+            color: green;
+            font-weight: bold;
+        }
+        .status-not-working {
+            color: red;
+            font-weight: bold;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .emoji-working {
+            color: green;
+            font-size: 1.2em;
+        }
+        .emoji-not-working {
+            color: red;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Proxy Checker ⚽</h1>
+        <p>Enter proxies in the format: ip:port or ip:port:user:pass</p>
+        <textarea id="proxyList" placeholder="Example:&#10;127.0.0.1:8080&#10;192.168.1.100:3128"></textarea>
+        <button onclick="checkProxies()">Check Proxies</button>
+
+        <div id="messageArea" style="margin-top: 10px; color: orange;"></div>
+
+        <h2>Working Proxies with Response Time</h2>
+        <table id="workingProxiesTable">
+            <thead>
+                <tr>
+                    <th>Proxy</th>
+                    <th>Status</th>
+                    <th>Avg. Response Time (ms)</th>
+                </tr>
+            </thead>
+            <tbody id="workingProxiesBody">
+                <!-- Working proxies will be added here -->
+            </tbody>
+        </table>
+
+        <h2>Non-Working Proxies</h2>
+        <table id="nonWorkingProxiesTable">
+            <thead>
+                <tr>
+                    <th>Proxy</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="nonWorkingProxiesBody">
+                <!-- Non-working proxies will be added here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function checkProxies() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (!urlParams.has('req')) {
+                document.getElementById('messageArea').innerText = 'Missing "req" parameter. Please add "?req" to the URL.';
+                return;
+            }
+            document.getElementById('messageArea').innerText = '';
+
+            const proxyListText = document.getElementById('proxyList').value;
+            const proxies = proxyListText.trim().split('\n').map(proxy => proxy.trim()).filter(proxy => proxy !== '');
+            const workingProxiesBody = document.getElementById('workingProxiesBody');
+            const nonWorkingProxiesBody = document.getElementById('nonWorkingProxiesBody');
+
+            workingProxiesBody.innerHTML = ''; // Clear previous results
+            nonWorkingProxiesBody.innerHTML = ''; // Clear previous results
+
+            proxies.forEach(proxy => {
+                checkProxyWithRetries(proxy, 5);
+            });
+        }
+
+        async function checkProxyWithRetries(proxy, retries) {
+            let totalResponseTime = 0;
+            let workingStatus = false;
+
+            for (let i = 0; i < retries; i++) {
+                const startTime = performance.now();
+                const isWorking = await simulateProxyCheck(); // Simulate proxy check function
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                totalResponseTime += responseTime;
+                if (isWorking) {
+                    workingStatus = true; // Consider working if at least one test is successful
+                }
+            }
+
+            const averageResponseTime = totalResponseTime / retries;
+            displayProxyResult(proxy, workingStatus, averageResponseTime);
+        }
+
+
+        async function simulateProxyCheck() {
+            return new Promise(resolve => {
+                const delay = Math.random() * 1000; // Simulate random response time up to 1 second
+                setTimeout(() => {
+                    const isWorking = Math.random() > 0.2; // Simulate 80% chance of working
+                    resolve(isWorking);
+                }, delay);
+            });
+        }
+
+
+        function displayProxyResult(proxy, isWorking, averageResponseTime) {
+            const workingProxiesBody = document.getElementById('workingProxiesBody');
+            const nonWorkingProxiesBody = document.getElementById('nonWorkingProxiesBody');
+
+            if (isWorking) {
+                let row = workingProxiesBody.insertRow();
+                let proxyCell = row.insertCell(0);
+                let statusCell = row.insertCell(1);
+                let timeCell = row.insertCell(2);
+
+                proxyCell.textContent = proxy;
+                statusCell.innerHTML = '<span class="status-working">Working <span class="emoji-working">✅</span></span>';
+                timeCell.textContent = averageResponseTime.toFixed(2); // Display average time with 2 decimal places
+            } else {
+                let row = nonWorkingProxiesBody.insertRow();
+                let proxyCell = row.insertCell(0);
+                let statusCell = row.insertCell(1);
+
+                proxyCell.textContent = proxy;
+                statusCell.innerHTML = '<span class="status-not-working">Not Working <span class="emoji-not-working">❌</span></span>';
+            }
+        }
+    </script>
+</body>
+</html>

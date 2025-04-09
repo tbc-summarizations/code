@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PenguinAI Proxy Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .header {
+            background-color: #36393f;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .instructions {
+            width: 300px;
+            background-color: #2f3136;
+            color: #ccc;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+        .chat-area {
+            flex: 1;
+            background-color: #36393f;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .message {
+            background-color: #40444b;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            width: fit-content;
+            max-width: 70%;
+        }
+        .message.user {
+            background-color: #4e5d94;
+            align-self: flex-end;
+        }
+        .message .sender {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+        .message .sender .avatar {
+            width: 20px;
+            height: 20px;
+            background-color: #7289da;
+            border-radius: 50%;
+            margin-right: 8px;
+            display: inline-block;
+            text-align: center;
+            line-height: 20px;
+            font-size: 12px;
+        }
+        .input-area {
+            background-color: #2f3136;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            box-sizing: border-box;
+        }
+        .input-area input[type="text"] {
+            flex: 1;
+            background-color: #40444b;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        .input-area button {
+            background-color: #7289da;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .activity-slider-container {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+            color: #ccc;
+        }
+        .activity-slider-container input[type="range"] {
+            flex: 1;
+            margin: 0 10px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PenguinAI Proxy Chat</h1>
+    </div>
+    <div class="container">
+        <div class="instructions">
+            <h2>How to Use PenguinAI Proxy:</h2>
+            <ol>
+                <li>
+                    <strong>Find Available Models:</strong><br>
+                    <ul>
+                        <li><strong>Action:</strong> Send a <code>GET</code> request to the <code>/v1/models</code> endpoint <strong>using HTTPS</strong>.</li>
+                        <li><strong>Correct Endpoint:</strong> <code>https://penguinai.derpygamer2142.com/v1/models</code></li>
+                        <li><strong>Example:</strong> <code>curl https://penguinai.derpygamer2142.com/v1/models</code></li>
+                        <li><strong>What You Get:</strong> A JSON list of all available AI models. Note the <code>id</code> of the model you want to use (e.g., "model-001").</li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>Generate Text (Chat Completion):</strong><br>
+                    <ul>
+                        <li><strong>Action:</strong> Send a <code>POST</code> request to the <code>/v1/chat/completions</code> endpoint <strong>using HTTPS</strong>.</li>
+                        <li><strong>Correct Endpoint:</strong> <code>https://penguinai.derpygamer2142.com/v1/chat/completions</code></li>
+                        <li><strong>Include:</strong> In the request body, send JSON specifying the <code>model</code> (using the ID from step 1) and your <code>messages</code> (your prompt/question).</li>
+                        <li><strong>Example JSON Body:</strong> <code>{ "model": "model-001", "messages": [ { "role": "user", "content": "Your prompt here" } ] }</code></li>
+                        <li><strong>Example Request:</strong> <code>curl -X POST -H 'Content-Type: application/json' -d '{...}' https://penguinai.derpygamer2142.com/v1/chat/completions</code></li>
+                        <li><strong>What You Get:</strong> A JSON response containing the AI's generated text. The actual answer is located in the <code>choices[0].message.content</code> field.</li>
+                    </ul>
+                </li>
+            </ol>
+            <p><strong>In short: Always use <code>https://penguinai.derpygamer2142.com/...</code> instead of <code>http://penguinai.derpygamer2142.com/...</code> when calling the API from your <code>HTTPS</code> webpage.</strong></p>
+            <hr>
+            <h3>Model Instruction Example:</h3>
+            <p>Use "llama-3.1-8b-instruct" model. Instruct it to act as a fun, energetic participant in a Discord group chat. Responses should be short, between 1-2 sentences. Be positive and engaging. For example, if asked "What's up?", respond with something like "Hey! 👋 Just chilling and ready to chat! What about you?". Keep responses concise and chat-like.</p>
+        </div>
+        <div class="chat-area" id="chatArea">
+            <div class="message">
+                <div class="sender"><span class="avatar">😀</span>User1</div>
+                Hey everyone! 👋
+            </div>
+            <div class="message">
+                <div class="sender"><span class="avatar">🤖</span>PenguinAI</div>
+                Hello User1! 😄 What's going on in the chat today? Ready for some fun discussions!
+            </div>
+            <div class="message user">
+                <div class="sender"><span class="avatar">😎</span>You</div>
+                Yeah! Let's talk about football! ⚽
+            </div>
+            <div class="message">
+                <div class="sender"><span class="avatar">😀</span>User1</div>
+                Football! Awesome! Which team are you supporting this season? 🏆
+            </div>
+            <div class="message">
+                <div class="sender"><span class="avatar">🤖</span>PenguinAI</div>
+                Ooh, football! 🤩 I'm always excited for football season!  Let's hear all about your favorite teams and matches!
+            </div>
+        </div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="messageInput" placeholder="Type a message...">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+    <div class="activity-slider-container">
+        <span>Activity Level:</span>
+        <input type="range" id="activitySlider" min="1" max="5" value="3">
+        <span id="activityValue">3</span>
+    </div>
+
+    <script>
+        document.getElementById('activitySlider').addEventListener('input', function() {
+            document.getElementById('activityValue').textContent = this.value;
+        });
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const chatArea = document.getElementById('chatArea');
+            const messageText = messageInput.value;
+
+            if (messageText.trim() !== "") {
+                // Add user message to chat
+                const userMessageDiv = document.createElement('div');
+                userMessageDiv.classList.add('message', 'user');
+                userMessageDiv.innerHTML = `<div class="sender"><span class="avatar">😎</span>You</div>${messageText}`;
+                chatArea.appendChild(userMessageDiv);
+
+                messageInput.value = ""; // Clear input
+
+                // Simulate PenguinAI response (replace with actual API call if needed)
+                simulatePenguinAIResponse(messageText);
+            }
+        }
+
+        function simulatePenguinAIResponse(userMessage) {
+            const chatArea = document.getElementById('chatArea');
+            const activityLevel = document.getElementById('activitySlider').value;
+            let aiResponse = "";
+
+            // Simulate different responses based on user message and activity level
+            if (userMessage.toLowerCase().includes("football")) {
+                if (activityLevel >= 4) {
+                    aiResponse = "Football talk! ⚽⚽⚽ I'm super in!  Let's get hyped for the next match! Who's playing?";
+                } else {
+                    aiResponse = "Ah, football!  Always a good topic.  Are there any interesting games coming up?";
+                }
+            } else if (userMessage.toLowerCase().includes("hello") || userMessage.toLowerCase().includes("hi")) {
+                if (activityLevel >= 4) {
+                    aiResponse = "Heeeey! 👋👋👋 Glad you're here! What's the buzz?";
+                } else {
+                    aiResponse = "Hello there!  What's happening?";
+                }
+            } else {
+                if (activityLevel >= 4) {
+                    aiResponse = "Interesting! 🤔 Tell me more! I'm all ears! 👂👂";
+                } else {
+                    aiResponse = "That's interesting.  Could you elaborate?";
+                }
+            }
+
+
+            // Simulate API call delay (remove in real implementation)
+            setTimeout(() => {
+                const aiMessageDiv = document.createElement('div');
+                aiMessageDiv.classList.add('message');
+                aiMessageDiv.innerHTML = `<div class="sender"><span class="avatar">🤖</span>PenguinAI</div>${aiResponse}`;
+                chatArea.appendChild(aiMessageDiv);
+                chatArea.scrollTop = chatArea.scrollHeight; // Scroll to bottom
+            }, 500); // 500ms delay to simulate response time
+        }
+
+        // Optional: Send message on Enter key press
+        document.getElementById('messageInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

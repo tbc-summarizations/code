@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Status Checker - Response Time Edition</title>
+  <!-- Meta viewport tag for responsive design -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    /* Reset and base styles */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      text-align: center;
+      font-family: Helvetica, Arial, sans-serif;
+      background-color: #1e1e1e;
+      color: #e0e0e0;
+      padding: 20px;
+      font-size: 16px; /* Set base font size */
+    }
+    h1 {
+      margin-bottom: 20px;
+      color: #ffffff;
+      font-size: 2.5rem; /* Use rem units */
+      white-space: nowrap;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 800px; /* Limit the container width */
+      padding: 25px;
+      background-color: #333333;
+      border-radius: 12px;
+      box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.6);
+      margin-bottom: 30px;
+    }
+    input, textarea {
+      margin: 15px 0;
+      padding: 14px;
+      font-size: 1.1rem;
+      border-radius: 7px;
+      background-color: #2a2a2a;
+      color: #e0e0e0;
+      border: 1px solid #555555;
+      width: 100%;
+      box-sizing: border-box;
+      transition: border-color 0.3s;
+    }
+    input:focus, textarea:focus {
+      border-color: #80bdff;
+      outline: 0;
+      box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    button {
+      cursor: pointer;
+      background-color: #007bff; /* Primary button color */
+      color: white;
+      border: none;
+      padding: 14px 24px;
+      border-radius: 7px;
+      font-size: 1.1rem;
+      transition: background-color 0.3s;
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 15px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    button:hover {
+      background-color: #0056b3; /* Darker shade for hover */
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+    }
+    button:active {
+      background-color: #004085; /* Even darker shade for active */
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      transform: translateY(1px);
+    }
+    button:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+    .status-section {
+      margin-top: 30px;
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .status-section h2 {
+      margin-bottom: 15px;
+      font-size: 1.8rem;
+      color: #ffffff;
+    }
+    .status-section table {
+      width: 100%;
+      border-collapse: collapse;
+      border-radius: 12px;
+      overflow: hidden;
+      background-color: #333333;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+      margin-bottom: 30px; /* Space between tables */
+    }
+    .status-section th, .status-section td {
+      padding: 16px;
+      border: 1px solid #555555;
+      text-align: left;
+      font-size: 1.1rem;
+    }
+    .status-section th {
+      background-color: #444444;
+      color: #f0f0f0;
+      font-weight: bold;
+    }
+    /* Adjust column widths */
+    .status-section th.name, .status-section td.name {
+      width: 50%; /* Name column takes up 50% */
+      word-wrap: break-word;
+    }
+    .status-section th.up, .status-section td.up,
+    .status-section th.req, .status-section td.req,
+    .status-section th.time, .status-section td.time {
+      width: 16.66%; /* Each of Up, Req, Time columns take up roughly equal width */
+      text-align: center;
+    }
+    .status-section td.up.green, .status-section td.req.green {
+      background-color: #28a745; /* Green */
+      color: #ffffff;
+    }
+    .status-section td.up.red, .status-section td.req.red {
+      background-color: #dc3545; /* Red */
+      color: #ffffff;
+    }
+    .status-section td.req.yellow {
+      background-color: #ffc107; /* Yellow */
+      color: #ffffff;
+    }
+    .status-section td.proxy {
+      background-color: #5a3da3; /* Shade of Purple, slightly lighter */
+      color: #ffffff;
+      font-weight: bold;
+    }
+    .message {
+      margin-top: 25px;
+      font-size: 1.2rem;
+      color: #ffffff;
+    }
+    /* Progress Bar Styles */
+    .progress-wrapper {
+      width: 100%;
+      max-width: 800px;
+      display: none; /* Initially hidden */
+      align-items: center;
+      margin-top: 25px;
+    }
+    .progress-container {
+      flex: 1;
+      background-color: #555555;
+      height: 24px;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background-color: #28a745;
+      border-radius: 7px;
+      transition: width 0.1s linear;
+    }
+    #cancelButton {
+      margin-left: 15px;
+      width: auto;
+      height: 100%;
+      padding: 8px 16px;
+      font-size: 1.1rem;
+      background-color: #dc3545;
+      border-radius: 7px;
+      cursor: pointer;
+      color: white;
+      border: none;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    #cancelButton:hover {
+      background-color: #c82333;
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+    }
+    #cancelButton:active {
+      background-color: #b21b2b;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      transform: translateY(1px);
+    }
+    /* Responsive Styles */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2.3rem;
+      }
+      .container {
+        padding: 20px;
+      }
+      input, textarea {
+        font-size: 1.1rem;
+        padding: 14px;
+      }
+      button, #cancelButton {
+        font-size: 1.1rem;
+        padding: 14px 20px;
+      }
+      .status-section h2 {
+        font-size: 1.7rem;
+      }
+      .status-section th, .status-section td {
+        padding: 14px;
+        font-size: 1.0rem;
+      }
+      .message {
+        font-size: 1.1rem;
+      }
+    }
+    @media (max-width: 480px) {
+      h1 {
+        font-size: 2.0rem;
+      }
+      .container {
+        padding: 15px;
+      }
+      input, textarea {
+        font-size: 1.0rem;
+        padding: 12px;
+      }
+      button, #cancelButton {
+        font-size: 1.0rem;
+        padding: 12px 16px;
+      }
+      .status-section h2 {
+        font-size: 1.6rem;
+      }
+      .status-section th, .status-section td {
+        padding: 12px;
+        font-size: 0.9rem;
+      }
+      .message {
+        font-size: 1.0rem;
+      }
+    }
+    /* Improve touch target sizes */
+    button, input, textarea, #cancelButton {
+      touch-action: manipulation;
+    }
+  </style>
+</head>
+<body>
+  <h1>Status Checker</h1>
+  <div class="container">
+    <input type="text" id="apiUrl" placeholder='Enter URL with "/v1" at the end (leave blank for default)'>
+    <button id="checkButton" onclick="checkStatus()">Check Status</button>
+    <!-- Progress Wrapper -->
+    <div class="progress-wrapper" id="progressWrapper">
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <button id="cancelButton" onclick="cancelStatusCheck()">Cancel</button>
+    </div>
+  </div>
+  <div class="status-section" id="statusSection">
+    <h2>Model Status</h2>
+    <table id="statusTable">
+      <tr>
+        <th class="name">Name</th>
+        <th class="up">Up</th>
+        <th class="req">Req</th>
+        <th class="time">Avg. Time (ms)</th>
+      </tr>
+      <!-- Rows will be added here dynamically -->
+    </table>
+
+    <h2>Working Models - Response Times</h2>
+    <table id="workingModelsTable">
+      <tr>
+        <th class="name">Name</th>
+        <th class="time">Avg. Response Time (ms)</th>
+      </tr>
+      <!-- Working model rows will be added here -->
+    </table>
+  </div>
+  <!-- Copy Results Button -->
+  <button id="copyButton" onclick="copyResults()" style="display: none; width: 100%; max-width: 800px; margin-top: 25px;">Copy Results</button>
+
+  <script>
+    let currentAbortController = null;
+    let pendingReqCells = [];
+    let workingModelsData = []; // Array to store working models and their times
+
+    async function getDefaultProxy(signal) {
+      const defaultProxyUrl = 'https://mubilop.tech/proxy';
+      try {
+        const response = await fetch(defaultProxyUrl, { signal });
+        if (response.ok) {
+          const proxy = await response.text();
+          return proxy.trim();
+        } else {
+          throw new Error(`Failed to retrieve default proxy: ${response.status} ${response.statusText}`);
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.log('Default proxy fetch aborted.');
+        } else {
+          console.error('Error retrieving default proxy:', error);
+          alert('Error retrieving default proxy. Please enter a valid API URL.');
+        }
+        return null;
+      }
+    }
+
+    async function checkProxy(apiUrl, signal) {
+      try {
+        const response = await fetch(apiUrl, { signal });
+        return response.ok;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.log('Proxy check aborted.');
+        } else {
+          console.error('Error checking proxy:', error);
+        }
+        return false;
+      }
+    }
+
+    async function getModels(apiUrl, signal) {
+      try {
+        const response = await fetch(`${apiUrl}/models`, { signal });
+        if (response.ok) {
+          const data = await response.json();
+          return data.data || [];
+        } else {
+          console.error(`Error fetching models: ${response.status} ${response.statusText}`);
+          return [];
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.log('Get models fetch aborted.');
+        } else {
+          console.error('Error fetching models:', error);
+        }
+        return [];
+      }
+    }
+
+    async function checkModelUp(apiUrl, modelId, signal) {
+      try {
+        const response = await fetch(`${apiUrl}/api/working?model=${modelId}`, { signal });
+        if (response.ok) {
+          const data = await response.text();
+          return data.trim().toLowerCase() === 'true';
+        } else {
+          console.error(`Error checking proxy status for model ${modelId}: ${response.status} ${response.statusText}`);
+          return false;
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.log(`Proxy check for model ${modelId} aborted.`);
+        } else {
+          console.error(`Error checking proxy status for model ${modelId}:`, error);
+        }
+        return false;
+      }
+    }
+
+    async function checkModelStatus(apiUrl, modelId, upCell, reqCell, timeCell, signal) {
+      const numTests = 5;
+      let totalTime = 0;
+      let successCount = 0;
+      let error = null;
+
+      for (let i = 0; i < numTests; i++) {
+        if (signal.aborted) return null; // Check for abort signal before each test
+        const startTime = performance.now();
+        try {
+          const response = await fetch(`${apiUrl}/chat/completions`, {
+            method: 'POST',
+            signal,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: modelId,
+              messages: [
+                { role: 'user', content: 'please output only a period "." to make sure you are online' }
+              ]
+            })
+          });
+
+          if (response.ok) {
+            const endTime = performance.now();
+            totalTime += (endTime - startTime);
+            successCount++;
+          } else {
+            console.error(`Test ${i+1} failed for model ${modelId}: ${response.status} ${response.statusText}`);
+          }
+        } catch (fetchError) {
+          if (fetchError.name !== 'AbortError') {
+            console.error(`Error in test ${i+1} for model ${modelId}:`, fetchError);
+            error = fetchError; // Capture the error if it's not abort
+          }
+          break; // Break out of the loop if there's a non-abort error
+        }
+      }
+
+      if (signal.aborted) {
+        console.log(`Check model ${modelId} status aborted during tests.`);
+        return null;
+      }
+
+      if (successCount > 0) {
+        const averageTime = (totalTime / successCount).toFixed(0);
+        reqCell.textContent = '✓';
+        reqCell.classList.remove('yellow');
+        reqCell.classList.add('green');
+        timeCell.textContent = `${averageTime}ms`;
+        upCell.textContent = '✓'; // Update Up status to ✓ and green if at least one req is successful
+        upCell.classList.remove('red');
+        upCell.classList.add('green');
+        return { modelId: modelId, avgTime: averageTime }; // Return data for working models table
+      } else {
+        reqCell.textContent = '✗';
+        reqCell.classList.remove('yellow');
+        reqCell.classList.add('red');
+        timeCell.textContent = 'N/A';
+        upCell.textContent = '✗'; // Update Up status to ✗ and red if all reqs failed
+        upCell.classList.remove('green');
+        upCell.classList.add('red');
+        return null; // Indicate not working
+      }
+    }
+
+
+    function formatModelName(modelId) {
+      return modelId.toLowerCase();
+    }
+
+    async function checkStatus() {
+      // If there's an ongoing process, abort it
+      if (currentAbortController) {
+        currentAbortController.abort();
+      }
+
+      // Create a new AbortController for the new process
+      currentAbortController = new AbortController();
+      const { signal } = currentAbortController;
+
+      const apiUrlInput = document.getElementById('apiUrl').value.trim();
+      const statusTable = document.getElementById('statusTable');
+      const workingModelsTable = document.getElementById('workingModelsTable');
+      const checkButton = document.getElementById('checkButton');
+      const progressWrapper = document.getElementById('progressWrapper');
+      const progressBar = document.getElementById('progressBar');
+      const cancelButton = document.getElementById('cancelButton');
+      const copyButton = document.getElementById('copyButton');
+
+      // Disable the button to prevent multiple clicks
+      checkButton.disabled = true;
+      workingModelsData = []; // Clear previous working models data
+
+      // Reset progress bar
+      progressBar.style.width = '0%';
+      progressWrapper.style.display = 'flex';
+      cancelButton.style.display = 'block';
+      copyButton.style.display = 'none'; // Hide the copy button
+
+      // Clear previous status and headers for both tables
+      statusTable.innerHTML = `
+        <tr>
+          <th class="name">Name</th>
+          <th class="up">Up</th>
+          <th class="req">Req</th>
+          <th class="time">Avg. Time (ms)</th>
+        </tr>
+      `;
+      workingModelsTable.innerHTML = `
+        <tr>
+          <th class="name">Name</th>
+          <th class="time">Avg. Response Time (ms)</th>
+        </tr>
+      `;
+
+
+      pendingReqCells = []; // Reset pendingReqCells
+
+      let apiUrl = apiUrlInput;
+      if (!apiUrl) {
+        apiUrl = await getDefaultProxy(signal);
+        if (!apiUrl) {
+          progressWrapper.style.display = 'none';
+          checkButton.disabled = false;
+          cancelButton.style.display = 'none';
+          return;
+        }
+      } else {
+        if (!apiUrl.startsWith('http')) {
+          apiUrl = 'https://' + apiUrl;
+        }
+      }
+
+      const proxyWorking = await checkProxy(apiUrl, signal);
+      if (signal.aborted) {
+        progressWrapper.style.display = 'none';
+        checkButton.disabled = false;
+        cancelButton.style.display = 'none';
+        return;
+      }
+
+      // Add Proxy status to table
+      const proxyRow = addRowToTable(apiUrl, proxyWorking, true);
+      const proxyUpCell = proxyRow.upCell;
+      const proxyReqCell = proxyRow.reqCell;
+      const proxyTimeCell = proxyRow.timeCell;
+
+
+      if (!proxyWorking) {
+        progressWrapper.style.display = 'none';
+        checkButton.disabled = false;
+        cancelButton.style.display = 'none';
+        return;
+      } else {
+        // Update proxy's "Req" cell to '✓' and make it green
+        proxyReqCell.textContent = '✓';
+        proxyReqCell.classList.add('green');
+        proxyTimeCell.textContent = 'N/A'; // Proxy time is not measured
+      }
+
+      const models = await getModels(apiUrl, signal);
+      if (signal.aborted) {
+        progressWrapper.style.display = 'none';
+        checkButton.disabled = false;
+        cancelButton.style.display = 'none';
+        return;
+      }
+
+      // Filter out ImageGen models
+      const filteredModels = models.filter(model => model.type !== 'images.generations');
+
+      if (filteredModels.length === 0) {
+        progressWrapper.style.display = 'none';
+        checkButton.disabled = false;
+        cancelButton.style.display = 'none';
+        return;
+      }
+
+      // Prepare progress tracking
+      const totalModels = filteredModels.length;
+      let completedModels = 0;
+
+      // Set the total duration for the progress bar (in milliseconds) - adjusted for 5 tests per model
+      const totalDuration = 102000 * 5; // 1.7 minutes * 5 tests = 8.5 minutes = 510,000 milliseconds (original was 102000 for 1 test)
+      const startTime = Date.now();
+
+      const updateProgressBar = () => {
+        const elapsedTime = Date.now() - startTime;
+        const estimatedCompletion = Math.min(elapsedTime / totalDuration, 1);
+        const progressByTime = estimatedCompletion * 100;
+        const progressByModels = (completedModels / totalModels) * 100;
+        const progress = Math.max(progressByTime, progressByModels);
+        progressBar.style.width = `${progress}%`;
+      };
+
+      // Start checking models
+      const modelPromises = filteredModels.map(async (model) => {
+        const modelId = model.id || 'unknown-id';
+        const modelName = formatModelName(modelId);
+
+        // Attempt to check if the model is up
+        const isUp = await checkModelUp(apiUrl, modelId, signal);
+        if (signal.aborted) {
+          return;
+        }
+
+        // Add the row to the table and get the status cells
+        const { upCell, reqCell, timeCell } = addRowToTable(modelName, isUp, false);
+
+        // Start the prompt request regardless of isUp
+        const workingModelResult = await checkModelStatus(apiUrl, modelId, upCell, reqCell, timeCell, signal);
+
+        if (workingModelResult) {
+          workingModelsData.push(workingModelResult); // Add to working models data if successful
+        }
+
+        // Update progress
+        completedModels += 1;
+        updateProgressBar();
+      });
+
+      // Periodically update the progress bar based on time
+      const progressInterval = setInterval(() => {
+        if (completedModels >= totalModels || signal.aborted) {
+          clearInterval(progressInterval);
+          return;
+        }
+        updateProgressBar();
+      }, 1000); // Update every second
+
+      // Wait for all model checks to complete
+      await Promise.all(modelPromises);
+
+      // Ensure progress bar is full
+      progressBar.style.width = '100%';
+
+      // Populate the working models table
+      populateWorkingModelsTable();
+
+      progressWrapper.style.display = 'none';
+      checkButton.disabled = false;
+      cancelButton.style.display = 'none';
+      copyButton.style.display = 'block'; // Show the copy button
+    }
+
+    /**
+     * Adds a row to the status table.
+     * @param {string} name - The name of the model or proxy.
+     * @param {boolean} isUp - Indicates if the model is up (for the "Up" column).
+     * @param {boolean} isProxy - Indicates if the row is for the proxy.
+     * @returns {Object} - Contains upCell, reqCell, and timeCell elements.
+     */
+    function addRowToTable(name, isUp, isProxy) {
+      const statusTable = document.getElementById('statusTable');
+      const row = document.createElement('tr');
+
+      const nameCell = document.createElement('td');
+      nameCell.textContent = name;
+      nameCell.classList.add('name');
+      if (isProxy) {
+        nameCell.classList.add('proxy'); // Apply proxy-specific styling
+      }
+      row.appendChild(nameCell);
+
+      const upCell = document.createElement('td');
+      upCell.classList.add('up');
+      if (isProxy) {
+        upCell.textContent = isUp ? '✓' : '✗';
+        upCell.classList.add(isUp ? 'green' : 'red');
+      } else {
+        upCell.textContent = isUp ? '✓' : '✗';
+        upCell.classList.add(isUp ? 'green' : 'red');
+      }
+      row.appendChild(upCell);
+
+      const reqCell = document.createElement('td');
+      reqCell.classList.add('req');
+
+      if (isProxy) {
+        if (isUp) {
+          reqCell.textContent = '✓';
+          reqCell.classList.add('green');
+        } else {
+          reqCell.textContent = '✗';
+          reqCell.classList.add('red');
+        }
+      } else {
+        reqCell.textContent = '~'; // Indicates pending request
+        reqCell.classList.add('yellow');
+        pendingReqCells.push(reqCell); // Add to pendingReqCells for models
+      }
+      row.appendChild(reqCell);
+
+      const timeCell = document.createElement('td');
+      timeCell.classList.add('time');
+      timeCell.textContent = '...'; // Initial loading state for time
+      row.appendChild(timeCell);
+
+
+      statusTable.appendChild(row);
+
+      if (!isProxy) {
+        return { upCell, reqCell, timeCell };
+      } else {
+        return { upCell, reqCell, timeCell };
+      }
+    }
+
+    function populateWorkingModelsTable() {
+      const workingModelsTable = document.getElementById('workingModelsTable');
+      // Sort working models by average time (optional, but makes sense to show fastest first)
+      workingModelsData.sort((a, b) => parseFloat(a.avgTime) - parseFloat(b.avgTime));
+
+      workingModelsData.forEach(modelData => {
+        const row = document.createElement('tr');
+
+        const nameCell = document.createElement('td');
+        nameCell.textContent = formatModelName(modelData.modelId);
+        nameCell.classList.add('name');
+        row.appendChild(nameCell);
+
+        const timeCell = document.createElement('td');
+        timeCell.classList.add('time');
+        timeCell.textContent = `${modelData.avgTime}ms`;
+        timeCell.style.textAlign = 'center'; // Center align time in working models table
+        row.appendChild(timeCell);
+
+        workingModelsTable.appendChild(row);
+      });
+    }
+
+
+    function cancelStatusCheck() {
+      if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+
+        // Update remaining reqCells
+        pendingReqCells.forEach(reqCell => {
+          reqCell.textContent = '✗';
+          reqCell.classList.remove('yellow');
+          reqCell.classList.add('red');
+        });
+
+        // Clear pendingReqCells
+        pendingReqCells = [];
+
+        // Update UI
+        const progressBar = document.getElementById('progressBar');
+        const progressWrapper = document.getElementById('progressWrapper');
+        const cancelButton = document.getElementById('cancelButton');
+        const copyButton = document.getElementById('copyButton');
+        const checkButton = document.getElementById('checkButton');
+
+        progressBar.style.width = '100%';
+        progressWrapper.style.display = 'none';
+        cancelButton.style.display = 'none';
+        copyButton.style.display = 'block';
+        checkButton.disabled = false;
+      }
+    }
+
+    function copyResults() {
+      const statusTable = document.getElementById('statusTable');
+      const rows = statusTable.querySelectorAll('tr');
+      const workingModelsTable = document.getElementById('workingModelsTable');
+      const workingRows = workingModelsTable.querySelectorAll('tr');
+
+      let resultsText = 'Model Status Report:\n\nModel Status Overview:\n';
+
+      let totalModels = 0;
+      let totalUp = 0;
+      let successful = 0;
+      let failed = 0;
+
+      // Skip the header row (index 0)
+      for (let i = 1; i < rows.length; i++) {
+        const cells = rows[i].querySelectorAll('td');
+        const name = cells[0].textContent.trim();
+        const up = cells[1].textContent.trim();
+        const req = cells[2].textContent.trim();
+        const time = cells[3].textContent.trim();
+
+        // Skip the proxy row
+        if (cells[0].classList.contains('proxy')) {
+          continue;
+        }
+
+        totalModels += 1;
+
+        const upIcon = (up === '✓' || up === '✅') ? '✅' : '❌';
+        if (upIcon === '✅') totalUp += 1;
+
+        const reqIcon = (req === '✓' || req === '✅') ? '✅' : '❌';
+        if (reqIcon === '✅') {
+          successful += 1;
+        } else if (reqIcon === '❌') {
+          failed += 1;
+        }
+
+        const modelName = name.replace(/\s+/g, '-').toLowerCase();
+        resultsText += `${modelName} > Up: ${upIcon} | Req: ${reqIcon} | Avg Time: ${time}\n`;
+      }
+
+      resultsText += `\nWorking Models - Response Times:\n`;
+      if (workingRows.length > 1) { // Check if there are working models to report
+        for (let i = 1; i < workingRows.length; i++) {
+          const cells = workingRows[i].querySelectorAll('td');
+          const name = cells[0].textContent.trim();
+          const time = cells[1].textContent.trim();
+          resultsText += `${name} > Avg Response Time: ${time}\n`;
+        }
+      } else {
+        resultsText += 'No working models with response times to report.\n';
+      }
+
+
+      resultsText += `\nSummary:\nTotal Models: ${totalModels} | Total Up: ${totalUp} | Successful Reqs: ${successful} | Failed Reqs: ${failed}`;
+
+      // Copy resultsText to clipboard
+      navigator.clipboard.writeText(resultsText)
+        .then(() => {
+          alert('Results copied to clipboard.');
+        })
+        .catch(err => {
+          console.error('Failed to copy results:', err);
+          alert('Failed to copy results.');
+        });
+    }
+  </script>
+</body>
+</html>

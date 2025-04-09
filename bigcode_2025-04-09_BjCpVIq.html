@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Chat Simulation</title>
+    <style>
+        :root {
+            --background-color: #36393f;
+            --chat-input-bg: #40444b;
+            --text-color: #dcddde;
+            --timestamp-color: #72767d;
+            --username-color: #ffffff;
+            --message-hover-bg: #32353b;
+            --slider-thumb-color: #7289da;
+            --slider-track-color: #40444b;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .chat-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 15px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: background-color 0.2s ease;
+        }
+
+        .message:hover {
+            background-color: var(--message-hover-bg);
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--chat-input-bg); /* Placeholder shape */
+            margin-right: 15px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px; /* For emoji avatars */
+        }
+
+        .message-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .username {
+            font-weight: 500;
+            color: var(--username-color);
+            margin-bottom: 3px;
+        }
+
+        .timestamp {
+            font-size: 0.75rem;
+            color: var(--timestamp-color);
+            margin-left: 8px;
+        }
+
+        .text {
+            line-height: 1.4;
+            word-wrap: break-word;
+            white-space: pre-wrap; /* Preserve whitespace and newlines */
+        }
+
+        .controls {
+            padding: 15px 20px;
+            background-color: var(--chat-input-bg);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-top: 1px solid #2f3136;
+        }
+
+        .controls label {
+            font-size: 0.9rem;
+        }
+
+        #activitySlider {
+            flex-grow: 1;
+            cursor: pointer;
+            appearance: none;
+            height: 8px;
+            background: var(--slider-track-color);
+            border-radius: 4px;
+            outline: none;
+        }
+
+        #activitySlider::-webkit-slider-thumb {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--slider-thumb-color);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        #activitySlider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: var(--slider-thumb-color);
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+
+        .activity-value {
+            min-width: 20px;
+            text-align: right;
+            font-weight: bold;
+        }
+
+        /* Simple shape example if emoji isn't desired */
+        .avatar.shape-square { background-color: #7289da; border-radius: 5px; }
+        .avatar.shape-triangle {
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-bottom: 35px solid #43b581; /* Example color */
+            background-color: transparent;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="chat-messages" class="chat-container">
+        <!-- Messages will be appended here -->
+    </div>
+
+    <div class="controls">
+        <label for="activitySlider">Activity:</label>
+        <input type="range" id="activitySlider" min="0" max="10" value="3">
+        <span id="activityValue" class="activity-value">3</span>
+    </div>
+
+    <script>
+        const chatMessagesContainer = document.getElementById('chat-messages');
+        const activitySlider = document.getElementById('activitySlider');
+        const activityValueDisplay = document.getElementById('activityValue');
+
+        const PENGUINAI_API_ENDPOINT = "https://penguinai.derpygamer2142.com/v1/chat/completions";
+        const MODEL_ID = "llama-3.1-8b-instruct";
+        const MAX_HISTORY = 8; // Keep more history for better context
+        const MAX_TOKENS_PER_MESSAGE = 60; // Slightly longer responses allowed
+
+        const users = [
+            { name: "GamerGuy42", avatar: "🎮" },
+            { name: "PixelPioneer", avatar: "👾" },
+            { name: "ChattyCathy", avatar: "💬" },
+            { name: "MemeMaster", avatar: "😂" },
+            { name: "CodeWizard", avatar: "💻" },
+            { name: "ArtisticAnt", avatar: "🎨" }
+        ];
+        let currentUserIndex = 0;
+        let chatHistory = [];
+        let messageInterval;
+        let isGenerating = false; // Prevent multiple simultaneous requests
+
+        // --- Core API Call Function ---
+        async function callPenguinAI(promptMessages) {
+            console.log("Calling PenguinAI with model:", MODEL_ID);
+            try {
+                const response = await fetch(PENGUINAI_API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // PenguinAI proxy might not need auth, but add if required:
+                        // 'Authorization': `Bearer YOUR_API_KEY_IF_NEEDED`
+                    },
+                    body: JSON.stringify({
+                        model: MODEL_ID,
+                        messages: promptMessages,
+                        max_tokens: MAX_TOKENS_PER_MESSAGE,
+                        temperature: 0.75, // Balanced creativity and coherence
+                        top_p: 0.9, // Nucleus sampling
+                        // stop: ["\n"] // Optional: Stop generation at newline if needed, but might cut off sentences
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    console.error("API Error Response Body:", errorBody);
+                    throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log("API Response:", data);
+
+                if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
+                    return data.choices[0].message.content.trim();
+                } else {
+                    console.error("Invalid response structure:", data);
+                    return "[Error: Invalid AI response structure]";
+                }
+            } catch (error) {
+                console.error("Error calling PenguinAI:", error);
+                // Provide more specific error feedback if possible
+                if (error instanceof TypeError && error.message.includes('fetch')) {
+                     return "[Error: Network issue or CORS problem. Ensure the API is accessible via HTTPS.]";
+                }
+                 return `[Error: Failed to get AI response - ${error.message}]`;
+            }
+        }
+
+        // --- Message Display Function ---
+        function displayMessage(username, avatar, text) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+
+            const avatarElement = document.createElement('span');
+            avatarElement.classList.add('avatar');
+            avatarElement.textContent = avatar; // Use emoji directly
+
+            const contentElement = document.createElement('div');
+            contentElement.classList.add('message-content');
+
+            const usernameElement = document.createElement('div');
+            usernameElement.classList.add('username');
+            usernameElement.textContent = username;
+
+            // Add a simple timestamp (client-side)
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const timestampElement = document.createElement('span');
+            timestampElement.classList.add('timestamp');
+            timestampElement.textContent = time;
+            usernameElement.appendChild(timestampElement);
+
+
+            const textElement = document.createElement('div');
+            textElement.classList.add('text');
+            // Basic sanitation (replace potential HTML tags)
+            textElement.textContent = text; // Using textContent automatically handles basic escaping
+
+            contentElement.appendChild(usernameElement);
+            contentElement.appendChild(textElement);
+
+            messageElement.appendChild(avatarElement);
+            messageElement.appendChild(contentElement);
+
+            chatMessagesContainer.appendChild(messageElement);
+            // Scroll to bottom smoothly
+            chatMessagesContainer.scrollTo({ top: chatMessagesContainer.scrollHeight, behavior: 'smooth' });
+
+             // Update chat history (only keep user messages relevant for context)
+            if (username !== "System") {
+                chatHistory.push({ role: "assistant", name: username, content: text }); // Simulate assistant role for context
+                 if (chatHistory.length > MAX_HISTORY) {
+                    chatHistory.shift(); // Keep history size limited
+                }
+            }
+        }
+
+
+        // --- AI Message Generation Logic ---
+        async function generateAIMessage() {
+            if (isGenerating) {
+                console.log("Already generating, skipping this interval.");
+                return;
+            }
+            isGenerating = true;
+
+            const currentUser = users[currentUserIndex % users.length];
+            const otherUsers = users.filter(u => u.name !== currentUser.name).map(u => u.name);
+            currentUserIndex++;
+
+            // Construct the prompt with clear instructions and examples
+            // Using a mix of system and user/assistant roles for context history
+             let promptBase = [
+                {
+                    "role": "system",
+                    "content": `You are ${currentUser.name}, participating in a fun, casual Discord group chat simulation. The other members are ${otherUsers.join(', ')}.
+Your goal is to generate ONE short, natural-sounding chat message (1-3 sentences, max ${MAX_TOKENS_PER_MESSAGE} tokens).
+Be conversational: React to previous messages, ask questions, share quick thoughts, use emojis (like 🎉, 🎮, 🍿, 😂, 🤔, 👍, 👎, 👀, 🔥), or talk about random fun stuff.
+Keep the tone lighthearted, friendly, informal, and sometimes humorous. Use internet slang or abbreviations occasionally if natural (e.g., lol, brb, idk, wyd).
+ABSOLUTELY DO NOT act like an AI assistant. Do not use formal language. Do not start messages with things like "Certainly!", "Here is a message:", or self-references like "As [Your Name]...". Just type the message directly.
+Mention other users sometimes by name (e.g., "@GamerGuy42 what game?", "lol @MemeMaster").
+Make sure your response is ONLY the chat message content itself, without your name prefixed.
+
+Good Examples:
+- "lol @PixelPioneer that map was crazy hard 😅"
+- "Anyone seen that new sci-fi movie? 🍿 Worth watching?"
+- "brb gotta walk the dog 🐕"
+- "@ChattyCathy wyd later? Wanna group up? 🎮"
+- "Just found this hilarious meme 😂 [link or description]"
+- "oof, mondays amirite? 😴"
+- "🔥🔥🔥"
+- "idk about that..."
+
+Bad Examples (Avoid):
+- "As GamerGuy42, I think..."
+- "Certainly! Here's a fun message:"
+- "Hello everyone, I am here to chat."
+- (Overly long paragraphs or formal analysis)
+
+Consider the recent chat history for context.`
+                }
+            ];
+
+            // Add chat history to the prompt messages
+            const historyForPrompt = chatHistory.map(msg => ({
+                 // Map stored history back to API's expected roles
+                 role: msg.role === 'user' ? 'user' : 'assistant', // Assume past AI messages are 'assistant'
+                 // Include name in content for clarity in the prompt, though AI should *not* mimic this format in output
+                 content: `${msg.name}: ${msg.content}`
+            }));
+
+            let promptMessages = [...promptBase, ...historyForPrompt];
+
+             // Add the final user instruction
+             promptMessages.push({
+                "role": "user",
+                "content": `Now, write your next chat message as ${currentUser.name}. Keep it brief and natural, like a real person chatting.`
+            });
+
+            console.log("Sending Prompt Messages:", JSON.stringify(promptMessages, null, 2)); // Log the exact prompt being sent
+
+            const aiResponseText = await callPenguinAI(promptMessages);
+
+            if (aiResponseText && !aiResponseText.startsWith("[")) { // Check for actual text and not our error messages
+                // Simple filtering for common unwanted AI phrases (case-insensitive)
+                const forbiddenPhrases = [
+                    "as an ai", "language model", "certainly", "here is", "here's",
+                    "okay, here", "response:", "message:", `${currentUser.name}:` // Avoid self-labeling
+                ];
+                let cleanResponse = aiResponseText;
+
+                // Remove potential quoting or leading labels added by AI
+                cleanResponse = cleanResponse.replace(/^["'“‘]?\s*.*?\s*[:\-–]\s*/, ''); // Remove "User:" "AI:" etc.
+                cleanResponse = cleanResponse.replace(/^["'“‘]/, '').replace(/["'”’]$/, ''); // Remove surrounding quotes
+
+
+                const isForbidden = forbiddenPhrases.some(phrase => cleanResponse.toLowerCase().startsWith(phrase.toLowerCase()));
+
+                if (!isForbidden && cleanResponse.length > 0 && cleanResponse.length < 200) { // Basic sanity checks
+                    displayMessage(currentUser.name, currentUser.avatar, cleanResponse);
+                     // Add *this* message to history with the 'assistant' role for next turn context
+                    // We store it slightly differently here than how we display it for the prompt
+                     chatHistory.push({ role: "assistant", name: currentUser.name, content: cleanResponse });
+                     if (chatHistory.length > MAX_HISTORY) {
+                        chatHistory.shift();
+                     }
+                } else {
+                    console.warn("Filtered out potentially bad AI response:", aiResponseText);
+                    // Optionally display a system message or just skip
+                     // displayMessage("System", "⚠️", `AI response filtered for user ${currentUser.name}.`);
+                }
+            } else {
+                 // Display the error message received from callPenguinAI
+                 displayMessage("System", "⚠️", `Error generating message for ${currentUser.name}: ${aiResponseText}`);
+            }
+            isGenerating = false; // Allow next generation
+        }
+
+        // --- Slider and Interval Control ---
+        function updateActivity() {
+            clearInterval(messageInterval);
+            const activityValue = parseInt(activitySlider.value, 10);
+            activityValueDisplay.textContent = activityValue;
+
+            if (activityValue > 0) {
+                // Exponential scaling for interval: more sensitive at higher levels
+                // Level 1: ~15s, Level 5: ~5s, Level 10: ~2s
+                const baseInterval = 15000; // 15 seconds at level 1
+                const scaleFactor = 1.4;
+                const intervalTime = Math.max(2000, baseInterval / Math.pow(scaleFactor, activityValue - 1));
+
+                console.log(`Setting interval for activity ${activityValue}: ${intervalTime.toFixed(0)}ms`);
+                messageInterval = setInterval(generateAIMessage, intervalTime);
+            } else {
+                console.log("Activity set to 0, stopping automatic messages.");
+            }
+        }
+
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', () => {
+            activitySlider.addEventListener('input', () => {
+                 activityValueDisplay.textContent = activitySlider.value; // Update display immediately
+            });
+             activitySlider.addEventListener('change', updateActivity); // Update interval only when slider is released
+
+            // Initial welcome message
+            displayMessage("System", "⚙️", `Chat simulation started! Model: ${MODEL_ID}. Adjust the slider to control message frequency.`);
+            chatHistory.push({role: "system", name: "System", content: "Chat started."}); // Seed history
+
+            // Start with initial slider value
+            updateActivity();
+
+            // Optionally generate one message immediately on load if activity > 0
+             if (parseInt(activitySlider.value, 10) > 0) {
+                 setTimeout(generateAIMessage, 1000); // Small delay after initial load
+             }
+        });
+
+    </script>
+
+</body>
+</html>

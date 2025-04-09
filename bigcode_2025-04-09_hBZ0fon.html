@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy Checker 🌐</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #007BFF;
+        }
+        #message {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+        }
+        #input-area {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        textarea, input[type="text"] {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #results {
+            display: none;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        #totalTime {
+            font-weight: bold;
+        }
+        .working { color: green; }
+        .non-working { color: red; }
+        .emoji-square {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background-color: green;
+            margin-right: 5px;
+        }
+        .emoji-triangle {
+            display: inline-block;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 10px solid red;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <h1>Proxy Checker 🌐</h1>
+    <div id="message"></div>
+    <div id="input-area">
+        <label for="proxyList">Proxy List (one proxy per line):</label>
+        <textarea id="proxyList" rows="10" placeholder="Enter proxies here (e.g., 127.0.0.1:8080)"></textarea>
+        <label for="targetUrl">Target URL to Check:</label>
+        <input type="text" id="targetUrl" value="https://example.com" placeholder="Enter target URL">
+        <button onclick="checkProxies()">Check Proxies</button>
+    </div>
+    <div id="results">
+        <h2>Working Proxies ✅</h2>
+        <table id="workingTable">
+            <thead>
+                <tr>
+                    <th>Proxy</th>
+                    <th>Average Response Time (ms)</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+        <h2>Non-Working Proxies ❌</h2>
+        <table id="nonWorkingTable">
+            <thead>
+                <tr>
+                    <th>Proxy</th>
+                </tr>
+            </thead>
+            <tbody>
+            </tbody>
+        </table>
+        <p>Total Test Time: <span id="totalTime"></span> ms</p>
+    </div>
+
+    <script>
+        function getParameterByName(name, url = window.location.href) {
+            name = name.replace(/[\[\]]/g, '\\$&');
+            var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+                results = regex.exec(url);
+            if (!results) return null;
+            if (!results[2]) return '';
+            return decodeURIComponent(results[2].replace(/\+/g, ' '));
+        }
+
+        window.onload = function() {
+            if (!getParameterByName('req')) {
+                document.getElementById('message').textContent = 'This page requires the "req" parameter to function.';
+                document.getElementById('input-area').style.display = 'none';
+                return;
+            }
+            document.getElementById('message').textContent = 'Checking proxies...';
+        };
+
+        async function checkProxies() {
+            if (!getParameterByName('req')) {
+                document.getElementById('message').textContent = 'This page requires the "req" parameter to function.';
+                document.getElementById('input-area').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('message').textContent = 'Testing proxies, please wait... ⏳';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('workingTable').querySelector('tbody').innerHTML = '';
+            document.getElementById('nonWorkingTable').querySelector('tbody').innerHTML = '';
+            document.getElementById('totalTime').textContent = '0';
+
+            const proxyListText = document.getElementById('proxyList').value;
+            const proxies = proxyListText.split('\n').filter(proxy => proxy.trim() !== '');
+            const targetUrl = document.getElementById('targetUrl').value;
+            const workingTableBody = document.getElementById('workingTable').querySelector('tbody');
+            const nonWorkingTableBody = document.getElementById('nonWorkingTable').querySelector('tbody');
+            let totalTimeStart = performance.now();
+
+            for (const proxy of proxies) {
+                let totalResponseTime = 0;
+                let workingTests = 0;
+                let responseTimes = [];
+
+                for (let i = 0; i < 5; i++) {
+                    let result = await testProxy(proxy.trim(), targetUrl);
+                    if (result.working) {
+                        totalResponseTime += result.time;
+                        workingTests++;
+                        responseTimes.push(result.time);
+                    }
+                }
+
+                if (workingTests > 0) {
+                    const averageResponseTime = totalResponseTime / workingTests;
+                    let row = workingTableBody.insertRow();
+                    let cell1 = row.insertCell(0);
+                    let cell2 = row.insertCell(1);
+                    cell1.textContent = proxy.trim();
+                    cell2.textContent = averageResponseTime.toFixed(2) + ' ms';
+                    row.classList.add('working');
+                } else {
+                    let row = nonWorkingTableBody.insertRow();
+                    let cell1 = row.insertCell(0);
+                    cell1.textContent = proxy.trim();
+                    row.classList.add('non-working');
+                }
+            }
+
+            let totalTimeEnd = performance.now();
+            let totalDuration = totalTimeEnd - totalTimeStart;
+
+            document.getElementById('totalTime').textContent = totalDuration.toFixed(2);
+            document.getElementById('message').textContent = 'Proxy check complete! ✅';
+            document.getElementById('results').style.display = 'block';
+        }
+
+
+        async function testProxy(proxy, targetUrl) {
+            const startTime = performance.now();
+            let working = false;
+            try {
+                const response = await fetch(targetUrl, {
+                    mode: 'no-cors', // To avoid CORS issues for simple checking
+                    method: 'GET',
+                    redirect: 'follow'
+                });
+
+                if (response.status >= 200 && response.status < 400) { // Consider 2xx and 3xx as success for basic check
+                    working = true;
+                }
+            } catch (error) {
+                working = false;
+            }
+            const endTime = performance.now();
+            const timeTaken = endTime - startTime;
+            return { working: working, time: timeTaken };
+        }
+    </script>
+</body>
+</html>

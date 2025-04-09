@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy Checker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1, h2 {
+            color: #0056b3;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background-color: white;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .working {
+            color: green;
+        }
+        .non-working {
+            color: red;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .table-container {
+            flex: 1;
+        }
+        .emoji-square {
+            width: 20px;
+            height: 20px;
+            background-color: #4CAF50; /* Green */
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .emoji-triangle {
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-bottom: 20px solid #F44336; /* Red */
+            display: inline-block;
+            margin-right: 5px;
+            vertical-align: top;
+        }
+    </style>
+</head>
+<body>
+    <h1>Proxy Checker ⚽</h1>
+    <textarea id="proxyList" placeholder="Enter proxies, one per line (IP:Port)"></textarea>
+    <button onclick="checkProxies()">Check Proxies</button>
+
+    <div id="results">
+        <h2>Working Proxies <span class="emoji-square"></span></h2>
+        <div class="table-container">
+            <table id="workingTable">
+                <thead>
+                    <tr>
+                        <th>Proxy</th>
+                        <th>Status</th>
+                        <th>Avg. Response Time (ms)</th>
+                    </tr>
+                </thead>
+                <tbody id="workingProxies">
+                    </tbody>
+            </table>
+        </div>
+
+        <h2>Non-Working Proxies <span class="emoji-triangle"></span></h2>
+        <div class="table-container">
+            <table id="nonWorkingTable">
+                <thead>
+                    <tr>
+                        <th>Proxy</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="nonWorkingProxies">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function checkProxies() {
+            const proxyListText = document.getElementById("proxyList").value;
+            const proxies = proxyListText.split('\n').filter(proxy => proxy.trim() !== '');
+            const workingProxiesBody = document.getElementById("workingProxies");
+            const nonWorkingProxiesBody = document.getElementById("nonWorkingProxies");
+
+            workingProxiesBody.innerHTML = "";
+            nonWorkingProxiesBody.innerHTML = "";
+
+            proxies.forEach(proxy => {
+                testProxy(proxy, workingProxiesBody, nonWorkingProxiesBody);
+            });
+        }
+
+        async function testProxy(proxy, workingProxiesBody, nonWorkingProxiesBody) {
+            let totalResponseTime = 0;
+            let isWorking = false;
+            let responseTimes = [];
+
+            for (let i = 0; i < 5; i++) {
+                const startTime = performance.now();
+                const status = await simulateProxyRequest(proxy); // Simulate request
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                responseTimes.push(responseTime);
+                if (status === 'success') {
+                    isWorking = true;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between tests, not strictly needed for simulation
+            }
+
+            const averageResponseTime = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
+
+            if (isWorking) {
+                let row = workingProxiesBody.insertRow();
+                let proxyCell = row.insertCell();
+                let statusCell = row.insertCell();
+                let timeCell = row.insertCell();
+
+                proxyCell.textContent = proxy;
+                statusCell.textContent = "Working";
+                statusCell.classList.add("working");
+                timeCell.textContent = averageResponseTime.toFixed(2) + " ms";
+
+            } else {
+                let row = nonWorkingProxiesBody.insertRow();
+                let proxyCell = row.insertCell();
+                let statusCell = row.insertCell();
+
+                proxyCell.textContent = proxy;
+                statusCell.textContent = "Non-Working";
+                statusCell.classList.add("non-working");
+            }
+        }
+
+        function simulateProxyRequest(proxy) {
+            return new Promise(resolve => {
+                const randomDelay = Math.random() * 1000; // Simulate response time up to 1 second
+                setTimeout(() => {
+                    const successRate = 0.7; // 70% success rate for simulation
+                    if (Math.random() < successRate) {
+                        resolve('success');
+                    } else {
+                        resolve('fail');
+                    }
+                }, randomDelay);
+            });
+        }
+    </script>
+</body>
+</html>

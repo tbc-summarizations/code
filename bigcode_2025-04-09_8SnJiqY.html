@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PenguinAI Text Analysis Meter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        #input-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            width: 80%;
+            max-width: 800px;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 16px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #meters-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            width: 80%;
+            max-width: 800px;
+        }
+        .meter {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .meter-bar {
+            background-color: #eee;
+            height: 10px;
+            border-radius: 5px;
+            margin-top: 5px;
+            position: relative;
+            overflow: hidden;
+        }
+        .meter-fill {
+            background-color: #28a745;
+            height: 100%;
+            width: 0%;
+            border-radius: 5px;
+            transition: width 0.5s ease-out;
+        }
+        .meter-value {
+            position: absolute;
+            top: -2px;
+            right: 5px;
+            font-size: 0.8em;
+            color: #555;
+        }
+        .emoji-container {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>PenguinAI Text Analysis Meter</h1>
+    <div id="input-container">
+        <textarea id="textInput" placeholder="Enter text to analyze..."></textarea>
+        <button onclick="analyzeText()">Analyze Text</button>
+    </div>
+    <div id="meters-container">
+        <!-- Meters will be generated here by JavaScript -->
+    </div>
+
+    <script>
+        async function analyzeText() {
+            const text = document.getElementById('textInput').value;
+            if (!text.trim()) {
+                alert("Please enter text to analyze.");
+                return;
+            }
+
+            const promptInstruction = `Analyze the following text and provide a score from 0 to 100 for each of the following metrics: Niceness, Toxicity, Politeness, Aggression, Respectfulness, Positivity, Negativity, Sarcasm, Irony, Hate Speech.  Return your response as a JSON object where each metric is a key and the value is the score (0-100).  For example:
+\`\`\`json
+{
+    "Niceness": 75,
+    "Toxicity": 20,
+    "Politeness": 80,
+    "Aggression": 10,
+    "Respectfulness": 90,
+    "Positivity": 60,
+    "Negativity": 30,
+    "Sarcasm": 5,
+    "Irony": 2,
+    "Hate Speech": 1
+}
+\`\`\`
+Text to analyze: "${text}"
+`;
+
+            const apiUrl = 'https://penguinai.derpygamer2142.com/v1/chat/completions';
+            const requestBody = {
+                model: "llama-3.1-8b-instruct",
+                messages: [{ role: "user", content: promptInstruction }],
+                max_tokens: 300 // Limit response tokens to ensure it's concise
+            };
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                if (data.choices && data.choices.length > 0) {
+                    const aiResponse = data.choices[0].message.content;
+                    try {
+                        const analysisResults = JSON.parse(aiResponse);
+                        displayMeters(analysisResults);
+                    } catch (jsonError) {
+                        console.error("Error parsing JSON response:", jsonError);
+                        console.error("Raw response from AI:", aiResponse);
+                        alert("Failed to parse AI response. Check console for details.");
+                    }
+                } else {
+                    alert("No response from AI.");
+                }
+
+            } catch (error) {
+                console.error("Error calling PenguinAI API:", error);
+                alert("Failed to analyze text. Check console for details.");
+            }
+        }
+
+        function displayMeters(results) {
+            const metersContainer = document.getElementById('meters-container');
+            metersContainer.innerHTML = ''; // Clear previous meters
+
+            const metrics = Object.keys(results);
+            metrics.forEach(metric => {
+                const score = results[metric];
+                if (typeof score !== 'number' || score < 0 || score > 100) {
+                    console.warn(`Invalid score for ${metric}: ${score}. Skipping meter.`);
+                    return;
+                }
+
+                const meterDiv = document.createElement('div');
+                meterDiv.className = 'meter';
+                meterDiv.innerHTML = `
+                    <h3>${metric}</h3>
+                    <div class="meter-bar">
+                        <div class="meter-fill" style="width: ${score}%"></div>
+                        <span class="meter-value">${score}%</span>
+                    </div>
+                `;
+                metersContainer.appendChild(meterDiv);
+
+                // Animate the meter fill
+                setTimeout(() => {
+                    const fill = meterDiv.querySelector('.meter-fill');
+                    fill.style.width = `${score}%`;
+                }, 10); // Small delay for animation to trigger
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The World Dictionary Editor</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            transition: background-color 1s ease;
+            background-color: hsl(200, 50%, 90%); /* Initial world state */
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            flex-grow: 1;
+        }
+        h1, h2 {
+            text-align: center;
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        select, textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* Include padding in width */
+            font-size: 1em;
+        }
+        textarea {
+            height: 150px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #definitionDisplay {
+            background-color: #f9f9f9;
+            border: 1px dashed #ddd;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+            min-height: 50px;
+        }
+        #worldEffect {
+            margin-top: 30px;
+            padding: 20px;
+            border: 2px solid #aaa;
+            border-radius: 5px;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.7);
+        }
+        #worldEmoji {
+            font-size: 3em;
+            display: block;
+            margin-bottom: 10px;
+        }
+        #worldStatus {
+            font-style: italic;
+            color: #333;
+        }
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            color: #777;
+            font-size: 0.9em;
+        }
+         /* Simple shape for list bullets */
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li::before {
+            content: '■'; /* Square shape */
+            color: #007bff;
+            display: inline-block;
+            width: 1em;
+            margin-left: -1em;
+            margin-right: 0.5em;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>The World Dictionary Editor 📖</h1>
+        <p>Select a word, view its current meaning, edit it, and save to see how your change subtly affects the world's state.</p>
+
+        <label for="wordSelect">Select Word:</label>
+        <select id="wordSelect">
+            <option value="" disabled selected>-- Select a word --</option>
+            <!-- Options will be populated by JavaScript -->
+        </select>
+
+        <h2>Current Meaning</h2>
+        <div id="definitionDisplay">Select a word to see its definition.</div>
+
+        <h2>Edit Meaning</h2>
+        <label for="definitionEdit">New Definition:</label>
+        <textarea id="definitionEdit" placeholder="Enter the new definition here..."></textarea>
+
+        <button id="saveButton">Save Change & Affect World</button>
+
+        <div id="worldEffect">
+            <h2>World State</h2>
+            <span id="worldEmoji">🌍</span>
+            <p id="worldStatus">The world is in its initial state. Make a change!</p>
+        </div>
+
+    </div>
+
+    <footer>
+         Disclaimer: World effects are symbolic representations within this page.
+    </footer>
+
+    <script>
+        // --- Dictionary Data ---
+        const dictionary = {
+            "apple": "A round fruit with firm, white flesh and a green or red skin.",
+            "book": "A written or printed work consisting of pages glued or sewn together along one side and bound in covers.",
+            "computer": "An electronic device for storing and processing data, typically in binary form, according to instructions given to it in a variable program.",
+            "democracy": "A system of government by the whole population or all the eligible members of a state, typically through elected representatives.",
+            "energy": "The strength and vitality required for sustained physical or mental activity.",
+            "freedom": "The power or right to act, speak, or think as one wants without hindrance or restraint.",
+            "gravity": "The force that attracts a body towards the center of the earth, or towards any other physical body having mass.",
+            "happiness": "The state of being happy.",
+            "internet": "A global computer network providing a variety of information and communication facilities, consisting of interconnected networks using standardized communication protocols.",
+            "justice": "Just behavior or treatment; the quality of being fair and reasonable.",
+            "knowledge": "Facts, information, and skills acquired through experience or education; the theoretical or practical understanding of a subject.",
+            "love": "An intense feeling of deep affection.",
+            "music": "Vocal or instrumental sounds (or both) combined in such a way as to produce beauty of form, harmony, and expression of emotion.",
+            "nature": "The phenomena of the physical world collectively, including plants, animals, the landscape, and other features and products of the earth, as opposed to humans or human creations.",
+            "ocean": "A very large expanse of sea, in particular each of the main areas into which the sea is divided geographically.",
+            "peace": "Freedom from disturbance; tranquility.",
+            "reality": "The state of things as they actually exist, as opposed to an idealistic or notional view of them.",
+            "science": "The intellectual and practical activity encompassing the systematic study of the structure and behavior of the physical and natural world through observation and experiment.",
+            "time": "The indefinite continued progress of existence and events in the past, present, and future regarded as a whole.",
+            "truth": "That which is true or in accordance with fact or reality."
+        };
+
+        // --- DOM Elements ---
+        const wordSelect = document.getElementById('wordSelect');
+        const definitionDisplay = document.getElementById('definitionDisplay');
+        const definitionEdit = document.getElementById('definitionEdit');
+        const saveButton = document.getElementById('saveButton');
+        const worldEmoji = document.getElementById('worldEmoji');
+        const worldStatus = document.getElementById('worldStatus');
+        const body = document.body;
+
+        let currentWord = null;
+        let worldHue = 200; // Initial hue for background
+
+        // --- Functions ---
+
+        // Populate the select dropdown
+        function populateWordSelect() {
+            const words = Object.keys(dictionary).sort();
+            words.forEach(word => {
+                const option = document.createElement('option');
+                option.value = word;
+                option.textContent = word.charAt(0).toUpperCase() + word.slice(1); // Capitalize
+                wordSelect.appendChild(option);
+            });
+        }
+
+        // Display the definition of the selected word
+        function displayDefinition(word) {
+            if (word && dictionary[word]) {
+                definitionDisplay.textContent = dictionary[word];
+                definitionEdit.value = dictionary[word]; // Load current definition into edit area
+                currentWord = word;
+                definitionEdit.disabled = false;
+                saveButton.disabled = false;
+            } else {
+                definitionDisplay.textContent = 'Select a word to see its definition.';
+                definitionEdit.value = '';
+                definitionEdit.disabled = true;
+                saveButton.disabled = true;
+                currentWord = null;
+            }
+        }
+
+        // Simple hash function for string to number (for color change)
+        function simpleHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            return Math.abs(hash);
+        }
+
+        // Update the symbolic "World Effect"
+        function updateWorldEffect(word, newDefinition) {
+            // 1. Change background hue based on definition hash
+            const hash = simpleHash(newDefinition);
+            worldHue = (worldHue + (hash % 30) - 15 + 360) % 360; // Shift hue slightly based on hash
+            body.style.backgroundColor = `hsl(${worldHue}, 50%, 90%)`;
+
+            // 2. Update Status Message and Emoji
+            const changeMagnitude = Math.abs(newDefinition.length - dictionary[word].length); // Compare old and new length
+            let statusText = `The definition of "${word}" has been altered. `;
+            let emoji = '🤔'; // Default thinking emoji
+
+            if (changeMagnitude > 50) {
+                statusText += "The world feels significantly different.";
+                emoji = '😲';
+            } else if (changeMagnitude > 10) {
+                statusText += "A noticeable shift is perceived in the world.";
+                emoji = '🧐';
+            } else if (changeMagnitude > 0) {
+                statusText += "A subtle change ripples through reality.";
+                emoji = '👀';
+            } else {
+                statusText += "The essence remains, yet the world notes the nuance.";
+                emoji = '😌';
+            }
+
+            // Add effect based on specific words being changed (example)
+             if (word === 'peace' && newDefinition.toLowerCase().includes('conflict')) {
+                statusText += " A sense of unease spreads.";
+                emoji = '😟';
+                worldHue = (worldHue + 180) % 360; // Dramatic color shift
+                body.style.backgroundColor = `hsl(${worldHue}, 40%, 85%)`;
+             } else if (word === 'love' && newDefinition.length < 10) {
+                statusText += " The world feels a little colder.";
+                emoji = '🥶';
+                body.style.backgroundColor = `hsl(${worldHue}, 30%, 90%)`;
+             } else if (word === 'truth' && newDefinition.includes('?')) {
+                 statusText += " Uncertainty hangs in the air.";
+                 emoji = '❓';
+             } else if (word === 'happiness' && newDefinition.length > 100) {
+                 statusText += " A wave of complex joy washes over.";
+                 emoji = '😊';
+                 body.style.backgroundColor = `hsl(${(worldHue + 30) % 360}, 60%, 90%)`;
+             }
+
+
+            worldStatus.textContent = statusText;
+            worldEmoji.textContent = emoji;
+        }
+
+        // Save the edited definition
+        function saveDefinition() {
+            if (!currentWord) {
+                alert('Please select a word first.');
+                return;
+            }
+            const newDefinition = definitionEdit.value.trim();
+            if (newDefinition === "") {
+                alert('Definition cannot be empty.');
+                return;
+            }
+
+            if (newDefinition !== dictionary[currentWord]) {
+                updateWorldEffect(currentWord, newDefinition); // Calculate effect *before* updating
+                dictionary[currentWord] = newDefinition; // Update the dictionary object
+                definitionDisplay.textContent = newDefinition; // Update the display
+                console.log(`Updated "${currentWord}" to: "${newDefinition}"`);
+                // Optional: Add a visual confirmation
+                saveButton.textContent = 'Saved!';
+                setTimeout(() => { saveButton.textContent = 'Save Change & Affect World'; }, 1500);
+            } else {
+                 worldStatus.textContent = `No changes detected for "${currentWord}". The world remains stable.`;
+                 worldEmoji.textContent = '🧘';
+            }
+        }
+
+        // --- Event Listeners ---
+        wordSelect.addEventListener('change', (event) => {
+            displayDefinition(event.target.value);
+        });
+
+        saveButton.addEventListener('click', saveDefinition);
+
+        // --- Initialization ---
+        populateWordSelect();
+        displayDefinition(null); // Initialize view
+
+    </script>
+
+</body>
+</html>

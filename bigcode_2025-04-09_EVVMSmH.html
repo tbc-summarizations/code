@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Dictionary Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        h1, h2 {
+            color: #0056b3;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .dictionary-section, .ai-section {
+            flex: 1;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        textarea, input[type="text"], button {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #output {
+            white-space: pre-wrap;
+            background-color: #eee;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .error {
+            color: red;
+        }
+        .word-item {
+            margin-bottom: 5px;
+            padding: 8px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #fafafa;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .word-item span {
+            flex-grow: 1;
+        }
+        .word-item button {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            margin-left: 10px;
+        }
+        .word-item button:hover {
+            background-color: #c82333;
+        }
+        .emoji-square {
+            width: 20px;
+            height: 20px;
+            background-color: #ffcc00;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .emoji-triangle {
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-bottom: 20px solid #33cc33;
+            display: inline-block;
+            margin-right: 5px;
+            position: relative;
+            top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1><span class="emoji-square"></span> <span class="emoji-triangle"></span> PenguinAI World Dictionary Editor <span class="emoji-triangle"></span> <span class="emoji-square"></span></h1>
+
+    <div class="container">
+        <div class="dictionary-section">
+            <h2>Edit Dictionary <span class="emoji-square"></span></h2>
+            <div id="dictionary-display">
+                <!-- Dictionary words will be displayed here -->
+            </div>
+            <input type="text" id="new-word-input" placeholder="Enter new word">
+            <textarea id="new-definition-input" placeholder="Enter new definition"></textarea>
+            <button onclick="addWord()">Add Word</button>
+        </div>
+
+        <div class="ai-section">
+            <h2>World Effect Simulation <span class="emoji-triangle"></span></h2>
+            <textarea id="ai-prompt" placeholder="Enter your prompt to see world effect"></textarea>
+            <button onclick="generateText()">Simulate World Effect</button>
+            <div id="output">
+                <!-- AI output will be displayed here -->
+            </div>
+            <div id="error-output" class="error"></div>
+        </div>
+    </div>
+
+    <script>
+        let dictionary = {
+            "sun": "The star at the center of our solar system that provides light and warmth.",
+            "tree": "A tall plant with a trunk and branches made of wood. 🌳",
+            "water": "A clear, colorless, odorless, and tasteless liquid, essential for life. 💧",
+            "sky": "The atmosphere above the earth, seen from the surface as blue during the day. ☁️",
+            "book": "A set of written, printed, illustrated, or blank sheets of paper, fastened together between covers. 📖",
+            "run": "To move at a speed faster than a walk, never having both or all the feet on the ground at the same time.",
+            "happy": "Feeling or showing pleasure or contentment. 😊",
+            "sad": "Feeling or showing sorrow; unhappy. 😞"
+        };
+
+        function displayDictionary() {
+            const dictionaryDisplay = document.getElementById('dictionary-display');
+            dictionaryDisplay.innerHTML = '';
+            for (const word in dictionary) {
+                const wordItem = document.createElement('div');
+                wordItem.classList.add('word-item');
+                wordItem.innerHTML = `
+                    <span><strong>${word}:</strong> ${dictionary[word]}</span>
+                    <button onclick="removeWord('${word}')">❌</button>
+                `;
+                dictionaryDisplay.appendChild(wordItem);
+            }
+        }
+
+        function addWord() {
+            const newWordInput = document.getElementById('new-word-input');
+            const newDefinitionInput = document.getElementById('new-definition-input');
+            const word = newWordInput.value.trim();
+            const definition = newDefinitionInput.value.trim();
+
+            if (word && definition) {
+                dictionary[word] = definition;
+                displayDictionary();
+                newWordInput.value = '';
+                newDefinitionInput.value = '';
+            }
+        }
+
+        function removeWord(wordToRemove) {
+            delete dictionary[wordToRemove];
+            displayDictionary();
+        }
+
+        function generateText() {
+            const promptInput = document.getElementById('ai-prompt');
+            const outputDiv = document.getElementById('output');
+            const errorDiv = document.getElementById('error-output');
+            const prompt = promptInput.value;
+
+            outputDiv.textContent = "Loading... ⏳";
+            errorDiv.textContent = "";
+
+            const apiEndpoint = 'https://penguinai.derpygamer2142.com/v1/chat/completions';
+            const modelId = 'llama-3.1-8b-instruct';
+
+            const fullPrompt = `You are an AI that understands the world based on a dictionary. The current dictionary is as follows:\n\n${JSON.stringify(dictionary, null, 2)}\n\nUser Prompt: "${prompt}"\n\nBased on this dictionary and the user's prompt, generate a short text (around 50-80 words) describing the situation or answering the prompt, considering how the definitions in the dictionary shape the world.`;
+
+
+            fetch(apiEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: modelId,
+                    messages: [{ role: "user", content: fullPrompt }]
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.choices && data.choices.length > 0) {
+                    outputDiv.textContent = data.choices[0].message.content.trim();
+                } else {
+                    outputDiv.textContent = "No response from AI.";
+                }
+            })
+            .catch(error => {
+                console.error('API Call Failed:', error);
+                errorDiv.textContent = `API Call Failed: ${error.message}`;
+                outputDiv.textContent = "Error fetching AI response. Please check console for details. ⚠️";
+            });
+        }
+
+        displayDictionary(); // Initial display of dictionary
+    </script>
+
+</body>
+</html>

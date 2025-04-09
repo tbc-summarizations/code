@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sentiment Meter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #input-area {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            width: 80%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+        textarea {
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            resize: vertical;
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #5cb85c;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #4cae4c;
+        }
+        #meters-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            width: 80%;
+            max-width: 800px;
+        }
+        .meter {
+            background-color: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .meter-bar {
+            width: 100%;
+            height: 10px;
+            background-color: #eee;
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+        .meter-progress {
+            height: 100%;
+            background-color: #007bff;
+            width: 0%;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        .emoji {
+            font-size: 2em;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sentiment Meter</h1>
+    <div id="input-area">
+        <textarea id="sentence-input" placeholder="Enter your sentence here"></textarea>
+        <button onclick="processSentence()">Analyze Sentence</button>
+    </div>
+
+    <div id="meters-container">
+        <div class="meter">
+            <div class="emoji">🙂/🙁</div>
+            <h3>Overall Sentiment</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-sentiment"></div>
+            </div>
+            <div id="sentiment-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">🤝/🙅</div>
+            <h3>Politeness</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-politeness"></div>
+            </div>
+            <div id="politeness-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">👑/🤡</div>
+            <h3>Respectfulness</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-respectfulness"></div>
+            </div>
+            <div id="respectfulness-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">😡/🧘</div>
+            <h3>Aggressiveness</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-aggressiveness"></div>
+            </div>
+            <div id="aggressiveness-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">🚫/⚠️</div>
+            <h3>Hate Speech Probability</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-hatespeech"></div>
+            </div>
+            <div id="hatespeech-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">😉/😐</div>
+            <h3>Sarcasm</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-sarcasm"></div>
+            </div>
+            <div id="sarcasm-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">🎭/😐</div>
+            <h3>Irony</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-irony"></div>
+            </div>
+            <div id="irony-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">😭/😐</div>
+            <h3>Negativity</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-negativity"></div>
+            </div>
+            <div id="negativity-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">😊/😐</div>
+            <h3>Positivity</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-positivity"></div>
+            </div>
+            <div id="positivity-value"></div>
+        </div>
+        <div class="meter">
+            <div class="emoji">💥/😐</div>
+            <h3>Emotional Intensity</h3>
+            <div class="meter-bar">
+                <div class="meter-progress" id="meter-intensity"></div>
+            </div>
+            <div id="intensity-value"></div>
+        </div>
+    </div>
+
+    <script>
+        async function processSentence() {
+            const sentence = document.getElementById('sentence-input').value;
+            const modelName = "llama-3.1-8b-instruct";
+            const endpoint = "https://penguinai.derpygamer2142.com/v1/chat/completions";
+
+            const prompt = `Analyze the following sentence and provide 10 meter values in JSON format. Each meter represents a different aspect of the sentence, ranging from 0 to 1.
+1. Overall Sentiment (0: Negative, 1: Positive)
+2. Politeness (0: Impolite, 1: Polite)
+3. Respectfulness (0: Disrespectful, 1: Respectful)
+4. Aggressiveness (0: Not Aggressive, 1: Aggressive)
+5. Hate Speech Probability (0: No Hate Speech, 1: High Hate Speech)
+6. Sarcasm (0: Not Sarcastic, 1: Sarcastic)
+7. Irony (0: Not Ironic, 1: Ironic)
+8. Negativity (0: Not Negative, 1: Very Negative)
+9. Positivity (0: Not Positive, 1: Very Positive)
+10. Emotional Intensity (0: Low Intensity, 1: High Intensity)
+
+Provide the output as a JSON object with a 'meters' array containing 10 floating-point numbers between 0 and 1, corresponding to the meters described above.
+
+Sentence: "${sentence}"`;
+
+            const requestBody = JSON.stringify({
+                "model": modelName,
+                "messages": [{"role": "user", "content": prompt}]
+            });
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: requestBody
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const aiResponse = data.choices[0].message.content;
+
+                try {
+                    const meterValues = JSON.parse(aiResponse).meters;
+                    if (meterValues && meterValues.length === 10) {
+                        updateMeters(meterValues);
+                    } else {
+                        console.error("Invalid meter values format from AI:", aiResponse);
+                        alert("Failed to process meter values. Invalid format from AI.");
+                    }
+                } catch (jsonError) {
+                    console.error("Error parsing JSON response:", jsonError, aiResponse);
+                    alert("Failed to parse AI response as JSON.");
+                }
+
+
+            } catch (error) {
+                console.error("Error fetching data from PenguinAI Proxy:", error);
+                alert("Failed to get data from PenguinAI Proxy. Check console for details.");
+            }
+        }
+
+        function updateMeters(values) {
+            const meterIds = [
+                'meter-sentiment', 'meter-politeness', 'meter-respectfulness', 'meter-aggressiveness',
+                'meter-hatespeech', 'meter-sarcasm', 'meter-irony', 'meter-negativity',
+                'meter-positivity', 'meter-intensity'
+            ];
+            const valueIds = [
+                'sentiment-value', 'politeness-value', 'respectfulness-value', 'aggressiveness-value',
+                'hatespeech-value', 'sarcasm-value', 'irony-value', 'negativity-value',
+                'positivity-value', 'intensity-value'
+            ];
+
+            for (let i = 0; i < values.length; i++) {
+                const percentage = values[i] * 100;
+                document.getElementById(meterIds[i]).style.width = `${percentage}%`;
+                document.getElementById(valueIds[i]).textContent = `${percentage.toFixed(1)}%`;
+            }
+        }
+    </script>
+</body>
+</html>

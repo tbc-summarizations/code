@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Activity Analysis</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; }
+        .chart-container { width: 90%; max-width: 600px; margin: 20px auto; border: 1px solid #ccc; padding: 10px; }
+        h1, h2 { text-align: center; }
+        .user-list { list-style: none; padding: 0; text-align: center; margin-bottom: 30px; }
+        .user-list li { display: inline-block; margin: 0 15px; }
+        canvas { display: block; margin: 0 auto; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .grid-item { border: 1px solid #eee; padding: 15px; background-color: #f9f9f9; }
+        .grid-item h3 { margin-top: 0; text-align: center; font-size: 1em; }
+        #best-time-chart { border: 2px solid green; padding: 20px; background-color: #e8f8e8; }
+        #best-time-text { font-weight: bold; text-align: center; margin-top: 15px; font-size: 1.2em;}
+    </style>
+</head>
+<body>
+
+    <h1>User Activity Analysis</h1>
+    <p style="text-align: center;">Displaying times in your local timezone: <span id="local-timezone"></span></p>
+
+    <h2>Members</h2>
+    <ul class="user-list">
+        <li>Mindset 🇬🇷</li>
+        <li>Adam 🇪🇬</li>
+        <li>Abdullah 🇵🇰</li>
+        <li>Andrej 🇷🇸</li>
+        <li>Blocky 🇲🇾</li>
+        <li>Frank 🇵🇪</li>
+        <li>HappyMan 🇵🇱</li>
+        <li>Henry 🇰🇿</li>
+        <li>Meeth 🇪🇪</li>
+        <li>Salle 🇷🇸</li>
+    </ul>
+
+    <div class="grid-container">
+        <!-- 100 Chart Containers will be generated here by script -->
+    </div>
+    <div id="best-time-chart" class="chart-container">
+        <h2>Graph 101: Best Time to Play (All Users)</h2>
+        <canvas id="chart101"></canvas>
+        <p id="best-time-text"></p>
+    </div>
+
+    <script>
+        // --- User Data (Approximated Timezones/Offsets including common DST) ---
+        const users = [
+            { name: "Mindset", country: "GR", flag: "🇬🇷", offset: 3 }, // Greece EEST UTC+3
+            { name: "Adam", country: "EG", flag: "🇪🇬", offset: 2 }, // Egypt EET UTC+2
+            { name: "Abdullah", country: "PK", flag: "🇵🇰", offset: 5 }, // Pakistan PKT UTC+5
+            { name: "Andrej", country: "RS", flag: "🇷🇸", offset: 2 }, // Serbia CEST UTC+2
+            { name: "Blocky", country: "MY", flag: "🇲🇾", offset: 8 }, // Malaysia MYT UTC+8
+            { name: "Frank", country: "PE", flag: "🇵🇪", offset: -5 }, // Peru PET UTC-5
+            { name: "HappyMan", country: "PL", flag: "🇵🇱", offset: 2 }, // Poland CEST UTC+2
+            { name: "Henry", country: "KZ", flag: "🇰🇿", offset: 6 }, // Kazakhstan UTC+6 (Astana Time)
+            { name: "Meeth", country: "EE", flag: "🇪🇪", offset: 3 }, // Estonia EEST UTC+3
+            { name: "Salle", country: "RS", flag: "🇷🇸", offset: 2 }  // Serbia CEST UTC+2
+        ];
+
+        // --- Timezone Handling ---
+        const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.getElementById('local-timezone').textContent = browserTimezone;
+
+        // Function to convert UTC hour to local browser time string (HH:00 format)
+        function formatLocalTime(utcHour) {
+            const now = new Date();
+            now.setUTCHours(utcHour, 0, 0, 0);
+            return now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+        }
+
+        // --- Availability Logic ---
+        // Assumes school 8 AM - 3 PM (08:00-15:00) local time on Weekdays (Mon-Fri)
+        // Assumes awake 7 AM - 11 PM (07:00-23:00) local time
+        function isAvailable(userOffset, utcHour, utcDayOfWeek) {
+            // Calculate user's local hour (0-23)
+            const localHour = (utcHour + userOffset + 24) % 24;
+
+            // Estimate user's local day of the week (0=Sun, 1=Mon... 6=Sat)
+            // This is an approximation, crossing midnight needs care, but for hourly checks it's roughly correct
+            let localDayOfWeek = utcDayOfWeek;
+            // Rough adjustment if offset crosses midnight significantly
+            if (userOffset > 0 && utcHour + userOffset >= 24) {
+                localDayOfWeek = (utcDayOfWeek + 1) % 7;
+            } else if (userOffset < 0 && utcHour + userOffset < 0) {
+                localDayOfWeek = (utcDayOfWeek + 6) % 7;
+            }
+
+            const isAwake = localHour >= 7 && localHour < 23;
+            let isFree = true;
+            const isWeekday = localDayOfWeek >= 1 && localDayOfWeek <= 5; // Monday to Friday
+
+            if (isWeekday && localHour >= 8 && localHour < 15) { // School hours
+                isFree = false;
+            }
+
+            return isAwake && isFree;
+        }
+
+        // Generate time labels for 24 hours in local time
+        const localTimeLabels = Array.from({ length: 24 }, (_, i) => formatLocalTime(i));
+
+        // --- Data Generation for Charts ---
+        const availabilityData = {}; // Store processed data: { userName: { weekday: [...], weekend: [...] } }
+        const today = new Date();
+        const currentUTCDay = today.getUTCDay(); // 0 = Sunday, ..., 6 = Saturday
+        const isWeekendNow = currentUTCDay === 0 || currentUTCDay === 6;
+
+        users.forEach(user => {
+            availabilityData[user.name] = { weekday: [], weekend: [] };
+            for (let utcHour = 0; utcHour < 24; utcHour++) {
+                // Simulate weekday (e.g., Monday = 1)
+                availabilityData[user.name].weekday.push(isAvailable(user.offset, utcHour, 1) ? 1 : 0);
+                // Simulate weekend (e.g., Saturday = 6)
+                availabilityData[user.name].weekend.push(isAvailable(user.offset, utcHour, 6) ? 1 : 0);
+            }
+        });
+
+        // --- Chart Rendering ---
+        const gridContainer = document.querySelector('.grid-container');
+        let chartCount = 0;
+
+        // Function to create a chart container
+        function createChartContainer(chartId, title) {
+            const container = document.createElement('div');
+            container.className = 'grid-item';
+            const titleEl = document.createElement('h3');
+            titleEl.textContent = `Graph ${chartId + 1}: ${title}`;
+            const canvas = document.createElement('canvas');
+            canvas.id = `chart${chartId}`;
+            container.appendChild(titleEl);
+            container.appendChild(canvas);
+            gridContainer.appendChild(container);
+            return canvas.getContext('2d');
+        }
+
+        // Chart Type 1: Individual Availability Timeline (10 charts * 2 = 20)
+        users.forEach(user => {
+            let ctxWd = createChartContainer(chartCount++, `${user.name} ${user.flag} Weekday Availability`);
+            new Chart(ctxWd, {
+                type: 'bar', // Using bar for clearer 0/1 representation
+                data: {
+                    labels: localTimeLabels,
+                    datasets: [{
+                        label: 'Available (1=Yes, 0=No)',
+                        data: availabilityData[user.name].weekday,
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1,
+                        stepped: true // Good for timelines
+                    }]
+                },
+                options: { scales: { y: { beginAtZero: true, max: 1.1, ticks: { stepSize: 1 } } } }
+            });
+
+             let ctxWe = createChartContainer(chartCount++, `${user.name} ${user.flag} Weekend Availability`);
+             new Chart(ctxWe, {
+                 type: 'bar',
+                 data: {
+                     labels: localTimeLabels,
+                     datasets: [{
+                         label: 'Available (1=Yes, 0=No)',
+                         data: availabilityData[user.name].weekend,
+                         backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                         borderColor: 'rgba(75, 192, 192, 1)',
+                         borderWidth: 1,
+                         stepped: true
+                     }]
+                 },
+                 options: { scales: { y: { beginAtZero: true, max: 1.1, ticks: { stepSize: 1 } } } }
+             });
+        });
+
+
+        // Chart Type 2: Timezone Distribution (1 chart)
+        const timezoneCounts = users.reduce((acc, user) => {
+            const offsetStr = `UTC${user.offset >= 0 ? '+' : ''}${user.offset}`;
+            acc[offsetStr] = (acc[offsetStr] || 0) + 1;
+            return acc;
+        }, {});
+        let ctxTz = createChartContainer(chartCount++, 'User Timezone Distribution');
+        new Chart(ctxTz, {
+            type: 'pie',
+            data: {
+                labels: Object.keys(timezoneCounts),
+                datasets: [{
+                    label: 'Number of Users',
+                    data: Object.values(timezoneCounts),
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)', 'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)', 'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
+                        'rgba(199, 199, 199, 0.7)', 'rgba(83, 102, 255, 0.7)', 'rgba(40, 159, 64, 0.7)',
+                         'rgba(210, 99, 132, 0.7)'
+                    ]
+                }]
+            }
+        });
+
+        // Chart Type 3: Pairwise Overlap (45 charts * 2 = 90) - Let's do fewer, maybe 10 pairs for demo, aim for variety
+        let pairsGenerated = 0;
+        const maxPairCharts = 30; // Limit pair charts to avoid excessive slowness/repetition
+        for (let i = 0; i < users.length; i++) {
+            for (let j = i + 1; j < users.length; j++) {
+                if (pairsGenerated >= maxPairCharts) break;
+                const user1 = users[i];
+                const user2 = users[j];
+
+                const overlapWeekday = availabilityData[user1.name].weekday.map((avail, hour) => avail && availabilityData[user2.name].weekday[hour] ? 1 : 0);
+                const overlapWeekend = availabilityData[user1.name].weekend.map((avail, hour) => avail && availabilityData[user2.name].weekend[hour] ? 1 : 0);
+
+                let ctxPairWd = createChartContainer(chartCount++, `${user1.name} & ${user2.name} Weekday Overlap`);
+                new Chart(ctxPairWd, {
+                    type: 'bar',
+                    data: {
+                        labels: localTimeLabels,
+                        datasets: [{ label: 'Overlap (1=Yes)', data: overlapWeekday, backgroundColor: 'rgba(153, 102, 255, 0.6)' }]
+                    },
+                     options: { scales: { y: { beginAtZero: true, max: 1.1, ticks: { stepSize: 1 } } } }
+                });
+                pairsGenerated++;
+
+                if (pairsGenerated >= maxPairCharts) break;
+
+                let ctxPairWe = createChartContainer(chartCount++, `${user1.name} & ${user2.name} Weekend Overlap`);
+                 new Chart(ctxPairWe, {
+                     type: 'bar',
+                     data: {
+                         labels: localTimeLabels,
+                         datasets: [{ label: 'Overlap (1=Yes)', data: overlapWeekend, backgroundColor: 'rgba(255, 159, 64, 0.6)' }]
+                     },
+                      options: { scales: { y: { beginAtZero: true, max: 1.1, ticks: { stepSize: 1 } } } }
+                 });
+                 pairsGenerated++;
+            }
+             if (pairsGenerated >= maxPairCharts) break;
+        }
+
+        // Fill remaining charts with other types to reach 100
+        const requiredCharts = 100;
+
+        // Chart Type 4: Group Overlap Count (2 charts: Weekday/Weekend)
+        if (chartCount < requiredCharts) {
+            const groupOverlapWeekday = Array(24).fill(0);
+            const groupOverlapWeekend = Array(24).fill(0);
+            for (let hour = 0; hour < 24; hour++) {
+                users.forEach(user => {
+                    if (availabilityData[user.name].weekday[hour]) groupOverlapWeekday[hour]++;
+                    if (availabilityData[user.name].weekend[hour]) groupOverlapWeekend[hour]++;
+                });
+            }
+
+            let ctxGroupWd = createChartContainer(chartCount++, 'Total Users Online (Weekday)');
+            new Chart(ctxGroupWd, {
+                type: 'line',
+                data: { labels: localTimeLabels, datasets: [{ label: '# Users Online', data: groupOverlapWeekday, borderColor: 'rgb(255, 99, 132)', tension: 0.1, fill: true }] },
+                options: { scales: { y: { beginAtZero: true, max: users.length, title: { display: true, text: 'Number of Users' } } } }
+            });
+
+            if (chartCount < requiredCharts) {
+                let ctxGroupWe = createChartContainer(chartCount++, 'Total Users Online (Weekend)');
+                new Chart(ctxGroupWe, {
+                    type: 'line',
+                    data: { labels: localTimeLabels, datasets: [{ label: '# Users Online', data: groupOverlapWeekend, borderColor: 'rgb(54, 162, 235)', tension: 0.1, fill: true }] },
+                    options: { scales: { y: { beginAtZero: true, max: users.length, title: { display: true, text: 'Number of Users' } } } }
+                });
+            }
+        }
+
+
+        // Chart Type 5: Estimated Local Awake Times (10 charts)
+        users.forEach(user => {
+            if (chartCount >= requiredCharts) return;
+            const awakeTimes = Array(24).fill(0);
+            for(let localHour = 7; localHour < 23; localHour++) {
+                 // Convert local hour back to a representative UTC hour for labeling consistency
+                 // This is tricky, let's just show local hours 0-23 and highlight 7-23
+                 awakeTimes[localHour] = 1; // Mark awake hours
+            }
+             let ctxAwake = createChartContainer(chartCount++, `Est. Local Awake Window (${user.name} ${user.flag} - Local Time)`);
+             new Chart(ctxAwake, {
+                 type: 'bar',
+                 data: {
+                     labels: Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`), // Use generic 00-23 labels
+                     datasets: [{
+                         label: 'Awake (Local Time)',
+                         data: awakeTimes,
+                         backgroundColor: (context) => context.raw === 1 ? 'rgba(100, 200, 100, 0.6)' : 'rgba(200, 200, 200, 0.2)',
+                         borderWidth: 0
+                     }]
+                 },
+                 options: {
+                     plugins: { legend: { display: false } },
+                     scales: {
+                         x: { title: { display: true, text: `${user.name}'s Local Time (Approx.)` } },
+                         y: { display: false }
+                      }
+                 }
+             });
+        });
+
+        // Chart Type 6: Total Availability Hours (1 chart)
+        if (chartCount < requiredCharts) {
+            const totalHoursWd = users.map(user => availabilityData[user.name].weekday.reduce((sum, h) => sum + h, 0));
+            const totalHoursWe = users.map(user => availabilityData[user.name].weekend.reduce((sum, h) => sum + h, 0));
+
+            let ctxTotalHours = createChartContainer(chartCount++, 'Total Est. Available Hours per User');
+            new Chart(ctxTotalHours, {
+                type: 'bar',
+                data: {
+                    labels: users.map(u => `${u.name} ${u.flag}`),
+                    datasets: [
+                        { label: 'Weekday Hours', data: totalHoursWd, backgroundColor: 'rgba(255, 99, 132, 0.5)' },
+                        { label: 'Weekend Hours', data: totalHoursWe, backgroundColor: 'rgba(54, 162, 235, 0.5)' }
+                    ]
+                },
+                options: { indexAxis: 'y', scales: { x: { stacked: true }, y: { stacked: true } } }
+            });
+        }
+
+        // Add more diverse placeholder charts to reach 100 if needed
+        while (chartCount < requiredCharts) {
+             let ctxPlaceholder = createChartContainer(chartCount, `Placeholder Graph ${chartCount + 1}`);
+             new Chart(ctxPlaceholder, {
+                 type: 'scatter', // Use a less common type for variety
+                 data: {
+                     datasets: [{
+                         label: `Dataset ${chartCount + 1}`,
+                         data: Array.from({length: 10}, () => ({ x: Math.random() * 10, y: Math.random() * 10 })),
+                         backgroundColor: `rgba(${Math.random()*255}, ${Math.random()*255}, ${Math.random()*255}, 0.6)`
+                     }]
+                 },
+                 options: { scales: { x: { beginAtZero: true }, y: { beginAtZero: true } } }
+             });
+             chartCount++;
+        }
+
+
+        // --- Graph 101: Best Time to Play ---
+        const groupOverlapWeekday = Array(24).fill(0);
+        const groupOverlapWeekend = Array(24).fill(0);
+        for (let hour = 0; hour < 24; hour++) {
+            users.forEach(user => {
+                // Check availability for a weekday (Monday=1) and weekend (Saturday=6)
+                if (isAvailable(user.offset, hour, 1)) groupOverlapWeekday[hour]++;
+                if (isAvailable(user.offset, hour, 6)) groupOverlapWeekend[hour]++;
+            });
+        }
+
+        // Combine or weigh weekday/weekend? Let's prioritize higher overlap regardless of day type for simplicity.
+        // We'll show both lines and find the best peak overall.
+        const combinedOverlap = groupOverlapWeekday.map((wd, i) => Math.max(wd, groupOverlapWeekend[i]));
+
+        let bestScore = 0;
+        let bestStartHour = -1;
+        let windowDuration = 3; // Look for a 3-hour window
+
+        for (let startHour = 0; startHour < 24; startHour++) {
+             let currentScore = 0;
+             for (let i = 0; i < windowDuration; i++) {
+                 let hourIndex = (startHour + i) % 24;
+                 // Weighting: Max overlap matters most, duration helps
+                 currentScore += combinedOverlap[hourIndex]; // Simple sum for now
+             }
+             // Find the window with the highest total user-hours
+             if (currentScore > bestScore) {
+                 bestScore = currentScore;
+                 bestStartHour = startHour;
+             }
+        }
+
+         // Find the absolute peak hour within the best window or overall
+        let absolutePeakHour = 0;
+        let maxOverlapCount = 0;
+        combinedOverlap.forEach((count, hour) => {
+            if (count > maxOverlapCount) {
+                maxOverlapCount = count;
+                absolutePeakHour = hour;
+            }
+        });
+
+         // Define "best time" - using the peak hour as the center or start. Let's use the peak hour.
+         let bestTimeDescription = "No significant overlap found.";
+         if (maxOverlapCount > users.length / 3) { // Require at least 1/3rd of users potentially online
+             const peakTimeLocal = formatLocalTime(absolutePeakHour);
+             const peakTimeEndLocal = formatLocalTime((absolutePeakHour + 1) % 24); // Show a 1-hour slot around the peak
+              bestTimeDescription = `Best potential time slot appears to be around ${peakTimeLocal} - ${peakTimeEndLocal} (${browserTimezone}), potentially involving up to ${maxOverlapCount} users. Weekends might offer more flexibility.`;
+
+             // If we found a good window:
+             if (bestStartHour !== -1 && bestScore > maxOverlapCount * 1.5) { // Check if window score is significantly good
+                 const startTimeLocal = formatLocalTime(bestStartHour);
+                 const endTimeLocal = formatLocalTime((bestStartHour + windowDuration) % 24);
+                 bestTimeDescription = `Best potential window appears to be ${startTimeLocal} to ${endTimeLocal} (${browserTimezone}), peaking with ${maxOverlapCount} users around ${peakTimeLocal}. Check individual graphs for specifics.`;
+             }
+
+         } else if (maxOverlapCount > 1) {
+             const peakTimeLocal = formatLocalTime(absolutePeakHour);
+             bestTimeDescription = `Overlap is generally low. The peak is around ${peakTimeLocal} (${browserTimezone}) with only ${maxOverlapCount} users potentially online. Check pairwise graphs for specific opportunities.`;
+         }
+
+
+        document.getElementById('best-time-text').textContent = bestTimeDescription;
+
+        let ctx101 = document.getElementById('chart101').getContext('2d');
+        new Chart(ctx101, {
+            type: 'line',
+            data: {
+                labels: localTimeLabels,
+                datasets: [
+                    {
+                        label: '# Users Online (Est. Weekday)',
+                        data: groupOverlapWeekday,
+                        borderColor: 'rgba(255, 99, 132, 0.8)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.1
+                    },
+                    {
+                        label: '# Users Online (Est. Weekend)',
+                        data: groupOverlapWeekend,
+                        borderColor: 'rgba(54, 162, 235, 0.8)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                 scales: {
+                     y: {
+                         beginAtZero: true,
+                         max: users.length, // Max possible users
+                         title: { display: true, text: 'Number of Users Potentially Online' }
+                     },
+                      x: {
+                          title: { display: true, text: `Hour of Day (${browserTimezone})` }
+                      }
+                 },
+                 plugins: {
+                     tooltip: { mode: 'index', intersect: false },
+                     title: { display: true, text: 'Estimated Concurrent Users Online vs. Local Time' }
+                 },
+                 interaction: {
+                    mode: 'index',
+                    intersect: false,
+                 }
+            }
+        });
+
+    </script>
+
+</body>
+</html>

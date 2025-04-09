@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Pede Artilleries Game</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #lightblue; }
+  #gameCanvas { background-color: #forestgreen; display: block; }
+  #ui { position: absolute; top: 10px; left: 10px; color: white; font-family: sans-serif; }
+</style>
+</head>
+<body>
+<div id="ui">
+  Score: <span id="scoreValue">0</span>
+</div>
+<canvas id="gameCanvas"></canvas>
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const scoreValueDisplay = document.getElementById('scoreValue');
+
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  let score = 0;
+  let artillery = { x: 50, y: canvas.height - 30, angle: 45, power: 50 };
+  let targets = [];
+  let projectile = null;
+  let gravity = 0.5;
+
+  function createTarget() {
+    const size = 20;
+    const x = canvas.width - 50;
+    const y = canvas.height - Math.random() * (canvas.height / 2) - size;
+    targets.push({ x: x, y: y, size: size, hit: false });
+  }
+
+  function drawArtillery() {
+    ctx.fillStyle = 'gray';
+    ctx.beginPath();
+    ctx.moveTo(artillery.x, artillery.y);
+    ctx.lineTo(artillery.x + 20, artillery.y);
+    ctx.lineTo(artillery.x + 10, artillery.y - 20);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = 'darkgray';
+    ctx.fillRect(artillery.x - 10, artillery.y, 20, 10);
+  }
+
+  function drawTargets() {
+    targets.forEach(target => {
+      if (!target.hit) {
+        ctx.fillStyle = 'red';
+        ctx.fillRect(target.x - target.size / 2, target.y - target.size / 2, target.size, target.size);
+      } else {
+        ctx.fillStyle = 'orange';
+        ctx.fillRect(target.x - target.size / 2, target.y - target.size / 2, target.size, target.size);
+        ctx.fillStyle = 'black';
+        ctx.font = '14px sans-serif';
+        ctx.fillText('💥', target.x - 10, target.y + 5);
+      }
+    });
+  }
+
+  function drawProjectile() {
+    if (projectile) {
+      ctx.fillStyle = 'yellow';
+      ctx.beginPath();
+      ctx.arc(projectile.x, projectile.y, 5, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function updateProjectile() {
+    if (projectile) {
+      projectile.x += projectile.velocityX;
+      projectile.y += projectile.velocityY;
+      projectile.velocityY += gravity;
+
+      if (projectile.y > canvas.height) {
+        projectile = null;
+      }
+    }
+  }
+
+  function checkCollisions() {
+    if (projectile) {
+      targets.forEach(target => {
+        if (!target.hit) {
+          const dx = projectile.x - target.x;
+          const dy = projectile.y - target.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance < target.size / 2 + 5) {
+            target.hit = true;
+            projectile = null;
+            score += 10;
+            scoreValueDisplay.textContent = score;
+          }
+        }
+      });
+    }
+  }
+
+  function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawArtillery();
+    drawTargets();
+    drawProjectile();
+
+    updateProjectile();
+    checkCollisions();
+
+    if (targets.length < 5) {
+      if (Math.random() < 0.02) {
+        createTarget();
+      }
+    }
+
+    targets = targets.filter(target => !target.hit || target.x > -50);
+    targets.forEach(target => target.x -= 1);
+
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  canvas.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    let angleRadians = Math.atan2(artillery.y - mouseY, mouseX - artillery.x);
+    artillery.angle = angleRadians * 180 / Math.PI;
+  });
+
+  canvas.addEventListener('click', () => {
+    if (!projectile) {
+      projectile = {
+        x: artillery.x + 10,
+        y: artillery.y - 20,
+        angle: artillery.angle,
+        power: artillery.power,
+        velocityX: artillery.power * 0.1 * Math.cos(artillery.angle * Math.PI / 180),
+        velocityY: -artillery.power * 0.1 * Math.sin(artillery.angle * Math.PI / 180)
+      };
+    }
+  });
+
+
+  gameLoop();
+</script>
+</body>
+</html>

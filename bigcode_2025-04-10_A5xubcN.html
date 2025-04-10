@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bird Shoot 'Em Up - 100 Levels</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 2px solid #4a4a8a;
+            background-color: #0f0f1e;
+            overflow: hidden; /* Important for camera movement */
+            cursor: none; /* Hide cursor over game */
+        }
+        #gameCanvas {
+            display: block;
+            background-color: #0f0f1e; /* Fallback if needed */
+        }
+        #uiLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Allow clicks to pass through */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #controlsInfo {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+         #levelDisplay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 1em;
+        }
+         #messageDisplay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 5px;
+            font-size: 1.5em;
+            text-align: center;
+            display: none; /* Hidden by default */
+         }
+        #skipButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 15px;
+            background-color: #4a4a8a;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            pointer-events: all; /* Enable clicks on the button */
+        }
+        #skipButton:hover {
+            background-color: #6a6aac;
+        }
+
+        /* Basic asset styling using characters/emojis or simple CSS */
+        .gameObject {
+            position: absolute;
+            /* Default styling */
+            font-size: 20px; /* Base size for emoji */
+            line-height: 1;
+        }
+
+        .player {
+            /* Using an emoji or a simple shape */
+             width: 25px;
+             height: 25px;
+             background-color: skyblue; /* Placeholder shape */
+             border-radius: 50%;
+             /* content: '🐦'; /* Using emoji - requires font support */
+             z-index: 10;
+        }
+
+        .bullet {
+            width: 5px;
+            height: 10px;
+            background-color: yellow;
+            z-index: 5;
+        }
+
+        .enemy {
+             /* Using a shape to represent comments */
+            width: 30px;
+            height: 30px;
+            background-color: #555; /* Dark grey square */
+            border: 1px solid #888;
+            /* content: '💬'; */
+            z-index: 8;
+        }
+         .enemy-type-1 { background-color: #c0392b; border: 1px solid #e74c3c; } /* Red */
+         .enemy-type-2 { background-color: #2980b9; border: 1px solid #3498db; } /* Blue */
+         .enemy-type-3 { background-color: #27ae60; border: 1px solid #2ecc71; } /* Green */
+         .enemy-type-4 { background-color: #f39c12; border: 1px solid #f1c40f; } /* Orange */
+         .enemy-type-5 { background-color: #8e44ad; border: 1px solid #9b59b6; } /* Purple */
+         /* Add more types as needed */
+
+         .obstacle {
+             background-color: #7f8c8d; /* Grey for obstacles */
+             z-index: 7;
+         }
+
+         .powerup {
+            width: 15px;
+            height: 15px;
+            background-color: limegreen;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+            z-index: 9;
+         }
+
+         @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 5px limegreen; }
+            50% { transform: scale(1.1); box-shadow: 0 0 15px limegreen; }
+            100% { transform: scale(1); box-shadow: 0 0 5px limegreen; }
+         }
+
+    </style>
+</head>
+<body>
+    <h1>Bird Shoot 'Em Up</h1>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="uiLayer">
+             <div id="levelDisplay">Level: 1</div>
+             <div id="messageDisplay">Loading...</div>
+             <div id="controlsInfo">WASD: Move | Space: Shoot | R: Reset Position</div>
+             <button id="skipButton">Skip Level</button>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('gameContainer');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelDisplay = document.getElementById('levelDisplay');
+        const messageDisplay = document.getElementById('messageDisplay');
+        const skipButton = document.getElementById('skipButton');
+
+        const gameWidth = 800;
+        const gameHeight = 600;
+        canvas.width = gameWidth;
+        canvas.height = gameHeight;
+
+        // --- Game State ---
+        let player;
+        let bullets = [];
+        let enemies = [];
+        let obstacles = []; // Added obstacles array
+        let powerups = []; // Added powerups array
+        let keys = {};
+        let currentLevel = 0; // Start at level 0 (index) -> displays as Level 1
+        let levelStartTime = 0;
+        let score = 0; // Basic score example
+        let cameraY = 0; // Vertical camera position
+        let levelProgress = 0; // How far into the current level's height we are
+        let gameRunning = false;
+        let gameOver = false;
+        let levelComplete = false;
+
+        // --- Game Settings ---
+        const playerSpeed = 5;
+        const bulletSpeed = 8;
+        const shootCooldown = 150; // milliseconds
+        let lastShotTime = 0;
+        const levelScrollSpeed = 0.5; // Pixels per frame the camera moves up
+
+        // --- Player Object ---
+        function createPlayer() {
+            return {
+                x: gameWidth / 2 - 12.5,
+                y: gameHeight - 60, // Start near bottom
+                width: 25,
+                height: 25,
+                speed: playerSpeed,
+                spawnX: gameWidth / 2 - 12.5,
+                spawnY: gameHeight - 60,
+                draw() {
+                    ctx.fillStyle = 'skyblue';
+                    ctx.beginPath();
+                    // Simple triangle shape for bird-like feel
+                    ctx.moveTo(this.x + this.width / 2, this.y); // Top point
+                    ctx.lineTo(this.x, this.y + this.height); // Bottom left
+                    ctx.lineTo(this.x + this.width, this.y + this.height); // Bottom right
+                    ctx.closePath();
+                    ctx.fill();
+                },
+                move() {
+                    let targetX = this.x;
+                    let targetY = this.y;
+
+                    if (keys['w'] || keys['W']) targetY -= this.speed;
+                    if (keys['s'] || keys['S']) targetY += this.speed;
+                    if (keys['a'] || keys['A']) targetX -= this.speed;
+                    if (keys['d'] || keys['D']) targetX += this.speed;
+
+                    // Collision with screen boundaries (relative to camera)
+                    targetX = Math.max(0, Math.min(gameWidth - this.width, targetX));
+                    // Adjust Y boundaries relative to camera view
+                    targetY = Math.max(cameraY, Math.min(cameraY + gameHeight - this.height, targetY));
+
+                    // Basic collision check with obstacles
+                    let canMove = true;
+                    for (const obs of obstacles) {
+                        if (checkCollision(
+                            { x: targetX, y: targetY, width: this.width, height: this.height },
+                            obs
+                        )) {
+                           // More refined collision response could be added here
+                           // For simplicity, just prevent movement into the obstacle
+                           // Check horizontal collision
+                           if (checkCollision({x: targetX, y: this.y, width: this.width, height: this.height}, obs)) {
+                               targetX = this.x; // block horizontal
+                           }
+                            // Check vertical collision
+                           if (checkCollision({x: this.x, y: targetY, width: this.width, height: this.height}, obs)) {
+                               targetY = this.y; // block vertical
+                           }
+                           // Re-check combined if both were attempted
+                           if (checkCollision({x: targetX, y: targetY, width: this.width, height: this.height}, obs)) {
+                               targetX = this.x;
+                               targetY = this.y;
+                           }
+
+                           break; // Stop checking after first collision
+                        }
+                    }
+
+                    this.x = targetX;
+                    this.y = targetY;
+                },
+                shoot() {
+                    const now = Date.now();
+                    if ((keys[' '] || keys['Spacebar']) && now - lastShotTime > shootCooldown) {
+                        bullets.push({
+                            x: this.x + this.width / 2 - 2.5, // Center bullet
+                            y: this.y,
+                            width: 5,
+                            height: 10,
+                            speed: bulletSpeed
+                        });
+                        lastShotTime = now;
+                    }
+                },
+                resetPosition() {
+                    this.x = this.spawnX;
+                    // Reset Y relative to current camera position
+                    this.y = cameraY + gameHeight - 60;
+                    // Ensure reset position isn't inside an obstacle immediately
+                     this.y = Math.max(cameraY, Math.min(cameraY + gameHeight - this.height, this.y));
+                      let attempts = 0;
+                      while (attempts < 5) { // Try a few times to nudge if stuck
+                        let collided = false;
+                        for (const obs of obstacles) {
+                            if (checkCollision(this, obs)) {
+                                this.y -= 5; // Nudge up slightly
+                                collided = true;
+                                break;
+                            }
+                        }
+                        if (!collided) break;
+                        attempts++;
+                      }
+
+                }
+            };
+        }
+
+        // --- Level Definitions ---
+        // !! IMPORTANT !! Creating 100 truly unique, long, balanced levels
+        // with progressively complex mechanics is an enormous task far beyond
+        // the scope of this format. This will provide a *structure* and a
+        // *small sample* demonstrating the concept. Scaling this requires
+        // significant development effort.
+
+        const levels = [];
+
+        function defineLevel(levelIndex, config) {
+            levels[levelIndex] = {
+                index: levelIndex,
+                height: config.height || 3000, // Pixel height of the level scroll
+                message: config.message || `Level ${levelIndex + 1}`,
+                backgroundColor: config.backgroundColor || '#0f0f1e',
+                enemySpawns: config.enemySpawns || [], // [ { type, y, x?, pattern?, health?, mechanic? }, ... ]
+                obstacleSpawns: config.obstacleSpawns || [], // [ { x, y, width, height, type? }, ... ]
+                powerupSpawns: config.powerupSpawns || [], // [ { x, y, type }, ... ]
+                newMechanics: config.newMechanics || [], // Description of new things
+                boss: config.boss || null // Boss definition for end of level
+                // Add more level-specific properties here (e.g., scroll speed mod)
+            };
+        }
+
+        // --- MECHANICS INTRODUCTION PLAN ---
+        // Level 0-9: Basic movement, shooting, simple enemy patterns, static obstacles.
+        // Level 10-19: Introduce moving enemies (simple paths), destructible obstacles.
+        // Level 20-29: Introduce enemies that shoot back (basic patterns).
+        // Level 30-39: Introduce power-ups (e.g., faster shot, shield).
+        // Level 40-49: Introduce environmental hazards (e.g., laser beams, zones).
+        // Level 50-59: Introduce enemies with more complex movement/attack patterns.
+        // Level 60-69: Introduce mini-bosses or tougher enemy waves.
+        // Level 70-79: Introduce mechanics requiring specific tactics (e.g., targeting weak points).
+        // Level 80-89: Introduce screen-altering effects or more dynamic environments.
+        // Level 90-99: Combine previous mechanics in challenging sequences.
+        // Level 100: Grand finale boss level using all mechanics.
+
+        // --- SAMPLE LEVEL DEFINITIONS (Illustrative - NOT 100 complete levels) ---
+
+        // Level 1 (Index 0) - Introduction
+        defineLevel(0, {
+            height: 2000,
+            message: "Level 1: First Flight",
+            enemySpawns: [
+                { type: 1, y: 300, x: 100, pattern: 'straightDown' },
+                { type: 1, y: 350, x: 700, pattern: 'straightDown' },
+                { type: 1, y: 600, x: 300, pattern: 'straightDown' },
+                { type: 1, y: 650, x: 500, pattern: 'straightDown' },
+                { type: 2, y: 1000, x: 150, pattern: 'straightDown' },
+                { type: 2, y: 1000, x: 650, pattern: 'straightDown' },
+                { type: 1, y: 1400, x: 400, pattern: 'straightDown' },
+                { type: 1, y: 1450, x: 200, pattern: 'straightDown' },
+                { type: 1, y: 1450, x: 600, pattern: 'straightDown' },
+            ],
+            obstacleSpawns: [
+                 { x: 0, y: 800, width: 150, height: 30 },
+                 { x: gameWidth - 200, y: 1200, width: 200, height: 30 }
+            ]
+        });
+
+        // Level 2 (Index 1) - More Enemies, Simple Obstacle
+         defineLevel(1, {
+            height: 2500,
+            message: "Level 2: Watch Out!",
+             enemySpawns: [
+                { type: 1, y: 200, x: 100, pattern: 'straightDown' }, { type: 1, y: 200, x: 700, pattern: 'straightDown' },
+                { type: 2, y: 400, x: 400, pattern: 'straightDown' },
+                { type: 1, y: 600, x: 200, pattern: 'straightDown', health: 2 }, { type: 1, y: 600, x: 600, pattern: 'straightDown', health: 2 },
+                { type: 2, y: 900, x: 100, pattern: 'straightDown' }, { type: 2, y: 950, x: 200, pattern: 'straightDown' }, { type: 2, y: 1000, x: 300, pattern: 'straightDown' },
+                { type: 1, y: 1300, x: 50, pattern: 'straightDown' }, { type: 1, y: 1300, x: 750, pattern: 'straightDown' },
+                { type: 2, y: 1600, x: 400, pattern: 'straightDown', health: 3 },
+                { type: 1, y: 1800, x: 100, pattern: 'straightDown' }, { type: 1, y: 1850, x: 250, pattern: 'straightDown' }, { type: 1, y: 1800, x: 700, pattern: 'straightDown' }, { type: 1, y: 1850, x: 550, pattern: 'straightDown' },
+            ],
+             obstacleSpawns: [
+                 { x: 300, y: 500, width: 200, height: 30 },
+                 { x: 0, y: 1100, width: 250, height: 30 },
+                 { x: gameWidth - 250, y: 1100, width: 250, height: 30 },
+                 { x: 350, y: 1700, width: 100, height: 100 }, // Square block
+             ]
+        });
+
+        // Level 3 (Index 2) - Diagonal Movement Intro
+        defineLevel(2, {
+            height: 3000,
+            message: "Level 3: Diagonal Threats",
+            newMechanics: ["Enemies moving diagonally"],
+            enemySpawns: [
+                 { type: 3, y: 300, x: 50, pattern: 'diagDownRight' },
+                 { type: 3, y: 300, x: 750, pattern: 'diagDownLeft' },
+                 { type: 1, y: 500, x: 400, pattern: 'straightDown' },
+                 { type: 3, y: 700, x: 100, pattern: 'diagDownRight' }, { type: 3, y: 750, x: 150, pattern: 'diagDownRight' },
+                 { type: 3, y: 1000, x: 700, pattern: 'diagDownLeft' }, { type: 3, y: 1050, x: 650, pattern: 'diagDownLeft' },
+                 { type: 2, y: 1300, x: 200, pattern: 'straightDown', health: 2}, { type: 2, y: 1300, x: 600, pattern: 'straightDown', health: 2},
+                 { type: 3, y: 1600, x: 50, pattern: 'diagDownRight', speed: 2.5 }, { type: 3, y: 1600, x: 750, pattern: 'diagDownLeft', speed: 2.5 },
+                 { type: 1, y: 1900, x: 100, pattern: 'straightDown' }, { type: 1, y: 1900, x: 300, pattern: 'straightDown' }, { type: 1, y: 1900, x: 500, pattern: 'straightDown' }, { type: 1, y: 1900, x: 700, pattern: 'straightDown' },
+                 { type: 3, y: 2200, x: 400, pattern: 'straightDown', speed: 1 }, // Slower green one
+                 { type: 3, y: 2500, x: 0, pattern: 'diagDownRight', speed: 3 }, { type: 3, y: 2550, x: gameWidth - 30, pattern: 'diagDownLeft', speed: 3 },
+            ],
+            obstacleSpawns: [
+                 { x: 100, y: 800, width: 30, height: 200 }, // Vertical pillar
+                 { x: gameWidth - 130, y: 1500, width: 30, height: 200 }, // Vertical pillar
+                 { x: 200, y: 2000, width: 400, height: 20 }, // Wide horizontal bar
+            ]
+        });
+
+        // Level 10 (Index 9) - Placeholder for new mechanic intro
+        defineLevel(9, {
+            height: 3500,
+            message: "Level 10: Moving Obstacles?", // Placeholder description
+             newMechanics: ["Introduce moving/destructible obstacles"],
+            enemySpawns: [ /* Add complex patterns */
+                { type: 4, y: 300, x: 100, pattern: 'sineWave', health: 3 },
+                { type: 4, y: 300, x: 700, pattern: 'sineWave', health: 3 },
+                { type: 1, y: 600, x: 50, pattern: 'diagDownRight', speed: 3 }, { type: 1, y: 600, x: 750, pattern: 'diagDownLeft', speed: 3 },
+                { type: 2, y: 1000, x: 400, pattern: 'straightDown', speed: 4 },
+                 // ... more spawns
+            ],
+            obstacleSpawns: [ /* Introduce basic moving obstacles or destructible ones */
+                 { x: 100, y: 500, width: 100, height: 30, type: 'movingHorizontally', range: 200, speed: 1 },
+                 { x: gameWidth-200, y: 1200, width: 100, height: 30, type: 'destructible', health: 5 },
+                 // ... more obstacles
+            ],
+             powerupSpawns: [
+                 { x: 400, y: 800, type: 'speedBoost' } // Example powerup
+             ]
+        });
+
+         // Level 20 (Index 19) - Placeholder for shooting enemies
+        defineLevel(19, {
+            height: 4000,
+            message: "Level 20: Return Fire!",
+            newMechanics: ["Enemies start shooting back"],
+            enemySpawns: [ /* Introduce enemies with shooting capabilities */
+                { type: 5, y: 400, x: 200, pattern: 'hoverShoot', health: 4, shootInterval: 2000 },
+                { type: 5, y: 400, x: 600, pattern: 'hoverShoot', health: 4, shootInterval: 2200 },
+                { type: 3, y: 800, x: 50, pattern: 'diagShoot', shootInterval: 1500, speed: 2 },
+                { type: 3, y: 800, x: 750, pattern: 'diagShoot', shootInterval: 1500, speed: 2 },
+                 // ... more spawns
+            ],
+            obstacleSpawns: [ /* Challenging obstacle layouts */ ],
+            powerupSpawns: [ /* Maybe shield powerup */ ]
+        });
+
+        // ... Add placeholders or simplified logic for levels 4, 5, ..., 99 ...
+        // THIS IS WHERE THE MAJORITY OF THE WORK WOULD BE.
+        // For this example, we will just loop through the first few levels
+        // or jump to a final placeholder level if skipped too far.
+
+        // Simplified loop for demonstration - will cycle after level 3 (index 2)
+        // A real implementation would need all 100 definitions.
+        const MAX_DEFINED_LEVEL = 2; // Only defined up to index 2 (Level 3)
+
+        // Placeholder for Level 100
+        defineLevel(99, {
+             height: 10000, // Very long
+             message: "Level 100: The Final Gauntlet",
+             newMechanics: ["All mechanics combined!", "Final Boss"],
+             backgroundColor: '#2c1a1a', // Darker, menacing background
+             enemySpawns: [ /* Intense waves using all defined types and patterns */
+                // Example: Wave 1
+                { type: 1, y: 300, x: 100, pattern: 'straightDown', speed: 3 }, { type: 1, y: 300, x: 700, pattern: 'straightDown', speed: 3 },
+                { type: 3, y: 350, x: 50, pattern: 'diagDownRight', speed: 2.5 }, { type: 3, y: 350, x: 750, pattern: 'diagDownLeft', speed: 2.5 },
+                // Example: Wave 2 with shooters
+                 { type: 5, y: 800, x: 200, pattern: 'hoverShoot', health: 5, shootInterval: 1800 },
+                 { type: 5, y: 800, x: 600, pattern: 'hoverShoot', health: 5, shootInterval: 1900 },
+                 { type: 4, y: 1000, x: 400, pattern: 'sineWave', health: 4, speed: 1.5 },
+                // ... Many more waves ...
+             ],
+             obstacleSpawns: [ /* Complex mix of static, moving, destructible */
+                { x: 0, y: 600, width: gameWidth, height: 20, type: 'laserBeam', activationDelay: 3000, duration: 1000 }, // Example Hazard
+                { x: 300, y: 1200, width: 200, height: 50, type: 'movingVertically', range: 150, speed: 1.5 },
+                { x: 100, y: 1800, width: 50, height: 50, type: 'destructible', health: 10 },
+                 // ... Many more obstacles ...
+             ],
+             powerupSpawns: [
+                 { x: 400, y: 500, type: 'shield' },
+                 { x: 200, y: 1500, type: 'rapidFire' },
+                 { x: 600, y: 2500, type: 'spreadShot' }, // Example new powerup
+                  // ... More strategic powerup placement ...
+             ],
+             boss: { // Example Boss definition
+                 type: 'finalBoss',
+                 y: 8500, // Appears near the end
+                 x: gameWidth / 2 - 100,
+                 width: 200,
+                 height: 150,
+                 health: 500, // Lots of health
+                 patterns: ['barrage', 'laserSweep', 'summonAdds', 'chargeAttack'], // Different phases/attacks
+                 phase: 0,
+                 phaseChangeHealth: [400, 250, 100] // Health thresholds for phase changes
+             }
+        });
+
+        // --- Utility Functions ---
+        function checkCollision(rect1, rect2) {
+            // Check if rect2 exists and has dimensions before proceeding
+            if (!rect2 || typeof rect2.x === 'undefined' || typeof rect2.y === 'undefined' || typeof rect2.width === 'undefined' || typeof rect2.height === 'undefined') {
+                return false;
+            }
+             // Check if rect1 exists and has dimensions before proceeding
+            if (!rect1 || typeof rect1.x === 'undefined' || typeof rect1.y === 'undefined' || typeof rect1.width === 'undefined' || typeof rect1.height === 'undefined') {
+                return false;
+            }
+
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function spawnEnemy(config) {
+             // Y position in spawn config is absolute level height, convert to initial spawn position
+            const spawnY = config.y - levelProgress + cameraY; // Adjust for current camera and total progress
+
+            // Only spawn if it's within or just above the view
+            if (spawnY < cameraY + gameHeight + 50) { // Spawn a bit above screen
+                 const enemy = {
+                    type: config.type || 1,
+                    x: config.x !== undefined ? config.x : Math.random() * (gameWidth - 30),
+                    y: spawnY, // Use calculated spawn Y
+                    width: 30,
+                    height: 30,
+                    speed: config.speed || 1.5 + (currentLevel * 0.1), // Base speed + level scaling
+                    health: config.health || 1 + Math.floor(currentLevel / 5), // Base health + level scaling
+                    pattern: config.pattern || 'straightDown',
+                    originalY: spawnY, // For patterns like sine wave
+                    originalX: config.x !== undefined ? config.x : Math.random() * (gameWidth - 30),
+                    shootInterval: config.shootInterval || null, // For shooting enemies
+                    lastShot: 0,
+                    active: true, // Mark as active for processing
+                    draw() {
+                        if (!this.active) return;
+                        // Apply basic class for shape, then specific type for color
+                         ctx.fillStyle = getEnemyColor(this.type);
+                         ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); // Adjust Y for camera
+                         // Simple health indicator (optional)
+                         if (this.health > 1) {
+                             ctx.fillStyle = 'white';
+                             ctx.font = '10px sans-serif';
+                             ctx.textAlign = 'center';
+                             ctx.fillText(this.health, this.x + this.width / 2, this.y - cameraY + this.height / 2 + 4);
+                         }
+                    },
+                    move() {
+                        if (!this.active) return;
+                         switch (this.pattern) {
+                            case 'straightDown':
+                                this.y += this.speed;
+                                break;
+                             case 'diagDownRight':
+                                this.y += this.speed * 0.707;
+                                this.x += this.speed * 0.707;
+                                break;
+                            case 'diagDownLeft':
+                                this.y += this.speed * 0.707;
+                                this.x -= this.speed * 0.707;
+                                break;
+                             case 'sineWave':
+                                 this.y += this.speed;
+                                 this.x = this.originalX + Math.sin((this.y - this.originalY) * 0.02) * 50; // Simple sine
+                                 break;
+                             case 'hoverShoot': // Stays roughly in place, moves slightly
+                                 this.x += Math.sin(Date.now() * 0.001) * 0.5;
+                                 // Add shooting logic here if needed
+                                 break;
+                             case 'diagShoot': // Moves diagonally and shoots
+                                this.y += this.speed * 0.707;
+                                this.x += (this.originalX < gameWidth / 2 ? 1 : -1) * this.speed * 0.707; // Move towards center initially
+                                 // Add shooting logic
+                                 break;
+                             // Add more patterns based on level mechanics
+                            default:
+                                this.y += this.speed;
+                        }
+
+                        // Keep within horizontal bounds
+                        if (this.x < 0) this.x = 0;
+                        if (this.x > gameWidth - this.width) this.x = gameWidth - this.width;
+
+                        // Deactivate if off bottom of screen (relative to camera)
+                        if (this.y > cameraY + gameHeight + 50) {
+                            this.active = false;
+                        }
+                    },
+                    shoot() {
+                         // Placeholder for enemy shooting logic (requires enemy bullet implementation)
+                         if (!this.active || !this.shootInterval) return;
+                         const now = Date.now();
+                         if (now - this.lastShot > this.shootInterval) {
+                             // console.log(`Enemy ${this.type} shooting!`); // Debug log
+                             // Create enemy bullet (needs definition and handling)
+                             this.lastShot = now;
+                         }
+                    }
+                };
+                enemies.push(enemy);
+                // Mark spawn as handled by setting its y to -Infinity or removing it
+                 config.y = -Infinity;
+            }
+        }
+
+        function spawnObstacle(config) {
+             const spawnY = config.y - levelProgress + cameraY;
+              if (spawnY < cameraY + gameHeight + 50) {
+                 const obstacle = {
+                     x: config.x,
+                     y: spawnY,
+                     width: config.width,
+                     height: config.height,
+                     type: config.type || 'static', // static, movingHorizontally, movingVertically, destructible, laserBeam etc.
+                     originalX: config.x,
+                     originalY: spawnY,
+                     range: config.range || 100,
+                     speed: config.speed || 1,
+                     health: config.health || 5, // For destructible
+                     active: true,
+                     draw() {
+                         if (!this.active) return;
+                         ctx.fillStyle = '#7f8c8d'; // Grey
+                         ctx.fillRect(this.x, this.y - cameraY, this.width, this.height); // Adjust for camera
+                         if (this.type === 'destructible') {
+                             ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                             ctx.font = '10px sans-serif';
+                             ctx.textAlign = 'center';
+                             ctx.fillText(this.health, this.x + this.width / 2, this.y - cameraY + this.height / 2 + 4);
+                         }
+                     },
+                     update() { // For moving or dynamic obstacles
+                         if (!this.active) return;
+                         switch(this.type) {
+                             case 'movingHorizontally':
+                                 this.x = this.originalX + Math.sin(Date.now() * 0.001 * this.speed) * this.range;
+                                 break;
+                             case 'movingVertically': // Note: vertical movement needs care with camera scroll
+                                 this.y = this.originalY + Math.sin(Date.now() * 0.001 * this.speed) * this.range;
+                                 break;
+                             // Add other dynamic types (lasers, etc.)
+                         }
+                          // Deactivate if scrolled way off screen
+                        if (this.y > cameraY + gameHeight + 200) {
+                            this.active = false;
+                        }
+                     }
+                 };
+                 obstacles.push(obstacle);
+                 config.y = -Infinity; // Mark as spawned
+             }
+        }
+
+        // Add spawnPowerup function (similar structure to spawnEnemy/Obstacle)
+
+        function getEnemyColor(type) {
+             switch(type) {
+                case 1: return '#c0392b'; // Red
+                case 2: return '#2980b9'; // Blue
+                case 3: return '#27ae60'; // Green
+                case 4: return '#f39c12'; // Orange
+                case 5: return '#8e44ad'; // Purple
+                default: return '#555555'; // Default Grey
+             }
+        }
+
+        // --- Level Management ---
+        function loadLevel(levelIndex) {
+            if (levelIndex >= levels.length) {
+                // If trying to load beyond defined levels (e.g., after level 100)
+                 console.log("Attempting to load undefined level:", levelIndex);
+                 if (levels[99]) { // Default to final level if exists
+                    currentLevel = 99;
+                 } else { // Or handle game completion / loop back / error
+                     showEndGameMessage("Congratulations! You completed all levels!");
+                     return; // Stop loading
+                 }
+            } else {
+                 currentLevel = levelIndex;
+            }
+
+            const levelData = levels[currentLevel];
+            if (!levelData) {
+                 console.error("Level data not found for index:", currentLevel);
+                 showEndGameMessage("Error: Could not load level data.");
+                 return;
+            }
+
+            console.log("Loading Level:", currentLevel + 1, levelData.message); // Debug log
+
+            levelDisplay.textContent = `Level: ${currentLevel + 1}`;
+            showMessage(levelData.message, 2000); // Show level title briefly
+
+            // Reset game state for the new level
+            bullets = [];
+            enemies = [];
+            obstacles = [];
+            powerups = [];
+            cameraY = 0;
+            levelProgress = 0;
+            levelStartTime = Date.now();
+            gameOver = false;
+            levelComplete = false;
+            canvas.style.backgroundColor = levelData.backgroundColor || '#0f0f1e'; // Set background
+
+            if (!player) { // Create player only once initially
+                player = createPlayer();
+            } else {
+                player.resetPosition(); // Reset position for the new level start
+                // Ensure player starts at the bottom relative to the new cameraY=0
+                 player.y = gameHeight - 60;
+            }
+
+
+            // Prepare spawns (make copies or reset flags if needed)
+            // Resetting 'y' allows respawn if level restarts; needs careful handling
+            // A better approach might be to clone the level data or use flags.
+             levelData.enemySpawns.forEach(spawn => {
+                 // Resetting a flag might be safer than modifying y directly if levels repeat
+                 spawn.spawned = false; // Example using a flag
+             });
+              levelData.obstacleSpawns.forEach(spawn => {
+                 spawn.spawned = false;
+             });
+             // levelData.powerupSpawns.forEach(spawn => spawn.spawned = false);
+
+
+            gameRunning = true;
+        }
+
+        function nextLevel() {
+            levelComplete = false; // Reset flag
+            let nextLevelIndex = currentLevel + 1;
+            // Handle looping or ending after the last defined level
+             if (nextLevelIndex >= levels.length) {
+                // Option 1: End Game
+                 showEndGameMessage("YOU WIN! All levels cleared!");
+                 // Option 2: Loop back (for testing or infinite play)
+                 // nextLevelIndex = 0;
+                 // loadLevel(nextLevelIndex);
+                return; // Stop if ending game
+             }
+             // If we only defined a few levels, make sure we don't exceed MAX_DEFINED_LEVEL
+             // This is a TEMPORARY measure because we don't have 100 levels.
+             if (nextLevelIndex > MAX_DEFINED_LEVEL && nextLevelIndex !== 99) { // Allow jump to 99
+                 console.warn(`Skipping to placeholder Level 100 as Level ${nextLevelIndex + 1} is not defined.`);
+                 nextLevelIndex = 99; // Jump to the final placeholder
+             }
+
+
+            loadLevel(nextLevelIndex);
+        }
+
+        function skipLevel() {
+             if (gameOver) return; // Don't skip if game over
+             showMessage("Level Skipped!", 1000);
+             nextLevel();
+        }
+
+
+        function showMessage(text, duration = 1500) {
+            messageDisplay.textContent = text;
+            messageDisplay.style.display = 'block';
+            if (duration) {
+                setTimeout(() => {
+                    // Only hide if the message hasn't been replaced
+                    if (messageDisplay.textContent === text) {
+                       messageDisplay.style.display = 'none';
+                    }
+                }, duration);
+            }
+        }
+
+        function showEndGameMessage(text) {
+            gameRunning = false;
+            gameOver = true;
+            messageDisplay.textContent = text + " (Refresh to replay)";
+            messageDisplay.style.display = 'block';
+        }
+
+
+        // --- Input Handling ---
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            if ((e.key === 'r' || e.key === 'R') && player && gameRunning && !gameOver) {
+                player.resetPosition();
+                showMessage("Position Reset", 500);
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        skipButton.addEventListener('click', skipLevel);
+
+
+        // --- Game Loop ---
+        function gameLoop(timestamp) {
+            if (!gameRunning) {
+                // Still draw background and maybe player if needed before start
+                 ctx.clearRect(0, 0, gameWidth, gameHeight);
+                 ctx.fillStyle = levels[currentLevel]?.backgroundColor || '#0f0f1e';
+                 ctx.fillRect(0,0, gameWidth, gameHeight);
+                if(player && !gameOver) player.draw(); // Draw player even if waiting to start
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            if (gameOver) {
+                 // Optionally draw a static game over screen
+                 requestAnimationFrame(gameLoop); // Keep animation frame request if needed for effects
+                 return;
+            }
+
+
+            // --- Clear Canvas ---
+            ctx.clearRect(0, 0, gameWidth, gameHeight); // Clear previous frame
+            // Redraw background for current level (in case it changes)
+            ctx.fillStyle = levels[currentLevel]?.backgroundColor || '#0f0f1e';
+            ctx.fillRect(0, 0, gameWidth, gameHeight);
+
+
+            // --- Update Camera & Level Progress ---
+            const levelData = levels[currentLevel];
+            if (!levelComplete && levelProgress < levelData.height) {
+                cameraY += levelScrollSpeed;
+                levelProgress += levelScrollSpeed; // Track how far we've scrolled
+            } else if (!levelComplete && levelProgress >= levelData.height) {
+                // Level finished scrolling, potentially trigger boss or completion
+                console.log("Level scroll complete for Level", currentLevel + 1);
+                 if (!levelData.boss && enemies.length === 0) { // Complete if no boss and enemies cleared
+                    levelComplete = true;
+                    showMessage("Level Cleared!", 2000);
+                    setTimeout(nextLevel, 2500); // Move to next level after a delay
+                 }
+                // Add boss logic here if levelData.boss exists
+            }
+
+            // --- Spawn Entities ---
+            levelData.enemySpawns.forEach(spawn => {
+                // Use the 'spawned' flag approach
+                if (!spawn.spawned && spawn.y >= levelProgress && spawn.y < levelProgress + gameHeight + 50) {
+                     spawnEnemy({ ...spawn }); // Pass a copy to avoid modifying original level data directly
+                     spawn.spawned = true; // Mark as spawned
+                }
+            });
+             levelData.obstacleSpawns.forEach(spawn => {
+                  if (!spawn.spawned && spawn.y >= levelProgress && spawn.y < levelProgress + gameHeight + 100) { // Spawn slightly earlier
+                    spawnObstacle({ ...spawn });
+                    spawn.spawned = true;
+                 }
+             });
+            // Add powerup spawning logic
+
+
+            // --- Update Entities ---
+            player.move();
+            player.shoot();
+
+            // Update Bullets
+            bullets.forEach((bullet, index) => {
+                bullet.y -= bullet.speed;
+                if (bullet.y < cameraY - 20) { // Remove if way off screen top (relative to camera)
+                    bullets.splice(index, 1);
+                }
+            });
+
+            // Update Enemies
+            enemies.forEach(enemy => {
+                 if (enemy.active) {
+                    enemy.move();
+                    enemy.shoot(); // Handle enemy shooting if applicable
+                 }
+            });
+
+             // Update Obstacles (for moving ones)
+             obstacles.forEach(obstacle => {
+                 if (obstacle.active) {
+                     obstacle.update();
+                 }
+             });
+
+            // --- Collision Detection ---
+            // Bullet vs Enemy
+            bullets.forEach((bullet, bulletIndex) => {
+                enemies.forEach((enemy) => {
+                     if (enemy.active && checkCollision(bullet, enemy)) {
+                        bullets.splice(bulletIndex, 1); // Remove bullet
+                        enemy.health--;
+                        if (enemy.health <= 0) {
+                            enemy.active = false; // Deactivate enemy
+                            score += 10; // Add score
+                        }
+                        // Add particle effect/sound here
+                    }
+                });
+                 // Bullet vs Destructible Obstacle
+                 obstacles.forEach((obstacle) => {
+                     if (obstacle.active && obstacle.type === 'destructible' && checkCollision(bullet, obstacle)) {
+                         bullets.splice(bulletIndex, 1);
+                         obstacle.health--;
+                         if (obstacle.health <= 0) {
+                             obstacle.active = false;
+                             // Maybe add score or effect
+                         }
+                     }
+                 });
+            });
+
+            // Player vs Enemy
+            enemies.forEach(enemy => {
+                if (enemy.active && checkCollision(player, enemy)) {
+                     console.log("Player hit by enemy!");
+                     showEndGameMessage("Game Over!");
+                     // Handle player death (e.g., lives, restart level, game over)
+                     // For now, simple game over
+                 }
+            });
+
+             // Player vs Obstacle (handled partially in player.move, but double check)
+             obstacles.forEach(obstacle => {
+                 if (obstacle.active && checkCollision(player, obstacle)) {
+                     // If movement didn't fully prevent overlap (e.g., fast obstacle)
+                     // Could implement pushback or damage
+                     // For now, rely on movement prevention. If it's a hazard like laser:
+                      if (obstacle.type === 'laserBeam' /* && laser is active */) {
+                           console.log("Player hit by obstacle hazard!");
+                           showEndGameMessage("Game Over!");
+                      }
+                  }
+             });
+
+            // Player vs Powerup
+             powerups.forEach((powerup, index) => {
+                if (powerup.active && checkCollision(player, powerup)) {
+                    powerup.active = false; // Collect powerup
+                    powerups.splice(index, 1);
+                    // Apply powerup effect (e.g., modify player.speed, shootCooldown)
+                     showMessage("Power-up!", 1000);
+                 }
+             });
+
+
+            // --- Drawing ---
+            // Player
+            player.draw();
+
+            // Bullets
+            ctx.fillStyle = 'yellow';
+            bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y - cameraY, bullet.width, bullet.height); // Adjust Y for camera
+            });
+
+            // Enemies
+            enemies.forEach(enemy => {
+                if (enemy.active) {
+                    enemy.draw(); // Draw method already adjusts for camera
+                }
+            });
+
+            // Obstacles
+            obstacles.forEach(obstacle => {
+                 if (obstacle.active) {
+                     obstacle.draw(); // Draw method already adjusts for camera
+                 }
+            });
+
+            // Powerups (needs draw method/logic)
+            powerups.forEach(powerup => {
+                if (powerup.active) {
+                    // Draw powerup (adjusting for cameraY)
+                     ctx.fillStyle = 'limegreen';
+                     ctx.beginPath();
+                     ctx.arc(powerup.x + 7.5, powerup.y - cameraY + 7.5, 7.5, 0, Math.PI * 2);
+                     ctx.fill();
+                 }
+            });
+
+            // --- Cleanup Inactive Entities ---
+             // Filter out inactive entities efficiently
+             enemies = enemies.filter(enemy => enemy.active && enemy.y < cameraY + gameHeight + 50); // Keep if active & near screen
+             obstacles = obstacles.filter(obstacle => obstacle.active && obstacle.y < cameraY + gameHeight + 200);
+             powerups = powerups.filter(powerup => powerup.active);
+             // Bullets cleaned up when they go off-screen or hit something
+
+            // --- Request Next Frame ---
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Start Game ---
+         showMessage("Loading Complete. Ready?", 3000);
+         // Need a delay or start button, but for now, auto-start after short delay
+         setTimeout(() => {
+             if (levels.length > 0) {
+                loadLevel(0); // Load the first level (index 0)
+                // gameLoop() will be called via requestAnimationFrame after level loaded
+             } else {
+                showEndGameMessage("Error: No levels defined!");
+             }
+         }, 1000); // Short delay before starting
+
+    </script>
+
+</body>
+</html>

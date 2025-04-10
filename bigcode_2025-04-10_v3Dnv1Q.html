@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Adventure 100</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #333;
+            color: white;
+            font-family: sans-serif;
+        }
+        canvas {
+            border: 2px solid white;
+            background-color: #87CEEB; /* Sky blue background */
+            display: block;
+        }
+        #controls {
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-top: 10px;
+            background-color: #555;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #777;
+        }
+         #levelInfo {
+            margin-top: 5px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Platformer Adventure 100</h1>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="levelInfo">Level: 1 / 100</div>
+    <div id="controls">Controls: WASD/Arrow Keys to Move, Space to Jump, R to Reset</div>
+    <button id="skipButton">Skip Level</button>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const levelInfoDiv = document.getElementById('levelInfo');
+        const skipButton = document.getElementById('skipButton');
+
+        const TILE_SIZE = 32;
+        const GRAVITY = 0.5;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = 12;
+        const FRICTION = 0.8;
+
+        let currentLevelIndex = 0;
+        let levels = []; // Will be populated later
+        let currentLevelData = null;
+
+        const player = {
+            x: 0,
+            y: 0,
+            width: TILE_SIZE * 0.8,
+            height: TILE_SIZE * 0.9,
+            vx: 0,
+            vy: 0,
+            spawnX: 0,
+            spawnY: 0,
+            onGround: false,
+            canJump: true,
+            hasKey: false,
+            color: '#A0522D', // Brown
+            hatColor: '#333333', // Dark grey
+            bowTieColor: '#FF0000' // Red
+        };
+
+        const keys = {
+            w: false,
+            a: false,
+            d: false,
+            space: false
+        };
+
+        const camera = {
+            x: 0,
+            y: 0,
+            targetX: 0,
+            targetY: 0,
+            smoothing: 0.1 // Lower value = smoother camera
+        };
+
+        const movingPlatforms = [];
+        const hazards = [];
+        const bouncePads = [];
+        const keysObjects = [];
+        const doors = [];
+        let goal = null;
+
+        // --- Level Definitions ---
+        // P=Player Start, X=Platform, G=Goal, M=Moving Platform (Horizontal), V=Moving Platform (Vertical)
+        // S=Spike/Hazard, B=Bounce Pad, K=Key, D=Door
+        // '-' or ' ' = Empty Space
+        // Each level is an array of strings. Max 100 levels.
+
+        // Generate 100 Levels (Simplified Procedural Approach)
+        function generateLevels() {
+            levels = [];
+            let baseWidth = 25; // ~800px / 32
+            let baseHeight = 19; // ~600px / 32
+
+            for (let i = 0; i < 100; i++) {
+                let level = [];
+                let width = baseWidth + Math.floor(i / 5) * 2 + Math.random() * 5; // Increase width over time
+                let height = baseHeight + Math.floor(i / 10);
+                width = Math.max(baseWidth, Math.min(150, width)); // Clamp width
+                height = Math.max(baseHeight, Math.min(50, height)); // Clamp height
+
+                // Initialize empty level
+                for (let y = 0; y < height; y++) {
+                    level.push(Array(width).fill('-').join(''));
+                }
+
+                // Place floor
+                level[height - 1] = 'X'.repeat(width);
+
+                // Place Player Start (always somewhere near the left, on the ground initially)
+                 let startY = height - 2;
+                 let startX = Math.floor(Math.random() * 5) + 1;
+                 level[startY] = setCharAt(level[startY], startX, 'P');
+
+
+                // Place Goal (always somewhere near the right)
+                let goalY = height - 2 - Math.floor(Math.random() * (height / 3));
+                let goalX = width - (Math.floor(Math.random() * 5) + 2);
+                level[goalY] = setCharAt(level[goalY], goalX, 'G');
+                // Ensure platform below goal if not on ground
+                if (level[goalY + 1][goalX] === '-') {
+                     level[goalY + 1] = setCharAt(level[goalY + 1], goalX, 'X');
+                }
+
+
+                // Add Platforms and Mechanics based on level number
+                let platformCount = 10 + Math.floor(i / 2);
+                let mechanicChance = i / 100; // Chance to add advanced mechanics
+
+                for (let p = 0; p < platformCount; p++) {
+                    let platX = Math.floor(Math.random() * (width - 6)) + 3; // Avoid edges initially
+                    let platY = Math.floor(Math.random() * (height - 4)) + 2; // Avoid top/bottom edges
+                    let platLength = Math.floor(Math.random() * 5) + 3;
+
+                    // Avoid overwriting player/goal starts initially
+                    if (platY === startY || platY === goalY) continue;
+
+                    let type = 'X'; // Default platform
+
+                    // Introduce Mechanics
+                    if (i >= 10 && Math.random() < mechanicChance * 0.5) type = (Math.random() < 0.5 ? 'M' : 'V'); // Moving platforms after level 10
+                    if (i >= 20 && Math.random() < mechanicChance * 0.4) type = 'S'; // Hazards after level 20
+                    if (i >= 30 && Math.random() < mechanicChance * 0.3) type = 'B'; // Bounce pads after level 30
+                    // Keys/Doors less frequent initially
+                    let addKeyDoor = (i >= 40 && Math.random() < mechanicChance * 0.2);
+
+                    for (let l = 0; l < platLength && platX + l < width; l++) {
+                        // Place single block elements (not streaks)
+                        if (type === 'S' || type === 'B') {
+                             level[platY] = setCharAt(level[platY], platX + l, type);
+                             break; // Only place one hazard/bounce pad per attempt
+                        } else if (type === 'M' || type === 'V'){
+                             level[platY] = setCharAt(level[platY], platX + l, type);
+                             // Only make first block of a sequence the moving platform anchor
+                             if (l > 0) level[platY] = setCharAt(level[platY], platX + l, 'X'); // Rest are static for simplicity now
+                             break; // Place only one moving platform anchor
+                        }
+                         else {
+                            level[platY] = setCharAt(level[platY], platX + l, 'X');
+                        }
+                    }
+
+                    // Add Key/Door Pair (Simplified placement)
+                    if (addKeyDoor) {
+                        let keyX = Math.floor(Math.random() * (width - 2)) + 1;
+                        let keyY = Math.floor(Math.random() * (height - 3)) + 1;
+                         if (level[keyY][keyX] === '-' && level[keyY+1][keyX] !== '-') { // Place key on something
+                             level[keyY] = setCharAt(level[keyY], keyX, 'K');
+
+                             // Place door somewhere else, often blocking a path
+                             let doorX = Math.floor(Math.random() * (width - 2)) + 1;
+                             let doorY = Math.floor(Math.random() * (height - 4)) + 2; // Place slightly higher
+                             if (level[doorY][doorX] === '-' && level[doorY+1][doorX] !== '-') {
+                                 level[doorY] = setCharAt(level[doorY], doorX, 'D');
+                                 level[doorY+1] = setCharAt(level[doorY+1], doorX, 'D'); // 2-tile high door
+                             }
+                         }
+                    }
+                }
+
+                 // Level 100 Specifics: Larger, combine all implemented mechanics
+                 if (i === 99) {
+                     level = []; // Redo level 100
+                     width = 150;
+                     height = 50;
+                     // Initialize empty level
+                     for (let y = 0; y < height; y++) {
+                         level.push(Array(width).fill('-').join(''));
+                     }
+                     level[height - 1] = 'X'.repeat(width); // Ground floor
+
+                     // Start and Goal
+                     level[height - 2] = setCharAt(level[height - 2], 2, 'P');
+                     level[2] = setCharAt(level[2], width - 3, 'G'); // Goal high up
+                     level[3] = setCharAt(level[3], width - 3, 'X'); // Platform for goal
+
+                     // Add lots of elements combining all types
+                     for (let j=0; j < 200; j++) { // More elements for final level
+                        let platX = Math.floor(Math.random() * (width - 6)) + 3;
+                        let platY = Math.floor(Math.random() * (height - 4)) + 2;
+                        let platLength = Math.floor(Math.random() * 6) + 2;
+
+                        let randType = Math.random();
+                        let type = 'X';
+                        if (randType < 0.15) type = 'M';
+                        else if (randType < 0.25) type = 'V';
+                        else if (randType < 0.40) type = 'S';
+                        else if (randType < 0.50) type = 'B';
+                        // else if (randType < 0.55) type = 'K'; // Added below
+                        // else if (randType < 0.60) type = 'D'; // Added below
+
+                        for (let l = 0; l < platLength && platX + l < width; l++) {
+                            if(level[platY][platX+l] !== '-') continue; // Don't overwrite easily
+
+                            if (type === 'S' || type === 'B') {
+                                level[platY] = setCharAt(level[platY], platX + l, type); break;
+                            } else if (type === 'M' || type === 'V') {
+                                level[platY] = setCharAt(level[platY], platX + l, type); break;
+                            } else {
+                                level[platY] = setCharAt(level[platY], platX + l, 'X');
+                            }
+                        }
+                     }
+                     // Add specific key/door challenges in level 100
+                     level[height-5] = setCharAt(level[height-5], width / 2, 'K');
+                     level[height-4] = setCharAt(level[height-4], width / 2, 'X');
+                     level[10] = setCharAt(level[10], width - 10, 'D');
+                     level[11] = setCharAt(level[11], width - 10, 'D');
+                     level[12] = setCharAt(level[12], width - 10, 'X'); // Platform before door
+
+                 }
+
+
+                levels.push(level);
+            }
+        }
+
+        function setCharAt(str, index, char) {
+            if (index > str.length - 1) return str;
+            return str.substring(0, index) + char + str.substring(index + 1);
+        }
+
+
+        function loadLevel(levelIndex) {
+            if (levelIndex < 0 || levelIndex >= levels.length) {
+                console.error("Invalid level index:", levelIndex);
+                // Maybe show a "You Win" screen or loop back
+                currentLevelIndex = 0; // Loop back for now
+                 alert("Congratulations! You completed all levels! Restarting from level 1.");
+            }
+
+            currentLevelIndex = levelIndex;
+            levelInfoDiv.textContent = `Level: ${currentLevelIndex + 1} / ${levels.length}`;
+            currentLevelData = levels[currentLevelIndex];
+            movingPlatforms.length = 0;
+            hazards.length = 0;
+            bouncePads.length = 0;
+            keysObjects.length = 0;
+            doors.length = 0;
+            goal = null;
+            player.hasKey = false; // Reset key status
+
+            let levelHeight = currentLevelData.length * TILE_SIZE;
+            let levelWidth = currentLevelData[0].length * TILE_SIZE;
+
+
+            for (let y = 0; y < currentLevelData.length; y++) {
+                for (let x = 0; x < currentLevelData[y].length; x++) {
+                    const char = currentLevelData[y][x];
+                    const tileX = x * TILE_SIZE;
+                    const tileY = y * TILE_SIZE;
+
+                    if (char === 'P') {
+                        player.spawnX = tileX + (TILE_SIZE - player.width) / 2;
+                        player.spawnY = tileY + (TILE_SIZE - player.height);
+                        resetPlayer();
+                    } else if (char === 'G') {
+                        goal = { x: tileX, y: tileY, width: TILE_SIZE, height: TILE_SIZE };
+                    } else if (char === 'M') {
+                        movingPlatforms.push({
+                            x: tileX, y: tileY, width: TILE_SIZE, height: TILE_SIZE,
+                            startX: tileX, startY: tileY,
+                            range: TILE_SIZE * 4, speed: 1.5, direction: 1, type: 'horizontal'
+                        });
+                    } else if (char === 'V') {
+                         movingPlatforms.push({
+                            x: tileX, y: tileY, width: TILE_SIZE, height: TILE_SIZE,
+                            startX: tileX, startY: tileY,
+                            range: TILE_SIZE * 3, speed: 1, direction: 1, type: 'vertical'
+                        });
+                    } else if (char === 'S') {
+                         hazards.push({x: tileX, y: tileY + TILE_SIZE * 0.5, width: TILE_SIZE, height: TILE_SIZE*0.5}); // Pointy part up
+                    } else if (char === 'B') {
+                         bouncePads.push({x: tileX, y: tileY + TILE_SIZE * 0.7, width: TILE_SIZE, height: TILE_SIZE*0.3}); // Flat top
+                    } else if (char === 'K') {
+                         keysObjects.push({id: `key_${x}_${y}`, x: tileX + TILE_SIZE*0.25, y: tileY + TILE_SIZE*0.25, width: TILE_SIZE*0.5, height: TILE_SIZE*0.5, collected: false });
+                    } else if (char === 'D') {
+                        // Check if door already exists (part of a multi-tile door)
+                        let existingDoor = doors.find(d => (d.x === tileX && d.y === tileY - TILE_SIZE) || (d.x === tileX && d.y === tileY + TILE_SIZE));
+                        if (!existingDoor) {
+                             doors.push({x: tileX, y: tileY, width: TILE_SIZE, height: TILE_SIZE, open: false});
+                        } else {
+                            // Extend existing door height or ignore if already tall enough
+                            if(tileY > existingDoor.y) existingDoor.height += TILE_SIZE;
+                            if(tileY < existingDoor.y) {
+                                existingDoor.y = tileY;
+                                existingDoor.height += TILE_SIZE;
+                            }
+                        }
+                    }
+                }
+            }
+            // Adjust camera initial position slightly
+             camera.x = player.x - canvas.width / 4;
+             camera.y = player.y - canvas.height / 2;
+             camera.targetX = camera.x;
+             camera.targetY = camera.y;
+        }
+
+        function resetPlayer() {
+            player.x = player.spawnX;
+            player.y = player.spawnY;
+            player.vx = 0;
+            player.vy = 0;
+            player.onGround = false;
+            player.hasKey = false; // Reset key on death/reset too
+
+            // Reset keys and doors in the level
+            keysObjects.forEach(k => k.collected = false);
+            doors.forEach(d => d.open = false);
+        }
+
+        function checkCollision(objA, objB) {
+            return objA.x < objB.x + objB.width &&
+                   objA.x + objA.width > objB.x &&
+                   objA.y < objB.y + objB.height &&
+                   objA.y + objA.height > objB.y;
+        }
+
+        function handlePlatformCollision(platform) {
+            // Simple AABB collision response
+            let dx = (player.x + player.width / 2) - (platform.x + platform.width / 2);
+            let dy = (player.y + player.height / 2) - (platform.y + platform.height / 2);
+            let combinedHalfWidths = (player.width + platform.width) / 2;
+            let combinedHalfHeights = (player.height + platform.height) / 2;
+
+            if (Math.abs(dx) < combinedHalfWidths && Math.abs(dy) < combinedHalfHeights) {
+                let overlapX = combinedHalfWidths - Math.abs(dx);
+                let overlapY = combinedHalfHeights - Math.abs(dy);
+
+                if (overlapY < overlapX) {
+                    // Vertical collision
+                    if (dy > 0) { // Collision from top (player below platform)
+                        player.y += overlapY;
+                        player.vy = 0;
+                    } else { // Collision from bottom (player on top of platform)
+                        player.y -= overlapY;
+                        player.vy = 0;
+                        player.onGround = true;
+                        player.canJump = true;
+
+                         // Handle moving platform push
+                        if (platform.speed) {
+                            if(platform.type === 'horizontal') player.x += platform.speed * platform.direction;
+                             // Vertical push is inherently handled by player staying on top
+                        }
+                    }
+                } else {
+                    // Horizontal collision
+                    if (dx > 0) { // Collision from left (player right of platform)
+                        player.x += overlapX;
+                        player.vx = 0;
+                    } else { // Collision from right (player left of platform)
+                        player.x -= overlapX;
+                        player.vx = 0;
+                    }
+                }
+                return true; // Collision occurred
+            }
+            return false; // No collision
+        }
+
+
+        function update(deltaTime) {
+            // --- Player Movement ---
+            player.vx *= FRICTION;
+            if (keys.a) player.vx = -PLAYER_SPEED;
+            if (keys.d) player.vx = PLAYER_SPEED;
+
+            player.vy += GRAVITY;
+            player.onGround = false; // Assume not on ground until collision check
+
+            // Jumping
+            if ((keys.w || keys.space) && player.canJump && player.vy >= -GRAVITY) { // Allow jump shortly after leaving edge
+                player.vy = -JUMP_FORCE;
+                player.canJump = false; // Prevent double jump unless landing again
+                 player.onGround = false;
+            }
+            // If jump key released early, cut jump short
+            if (!(keys.w || keys.space) && player.vy < -JUMP_FORCE / 3) {
+                 player.vy = -JUMP_FORCE / 3;
+            }
+
+
+            // --- Collision Detection and Response ---
+            // Store proposed next position
+            let nextX = player.x + player.vx;
+            let nextY = player.y + player.vy;
+
+             // Reset collision flags for moving platforms specifically
+            let onMovingPlatform = false;
+
+            // --- Moving Platforms Update ---
+             movingPlatforms.forEach(p => {
+                 if (p.type === 'horizontal') {
+                     p.x += p.speed * p.direction;
+                     if (Math.abs(p.x - p.startX) >= p.range) {
+                         p.direction *= -1;
+                         // Clamp position to prevent overshooting
+                         p.x = p.startX + p.range * Math.sign(p.x - p.startX);
+                     }
+                 } else { // Vertical
+                      p.y += p.speed * p.direction;
+                     if (Math.abs(p.y - p.startY) >= p.range) {
+                         p.direction *= -1;
+                         p.y = p.startY + p.range * Math.sign(p.y - p.startY);
+                     }
+                 }
+             });
+
+             // --- Collision with Level Tiles ---
+             // Check Horizontal Collision
+             player.x = nextX;
+             checkLevelCollisions(true); // Check X collision
+
+             // Check Vertical Collision
+             player.y = nextY;
+             checkLevelCollisions(false); // Check Y collision
+
+
+            // --- Other Interactions ---
+            // Hazards
+            hazards.forEach(hazard => {
+                if (checkCollision(player, hazard)) {
+                    resetPlayer();
+                    return; // Exit update early on reset
+                }
+            });
+
+            // Bounce Pads
+            bouncePads.forEach(pad => {
+                 // Check collision specifically with top of pad when falling
+                 if (player.vy > 0 &&
+                     player.x < pad.x + pad.width &&
+                     player.x + player.width > pad.x &&
+                     player.y + player.height > pad.y && // Player bottom edge crosses pad top
+                     player.y + player.height < pad.y + pad.height + Math.abs(player.vy) // Check within next frame
+                 ) {
+                     player.y = pad.y - player.height; // Place player on top
+                     player.vy = -JUMP_FORCE * 1.5; // Extra bounce
+                     player.onGround = true; // Temporarily grounded for jump logic feel
+                     player.canJump = true;
+                 }
+            });
+
+             // Keys
+             keysObjects.forEach((key, index) => {
+                 if (!key.collected && checkCollision(player, key)) {
+                     key.collected = true;
+                     player.hasKey = true;
+                     // Make key visually disappear (or mark as collected) - here we remove it
+                     keysObjects.splice(index, 1);
+                 }
+             });
+
+             // Doors (only check if player has key)
+             doors.forEach(door => {
+                 if (!door.open && player.hasKey && checkCollision(player, door)) {
+                      door.open = true; // Open the door
+                      player.hasKey = false; // Consume the key (optional)
+                 }
+             });
+
+             // Goal
+             if (goal && checkCollision(player, goal)) {
+                 currentLevelIndex++;
+                 if (currentLevelIndex < levels.length) {
+                     loadLevel(currentLevelIndex);
+                 } else {
+                     // Game completed!
+                     alert("Congratulations! You beat all 100 levels!");
+                     currentLevelIndex = 0; // Reset or show end screen
+                     loadLevel(currentLevelIndex);
+                 }
+                 return; // Stop update for this frame after level change
+             }
+
+             // Check out of bounds (bottom only for now)
+             let levelHeight = currentLevelData.length * TILE_SIZE;
+             if (player.y > levelHeight + TILE_SIZE * 2) {
+                 resetPlayer();
+                 return;
+             }
+
+
+             // --- Camera Update ---
+             // Target the player, but keep camera within level bounds (simplified)
+             let levelWidth = currentLevelData[0].length * TILE_SIZE;
+
+             // Center camera on player, with some look-ahead based on velocity? (Keep simple for now)
+             camera.targetX = player.x - canvas.width / 2 + player.width / 2;
+             camera.targetY = player.y - canvas.height / 2 + player.height / 2;
+
+             // Clamp camera to level boundaries
+             camera.targetX = Math.max(0, Math.min(camera.targetX, levelWidth - canvas.width));
+             camera.targetY = Math.max(0, Math.min(camera.targetY, levelHeight - canvas.height));
+
+             // Smooth camera movement
+             camera.x += (camera.targetX - camera.x) * camera.smoothing;
+             camera.y += (camera.targetY - camera.y) * camera.smoothing;
+
+              // Prevent camera jitter on pixel boundaries
+              camera.x = Math.round(camera.x);
+              camera.y = Math.round(camera.y);
+
+        }
+
+         function checkLevelCollisions(checkX) {
+            // Check collision with static tiles, moving platforms, and closed doors
+             const startCol = Math.floor(player.x / TILE_SIZE);
+             const endCol = Math.floor((player.x + player.width) / TILE_SIZE);
+             const startRow = Math.floor(player.y / TILE_SIZE);
+             const endRow = Math.floor((player.y + player.height) / TILE_SIZE);
+
+             let collided = false;
+
+             for (let row = startRow; row <= endRow; row++) {
+                 for (let col = startCol; col <= endCol; col++) {
+                     if (row < 0 || row >= currentLevelData.length || col < 0 || col >= currentLevelData[0].length) continue;
+
+                     const tileChar = currentLevelData[row][col];
+                     let isSolid = (tileChar === 'X'); // Only solid ground for now
+
+                     // Check collision with static tiles
+                     if (isSolid) {
+                          const tile = { x: col * TILE_SIZE, y: row * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE };
+                          collided = handlePlatformCollision(tile) || collided; // Accumulate collision results
+                     }
+                 }
+             }
+              // Check collision with moving platforms separately
+             movingPlatforms.forEach(p => {
+                 collided = handlePlatformCollision(p) || collided;
+             });
+
+              // Check collision with CLOSED doors
+              doors.forEach(d => {
+                 if (!d.open) {
+                     collided = handlePlatformCollision(d) || collided;
+                 }
+             });
+
+         }
+
+
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Apply camera transformation
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // Get visible tile range based on camera
+             const startCol = Math.floor(camera.x / TILE_SIZE);
+             const endCol = startCol + Math.ceil(canvas.width / TILE_SIZE) + 1;
+             const startRow = Math.floor(camera.y / TILE_SIZE);
+             const endRow = startRow + Math.ceil(canvas.height / TILE_SIZE) + 1;
+
+             let levelWidth = currentLevelData[0].length * TILE_SIZE;
+             let levelHeight = currentLevelData.length * TILE_SIZE;
+
+
+            // --- Draw Level Elements (within camera view) ---
+            for (let y = startRow; y < endRow; y++) {
+                for (let x = startCol; x < endCol; x++) {
+                     // Check bounds
+                    if (y < 0 || y >= currentLevelData.length || x < 0 || x >= currentLevelData[y].length) {
+                        continue; // Skip drawing out-of-bounds tiles
+                    }
+
+                    const char = currentLevelData[y][x];
+                    const tileX = x * TILE_SIZE;
+                    const tileY = y * TILE_SIZE;
+
+                    if (char === 'X') {
+                        // Use SA Flag colors for platforms (simple pattern)
+                        let colorIndex = (x + y) % 6;
+                        switch(colorIndex) {
+                            case 0: ctx.fillStyle = '#007A4D'; break; // Green
+                            case 1: ctx.fillStyle = '#FFFFFF'; break; // White
+                            case 2: ctx.fillStyle = '#FFB612'; break; // Yellow
+                            case 3: ctx.fillStyle = '#000000'; break; // Black
+                            case 4: ctx.fillStyle = '#DE3831'; break; // Red
+                            case 5: ctx.fillStyle = '#001489'; break; // Blue
+                        }
+                         ctx.fillRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
+                         // Add a slight border for definition
+                         ctx.strokeStyle = '#222';
+                         ctx.lineWidth = 1;
+                         ctx.strokeRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
+                    } else if (char === 'S') {
+                        // Draw Hazard (Triangle pointing up)
+                        ctx.fillStyle = 'red';
+                        ctx.beginPath();
+                        ctx.moveTo(tileX, tileY + TILE_SIZE);
+                        ctx.lineTo(tileX + TILE_SIZE / 2, tileY + TILE_SIZE*0.3);
+                        ctx.lineTo(tileX + TILE_SIZE, tileY + TILE_SIZE);
+                        ctx.closePath();
+                        ctx.fill();
+                    } else if (char === 'B') {
+                        // Draw Bounce Pad
+                        ctx.fillStyle = 'purple';
+                         ctx.fillRect(tileX, tileY + TILE_SIZE * 0.7, TILE_SIZE, TILE_SIZE * 0.3);
+                         // Add springs maybe?
+                         ctx.strokeStyle = 'gray';
+                         ctx.lineWidth = 2;
+                         ctx.beginPath();
+                         ctx.moveTo(tileX+TILE_SIZE*0.2, tileY + TILE_SIZE); ctx.lineTo(tileX+TILE_SIZE*0.2, tileY + TILE_SIZE * 0.7);
+                         ctx.moveTo(tileX+TILE_SIZE*0.8, tileY + TILE_SIZE); ctx.lineTo(tileX+TILE_SIZE*0.8, tileY + TILE_SIZE * 0.7);
+                         ctx.stroke();
+                    }
+                     // We don't draw P, M, V, K, D directly here, they are handled by object lists below
+                }
+            }
+
+             // Draw Moving Platforms
+             ctx.fillStyle = '#666'; // Grey color for moving platforms
+             movingPlatforms.forEach(p => {
+                  // Check if platform is within camera view before drawing
+                  if (p.x + p.width > camera.x && p.x < camera.x + canvas.width &&
+                      p.y + p.height > camera.y && p.y < camera.y + canvas.height) {
+                      ctx.fillRect(p.x, p.y, p.width, p.height);
+                       ctx.strokeStyle = '#333';
+                       ctx.strokeRect(p.x, p.y, p.width, p.height);
+                  }
+             });
+
+             // Draw Keys
+             ctx.fillStyle = '#FFD700'; // Gold color for keys
+             keysObjects.forEach(key => {
+                 if (!key.collected &&
+                      key.x + key.width > camera.x && key.x < camera.x + canvas.width &&
+                      key.y + key.height > camera.y && key.y < camera.y + canvas.height) {
+                     // Simple key shape (rectangle with circle)
+                     ctx.fillRect(key.x, key.y, key.width * 0.8, key.height);
+                     ctx.beginPath();
+                     ctx.arc(key.x + key.width*0.8, key.y + key.height/2, key.width*0.4, 0, Math.PI*2);
+                     ctx.fill();
+                 }
+             });
+
+             // Draw Doors
+             ctx.fillStyle = '#8B4513'; // Brown color for doors
+             ctx.strokeStyle = '#5A2D0C';
+             ctx.lineWidth = 2;
+             doors.forEach(door => {
+                 if (!door.open &&
+                     door.x + door.width > camera.x && door.x < camera.x + canvas.width &&
+                     door.y + door.height > camera.y && door.y < camera.y + canvas.height) {
+                     ctx.fillRect(door.x, door.y, door.width, door.height);
+                     ctx.strokeRect(door.x, door.y, door.width, door.height);
+                     // Draw doorknob
+                      ctx.fillStyle = '#FFD700';
+                      ctx.beginPath();
+                      ctx.arc(door.x + door.width*0.8, door.y + door.height*0.5, TILE_SIZE*0.1, 0, Math.PI*2);
+                      ctx.fill();
+                 }
+                  // Could optionally draw open doors differently (e.g., transparent or shifted)
+             });
+
+            // Draw Goal
+            if (goal &&
+                goal.x + goal.width > camera.x && goal.x < camera.x + canvas.width &&
+                goal.y + goal.height > camera.y && goal.y < camera.y + canvas.height) {
+                ctx.font = `${TILE_SIZE * 0.8}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🏁', goal.x + goal.width / 2, goal.y + goal.height / 2);
+            }
+
+            // --- Draw Player ---
+            if (player.x + player.width > camera.x && player.x < camera.x + canvas.width &&
+                player.y + player.height > camera.y && player.y < camera.y + canvas.height)
+            {
+                 // Body
+                 ctx.fillStyle = player.color;
+                 ctx.fillRect(player.x, player.y, player.width, player.height);
+
+                 // Simple Hat (small rectangle on top)
+                 const hatWidth = player.width * 0.5;
+                 const hatHeight = player.height * 0.2;
+                 ctx.fillStyle = player.hatColor;
+                 ctx.fillRect(player.x + (player.width - hatWidth) / 2, player.y - hatHeight, hatWidth, hatHeight);
+
+                 // Simple Bow Tie (small triangle below 'neck')
+                 const bowTieSize = player.width * 0.3;
+                 ctx.fillStyle = player.bowTieColor;
+                 ctx.beginPath();
+                 ctx.moveTo(player.x + player.width / 2, player.y + player.height * 0.1); // Center point slightly below top
+                 ctx.lineTo(player.x + player.width / 2 - bowTieSize / 2, player.y + player.height * 0.1 + bowTieSize / 2);
+                 ctx.lineTo(player.x + player.width / 2 + bowTieSize / 2, player.y + player.height * 0.1 + bowTieSize / 2);
+                 ctx.closePath();
+                 ctx.fill();
+            }
+
+
+            // Restore camera transformation
+            ctx.restore();
+
+             // --- Draw UI Elements (fixed position) ---
+             // Optionally draw collected key indicator
+             if (player.hasKey) {
+                  ctx.fillStyle = '#FFD700';
+                  ctx.font = '24px Arial';
+                  ctx.textAlign = 'left';
+                  ctx.fillText('🔑', 10, canvas.height - 10);
+             }
+
+        }
+
+        // --- Input Handling ---
+        function handleKeyDown(e) {
+            switch (e.key.toLowerCase()) {
+                case 'w': case 'arrowup': keys.w = true; break;
+                case 'a': case 'arrowleft': keys.a = true; break;
+                case 'd': case 'arrowright': keys.d = true; break;
+                case ' ': keys.space = true; break; // Space bar
+                case 'r': resetPlayer(); break;
+            }
+        }
+
+        function handleKeyUp(e) {
+            switch (e.key.toLowerCase()) {
+                case 'w': case 'arrowup': keys.w = false; break;
+                case 'a': case 'arrowleft': keys.a = false; break;
+                case 'd': case 'arrowright': keys.d = false; break;
+                 case ' ': keys.space = false; break;
+            }
+        }
+
+        // --- Game Loop ---
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Cap deltaTime to prevent physics issues if tabbed out
+            const dt = Math.min(deltaTime / 1000, 1/30); // Convert ms to s, max step 1/30s
+
+            update(dt);
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Initialization ---
+        skipButton.addEventListener('click', () => {
+            currentLevelIndex++;
+            if (currentLevelIndex >= levels.length) {
+                alert("Congratulations! You beat all 100 levels!");
+                currentLevelIndex = 0;
+            }
+            loadLevel(currentLevelIndex);
+        });
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+
+        // Generate and load the first level
+        generateLevels();
+         if (levels.length > 0) {
+            loadLevel(0);
+            requestAnimationFrame(gameLoop); // Start the game loop
+         } else {
+             console.error("Failed to generate levels!");
+             alert("Error: Could not generate game levels.");
+         }
+
+    </script>
+</body>
+</html>

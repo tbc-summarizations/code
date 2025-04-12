@@ -1,0 +1,2666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platformer Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+        canvas {
+            border: 1px solid black;
+            background-color: #e0f7ff; /* Light sky blue background */
+            display: block;
+            margin: auto;
+        }
+        #controls, #levelInfo {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #ddd;
+            border-radius: 5px;
+            text-align: center;
+        }
+         #controls ul {
+            list-style: none;
+            padding: 0;
+         }
+         #controls li {
+            margin-bottom: 5px;
+         }
+         .hidden {
+             display: none;
+         }
+    </style>
+</head>
+<body>
+
+    <div id="levelInfo">Loading...</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="controls">
+        <h4>Controls:</h4>
+        <ul>
+            <li>[←][→]: Move Left/Right</li>
+            <li class="control hidden" data-level="1">[↑]/[Space]: Jump</li>
+            <li class="control hidden" data-level="2">Jump again in mid-air: Double Jump</li>
+            <li class="control hidden" data-level="3">[Shift] or Double-Tap [←]/[→]: Dash</li>
+            <li class="control hidden" data-level="4">Jump against wall: Wall Jump</li>
+            <li class="control hidden" data-level="5">[↓] while moving: Slide</li>
+            <li class="control hidden" data-level="34">[P]: Phase Shift (if available)</li>
+            <li class="control hidden" data-level="35">[G]: Grapple Hook (aim with mouse, click to fire/release)</li>
+            <li class="control hidden" data-level="36">[H]: Hold to Glide (if available)</li>
+            <li class="control hidden" data-level="38">[B]: Drop Bomb (if available)</li>
+            <li class="control hidden" data-level="39">[S]: Activate Shield (if available)</li>
+            <li class="control hidden" data-level="40">[C]: Create Clone (if available)</li>
+            <li class="control hidden" data-level="42">[T]: Toggle Slow Motion (if available)</li>
+            <li class="control hidden" data-level="43">[D]: Toggle Disguise (if available)</li>
+            <li class="control hidden" data-level="44">[F]: Summon Platform below (if available)</li>
+            <li class="control hidden" data-level="46">[M]: Toggle Morph Ball (if available)</li>
+            <li class="control hidden" data-level="47">[Hold ↑/↓] on wall: Wall Climb (if available)</li>
+            <li class="control hidden" data-level="48">[E]: Grab/Release Rope (if near)</li>
+            <li class="control hidden" data-level="49">[L]: Fire Laser (if available)</li>
+            <li>[R]: Restart Level</li>
+        </ul>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const controlsDiv = document.getElementById('controls');
+        const levelInfoDiv = document.getElementById('levelInfo');
+
+        // Game Settings
+        const GRAVITY = 0.6;
+        const FRICTION = 0.85;
+        const AIR_FRICTION = 0.95;
+        const PLAYER_SPEED = 5;
+        const JUMP_FORCE = -12;
+        const DOUBLE_JUMP_FORCE = -10;
+        const DASH_SPEED = 15;
+        const DASH_DURATION = 8; // frames
+        const WALL_JUMP_H_FORCE = 8;
+        const WALL_JUMP_V_FORCE = -10;
+        const SLIDE_SPEED_BOOST = 2;
+        const SLIDE_FRICTION = 0.98;
+        const SWIM_SPEED = 2;
+        const SWIM_BOUNCE = -4;
+        const ICE_FRICTION = 0.98;
+        const WIND_FORCE = 0.3;
+        const PHASE_DURATION = 120; // frames (2 seconds)
+        const GRAPPLE_RANGE = 200;
+        const GRAPPLE_SPEED = 15;
+        const GLIDE_FALL_SPEED = 1.5;
+        const BOMB_FUSE = 120; // frames
+        const BOMB_RADIUS = 50;
+        const SHIELD_DURATION = 180; // frames
+        const CLONE_DURATION = 300; // frames
+        const SLOW_MOTION_FACTOR = 0.5;
+        const PLATFORM_SUMMON_COOLDOWN = 60; // frames
+        const MORPH_BALL_SIZE = 15;
+        const WALL_CLIMB_SPEED = -2;
+        const ROPE_SWING_FORCE = 0.1;
+        const LASER_SPEED = 10;
+        const LASER_COOLDOWN = 30; // frames
+        const BOSS_HEALTH = 20;
+
+        // Game State
+        let currentLevelIndex = 0;
+        let player;
+        let platforms = [];
+        let enemies = [];
+        let hazards = [];
+        let items = [];
+        let interactives = [];
+        let environmental = [];
+        let projectiles = [];
+        let clones = [];
+        let ropes = [];
+        let grapplePoints = [];
+        let levelGoal;
+        let keys = { left: false, right: false, up: false, down: false, jump: false, dash: false, phase: false, grapple: false, glide: false, bomb: false, shield: false, clone: false, slowMo: false, disguise: false, summon: false, morph: false, climb: false, grabRope: false, laser: false };
+        let canDoubleJump = false;
+        let isDashing = false;
+        let dashTimer = 0;
+        let dashDirection = 1;
+        let onWall = 0; // -1 left, 1 right, 0 none
+        let canWallJump = false;
+        let isSliding = false;
+        let speedBoostTimer = 0;
+        let invincibilityTimer = 0;
+        let phaseTimer = 0;
+        let isPhasing = false;
+        let grapple = null; // { x, y, targetX, targetY, active, retracting, length }
+        let isGliding = false;
+        let bombCooldown = 0;
+        let shieldTimer = 0;
+        let isShieldActive = false;
+        let cloneCooldown = 0;
+        let isSlowMotion = false;
+        let slowMoToggle = false;
+        let isDisguised = false;
+        let summonCooldown = 0;
+        let isMorphed = false;
+        let isClimbing = false;
+        let grabbedRope = null; // reference to the rope object
+        let laserCooldown = 0;
+        let boss = null;
+        let gamePaused = false;
+        let levelComplete = false;
+        let lastDashTap = { time: 0, key: null };
+        const DASH_TAP_THRESHOLD = 200; // ms
+
+        let mouse = { x: 0, y: 0, down: false };
+
+        // --- Level Definitions ---
+        const levels = [
+            // Level 1: Getting Started - Basic Movement (Jump)
+            {
+                playerStart: { x: 50, y: 500 },
+                goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                    { x: 200, y: 530, w: 100, h: 20, type: 'static' },
+                    { x: 400, y: 480, w: 100, h: 20, type: 'static' },
+                ],
+                mechanics: ['jump'],
+                message: "Level 1: Reach the Green Goal! Use [↑]/[Space] to Jump."
+            },
+            // Level 2: Extended Reach - Double Jump
+            {
+                playerStart: { x: 50, y: 500 },
+                goal: { x: 700, y: 400, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                    { x: 350, y: 540, w: 150, h: 20, type: 'static' },
+                    { x: 650, y: 450, w: 150, h: 20, type: 'static' },
+                ],
+                mechanics: ['jump', 'doubleJump'],
+                message: "Level 2: Wider Gaps! Press Jump again mid-air for a Double Jump."
+            },
+            // Level 3: Quick Movement - Dash
+            {
+                playerStart: { x: 50, y: 500 },
+                goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                    { x: 400, y: 580, w: 400, h: 20, type: 'static' },
+                ],
+                hazards: [
+                    { x: 300, y: 560, type: 'spike', size: 20 },
+                ],
+                mechanics: ['jump', 'doubleJump', 'dash'],
+                message: "Level 3: Danger! Use [Shift] or Double-Tap Direction to Dash over the spike."
+            },
+            // Level 4: Verticality - Wall Jump
+            {
+                playerStart: { x: 380, y: 550 },
+                goal: { x: 375, y: 50, w: 50, h: 50 },
+                platforms: [
+                    { x: 300, y: 100, w: 20, h: 500, type: 'static' }, // Left Wall
+                    { x: 480, y: 100, w: 20, h: 500, type: 'static' }, // Right Wall
+                    { x: 300, y: 580, w: 200, h: 20, type: 'static' }, // Bottom
+                    { x: 350, y: 100, w: 100, h: 20, type: 'static' }, // Top platform near goal
+                ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump'],
+                 message: "Level 4: Go Up! Jump against a wall to Wall Jump off it."
+            },
+             // Level 5: Low Profile - Sliding
+            {
+                playerStart: { x: 50, y: 550 },
+                goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                    { x: 300, y: 530, w: 200, h: 20, type: 'static' }, // Low ceiling
+                ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 5: Low Bridge! Press [↓] while moving to Slide under obstacles."
+            },
+            // Level 6: Speed Boost - Power Up (Speed)
+             {
+                playerStart: { x: 50, y: 550 },
+                goal: { x: 750, y: 550, w: 50, h: 50 },
+                platforms: [
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                     { x: 200, y: 530, w: 100, h: 20, type: 'falling', delay: 30 }, // Needs speed
+                     { x: 450, y: 530, w: 100, h: 20, type: 'falling', delay: 30 },
+                 ],
+                 items: [
+                    { x: 150, y: 550, type: 'speedBoost' }
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'speedBoost'],
+                 message: "Level 6: Need for Speed! Collect ✨ for a temporary Speed Boost."
+             },
+             // Level 7: Hazard Immunity - Power Up (Invincibility)
+             {
+                playerStart: { x: 50, y: 550 },
+                goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                 ],
+                 hazards: [
+                    { x: 250, y: 560, type: 'spike', size: 20 },
+                    { x: 270, y: 560, type: 'spike', size: 20 },
+                    { x: 290, y: 560, type: 'spike', size: 20 },
+                    { x: 310, y: 560, type: 'spike', size: 20 },
+                    { x: 330, y: 560, type: 'spike', size: 20 },
+                    { x: 450, y: 560, type: 'spike', size: 20 },
+                    { x: 470, y: 560, type: 'spike', size: 20 },
+                    { x: 490, y: 560, type: 'spike', size: 20 },
+                 ],
+                 items: [
+                     { x: 380, y: 550, type: 'invincibility' }
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'invincibility'],
+                 message: "Level 7: Danger Zone! Collect 🛡️ for temporary Invincibility."
+             },
+             // Level 8: Moving Terrain - Moving Platforms
+             {
+                playerStart: { x: 50, y: 500 },
+                goal: { x: 700, y: 350, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                    { x: 250, y: 500, w: 100, h: 20, type: 'moving', moveX: 150, moveY: 0, speed: 2 },
+                    { x: 550, y: 400, w: 100, h: 20, type: 'moving', moveX: 0, moveY: 100, speed: 1.5 },
+                    { x: 650, y: 400, w: 150, h: 20, type: 'static' }, // Goal platform
+                ],
+                mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 8: Moving On Up! Time your jumps onto Moving Platforms (↔️, ↕️)."
+             },
+             // Level 9: Unstable Ground - Falling Platforms
+             {
+                 playerStart: { x: 50, y: 550 },
+                 goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 250, y: 580, w: 80, h: 20, type: 'falling', delay: 30 },
+                     { x: 400, y: 580, w: 80, h: 20, type: 'falling', delay: 20 },
+                     { x: 550, y: 580, w: 80, h: 20, type: 'falling', delay: 10 },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 9: Don't Wait! Falling Platforms (⬇️) disappear quickly."
+             },
+             // Level 10: Deadly Floors - Spikes
+             {
+                 playerStart: { x: 50, y: 400 },
+                 goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 450, w: 150, h: 20, type: 'static' },
+                     { x: 300, y: 500, w: 150, h: 20, type: 'static' },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 hazards: [
+                     { x: 160, y: 580, w: 130, h: 20, type: 'spikeFloor' },
+                     { x: 460, y: 580, w: 180, h: 20, type: 'spikeFloor' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 10: Watch Your Step! Spikes (▲) are deadly."
+             },
+            // Level 11: Basic Foe - Enemy (Walking)
+            {
+                playerStart: { x: 50, y: 550 },
+                goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                ],
+                enemies: [
+                    { x: 300, y: 550, type: 'walker', range: 100 },
+                    { x: 500, y: 550, type: 'walker', range: 50 },
+                ],
+                mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                message: "Level 11: Enemies! Avoid the walking foes (👹)."
+            },
+            // Level 12: Aerial Threat - Enemy (Flying)
+             {
+                 playerStart: { x: 50, y: 550 },
+                 goal: { x: 700, y: 100, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 300, y: 450, w: 150, h: 20, type: 'static' },
+                     { x: 500, y: 300, w: 150, h: 20, type: 'static' },
+                     { x: 650, y: 150, w: 150, h: 20, type: 'static' },
+                 ],
+                 enemies: [
+                     { x: 200, y: 300, type: 'flyer', rangeX: 100, rangeY: 50, speed: 1.5 },
+                     { x: 550, y: 100, type: 'flyer', rangeX: 0, rangeY: 100, speed: 2 },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 12: Look Out Above! Avoid the flying foes (👻)."
+             },
+             // Level 13: Puzzle Elements - Switches and Doors
+             {
+                 playerStart: { x: 50, y: 550 },
+                 goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 200, h: 20, type: 'static' },
+                     { x: 500, y: 580, w: 300, h: 20, type: 'static' },
+                 ],
+                 interactives: [
+                     { x: 150, y: 550, type: 'switch', id: 1 },
+                     { x: 350, y: 500, w: 20, h: 80, type: 'door', switchId: 1 },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 13: Locked Out? Hit the Switch (🟧) to open the Door (🚪)."
+             },
+            // Level 14: Gated Progress - Keys and Locks
+             {
+                 playerStart: { x: 50, y: 100 },
+                 goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 150, w: 100, h: 20, type: 'static' },
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                     { x: 300, y: 400, w: 100, h: 20, type: 'static' },
+                 ],
+                 items: [
+                     { x: 350, y: 370, type: 'key', id: 1 }
+                 ],
+                 interactives: [
+                     { x: 500, y: 500, w: 20, h: 80, type: 'lock', keyId: 1 },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 14: Find the Key (🔑) to open the Lock (🔒)."
+             },
+             // Level 15: Aquatic Movement - Water
+             {
+                 playerStart: { x: 50, y: 100 },
+                 goal: { x: 700, y: 100, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 150, w: 100, h: 20, type: 'static' },
+                     { x: 650, y: 150, w: 150, h: 20, type: 'static' },
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' }, // bottom of water
+                 ],
+                 environmental: [
+                     { x: 0, y: 300, w: 800, h: 280, type: 'water' }
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'swim'],
+                 message: "Level 15: Take a Dip! Jump is weaker in Water (💧), but you can swim."
+             },
+             // Level 16: Slippery Surfaces - Ice
+             {
+                 playerStart: { x: 50, y: 550 },
+                 goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 150, y: 580, w: 400, h: 20, type: 'ice' },
+                     { x: 550, y: 580, w: 250, h: 20, type: 'static' },
+                 ],
+                 hazards: [ { x: 350, y: 560, type: 'spike', size: 20 }],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 16: Slippery! Be careful on Ice Platforms (🧊)."
+             },
+             // Level 17: Environmental Force - Wind
+             {
+                 playerStart: { x: 50, y: 100 },
+                 goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 150, w: 100, h: 20, type: 'static' },
+                     { x: 350, y: 350, w: 100, h: 20, type: 'static' },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 environmental: [
+                     { x: 100, y: 0, w: 600, h: 600, type: 'wind', direction: 'right' } // Wind pushing right
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 17: Windy! Fight against or use the Wind (🌬️)."
+             },
+             // Level 18: Upside Down - Gravity Switch
+             {
+                 playerStart: { x: 50, y: 550 },
+                 goal: { x: 700, y: 50, w: 50, h: 50 }, // Goal on ceiling
+                 platforms: [
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' }, // Floor
+                     { x: 0, y: 0, w: 800, h: 20, type: 'static' }, // Ceiling
+                     { x: 300, y: 400, w: 100, h: 20, type: 'static' },
+                     { x: 500, y: 200, w: 100, h: 20, type: 'static' }, // Ceiling platform
+                 ],
+                 interactives: [
+                     { x: 150, y: 550, type: 'gravitySwitch' }
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'gravitySwitch'],
+                 message: "Level 18: Topsy Turvy! Hit the Switch (💫) to flip Gravity."
+             },
+             // Level 19: Instant Transport - Portals
+             {
+                 playerStart: { x: 50, y: 550 },
+                 goal: { x: 700, y: 100, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 200, h: 20, type: 'static' }, // Start area
+                     { x: 600, y: 150, w: 200, h: 20, type: 'static' }, // Goal area
+                     { x: 300, y: 300, w: 200, h: 20, type: 'static' }, // Middle platform
+                 ],
+                 interactives: [
+                     { x: 150, y: 530, w: 20, h: 40, type: 'portal', id: 1, targetId: 2 },
+                     { x: 450, y: 250, w: 20, h: 40, type: 'portal', id: 2, targetId: 1 },
+                     { x: 350, y: 250, w: 20, h: 40, type: 'portal', id: 3, targetId: 4 },
+                     { x: 650, y: 100, w: 20, h: 40, type: 'portal', id: 4, targetId: 3 },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 19: Warp Zone! Enter Portals (🌀) to teleport."
+            },
+             // Level 20: Precision Timing - Timed Platforms
+             {
+                 playerStart: { x: 50, y: 550 },
+                 goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 250, y: 580, w: 80, h: 20, type: 'timed', onTime: 60, offTime: 60 },
+                     { x: 400, y: 580, w: 80, h: 20, type: 'timed', onTime: 45, offTime: 45, phaseOffset: 30 },
+                     { x: 550, y: 580, w: 80, h: 20, type: 'timed', onTime: 30, offTime: 90 },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 20: Perfect Timing! Timed Platforms (⏱️) appear and disappear."
+             },
+            // --- Add Levels 21-50 (Simplified representations) ---
+            // Level 21: Invisible Platforms
+            {
+                playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 300, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                    { x: 250, y: 500, w: 100, h: 20, type: 'invisible' },
+                    { x: 450, y: 400, w: 100, h: 20, type: 'invisible' },
+                    { x: 650, y: 350, w: 150, h: 20, type: 'static' },
+                ],
+                mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                message: "Level 21: Leap of Faith! Find the Invisible Platforms (?)."
+            },
+            // Level 22: Bouncing Platforms
+            {
+                playerStart: { x: 50, y: 550 }, goal: { x: 400, y: 100, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                    { x: 150, y: 560, w: 80, h: 20, type: 'bounce' },
+                    { x: 380, y: 150, w: 100, h: 20, type: 'static' },
+                ],
+                mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                message: "Level 22: Bounce High! Use Bouncing Platforms (🦘) to reach new heights."
+            },
+             // Level 23: Sticky Platforms (Simplified: Slows player significantly)
+            {
+                playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                    { x: 250, y: 580, w: 100, h: 20, type: 'sticky' },
+                    { x: 450, y: 580, w: 100, h: 20, type: 'sticky' },
+                    { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                ],
+                 hazards: [ { x: 375, y: 560, type: 'spike', size: 20 } ],
+                mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                message: "Level 23: Sticky Situation! Sticky Platforms (🐾) slow you down."
+            },
+            // Level 24: One-Way Platforms
+             {
+                playerStart: { x: 400, y: 100 }, goal: { x: 400, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 300, y: 150, w: 200, h: 20, type: 'static' },
+                    { x: 300, y: 300, w: 200, h: 20, type: 'oneWay' },
+                    { x: 300, y: 450, w: 200, h: 20, type: 'oneWay' },
+                    { x: 300, y: 580, w: 200, h: 20, type: 'static' },
+                ],
+                mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                message: "Level 24: No Going Back! One-Way Platforms (⬇️) only let you pass downwards."
+             },
+            // Level 25: Rotating Platforms (Simplified: Just visual rotation)
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 400, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 350, y: 500, w: 80, h: 20, type: 'rotating', speed: 1 }, // Center pivot assumed
+                     { x: 650, y: 450, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 25: Spin Cycle! Land carefully on Rotating Platforms (🔄)."
+             },
+             // Level 26: Crumbling Platforms (Same as falling for now)
+             {
+                playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 250, y: 580, w: 80, h: 20, type: 'crumbling', delay: 25 },
+                     { x: 400, y: 580, w: 80, h: 20, type: 'crumbling', delay: 20 },
+                     { x: 550, y: 580, w: 80, h: 20, type: 'crumbling', delay: 15 },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 26: Falling Apart! Crumbling Platforms (💥) break quickly."
+             },
+             // Level 27: Growing Platforms (Simplified: cycle between small/large)
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 300, y: 580, w: 50, h: 20, type: 'growing', minW: 20, maxW: 100, speed: 1 },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 27: Expanding! Growing Platforms (🌱) change size."
+             },
+             // Level 28: Shrinking Platforms (Simplified: cycle between large/small)
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 300, y: 580, w: 100, h: 20, type: 'shrinking', minW: 20, maxW: 100, speed: 0.5 },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 28: Hurry! Shrinking Platforms (🍄) get smaller."
+             },
+            // Level 29: Color-Coded Platforms (Simplified: Player cycles colors, only matching platforms are solid)
+             {
+                playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                    { x: 250, y: 580, w: 100, h: 20, type: 'color', color: 'red' },
+                    { x: 450, y: 580, w: 100, h: 20, type: 'color', color: 'blue' },
+                    { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                ],
+                mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'colorChange'], // Player ability added
+                message: "Level 29: Match the Colors! Player automatically cycles colors (Blue/Red). Only stand on matching platforms (🟥, 🟦)."
+             },
+            // Level 30: Sound-Activated Platforms (Simplified: Always active for demo)
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 300, y: 580, w: 100, h: 20, type: 'sound' }, // Treat as static for now
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 30: Sound On! Sound Platforms (🎵) respond to noise (Always ON for now)."
+             },
+            // Level 31: Light-Sensitive Platforms (Simplified: Always active for demo)
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 300, y: 580, w: 100, h: 20, type: 'light' }, // Treat as static for now
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 31: In the Light! Light Platforms (💡) react to light (Always ON for now)."
+             },
+            // Level 32: Magnet Platforms (Simplified: Gently pull player)
+             {
+                 playerStart: { x: 50, y: 100 }, goal: { x: 700, y: 100, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 150, w: 150, h: 20, type: 'static' },
+                     { x: 300, y: 150, w: 200, h: 20, type: 'magnet', strength: 0.2 }, // Attracts player upwards
+                     { x: 650, y: 150, w: 150, h: 20, type: 'static' },
+                 ],
+                 hazards: [ { x: 0, y: 580, w: 800, h: 20, type: 'spikeFloor' } ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 32: Attractive! Magnet Platforms (🧲) pull you towards them."
+             },
+            // Level 33: Teleport Platforms
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 100, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 200, h: 20, type: 'static' },
+                     { x: 250, y: 580, w: 100, h: 20, type: 'teleport', targetX: 400, targetY: 300 },
+                     { x: 350, y: 350, w: 100, h: 20, type: 'teleport', targetX: 650, targetY: 120 },
+                     { x: 600, y: 150, w: 200, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide'],
+                 message: "Level 33: Beam Me Up! Teleport Platforms (🚀) send you to fixed spots."
+             },
+             // Level 34: Phase Shift
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                     { x: 300, y: 500, w: 20, h: 80, type: 'static' }, // Wall to phase through
+                     { x: 500, y: 500, w: 20, h: 80, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'phaseShift'],
+                 message: "Level 34: Ghostly! Press [P] to Phase Shift (👻) through walls briefly."
+             },
+            // Level 35: Grappling Hook
+            {
+                playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 100, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                    { x: 650, y: 150, w: 150, h: 20, type: 'static' }, // Goal platform
+                ],
+                grapplePoints: [
+                    { x: 300, y: 400 },
+                    { x: 500, y: 250 },
+                ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'grappleHook'],
+                 message: "Level 35: Swing Time! Aim with mouse, Click to fire/release Grapple Hook (🪝) at points (⚓)."
+             },
+             // Level 36: Gliding
+             {
+                playerStart: { x: 50, y: 100 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 150, w: 100, h: 20, type: 'static' },
+                    { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                ],
+                 hazards: [ { x: 200, y: 580, w: 400, h: 20, type: 'spikeFloor' } ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'glide'],
+                 message: "Level 36: Float On! Hold [H] in mid-air to Glide (🍃) slowly."
+             },
+             // Level 37: Parachute (Similar to Glide for now)
+             {
+                 playerStart: { x: 50, y: 100 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 150, w: 100, h: 20, type: 'static' },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 hazards: [ { x: 150, y: 580, w: 450, h: 20, type: 'spikeFloor' } ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'parachute'], // Treat same as glide
+                 message: "Level 37: Safe Descent! Hold [H] to use Parachute (🪂) for slow fall (Similar to Glide)."
+             },
+             // Level 38: Bomb/Projectile
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                     { x: 400, y: 500, w: 20, h: 80, type: 'destructible', health: 3 }, // Destructible wall
+                 ],
+                 enemies: [ { x: 550, y: 550, type: 'walker', range: 50 }],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'bomb'],
+                 message: "Level 38: Kaboom! Press [B] to drop Bombs (💣) to destroy walls (🧱) or enemies."
+             },
+             // Level 39: Shield
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [ { x: 0, y: 580, w: 800, h: 20, type: 'static' } ],
+                 hazards: [
+                     { x: 200, y: 560, type: 'spike', size: 20 }, { x: 220, y: 560, type: 'spike', size: 20 },
+                     { x: 500, y: 560, type: 'spike', size: 20 }, { x: 520, y: 560, type: 'spike', size: 20 },
+                 ],
+                 enemies: [ { x: 350, y: 550, type: 'walker', range: 80 }],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'shield'],
+                 message: "Level 39: Force Field! Press [S] to activate a temporary Shield (🛡️) against hazards/enemies."
+             },
+             // Level 40: Clone Character
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 250, h: 20, type: 'static' },
+                     { x: 550, y: 580, w: 250, h: 20, type: 'static' },
+                     { x: 350, y: 580, w: 100, h: 20, type: 'static' }, // Switch platform
+                 ],
+                 interactives: [
+                     { x: 390, y: 550, type: 'switch', id: 1, requiresWeight: true }, // Needs clone on it
+                     { x: 480, y: 500, w: 20, h: 80, type: 'door', switchId: 1 },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'clone'],
+                 message: "Level 40: Seeing Double! Press [C] to create a temporary Clone (👥) to hold down switches."
+             },
+             // Level 41: Time Rewind (Simplified: Instant reset on fail instead)
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                     { x: 250, y: 580, w: 80, h: 20, type: 'falling', delay: 15 },
+                     { x: 400, y: 580, w: 80, h: 20, type: 'falling', delay: 10 },
+                     { x: 550, y: 580, w: 80, h: 20, type: 'falling', delay: 5 },
+                     { x: 650, y: 580, w: 150, h: 20, type: 'static' },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'timeRewind'], // Feature just mentioned
+                 message: "Level 41: Second Chance! Time Rewind (⏪) lets you undo mistakes (Not implemented; use [R] to restart)."
+             },
+             // Level 42: Slow Motion
+             {
+                playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                ],
+                enemies: [ { x: 300, y: 550, type: 'walker', range: 100, speed: 5 } ], // Fast enemy
+                hazards: [ { x: 500, y: 0, w: 20, h: 560, type: 'laserBeam', speed: 10, vertical: true } ], // Fast laser
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'slowMotion'],
+                 message: "Level 42: Slow Down! Press [T] to toggle Slow Motion (⏳) for tricky timing."
+             },
+             // Level 43: Disguise/Stealth
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [ { x: 0, y: 580, w: 800, h: 20, type: 'static' } ],
+                 enemies: [
+                     { x: 200, y: 550, type: 'walker', range: 50, seesPlayer: true },
+                     { x: 400, y: 550, type: 'walker', range: 50, seesPlayer: true },
+                     { x: 600, y: 550, type: 'walker', range: 50, seesPlayer: true },
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'disguise'],
+                 message: "Level 43: Sneaky! Press [D] to toggle Disguise (🎭) and enemies won't see you."
+             },
+             // Level 44: Summon Platform
+             {
+                playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 100, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 580, w: 150, h: 20, type: 'static' },
+                    { x: 650, y: 150, w: 150, h: 20, type: 'static' }, // Goal platform
+                ],
+                 hazards: [ { x: 150, y: 580, w: 500, h: 20, type: 'spikeFloor' } ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'summonPlatform'],
+                 message: "Level 44: Build Your Way! Press [F] to Summon a temporary Platform (🏗️) below you."
+             },
+             // Level 45: Rideable Animal (Simplified: Speed/Jump boost powerup)
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 100, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                     { x: 400, y: 400, w: 100, h: 20, type: 'static' },
+                     { x: 650, y: 150, w: 150, h: 20, type: 'static' },
+                 ],
+                 items: [ { x: 100, y: 550, type: 'rideAnimal' } ], // Powerup instead of entity
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'rideAnimal'],
+                 message: "Level 45: Giddy Up! Collect 🐴 for faster speed and higher jump (Simplified)."
+             },
+            // Level 46: Morph into Ball
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                     { x: 300, y: 560, w: 200, h: 20, type: 'static' }, // Low ceiling requires morph
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'morphBall'],
+                 message: "Level 46: Roll Out! Press [M] to toggle Morph Ball (⚽) form to fit small gaps."
+             },
+             // Level 47: Wall Climbing
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 100, w: 50, h: 50 },
+                 platforms: [
+                     { x: 0, y: 580, w: 100, h: 20, type: 'static' },
+                     { x: 150, y: 150, w: 20, h: 430, type: 'climbable' }, // Climbable wall
+                     { x: 300, y: 300, w: 20, h: 280, type: 'climbable' },
+                     { x: 650, y: 150, w: 150, h: 20, type: 'static' }, // Goal platform
+                 ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'wallClimb'],
+                 message: "Level 47: Scaling! Hold onto climbable walls (|||) and press Up/Down [↑]/[↓] to Wall Climb (🧗)."
+             },
+            // Level 48: Rope Swing
+             {
+                playerStart: { x: 50, y: 100 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                platforms: [
+                    { x: 0, y: 150, w: 150, h: 20, type: 'static' },
+                    { x: 650, y: 580, w: 150, h: 20, type: 'static' }, // Goal platform
+                ],
+                ropes: [
+                    { x: 250, y: 150, length: 150 },
+                    { x: 450, y: 250, length: 200 },
+                ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'ropeSwing'],
+                 message: "Level 48: Tarzan! Press [E] near a Rope anchor (🧵) to grab/release and swing."
+             },
+             // Level 49: Laser Beam
+             {
+                 playerStart: { x: 50, y: 550 }, goal: { x: 700, y: 550, w: 50, h: 50 },
+                 platforms: [ { x: 0, y: 580, w: 800, h: 20, type: 'static' } ],
+                 enemies: [
+                     { x: 300, y: 550, type: 'walker', range: 50, health: 2 },
+                     { x: 500, y: 300, type: 'flyer', rangeX: 50, rangeY: 0, health: 1 }
+                 ],
+                 interactives: [ { x: 600, y: 550, type: 'laserSwitch', id: 2 }, { x: 650, y: 500, w: 20, h: 80, type: 'door', switchId: 2 } ],
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'laser'],
+                 message: "Level 49: Pew Pew! Press [L] to fire a Laser (⚡) to defeat enemies or hit switches."
+             },
+             // Level 50: Boss Fight
+             {
+                 playerStart: { x: 100, y: 550 }, goal: { x: 400, y: 300, w: 0, h: 0 }, // Goal is defeating boss
+                 platforms: [
+                     { x: 0, y: 580, w: 800, h: 20, type: 'static' },
+                     { x: 150, y: 450, w: 150, h: 20, type: 'static' },
+                     { x: 500, y: 450, w: 150, h: 20, type: 'static' },
+                     { x: 350, y: 300, w: 100, h: 20, type: 'timed', onTime: 120, offTime: 60 }
+                 ],
+                 boss: { x: 600, y: 500, health: BOSS_HEALTH },
+                 mechanics: ['jump', 'doubleJump', 'dash', 'wallJump', 'slide', 'laser', 'shield'], // Example subset for boss
+                 message: "Level 50: BOSS FIGHT! Defeat the Boss (👾) using your skills! (Laser recommended)"
+             },
+             // --- End Screen ---
+             {
+                playerStart: {x: 400, y: 300}, goal: null, platforms: [],
+                message: "Congratulations! You completed the game! Thanks for playing.",
+                isEndScreen: true
+             }
+        ];
+
+        // --- Helper Functions ---
+        function rectCollision(r1, r2) {
+            if (!r1 || !r2) return false;
+            return r1.x < r2.x + r2.w &&
+                   r1.x + r1.w > r2.x &&
+                   r1.y < r2.y + r2.h &&
+                   r1.y + r1.h > r2.y;
+        }
+
+        function pointInRect(px, py, rect) {
+            return px >= rect.x && px <= rect.x + rect.w &&
+                   py >= rect.y && py <= rect.y + rect.h;
+        }
+
+         function distance(x1, y1, x2, y2) {
+            const dx = x1 - x2;
+            const dy = y1 - y2;
+            return Math.sqrt(dx * dx + dy * dy);
+         }
+
+        function resetPlayer(startPos) {
+            const hasMechanic = (mech) => levels[currentLevelIndex].mechanics.includes(mech);
+            const playerSize = 30;
+            player = {
+                x: startPos.x, y: startPos.y,
+                w: playerSize, h: playerSize,
+                vx: 0, vy: 0,
+                grounded: false,
+                jumpsLeft: hasMechanic('doubleJump') ? 2 : (hasMechanic('jump') ? 1 : 0),
+                canDash: hasMechanic('dash'),
+                isDashing: false, dashTimer: 0, dashDirection: 1,
+                onWall: 0, canWallJump: hasMechanic('wallJump'), wallCooldown: 0,
+                isSliding: false, canSlide: hasMechanic('slide'),
+                speedBoostTimer: 0,
+                invincibilityTimer: 0,
+                inWater: false,
+                onIce: false,
+                gravityFactor: 1,
+                facing: 1, // 1 right, -1 left
+                canPhase: hasMechanic('phaseShift'), isPhasing: false, phaseTimer: 0, phaseCooldown: 0,
+                canGrapple: hasMechanic('grappleHook'), grapple: null,
+                canGlide: hasMechanic('glide') || hasMechanic('parachute'), isGliding: false,
+                canBomb: hasMechanic('bomb'), bombCooldown: 0,
+                canShield: hasMechanic('shield'), isShieldActive: false, shieldTimer: 0, shieldCooldown: 0,
+                canClone: hasMechanic('clone'), cloneCooldown: 0,
+                canSlowMo: hasMechanic('slowMotion'),
+                canDisguise: hasMechanic('disguise'), isDisguised: false,
+                canSummon: hasMechanic('summonPlatform'), summonCooldown: 0,
+                hasAnimalBoost: false, animalBoostTimer: 0,
+                canMorph: hasMechanic('morphBall'), isMorphed: false, originalSize: {w: playerSize, h: playerSize},
+                canClimb: hasMechanic('wallClimb'), isClimbing: false,
+                canGrabRope: hasMechanic('ropeSwing'), grabbedRope: null,
+                canLaser: hasMechanic('laser'), laserCooldown: 0,
+                currentColor: 'blue', colorTimer: 0, colorChangeInterval: 120, // For color platforms
+                health: 1, // For potential future damage system beyond instant death
+                isDead: false
+            };
+             isSlowMotion = false; // Reset global slow mo state too
+             slowMoToggle = false;
+        }
+
+        function updateControlsUI(levelMechanics) {
+             document.querySelectorAll('#controls .control').forEach(el => {
+                 const levelReq = parseInt(el.getAttribute('data-level'), 10);
+                 if (levelMechanics.includes(mechanicMap[levelReq])) {
+                     el.classList.remove('hidden');
+                 } else {
+                     el.classList.add('hidden');
+                 }
+             });
+         }
+
+         // Map level number to mechanic name for UI update
+         const mechanicMap = {
+             1: 'jump', 2: 'doubleJump', 3: 'dash', 4: 'wallJump', 5: 'slide',
+             6: 'speedBoost', 7: 'invincibility', 15: 'swim', 18: 'gravitySwitch',
+             29: 'colorChange', 34: 'phaseShift', 35: 'grappleHook', 36: 'glide', 37: 'parachute',
+             38: 'bomb', 39: 'shield', 40: 'clone', 41: 'timeRewind', 42: 'slowMotion',
+             43: 'disguise', 44: 'summonPlatform', 45: 'rideAnimal', 46: 'morphBall',
+             47: 'wallClimb', 48: 'ropeSwing', 49: 'laser', 50: 'boss' // Not a control, but for consistency
+         };
+
+
+        function loadLevel(levelIndex) {
+             if (levelIndex >= levels.length) {
+                 console.error("Attempted to load invalid level index:", levelIndex);
+                 currentLevelIndex = levels.length - 1; // Go to end screen or last level
+                 levelIndex = currentLevelIndex;
+             }
+             levelComplete = false;
+             gamePaused = false; // Unpause if paused
+
+            const levelData = levels[levelIndex];
+            levelInfoDiv.textContent = levelData.message || `Level ${levelIndex + 1}`;
+            updateControlsUI(levelData.mechanics || []);
+
+            resetPlayer(levelData.playerStart);
+
+            platforms = (levelData.platforms || []).map(p => ({
+                ...p,
+                originalY: p.y, // For moving platforms
+                originalX: p.x,
+                moveTimer: 0,
+                state: 'visible', // For timed/falling/crumbling
+                fallTimer: p.delay || 30,
+                onTimer: p.onTime || 60,
+                offTimer: p.offTime || 60,
+                phase: p.phaseOffset || 0,
+                active: true, // For falling/crumbling check
+                rotation: 0, // For rotating
+                currentW: p.w, // For growing/shrinking
+                growDir: 1 // For growing/shrinking
+            }));
+            enemies = (levelData.enemies || []).map(e => ({
+                ...e,
+                originalX: e.x,
+                originalY: e.y,
+                vx: e.speed || 1,
+                vy: e.speed || 1,
+                moveTimer: 0,
+                health: e.health || 1,
+                active: true,
+                seesPlayer: e.seesPlayer || false,
+                isAlerted: false
+            }));
+            hazards = (levelData.hazards || []).map(h => ({ ...h, active: true }));
+            items = (levelData.items || []).map(i => ({ ...i, active: true }));
+            interactives = (levelData.interactives || []).map(int => ({
+                 ...int,
+                 active: true,
+                 activated: false,
+                 targetX: int.targetX || 0, // For teleporters
+                 targetY: int.targetY || 0,
+                 weightOn: 0 // For weight switches
+            }));
+             environmental = (levelData.environmental || []).map(env => ({ ...env }));
+             projectiles = []; // Clear projectiles between levels
+             clones = []; // Clear clones
+             ropes = (levelData.ropes || []).map(r => ({...r}));
+             grapplePoints = (levelData.grapplePoints || []).map(gp => ({...gp}));
+
+             levelGoal = levelData.goal ? { ...levelData.goal, active: true } : null;
+             boss = levelData.boss ? { ...levelData.boss, active: true, w: 60, h: 60, vx: 2, vy: 0, attackTimer: 120, phase: 0 } : null;
+
+             // Special case for end screen
+             if (levelData.isEndScreen) {
+                player.isDead = true; // Effectively disable player
+                gamePaused = true;
+             }
+        }
+
+
+        // --- Update Functions ---
+        function updatePlayer() {
+            if (player.isDead || gamePaused || levelComplete) return;
+
+             let currentGravity = GRAVITY * player.gravityFactor;
+             let currentFriction = player.onIce ? ICE_FRICTION : FRICTION;
+
+             // Handle Input Doube Tap for Dash
+             // (Handled in keyDown event listener)
+
+             // Sliding Logic
+             if (player.canSlide && keys.down && player.grounded && (keys.left || keys.right) && !player.isSliding && !player.isMorphed) {
+                 player.isSliding = true;
+                 player.h = player.originalSize.h / 2;
+                 player.y += player.originalSize.h / 2;
+                 player.vx += (keys.right ? SLIDE_SPEED_BOOST : -SLIDE_SPEED_BOOST);
+             }
+             if (player.isSliding && (!keys.down || (!keys.left && !keys.right) || !player.grounded)) {
+                 player.isSliding = false;
+                 // Check if space to stand up
+                 let standRect = {x: player.x, y: player.y - player.originalSize.h / 2, w: player.w, h: player.originalSize.h};
+                 let canStand = true;
+                 platforms.forEach(p => { if (p.active && rectCollision(standRect, p)) canStand = false; });
+                 interactives.forEach(p => { if (p.active && rectCollision(standRect, p)) canStand = false; });
+
+                 if (canStand) {
+                     player.h = player.originalSize.h;
+                     player.y -= player.originalSize.h / 2;
+                 } else {
+                     // Force remain sliding if no room
+                     player.isSliding = true;
+                 }
+             }
+
+             // Morph Ball Logic
+             if (player.canMorph && keys.morph && !player.morphCooldown) {
+                 player.isMorphed = !player.isMorphed;
+                 player.morphCooldown = 20; // Prevent rapid toggling
+                 if (player.isMorphed) {
+                     player.isSliding = false; // Can't slide while morphed
+                     player.w = MORPH_BALL_SIZE * 2;
+                     player.h = MORPH_BALL_SIZE * 2;
+                     player.y += (player.originalSize.h - MORPH_BALL_SIZE * 2) / 2; // Adjust y pos
+                 } else {
+                      // Check if space to unmorph
+                     let standRect = {x: player.x, y: player.y - (player.originalSize.h - MORPH_BALL_SIZE*2)/2, w: player.originalSize.w, h: player.originalSize.h};
+                     let canStand = true;
+                     platforms.forEach(p => { if (p.active && rectCollision(standRect, p)) canStand = false; });
+                      interactives.forEach(p => { if (p.active && rectCollision(standRect, p)) canStand = false; });
+
+                     if(canStand){
+                         player.w = player.originalSize.w;
+                         player.h = player.originalSize.h;
+                         player.y -= (player.originalSize.h - MORPH_BALL_SIZE * 2) / 2;
+                     } else {
+                         player.isMorphed = true; // Force remain morphed if no room
+                          player.morphCooldown = 0; // Allow trying again immediately
+                     }
+                 }
+             }
+            if(player.morphCooldown > 0) player.morphCooldown--;
+
+
+            // Movement
+            let targetSpeed = (player.speedBoostTimer > 0 || player.hasAnimalBoost) ? PLAYER_SPEED * 1.5 : PLAYER_SPEED;
+            targetSpeed = player.isMorphed ? targetSpeed * 1.2 : targetSpeed; // Morph ball is faster?
+             targetSpeed = player.inWater ? SWIM_SPEED : targetSpeed;
+             targetSpeed = player.isSliding ? Math.abs(player.vx) : targetSpeed; // Maintain slide speed initially
+
+
+             if (!player.isDashing && !player.isClimbing && !player.grabbedRope) {
+                 if (keys.left) {
+                     player.vx -= player.isSliding ? 0.1 : (player.grounded ? 1 : 0.5); // Less control mid-air/sliding
+                     player.facing = -1;
+                 }
+                 if (keys.right) {
+                     player.vx += player.isSliding ? 0.1 : (player.grounded ? 1 : 0.5);
+                     player.facing = 1;
+                 }
+                 // Clamp horizontal speed
+                 if(Math.abs(player.vx) > targetSpeed && !player.isSliding) {
+                     player.vx = targetSpeed * Math.sign(player.vx);
+                 }
+             }
+
+             // Apply Friction
+             if (player.grounded && !keys.left && !keys.right) {
+                 player.vx *= (player.isSliding ? SLIDE_FRICTION : currentFriction);
+             } else if (!player.grounded){
+                 player.vx *= AIR_FRICTION; // Air resistance
+             }
+              if (Math.abs(player.vx) < 0.1) player.vx = 0;
+
+
+             // Jumping
+             if (keys.jump && player.jumpsLeft > 0 && !player.jumpHeld) {
+                 player.jumpHeld = true; // Prevent holding jump for multiple jumps
+                 let jumpForce = (player.jumpsLeft === ( (player.hasMechanic('doubleJump') ? 2 : 1) ) ) ? JUMP_FORCE : DOUBLE_JUMP_FORCE; // First or second jump?
+                 jumpForce = (player.hasAnimalBoost) ? jumpForce * 1.2 : jumpForce;
+                 jumpForce = player.inWater ? SWIM_BOUNCE : jumpForce;
+
+                 player.vy = jumpForce * player.gravityFactor;
+                 player.jumpsLeft--;
+                 player.grounded = false;
+                  player.onIce = false; // No longer on ice after jump
+                  player.isSliding = false; // Stop sliding on jump
+                  if (player.isMorphed && !player.inWater) player.vy *= 0.7; // Morph ball jump weaker?
+             }
+
+             // Wall Jumping
+             player.onWall = 0;
+             if (player.canWallJump && !player.grounded && player.wallCooldown <= 0) {
+                platforms.forEach(p => {
+                    if (!p.active || p.type === 'oneWay') return;
+                    // Check slightly to the left
+                    if (rectCollision({x: player.x - 2, y: player.y, w: player.w, h: player.h}, p)) player.onWall = -1;
+                    // Check slightly to the right
+                    if (rectCollision({x: player.x + 2, y: player.y, w: player.w, h: player.h}, p)) player.onWall = 1;
+                 });
+                 // Allow wall jump if touching wall and pressing jump
+                 if (player.onWall !== 0 && keys.jump && !player.jumpHeld) {
+                     player.jumpHeld = true;
+                     player.vy = WALL_JUMP_V_FORCE * player.gravityFactor;
+                     player.vx = -player.onWall * WALL_JUMP_H_FORCE; // Jump away from wall
+                     player.jumpsLeft = (player.hasMechanic('doubleJump') ? 1 : 0); // Reset double jump after wall jump
+                     player.onWall = 0; // No longer on wall
+                     player.wallCooldown = 15; // Prevent sticking back immediately
+                 }
+             }
+             if (player.wallCooldown > 0) player.wallCooldown--;
+
+             // Wall Climbing
+             player.isClimbing = false;
+             if (player.canClimb && !player.grounded) {
+                 let touchingClimbable = false;
+                 let climbWallDir = 0;
+                 platforms.forEach(p => {
+                    if (!p.active || p.type !== 'climbable') return;
+                    if (rectCollision({x: player.x - 1, y: player.y, w: player.w, h: player.h}, p)) { touchingClimbable = true; climbWallDir = -1; }
+                    if (rectCollision({x: player.x + 1, y: player.y, w: player.w, h: player.h}, p)) { touchingClimbable = true; climbWallDir = 1; }
+                 });
+
+                 if (touchingClimbable && !player.grabbedRope) {
+                     // Stick to wall slightly
+                     if (player.vy * player.gravityFactor > 1) player.vy = 1; // Slow fall while against wall
+                     if (keys.up || keys.down) {
+                         player.isClimbing = true;
+                         player.vy = (keys.up ? WALL_CLIMB_SPEED : -WALL_CLIMB_SPEED) * player.gravityFactor;
+                         player.vx = 0; // Stop horizontal movement while climbing
+                         player.jumpsLeft = (player.hasMechanic('doubleJump') ? 2 : 1); // Reset jumps when climbing
+                     }
+                     // Wall jump while climbing
+                     if (keys.jump && !player.jumpHeld) {
+                         player.jumpHeld = true;
+                         player.isClimbing = false;
+                         player.vy = WALL_JUMP_V_FORCE * player.gravityFactor;
+                         player.vx = -climbWallDir * WALL_JUMP_H_FORCE * 1.2; // Stronger jump off climbable wall?
+                         player.jumpsLeft = (player.hasMechanic('doubleJump') ? 1 : 0);
+                         player.wallCooldown = 15;
+                     }
+                 }
+             }
+
+
+            // Dashing
+            if (player.canDash && keys.dash && !player.isDashing && player.dashCooldown <= 0 && !player.isSliding && !player.isMorphed && !player.isClimbing && !player.grabbedRope) {
+                 player.isDashing = true;
+                 player.dashTimer = DASH_DURATION;
+                 player.dashDirection = player.facing;
+                 player.vy = 0; // Maintain vertical position during dash
+                 player.dashCooldown = 30; // Cooldown after dash
+             }
+             if (player.isDashing) {
+                 player.vx = player.dashDirection * DASH_SPEED;
+                 player.vy = 0; // Override gravity during dash
+                 player.dashTimer--;
+                 if (player.dashTimer <= 0) {
+                     player.isDashing = false;
+                     player.vx *= 0.5; // Reduce speed after dash ends
+                 }
+             }
+             if(player.dashCooldown > 0) player.dashCooldown--;
+
+
+             // Phasing
+             if (player.canPhase && keys.phase && !player.isPhasing && player.phaseCooldown <= 0) {
+                 player.isPhasing = true;
+                 player.phaseTimer = PHASE_DURATION;
+                 player.phaseCooldown = PHASE_DURATION + 60; // Cooldown after phase ends
+             }
+             if (player.isPhasing) {
+                 player.phaseTimer--;
+                 if (player.phaseTimer <= 0) {
+                     player.isPhasing = false;
+                     // Check if stuck in wall after phasing
+                     let stuck = false;
+                     platforms.forEach(p => { if (p.active && rectCollision(player, p)) stuck = true; });
+                     if(stuck) player.isDead = true; // Die if stuck
+                 }
+             }
+              if(player.phaseCooldown > 0) player.phaseCooldown--;
+
+            // Grappling Hook
+            if (player.canGrapple) {
+                if (keys.grapple && !player.grapple) {
+                     // Fire grapple hook towards mouse
+                     let closestPoint = null;
+                     let minDist = GRAPPLE_RANGE;
+                     grapplePoints.forEach(gp => {
+                         let d = distance(player.x + player.w/2, player.y + player.h/2, gp.x, gp.y);
+                         // Check angle as well? For now just distance and rough direction check
+                         let dx = gp.x - (player.x + player.w/2);
+                         let dy = gp.y - (player.y + player.h/2);
+                         let mouseDx = mouse.x - (player.x + player.w/2);
+                         let mouseDy = mouse.y - (player.y + player.h/2);
+                         // Check if point is roughly in direction of mouse click & within range
+                         if (d < minDist && Math.sign(dx) === Math.sign(mouseDx) && Math.sign(dy) === Math.sign(mouseDy) ) {
+                              // Basic angle check (dot product > 0)
+                              let dot = dx * mouseDx + dy * mouseDy;
+                              if (dot > 0) {
+                                 minDist = d;
+                                 closestPoint = gp;
+                              }
+                         }
+                     });
+
+                     if (closestPoint) {
+                         player.grapple = {
+                             x: player.x + player.w/2, y: player.y + player.h/2,
+                             targetX: closestPoint.x, targetY: closestPoint.y,
+                             active: false, // Becomes active when hook reaches target
+                             retracting: false,
+                             length: 0, // current length
+                             maxLength: minDist,
+                             hookX: player.x + player.w/2, hookY: player.y + player.h/2 // Hook position
+                         };
+                     }
+                      keys.grapple = false; // Consume the key press
+                } else if (!keys.grapple && player.grapple && player.grapple.active) {
+                     // Release grapple
+                     player.grapple = null;
+                 }
+
+                 // Update grapple logic
+                 if (player.grapple && !player.grapple.active && !player.grapple.retracting) {
+                    // Hook travelling to target
+                    let dx = player.grapple.targetX - player.grapple.hookX;
+                    let dy = player.grapple.targetY - player.grapple.hookY;
+                    let distToTarget = Math.sqrt(dx*dx + dy*dy);
+                    if (distToTarget < GRAPPLE_SPEED) {
+                        player.grapple.hookX = player.grapple.targetX;
+                        player.grapple.hookY = player.grapple.targetY;
+                        player.grapple.active = true; // Attached!
+                        player.grapple.length = player.grapple.maxLength;
+                        // Yank player slightly
+                        player.vx += dx * 0.1;
+                        player.vy += dy * 0.1;
+                        player.grounded = false; // Force aerial state
+                        player.jumpsLeft = (player.hasMechanic('doubleJump') ? 2 : 1); // Reset jumps on successful grapple
+                    } else {
+                        let angle = Math.atan2(dy, dx);
+                        player.grapple.hookX += Math.cos(angle) * GRAPPLE_SPEED;
+                        player.grapple.hookY += Math.sin(angle) * GRAPPLE_SPEED;
+                    }
+                 } else if (player.grapple && player.grapple.active) {
+                    // Swinging logic (simplified pendulum)
+                    let px = player.x + player.w/2;
+                    let py = player.y + player.h/2;
+                    let hookX = player.grapple.targetX;
+                    let hookY = player.grapple.targetY;
+                    let dx = px - hookX;
+                    let dy = py - hookY;
+                    let currentDist = Math.sqrt(dx*dx + dy*dy);
+                    let angle = Math.atan2(dy, dx);
+
+                    // Apply gravity tangential component
+                     let gravityAngle = Math.PI / 2; // Angle of gravity vector
+                     let tangentialForce = currentGravity * Math.cos(angle - gravityAngle) * 0.1; // Force pulling along the swing arc
+                     player.vx -= Math.sin(angle) * tangentialForce;
+                     player.vy += Math.cos(angle) * tangentialForce;
+
+
+                    // Tension force to maintain distance (if needed, basic constraint)
+                    if (currentDist > player.grapple.length) {
+                         let diff = currentDist - player.grapple.length;
+                         player.x -= (dx / currentDist) * diff;
+                         player.y -= (dy / currentDist) * diff;
+                         // Dampen velocity component along the rope
+                         let dot = player.vx * (dx/currentDist) + player.vy * (dy/currentDist);
+                         player.vx -= (dx / currentDist) * dot * 0.5; // Reduce outward velocity
+                         player.vy -= (dy / currentDist) * dot * 0.5;
+                     }
+
+                      // Override gravity while swinging
+                     player.vy -= currentGravity; // Counteract normal gravity application somewhat
+
+                 } else if (player.grapple && player.grapple.retracting) {
+                    // Hook returning to player (not implemented fully)
+                    player.grapple = null; // Just remove for now
+                 }
+            }
+
+             // Rope Swing
+             player.grabbedRope = null; // Reset check each frame
+             if (player.canGrabRope) {
+                let canGrab = false;
+                let targetRope = null;
+                ropes.forEach(rope => {
+                    // Check if player is near the anchor point to grab
+                    let distToAnchor = distance(player.x + player.w/2, player.y + player.h/2, rope.x, rope.y);
+                     // Calculate current end point of rope for collision check (approximation)
+                     let ropeEndX = rope.x; // Simplified - assume vertical rope for grabbing check
+                     let ropeEndY = rope.y + rope.length;
+                     let playerFeetY = player.y + player.h;
+                    if (rectCollision(player, {x: rope.x - 5, y: rope.y, w: 10, h: rope.length})) {
+                         canGrab = true;
+                         targetRope = rope;
+                     }
+                 });
+
+                 if (keys.grabRope && canGrab && !player.ropeHeld) {
+                     player.grabbedRope = targetRope;
+                     player.ropeHeld = true; // Prevent regrabbing instantly
+                     // Snap player to rope? Or just apply forces? Apply forces.
+                     player.grounded = false;
+                     player.isClimbing = false;
+                 } else if (!keys.grabRope && player.ropeHeld) {
+                     player.ropeHeld = false; // Allow grabbing again
+                 }
+
+                 if (player.grabbedRope) {
+                     // Simplified Swing Physics
+                     let rope = player.grabbedRope;
+                     let px = player.x + player.w / 2;
+                     let py = player.y + player.h / 2;
+                     let angle = Math.atan2(py - rope.y, px - rope.x);
+
+                     // Apply force based on horizontal position relative to anchor
+                     let swingForce = (rope.x - px) * ROPE_SWING_FORCE;
+                     player.vx += swingForce;
+
+                     // Apply slight upward force to counteract gravity
+                     player.vy -= currentGravity * 0.8;
+
+                     // Keep player roughly within rope length (very basic constraint)
+                     let d = distance(px, py, rope.x, rope.y);
+                     if (d > rope.length) {
+                         player.vx *= 0.9; // Dampen velocity if overextended
+                         player.vy *= 0.9;
+                         // Move player back slightly (crude constraint)
+                         let diff = d - rope.length;
+                         player.x -= (px - rope.x) / d * diff;
+                         player.y -= (py - rope.y) / d * diff;
+                     }
+
+                     // Release rope if E is pressed again or Jump is pressed
+                     if ((keys.grabRope && !player.ropeHeld) || (keys.jump && !player.jumpHeld)) {
+                         player.grabbedRope = null;
+                         if(keys.jump){ // Give jump boost if jumping off rope
+                             player.jumpHeld = true;
+                             player.vy += JUMP_FORCE * 0.8 * player.gravityFactor; // Slightly weaker jump off rope
+                             player.jumpsLeft = (player.hasMechanic('doubleJump') ? 1 : 0);
+                         }
+                     }
+                 }
+             }
+
+             // Gliding / Parachute
+             if ((player.canGlide || player.hasMechanic('parachute')) && keys.glide && player.vy * player.gravityFactor > 0 && !player.grounded && !player.inWater && !player.isClimbing && !player.grabbedRope) {
+                 player.isGliding = true;
+                 if (player.vy * player.gravityFactor > GLIDE_FALL_SPEED) {
+                    player.vy = GLIDE_FALL_SPEED * player.gravityFactor;
+                 }
+             } else {
+                 player.isGliding = false;
+             }
+
+             // Bomb Dropping
+             if (player.canBomb && keys.bomb && player.bombCooldown <= 0) {
+                 projectiles.push({
+                     x: player.x + player.w / 2 - 5, y: player.y + player.h / 2 - 5,
+                     w: 10, h: 10, type: 'bomb', fuse: BOMB_FUSE, owner: 'player'
+                 });
+                 player.bombCooldown = 45; // Cooldown between bombs
+                 keys.bomb = false; // Consume key press
+             }
+             if (player.bombCooldown > 0) player.bombCooldown--;
+
+             // Shield Activation
+             if (player.canShield && keys.shield && player.shieldCooldown <= 0) {
+                 player.isShieldActive = true;
+                 player.shieldTimer = SHIELD_DURATION;
+                 player.shieldCooldown = SHIELD_DURATION + 90; // Cooldown after shield ends
+                 keys.shield = false; // Consume key press
+             }
+             if (player.isShieldActive) {
+                 player.shieldTimer--;
+                 if (player.shieldTimer <= 0) {
+                     player.isShieldActive = false;
+                 }
+             }
+              if(player.shieldCooldown > 0) player.shieldCooldown--;
+
+             // Clone Creation
+             if (player.canClone && keys.clone && player.cloneCooldown <= 0 && clones.length < 1) { // Limit to 1 clone
+                 clones.push({
+                     x: player.x, y: player.y, w: player.w, h: player.h,
+                     timer: CLONE_DURATION, active: true
+                 });
+                 player.cloneCooldown = CLONE_DURATION + 60;
+                 keys.clone = false;
+             }
+             if (player.cloneCooldown > 0) player.cloneCooldown--;
+
+             // Slow Motion Toggle
+             if (player.canSlowMo && keys.slowMo) {
+                 if (!slowMoToggle) { // Only toggle once per press
+                     isSlowMotion = !isSlowMotion;
+                 }
+                 slowMoToggle = true;
+                 keys.slowMo = false; // Consume key press
+             } else {
+                 slowMoToggle = false;
+             }
+             const timeFactor = isSlowMotion ? SLOW_MOTION_FACTOR : 1;
+
+             // Disguise Toggle
+             if (player.canDisguise && keys.disguise) {
+                 player.isDisguised = !player.isDisguised;
+                 keys.disguise = false; // Consume key press
+             }
+
+             // Summon Platform
+             if (player.canSummon && keys.summon && player.summonCooldown <= 0 && !player.grounded) {
+                 // Summon slightly below the player
+                 platforms.push({
+                     x: player.x + player.w / 2 - 40, y: player.y + player.h + 5,
+                     w: 80, h: 15, type: 'summoned', timer: 180, active: true // Lasts 3 seconds
+                 });
+                 player.summonCooldown = PLATFORM_SUMMON_COOLDOWN;
+                 keys.summon = false;
+             }
+             if (player.summonCooldown > 0) player.summonCooldown--;
+
+             // Laser Firing
+             if (player.canLaser && keys.laser && player.laserCooldown <= 0) {
+                 projectiles.push({
+                     x: player.x + player.w/2, y: player.y + player.h/2 - 2, // Center vertically
+                     w: 15, h: 4, type: 'laser', vx: player.facing * LASER_SPEED, vy: 0, owner: 'player'
+                 });
+                 player.laserCooldown = LASER_COOLDOWN;
+                 keys.laser = false;
+             }
+              if (player.laserCooldown > 0) player.laserCooldown--;
+
+             // Power-up timers
+             if (player.speedBoostTimer > 0) player.speedBoostTimer--;
+             if (player.invincibilityTimer > 0) player.invincibilityTimer--;
+             if (player.animalBoostTimer > 0) player.animalBoostTimer--; else player.hasAnimalBoost = false;
+
+             // Apply Gravity (unless dashing, climbing, swinging, or gliding with upward movement)
+             if (!player.isDashing && !player.isClimbing && !player.grabbedRope && !(player.isGliding && player.vy <=0) && !(player.grapple && player.grapple.active) ) {
+                 player.vy += currentGravity;
+             }
+
+             // Water physics adjustment
+             if (player.inWater) {
+                 player.vy *= 0.9; // Dampen vertical speed in water
+                 if(player.vy * player.gravityFactor > 3) player.vy = 3 * player.gravityFactor; // Terminal velocity in water
+                 player.grounded = false; // Can't be grounded in water unless on a submerged platform
+             }
+
+             // Wind effect
+             environmental.forEach(env => {
+                 if (env.type === 'wind' && rectCollision(player, env)) {
+                     if (env.direction === 'right') player.vx += WIND_FORCE;
+                     if (env.direction === 'left') player.vx -= WIND_FORCE;
+                     if (env.direction === 'up') player.vy -= WIND_FORCE;
+                     if (env.direction === 'down') player.vy += WIND_FORCE;
+                 }
+             });
+
+             // Magnet platform effect
+             platforms.forEach(p => {
+                 if (p.active && p.type === 'magnet' && rectCollision(player, {x: p.x, y: p.y - 100, w: p.w, h: p.h + 200})) { // Wider check range for magnet
+                     let dx = (p.x + p.w/2) - (player.x + player.w/2);
+                     let dy = (p.y + p.h/2) - (player.y + player.h/2);
+                     let d = Math.sqrt(dx*dx + dy*dy);
+                     if (d > 10) { // Don't apply if too close
+                        player.vx += (dx / d) * p.strength * 0.5; // Weaker horizontal pull
+                        player.vy += (dy / d) * p.strength;
+                     }
+                 }
+             });
+
+             // Update position
+             let effectiveVx = player.vx * timeFactor;
+             let effectiveVy = player.vy * timeFactor;
+
+             player.x += effectiveVx;
+             player.y += effectiveVy;
+
+             // Collision Detection & Resolution
+             player.grounded = false;
+             player.onIce = false;
+             player.inWater = false;
+
+             // Check water collision first
+             environmental.forEach(env => {
+                 if (env.type === 'water' && rectCollision(player, env)) {
+                     player.inWater = true;
+                 }
+             });
+
+             // Clone collision (treat as static platform for player)
+             clones.forEach(clone => {
+                 if(clone.active && rectCollision(player, clone)) {
+                     // Simple vertical resolution for clones
+                     if (player.vy * player.gravityFactor > 0 && player.y + player.h - effectiveVy <= clone.y) { // Landed on top
+                         player.y = clone.y - player.h;
+                         player.vy = 0;
+                         player.grounded = true;
+                         player.jumpsLeft = player.hasMechanic('doubleJump') ? 2 : 1;
+                     }
+                 }
+             });
+
+             // Platform collision
+             platforms.forEach(p => {
+                if (!p.active || (player.isPhasing && p.type !== 'static')) return; // Phasing ignores non-static
+
+                 // Special platform behaviors check
+                 if (p.type === 'color' && p.color !== player.currentColor && !player.isPhasing) return; // Skip collision if wrong color
+                 if (p.type === 'timed' && p.state !== 'visible' && !player.isPhasing) return; // Skip collision if invisible timed platform
+
+                 if (rectCollision(player, p)) {
+                    let overlapX = (player.x + player.w / 2) - (p.x + p.w / 2);
+                    let overlapY = (player.y + player.h / 2) - (p.y + p.h / 2);
+                    let combinedHalfWidths = player.w / 2 + p.w / 2;
+                    let combinedHalfHeights = player.h / 2 + p.h / 2;
+
+                     // Check for one-way platform - only collide if falling onto it from above
+                    if (p.type === 'oneWay' && player.y + player.h - effectiveVy > p.y + 5) { // Allow small buffer, ensure player was above last frame
+                         return;
+                    }
+
+                    if (Math.abs(overlapX) < combinedHalfWidths && Math.abs(overlapY) < combinedHalfHeights) {
+                        // Collision occurred
+                        let overlapXAmount = combinedHalfWidths - Math.abs(overlapX);
+                        let overlapYAmount = combinedHalfHeights - Math.abs(overlapY);
+
+                         // Phasing check before resolving
+                        if (player.isPhasing && p.type !== 'static') return;
+
+                        if (overlapYAmount < overlapXAmount || p.type === 'oneWay') {
+                             // Vertical collision resolution
+                             if (overlapY > 0 && player.vy * player.gravityFactor >= 0) { // Collision from top (landing)
+                                if (p.type !== 'oneWay' || (p.type === 'oneWay' && player.y + player.h - effectiveVy <= p.y + 5) ) {
+                                    player.y = p.y - player.h;
+                                    if (player.vy > 1) player.vy = 0; // Stop downward velocity if significant
+                                    player.grounded = true;
+                                    player.jumpsLeft = player.hasMechanic('doubleJump') ? 2 : (player.hasMechanic('jump') ? 1 : 0);
+                                    player.isGliding = false; // Stop gliding on land
+                                    if(player.hasAnimalBoost) player.jumpsLeft++; // Extra jump maybe?
+
+                                    // Platform specific landing effects
+                                     if (p.type === 'ice') player.onIce = true;
+                                     if (p.type === 'bounce') player.vy = JUMP_FORCE * 1.5 * player.gravityFactor; // Bounce!
+                                     if (p.type === 'sticky') player.vx *= 0.1; // Drastically slow horizontal speed
+                                     if (p.type === 'falling' || p.type === 'crumbling') p.state = 'triggered';
+                                     if (p.type === 'teleport') { player.x = p.targetX; player.y = p.targetY; player.vx = 0; player.vy = 0; }
+
+                                     // Attach to moving platform
+                                     if (p.type === 'moving' || p.type === 'rotating' || p.type === 'growing' || p.type === 'shrinking') {
+                                         // This needs refinement - basic attachment
+                                         player.x += p.vx || 0; // Add platform's velocity (needs platform vx/vy)
+                                         //player.y += p.vy || 0;
+                                     }
+                                }
+                             } else if (overlapY < 0 && player.vy * player.gravityFactor < 0) { // Collision from bottom (hitting head)
+                                 if (p.type !== 'oneWay') {
+                                    player.y = p.y + p.h;
+                                    player.vy = 0;
+                                 }
+                             }
+                        } else {
+                             // Horizontal collision resolution
+                             if (p.type !== 'oneWay') { // Don't resolve horizontally for one-way
+                                if (overlapX > 0) { // Collision from left
+                                    player.x = p.x - player.w;
+                                } else { // Collision from right
+                                    player.x = p.x + p.w;
+                                }
+                                player.vx = 0;
+                                if (player.isDashing) player.isDashing = false; // Stop dash on wall hit
+                             }
+                         }
+                     }
+                 }
+             });
+
+            // Hazard collision
+             if (player.invincibilityTimer <= 0 && player.shieldTimer <= 0 && !player.isPhasing) {
+                 hazards.forEach(h => {
+                     if (!h.active) return;
+                     let hazardRect = {};
+                     if (h.type === 'spike') {
+                         hazardRect = { x: h.x, y: h.y, w: h.size, h: h.size };
+                     } else if (h.type === 'spikeFloor') {
+                         hazardRect = { x: h.x, y: h.y, w: h.w, h: h.h };
+                     } else if (h.type === 'laserBeam') {
+                         hazardRect = { x: h.x, y: h.y, w: h.w, h: h.h };
+                     }
+                     // Add other hazard types here
+                     if (rectCollision(player, hazardRect)) {
+                         player.isDead = true;
+                     }
+                 });
+             }
+
+            // Enemy collision
+             if (player.invincibilityTimer <= 0 && player.shieldTimer <= 0 && !player.isPhasing && !player.isDisguised) {
+                 enemies.forEach(e => {
+                     if (e.active && rectCollision(player, e)) {
+                          player.isDead = true;
+                     }
+                 });
+             }
+             // Boss collision
+             if (boss && boss.active && player.invincibilityTimer <= 0 && player.shieldTimer <= 0 && !player.isPhasing) {
+                  if (rectCollision(player, boss)) {
+                      player.isDead = true;
+                  }
+             }
+
+
+             // Item collision
+             items.forEach((item, index) => {
+                 if (item.active && rectCollision(player, item)) {
+                     item.active = false; // Collect item
+                     if (item.type === 'speedBoost') player.speedBoostTimer = 300; // 5 seconds
+                     if (item.type === 'invincibility') player.invincibilityTimer = 300;
+                     if (item.type === 'key') {
+                         // Find corresponding lock and open it
+                         interactives.forEach(lock => {
+                             if (lock.type === 'lock' && lock.keyId === item.id) {
+                                 lock.active = false; // Unlock the door/lock
+                             }
+                         });
+                     }
+                      if (item.type === 'rideAnimal') {
+                           player.hasAnimalBoost = true;
+                           player.animalBoostTimer = 600; // 10 seconds
+                       }
+                 }
+             });
+
+             // Interactive object collision / interaction
+             interactives.forEach(int => {
+                 if (int.active && rectCollision(player, int)) {
+                     if (int.type === 'switch' && !int.requiresWeight) {
+                         int.activated = !int.activated; // Toggle switch
+                         // Find corresponding door and toggle its state
+                         interactives.forEach(door => {
+                             if (door.type === 'door' && door.switchId === int.id) {
+                                 door.active = !int.activated;
+                             }
+                              if (door.type === 'laserSwitch' && door.switchId === int.id) {
+                                 door.active = !int.activated; // Laser switch behavior might differ later
+                             }
+                         });
+                          int.active = false; // One-time switch for simplicity? Or keep toggling? Keep toggle for now.
+                     }
+                     if (int.type === 'gravitySwitch') {
+                         player.gravityFactor *= -1;
+                         player.y += player.gravityFactor > 0 ? -5 : 5; // Nudge player slightly to unstick
+                         int.active = false; // One-time use
+                     }
+                     if (int.type === 'portal' && int.active) {
+                         const targetPortal = interactives.find(p => p.type === 'portal' && p.id === int.targetId);
+                         if (targetPortal) {
+                            player.x = targetPortal.x + targetPortal.w / 2 - player.w / 2; // Center player on target portal
+                            player.y = targetPortal.y + targetPortal.h / 2 - player.h / 2;
+                            player.vx = 0;
+                            player.vy = 0;
+                            // Cooldown to prevent instant return?
+                            targetPortal.active = false;
+                            int.active = false;
+                            setTimeout(() => { targetPortal.active = true; int.active = true; }, 500); // Reactivate portals after delay
+                         }
+                     }
+                 }
+                  // Weight switch logic (check player OR clone)
+                  if (int.active && int.type === 'switch' && int.requiresWeight) {
+                     let weightPresent = false;
+                     if (rectCollision(player, int)) weightPresent = true;
+                     clones.forEach(clone => { if(clone.active && rectCollision(clone, int)) weightPresent = true; })
+
+                     if (weightPresent && !int.activated) {
+                         int.activated = true;
+                          interactives.forEach(door => {
+                              if (door.type === 'door' && door.switchId === int.id) {
+                                 door.active = false; // Open door
+                             }
+                         });
+                     } else if (!weightPresent && int.activated) {
+                         int.activated = false;
+                          interactives.forEach(door => {
+                              if (door.type === 'door' && door.switchId === int.id) {
+                                  door.active = true; // Close door
+                              }
+                         });
+                     }
+                 }
+             });
+
+             // Color change mechanic
+             if (player.hasMechanic('colorChange')) {
+                 player.colorTimer = (player.colorTimer + 1 * timeFactor) % (player.colorChangeInterval * 2);
+                 player.currentColor = player.colorTimer < player.colorChangeInterval ? 'blue' : 'red';
+             }
+
+
+             // Check goal collision
+             if (levelGoal && levelGoal.active && rectCollision(player, levelGoal)) {
+                 levelComplete = true;
+                  setTimeout(() => {
+                     currentLevelIndex++;
+                     if (currentLevelIndex < levels.length) {
+                         loadLevel(currentLevelIndex);
+                     } else {
+                         // Game finished - handled by end screen level type
+                         console.log("Game Complete!");
+                     }
+                 }, 500); // Short delay before loading next level
+             }
+
+             // Check death conditions
+             if (player.y > canvas.height + 50 || player.y < -50 - player.h) { // Fell off screen (allow buffer for gravity flip)
+                 player.isDead = true;
+             }
+
+             if (player.isDead) {
+                 // Simple restart on death
+                  setTimeout(() => loadLevel(currentLevelIndex), 500);
+             }
+
+             // Reset jump state if key released
+             if (!keys.jump) {
+                 player.jumpHeld = false;
+             }
+             if(!keys.grabRope) {
+                 player.ropeHeld = false;
+             }
+        }
+
+        function updatePlatforms() {
+             const timeFactor = isSlowMotion ? SLOW_MOTION_FACTOR : 1;
+             platforms.forEach(p => {
+                p.vx = 0; // Reset velocity each frame unless moving
+                 p.vy = 0;
+
+                 if (!p.active) return;
+
+                 // Moving platforms
+                 if (p.type === 'moving') {
+                     p.moveTimer = (p.moveTimer + p.speed * timeFactor) % 360; // Use degrees for oscillation
+                     let moveRad = (p.moveTimer * Math.PI) / 180;
+                     let oscillation = Math.sin(moveRad); // -1 to 1
+                     let currentOffsetX = (p.moveX / 2) * oscillation + (p.moveX / 2);
+                     let currentOffsetY = (p.moveY / 2) * oscillation + (p.moveY / 2);
+
+                     let nextX = p.originalX + currentOffsetX;
+                     let nextY = p.originalY + currentOffsetY;
+                     p.vx = (nextX - p.x) / timeFactor; // Calculate velocity for player attachment
+                     p.vy = (nextY - p.y) / timeFactor;
+                     p.x = nextX;
+                     p.y = nextY;
+                 }
+
+                 // Falling / Crumbling platforms
+                 if ((p.type === 'falling' || p.type === 'crumbling') && p.state === 'triggered') {
+                     p.fallTimer -= 1 * timeFactor;
+                     if (p.fallTimer <= 0) {
+                         p.state = 'falling';
+                     }
+                 }
+                 if (p.state === 'falling') {
+                     p.y += 5 * timeFactor; // Fall down
+                     if (p.y > canvas.height + 50) {
+                         p.active = false; // Deactivate when off screen
+                     }
+                 }
+
+                 // Timed platforms
+                 if (p.type === 'timed') {
+                     let cycleTime = p.onTimer + p.offTimer;
+                     let timeInCycle = (Date.now() / (1000/60) * timeFactor + p.phase) % cycleTime; // Use frame-based timer approx
+
+                     if (timeInCycle < p.onTimer) {
+                         p.state = 'visible';
+                     } else {
+                         p.state = 'invisible';
+                     }
+                 }
+
+                  // Rotating platforms
+                 if (p.type === 'rotating') {
+                     p.rotation = (p.rotation + p.speed * timeFactor) % 360;
+                     // Note: Actual collision needs to account for rotation, which is complex.
+                     // For now, treat collision box as static AABB based on current w/h.
+                 }
+
+                 // Growing/Shrinking Platforms
+                 if (p.type === 'growing' || p.type === 'shrinking') {
+                     let deltaW = (p.type === 'growing' ? p.speed : -p.speed) * p.growDir * timeFactor;
+                     p.currentW += deltaW;
+                     // Adjust x position to keep center stable
+                     p.x -= deltaW / 2;
+
+                     if (p.currentW >= p.maxW || p.currentW <= p.minW) {
+                         p.currentW = Math.max(p.minW, Math.min(p.maxW, p.currentW)); // Clamp
+                         p.growDir *= -1; // Reverse direction
+                         // Keep center stable on reverse
+                         p.x += ( (p.type === 'growing' ? p.speed : -p.speed) * p.growDir * timeFactor) / 2;
+                     }
+                      p.w = p.currentW; // Update collision width
+                 }
+
+                 // Summoned Platforms
+                 if (p.type === 'summoned') {
+                     p.timer -= 1 * timeFactor;
+                     if (p.timer <= 0) {
+                         p.active = false;
+                     }
+                 }
+
+             });
+             // Remove inactive platforms periodically? Or just keep them inactive. Keep for now.
+        }
+
+         function updateEnemies() {
+             const timeFactor = isSlowMotion ? SLOW_MOTION_FACTOR : 1;
+             enemies.forEach(e => {
+                 if (!e.active) return;
+
+                 // Basic movement patterns
+                 if (e.type === 'walker') {
+                    e.x += e.vx * timeFactor;
+                     // Simple back and forth patrol
+                    if (e.x < e.originalX - e.range || e.x > e.originalX + e.range) {
+                        e.vx *= -1;
+                    }
+                     // Basic gravity application for walkers
+                     e.vy += GRAVITY * timeFactor;
+                     e.y += e.vy * timeFactor;
+                     // Basic platform collision for walkers
+                     let grounded = false;
+                     platforms.forEach(p => {
+                         if (p.active && rectCollision(e, p)) {
+                             // Simple vertical resolution
+                             if (e.vy > 0 && e.y + e.h - e.vy <= p.y) {
+                                 e.y = p.y - e.h;
+                                 e.vy = 0;
+                                 grounded = true;
+                             }
+                             // Simple horizontal resolution (turn around)
+                              let overlapX = (e.x + e.w / 2) - (p.x + p.w / 2);
+                             let overlapY = (e.y + e.h / 2) - (p.y + p.h / 2);
+                             let combinedHalfWidths = e.w / 2 + p.w / 2;
+                             let combinedHalfHeights = e.h / 2 + p.h / 2;
+                             if (Math.abs(overlapX) < combinedHalfWidths && Math.abs(overlapY) < combinedHalfHeights) {
+                                 let overlapXAmount = combinedHalfWidths - Math.abs(overlapX);
+                                 let overlapYAmount = combinedHalfHeights - Math.abs(overlapY);
+                                  if (overlapXAmount < overlapYAmount && !grounded) { // Horizontal collision only if not landing
+                                      if (overlapX > 0) e.x = p.x - e.w; else e.x = p.x + p.w;
+                                      e.vx *= -1; // Turn around
+                                  }
+                             }
+                         }
+                     });
+
+
+                 } else if (e.type === 'flyer') {
+                     e.moveTimer = (e.moveTimer + (e.speed || 1) * timeFactor) % 360;
+                     let moveRad = (e.moveTimer * Math.PI) / 180;
+                     e.x = e.originalX + Math.cos(moveRad) * (e.rangeX || 50);
+                     e.y = e.originalY + Math.sin(moveRad) * (e.rangeY || 50);
+                 }
+
+                 // Simple 'sees player' logic for disguise
+                 if (e.seesPlayer) {
+                     if (player.isDisguised) {
+                         e.isAlerted = false; // Lose track if disguised
+                     } else {
+                         // Basic line of sight (horizontal only)
+                         let dx = player.x - e.x;
+                         let dist = Math.abs(dx);
+                         if (dist < 200 && Math.sign(dx) === Math.sign(e.vx)) { // Player within range and roughly in front
+                              e.isAlerted = true;
+                              // Maybe chase player? For now just visual indication.
+                         } else {
+                              e.isAlerted = false;
+                         }
+                     }
+                 }
+
+                 // Check collision with player projectiles
+                 projectiles.forEach((proj, index) => {
+                     if (proj.active && proj.owner === 'player' && rectCollision(e, proj)) {
+                         e.health--;
+                          proj.active = false; // Projectile hits enemy
+                         if (e.health <= 0) {
+                             e.active = false; // Enemy defeated
+                         }
+                     }
+                 });
+             });
+
+             enemies = enemies.filter(e => e.active); // Remove defeated enemies
+         }
+
+         function updateHazards() {
+             const timeFactor = isSlowMotion ? SLOW_MOTION_FACTOR : 1;
+             hazards.forEach(h => {
+                 if (!h.active) return;
+                 if (h.type === 'laserBeam') {
+                    if(h.vertical) {
+                         h.y += h.speed * timeFactor;
+                         if (h.y > canvas.height || h.y < 0 - h.h) h.speed *= -1; // Bounce off top/bottom
+                    } else {
+                        h.x += h.speed * timeFactor;
+                        if (h.x > canvas.width || h.x < 0 - h.w) h.speed *= -1; // Bounce off sides
+                    }
+                 }
+             });
+         }
+
+          function updateProjectiles() {
+             const timeFactor = isSlowMotion ? SLOW_MOTION_FACTOR : 1;
+             projectiles.forEach((p, index) => {
+                 if (!p.active) return;
+
+                 if (p.type === 'bomb') {
+                     p.fuse -= 1 * timeFactor;
+                     // Basic gravity for bombs
+                     p.vy = (p.vy || 0) + GRAVITY * timeFactor * 0.5; // Slower gravity maybe?
+                     p.y += p.vy * timeFactor;
+                     // Bomb platform collision
+                     let grounded = false;
+                     platforms.forEach(plat => {
+                         if(plat.active && rectCollision(p, plat)) {
+                             if (p.vy > 0 && p.y + p.h - p.vy <= plat.y) {
+                                 p.y = plat.y - p.h;
+                                 p.vy = 0;
+                                 grounded = true;
+                             }
+                         }
+                     });
+
+                     if (p.fuse <= 0) {
+                         p.active = false;
+                         // Create explosion effect / damage check
+                         projectiles.push({
+                             x: p.x + p.w/2 - BOMB_RADIUS, y: p.y + p.h/2 - BOMB_RADIUS,
+                             w: BOMB_RADIUS * 2, h: BOMB_RADIUS * 2,
+                             type: 'explosion', timer: 15, owner: p.owner, active: true
+                         });
+                     }
+                 } else if (p.type === 'laser') {
+                     p.x += p.vx * timeFactor;
+                     p.y += p.vy * timeFactor;
+
+                     // Laser collision with platforms
+                     platforms.forEach(plat => {
+                         if (plat.active && rectCollision(p, plat)) {
+                             p.active = false;
+                             if(plat.type === 'destructible'){
+                                 plat.health = (plat.health || 1) -1;
+                                 if(plat.health <= 0) plat.active = false;
+                             }
+                         }
+                     });
+                       // Laser collision with laser switches
+                      interactives.forEach(int => {
+                          if (int.active && int.type === 'laserSwitch' && rectCollision(p, int)) {
+                              p.active = false; // Laser hits switch
+                              int.activated = true; // Activate switch (make it one-time for now)
+                              // Find corresponding door and open it
+                              interactives.forEach(door => {
+                                  if (door.type === 'door' && door.switchId === int.id) {
+                                      door.active = false; // Open door permanently
+                                  }
+                              });
+                          }
+                      });
+
+                     if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                         p.active = false; // Deactivate if off-screen
+                     }
+                 } else if (p.type === 'explosion') {
+                     p.timer -= 1 * timeFactor;
+                     if (p.timer <= 0) {
+                         p.active = false;
+                     } else {
+                         // Check explosion collision with player, enemies, destructibles
+                         if (p.owner !== 'player' && rectCollision(player, p) && player.invincibilityTimer <= 0 && player.shieldTimer <= 0) {
+                             player.isDead = true;
+                         }
+                         enemies.forEach(e => {
+                             if (e.active && rectCollision(e, p)) {
+                                 e.health -= 2; // Bombs do more damage?
+                                 if (e.health <= 0) e.active = false;
+                             }
+                         });
+                         platforms.forEach(plat => {
+                             if (plat.active && plat.type === 'destructible' && rectCollision(plat, p)) {
+                                 plat.active = false; // Destroy destructible walls
+                             }
+                         });
+                         // Check boss collision
+                         if (boss && boss.active && rectCollision(boss, p)) {
+                              boss.health -= 1; // Explosion damage boss
+                         }
+                     }
+                 } else if (p.type === 'bossBullet') {
+                     p.x += p.vx * timeFactor;
+                     p.y += p.vy * timeFactor;
+                      if (rectCollision(player, p) && player.invincibilityTimer <= 0 && player.shieldTimer <= 0 && !player.isPhasing) {
+                         player.isDead = true;
+                         p.active = false;
+                      }
+                      if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                         p.active = false;
+                     }
+                 }
+             });
+
+             projectiles = projectiles.filter(p => p.active);
+         }
+
+         function updateClones() {
+             const timeFactor = isSlowMotion ? SLOW_MOTION_FACTOR : 1;
+             clones.forEach((c, index) => {
+                 if (!c.active) return;
+                 c.timer -= 1 * timeFactor;
+                 if (c.timer <= 0) {
+                     c.active = false;
+                 }
+             });
+             clones = clones.filter(c => c.active);
+         }
+
+         function updateBoss() {
+             if (!boss || !boss.active) return;
+             const timeFactor = isSlowMotion ? SLOW_MOTION_FACTOR : 1;
+
+             // Basic Boss Movement (back and forth)
+             boss.x += boss.vx * timeFactor;
+             if (boss.x < 0 || boss.x + boss.w > canvas.width) {
+                 boss.vx *= -1;
+             }
+              // Basic gravity? Or floating boss? Let's make it float simply for now
+             // boss.vy += GRAVITY * timeFactor;
+             // boss.y += boss.vy * timeFactor;
+             // Simple platform collision (land on floor)
+              platforms.forEach(p => {
+                 if(p.active && p.type === 'static' && rectCollision(boss, p)){
+                     if(boss.vy > 0 && boss.y + boss.h - boss.vy <= p.y){
+                         boss.y = p.y - boss.h;
+                         boss.vy = 0;
+                     }
+                 }
+             });
+
+
+             // Boss Attack Patterns
+             boss.attackTimer -= 1 * timeFactor;
+             if (boss.attackTimer <= 0) {
+                 // Choose an attack based on phase/health?
+                 let attackChoice = Math.random();
+                 if (attackChoice < 0.6) { // Simple Bullet Attack
+                     projectiles.push({
+                         x: boss.x + boss.w / 2 - 5, y: boss.y + boss.h / 2 - 5,
+                         w: 10, h: 10, type: 'bossBullet', owner: 'boss',
+                         vx: (player.x - boss.x) / 50, // Aim roughly at player
+                         vy: (player.y - boss.y) / 50,
+                         active: true
+                     });
+                     boss.attackTimer = 60 + Math.random() * 60; // Cooldown 1-2 seconds
+                 } else { // Maybe a dash attack? Or summon hazard? Simple bullet for now.
+                     boss.attackTimer = 90;
+                 }
+             }
+
+              // Check collision with player projectiles
+             projectiles.forEach((proj) => {
+                 if (proj.active && proj.owner === 'player' && rectCollision(boss, proj)) {
+                      boss.health--;
+                      proj.active = false; // Projectile hits boss
+                 }
+             });
+
+
+             // Check if boss defeated
+             if (boss.health <= 0) {
+                 boss.active = false;
+                 // Trigger level complete / goal achieved
+                 levelComplete = true;
+                  setTimeout(() => {
+                     currentLevelIndex++;
+                     if (currentLevelIndex < levels.length) {
+                         loadLevel(currentLevelIndex);
+                     } else {
+                         console.log("Game Complete!");
+                     }
+                 }, 1000); // Longer delay after boss
+             }
+         }
+
+        // --- Draw Functions ---
+        function drawPlayer() {
+             if (player.isDead || gamePaused) return;
+
+             ctx.save();
+             if (player.invincibilityTimer > 0 || player.phaseTimer > 0 || player.isPhasing) {
+                 ctx.globalAlpha = 0.5 + Math.sin(Date.now() / 100) * 0.2; // Pulsing alpha
+             }
+              if (player.isDisguised) {
+                 ctx.fillStyle = '#888888'; // Grey when disguised
+                 ctx.fillRect(player.x, player.y, player.w, player.h);
+                 ctx.fillStyle = 'white';
+                 ctx.font = `${player.h * 0.6}px Arial`;
+                 ctx.textAlign = 'center';
+                 ctx.fillText('🎭', player.x + player.w / 2, player.y + player.h * 0.7);
+              } else if (player.isMorphed) {
+                 ctx.fillStyle = 'darkorange';
+                 ctx.beginPath();
+                 ctx.arc(player.x + player.w / 2, player.y + player.h / 2, player.w / 2, 0, Math.PI * 2);
+                 ctx.fill();
+                 ctx.fillStyle = 'white';
+                 ctx.font = `${player.h * 0.6}px Arial`;
+                 ctx.textAlign = 'center';
+                 ctx.fillText('⚽', player.x + player.w / 2, player.y + player.h * 0.75);
+              } else {
+                // Normal appearance - potentially change based on color mechanic
+                ctx.fillStyle = player.currentColor === 'red' ? 'salmon' : 'cornflowerblue';
+                ctx.fillRect(player.x, player.y, player.w, player.h);
+                // Simple face based on direction
+                ctx.fillStyle = 'white';
+                ctx.fillRect(player.x + player.w * (player.facing > 0 ? 0.6 : 0.2), player.y + player.h * 0.2, player.w * 0.2, player.h * 0.2); // Eye
+             }
+
+             // Shield effect
+             if (player.isShieldActive) {
+                 ctx.strokeStyle = 'cyan';
+                 ctx.lineWidth = 3;
+                 ctx.beginPath();
+                 ctx.arc(player.x + player.w / 2, player.y + player.h / 2, player.w * 0.7, 0, Math.PI * 2);
+                 ctx.stroke();
+                 ctx.lineWidth = 1;
+             }
+             // Speed boost effect
+             if (player.speedBoostTimer > 0 || player.hasAnimalBoost) {
+                 ctx.strokeStyle = 'yellow';
+                 ctx.lineWidth = 2;
+                 ctx.strokeRect(player.x-2, player.y-2, player.w+4, player.h+4);
+                 ctx.lineWidth = 1;
+             }
+             // Gliding / Parachute visual
+              if (player.isGliding) {
+                   ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                   ctx.beginPath();
+                   ctx.moveTo(player.x, player.y);
+                   ctx.lineTo(player.x - player.w * 0.5, player.y - player.h * 0.5);
+                   ctx.lineTo(player.x + player.w * 1.5, player.y - player.h * 0.5);
+                   ctx.closePath();
+                   ctx.fill();
+                    ctx.fillStyle = 'white';
+                     ctx.font = `${player.h * 0.8}px Arial`;
+                     ctx.textAlign = 'center';
+                     ctx.fillText(player.hasMechanic('parachute') ? '🪂' : '🍃', player.x + player.w / 2, player.y - 5);
+              }
+
+             ctx.restore();
+        }
+
+        function drawPlatforms() {
+            platforms.forEach(p => {
+                 if (!p.active) return;
+
+                ctx.save();
+                let platformColor = '#654321'; // Default brown
+                let platformText = '';
+
+                switch (p.type) {
+                     case 'moving': platformColor = '#a0522d'; platformText = '↔️'; break; // Sienna
+                     case 'falling': platformColor = '#d2691e'; platformText = '⬇️'; break; // Chocolate
+                     case 'crumbling': platformColor = '#8b4513'; platformText = '💥'; break; // SaddleBrown
+                     case 'timed':
+                         platformColor = p.state === 'visible' ? '#bdb76b' : 'rgba(189, 183, 107, 0.3)'; // DarkKhaki (transparent when off)
+                         platformText = '⏱️';
+                         break;
+                    case 'invisible':
+                        platformColor = 'rgba(128, 128, 128, 0.3)'; // Transparent grey
+                        platformText = '?';
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeStyle = 'grey';
+                        ctx.strokeRect(p.x, p.y, p.w, p.h);
+                        ctx.setLineDash([]);
+                         break; // Don't fill, just draw border
+                     case 'bounce': platformColor = '#9acd32'; platformText = '🦘'; break; // YellowGreen
+                     case 'sticky': platformColor = '#8fbc8f'; platformText = '🐾'; break; // DarkSeaGreen
+                     case 'oneWay': platformColor = '#d8bfd8'; platformText = '⤵️'; break; // Thistle
+                     case 'ice': platformColor = '#afeeee'; platformText = '🧊'; break; // PaleTurquoise
+                     case 'rotating': platformColor = '#fa8072'; platformText = '🔄'; break; // Salmon
+                     case 'growing': platformColor = '#32cd32'; platformText = '🌱'; break; // LimeGreen
+                     case 'shrinking': platformColor = '#ff6347'; platformText = '🍄'; break; // Tomato
+                     case 'color': platformColor = p.color === 'red' ? '#dc143c' : '#1e90ff'; platformText = p.color === 'red' ? '🟥' : '🟦'; break; // Crimson / DodgerBlue
+                     case 'sound': platformColor = '#da70d6'; platformText = '🎵'; break; // Orchid
+                     case 'light': platformColor = '#eee8aa'; platformText = '💡'; break; // PaleGoldenrod
+                     case 'magnet': platformColor = '#4682b4'; platformText = '🧲'; break; // SteelBlue
+                     case 'teleport': platformColor = '#9370db'; platformText = '🚀'; break; // MediumPurple
+                     case 'destructible': platformColor = '#deb887'; platformText = '🧱'; break; // BurlyWood
+                     case 'climbable': platformColor = '#556b2f'; platformText = '🧗'; break; // DarkOliveGreen
+                     case 'summoned':
+                         platformColor = 'lightblue';
+                         platformText = '🛠️';
+                         ctx.globalAlpha = Math.max(0.2, p.timer / 180); // Fade out
+                         break;
+                     default: // Static
+                        platformColor = '#654321';
+                         break;
+                 }
+
+                 ctx.fillStyle = platformColor;
+
+                 if(p.type === 'rotating') {
+                     ctx.translate(p.x + p.w/2, p.y + p.h/2);
+                     ctx.rotate(p.rotation * Math.PI / 180);
+                     ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+                 } else if (p.type !== 'invisible') {
+                     ctx.fillRect(p.x, p.y, p.w, p.h);
+                 }
+
+                 if (platformText) {
+                     ctx.fillStyle = 'black';
+                     ctx.font = '14px Arial';
+                     ctx.textAlign = 'center';
+                     // Adjust text position for rotated platforms
+                     if(p.type === 'rotating') {
+                          ctx.fillText(platformText, 0, 5); // Center of rotated platform
+                     } else {
+                          ctx.fillText(platformText, p.x + p.w / 2, p.y + p.h * 0.7);
+                     }
+                 }
+                 if (p.type === 'destructible' && p.health < 3) { // Show damage
+                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    ctx.fillRect(p.x, p.y, p.w * (1 - p.health / 3), p.h);
+                 }
+
+
+                ctx.restore();
+            });
+        }
+
+         function drawEnemies() {
+             enemies.forEach(e => {
+                 if (!e.active) return;
+                 ctx.fillStyle = e.type === 'walker' ? 'firebrick' : 'darkslateblue';
+                  if(e.isAlerted) ctx.fillStyle = 'red';
+                 // Simple shape for enemy
+                 ctx.fillRect(e.x, e.y, e.w, e.h);
+                  // Emoji representation
+                 ctx.fillStyle = 'white';
+                 ctx.font = `${e.h * 0.7}px Arial`;
+                 ctx.textAlign = 'center';
+                 ctx.fillText(e.type === 'walker' ? '👹' : '👻', e.x + e.w / 2, e.y + e.h * 0.75);
+
+             });
+         }
+
+         function drawHazards() {
+             hazards.forEach(h => {
+                if (!h.active) return;
+                 ctx.fillStyle = 'darkred';
+                 if (h.type === 'spike') {
+                     // Draw triangle
+                     ctx.beginPath();
+                     ctx.moveTo(h.x, h.y + h.size);
+                     ctx.lineTo(h.x + h.size / 2, h.y);
+                     ctx.lineTo(h.x + h.size, h.y + h.size);
+                     ctx.closePath();
+                     ctx.fill();
+                 } else if (h.type === 'spikeFloor') {
+                     // Draw row of spikes
+                     for (let i = 0; i < h.w; i += 15) {
+                         ctx.beginPath();
+                         ctx.moveTo(h.x + i, h.y + h.h);
+                         ctx.lineTo(h.x + i + 7.5, h.y);
+                         ctx.lineTo(h.x + i + 15, h.y + h.h);
+                         ctx.closePath();
+                         ctx.fill();
+                     }
+                 } else if (h.type === 'laserBeam') {
+                     ctx.fillStyle = 'red';
+                     ctx.fillRect(h.x, h.y, h.w, h.h);
+                 }
+             });
+         }
+
+        function drawItems() {
+             items.forEach(item => {
+                 if (!item.active) return;
+                 ctx.fillStyle = 'gold';
+                 let itemText = '';
+                 if (item.type === 'speedBoost') { itemText = '✨'; ctx.fillStyle = 'yellow'; }
+                 else if (item.type === 'invincibility') { itemText = '🛡️'; ctx.fillStyle = 'cyan'; }
+                 else if (item.type === 'key') { itemText = '🔑'; ctx.fillStyle = 'gold'; }
+                  else if (item.type === 'rideAnimal') { itemText = '🐴'; ctx.fillStyle = 'saddlebrown'; }
+
+                 ctx.font = '24px Arial';
+                 ctx.textAlign = 'center';
+                 ctx.fillText(itemText, item.x + 15, item.y + 25); // Adjust position for emoji size
+             });
+         }
+
+         function drawInteractives() {
+             interactives.forEach(int => {
+                 if (!int.active && int.type !== 'door' && int.type !== 'lock') return; // Doors/locks remain visible when inactive
+
+                let intColor = 'grey';
+                let intText = '';
+
+                 switch (int.type) {
+                     case 'switch': intColor = int.activated ? 'limegreen' : 'orange'; intText = '🟧'; break;
+                     case 'door': intColor = int.active ? 'dimgray' : 'lightgray'; intText = '🚪'; break; // Active = closed
+                     case 'lock': intColor = int.active ? 'darkslategrey' : 'lightgray'; intText = '🔒'; break; // Active = locked
+                     case 'gravitySwitch': intColor = 'purple'; intText = '💫'; break;
+                     case 'portal': intColor = 'indigo'; intText = '🌀'; break;
+                     case 'laserSwitch': intColor = int.activated ? 'red' : 'darkred'; intText = '🚨'; break;
+                 }
+
+                 if (int.active || int.type === 'door' || int.type === 'lock') { // Only draw if active or is door/lock
+                     ctx.fillStyle = intColor;
+                     ctx.fillRect(int.x, int.y, int.w, int.h);
+                     if (intText) {
+                         ctx.fillStyle = 'white';
+                         ctx.font = `${int.h * 0.6}px Arial`;
+                         ctx.textAlign = 'center';
+                         ctx.fillText(intText, int.x + int.w / 2, int.y + int.h * 0.7);
+                     }
+                 }
+             });
+         }
+
+         function drawEnvironmental() {
+             environmental.forEach(env => {
+                 if (env.type === 'water') {
+                     ctx.fillStyle = 'rgba(0, 100, 255, 0.4)';
+                     ctx.fillRect(env.x, env.y, env.w, env.h);
+                     // Draw wavy lines for water surface
+                     ctx.strokeStyle = 'rgba(0, 150, 255, 0.8)';
+                     ctx.lineWidth = 2;
+                     ctx.beginPath();
+                     for(let i = env.x; i < env.x + env.w; i += 20) {
+                         ctx.moveTo(i, env.y + 5 + Math.sin(i / 20 + Date.now() / 300) * 3);
+                         ctx.lineTo(i + 20, env.y + 5 + Math.sin((i + 20) / 20 + Date.now() / 300) * 3);
+                     }
+                     ctx.stroke();
+                     ctx.lineWidth = 1;
+                 } else if (env.type === 'wind') {
+                      // Draw wind particles (simple lines)
+                     ctx.strokeStyle = 'rgba(135, 206, 250, 0.5)'; // LightSkyBlue
+                     ctx.lineWidth = 1;
+                     for (let i = 0; i < 10; i++) { // Draw a few particles
+                         let pX = env.x + Math.random() * env.w;
+                         let pY = env.y + Math.random() * env.h;
+                         let length = 10;
+                         ctx.beginPath();
+                         if (env.direction === 'right') { ctx.moveTo(pX - length, pY); ctx.lineTo(pX, pY); }
+                         if (env.direction === 'left') { ctx.moveTo(pX + length, pY); ctx.lineTo(pX, pY); }
+                         if (env.direction === 'up') { ctx.moveTo(pX, pY + length); ctx.lineTo(pX, pY); }
+                         if (env.direction === 'down') { ctx.moveTo(pX, pY - length); ctx.lineTo(pX, pY); }
+                         ctx.stroke();
+                     }
+                 }
+             });
+         }
+
+         function drawProjectiles() {
+             projectiles.forEach(p => {
+                if (!p.active) return;
+                 if (p.type === 'bomb') {
+                     ctx.fillStyle = 'black';
+                     ctx.beginPath();
+                     ctx.arc(p.x + p.w/2, p.y + p.h/2, p.w/2, 0, Math.PI * 2);
+                     ctx.fill();
+                      // Fuse spark
+                     ctx.fillStyle = (Math.floor(p.fuse / 10) % 2 === 0) ? 'red' : 'yellow';
+                     ctx.fillRect(p.x + p.w/2 - 1, p.y - 3, 2, 3);
+                     ctx.fillStyle = 'white';
+                     ctx.font = `${p.h}px Arial`;
+                     ctx.textAlign = 'center';
+                     ctx.fillText('💣', p.x + p.w / 2, p.y + p.h * 0.9);
+
+                 } else if (p.type === 'laser') {
+                     ctx.fillStyle = p.owner === 'player' ? 'cyan' : 'red';
+                     ctx.fillRect(p.x, p.y, p.w, p.h);
+                 } else if (p.type === 'explosion') {
+                     ctx.fillStyle = `rgba(255, 165, 0, ${p.timer / 15 * 0.8})`; // Orange, fades out
+                     ctx.beginPath();
+                     ctx.arc(p.x + p.w/2, p.y + p.h/2, p.w/2 * (1 - p.timer / 15), 0, Math.PI * 2); // Expanding radius
+                     ctx.fill();
+                 } else if (p.type === 'bossBullet') {
+                      ctx.fillStyle = 'magenta';
+                      ctx.beginPath();
+                      ctx.arc(p.x + p.w/2, p.y + p.h/2, p.w/2, 0, Math.PI * 2);
+                      ctx.fill();
+                 }
+             });
+         }
+
+         function drawClones() {
+             clones.forEach(c => {
+                if (!c.active) return;
+                 ctx.save();
+                 ctx.globalAlpha = Math.max(0.1, c.timer / CLONE_DURATION); // Fade out
+                 ctx.fillStyle = 'mediumseagreen';
+                 ctx.fillRect(c.x, c.y, c.w, c.h);
+                  ctx.fillStyle = 'white';
+                  ctx.font = `${c.h * 0.6}px Arial`;
+                  ctx.textAlign = 'center';
+                  ctx.fillText('👥', c.x + c.w / 2, c.y + c.h * 0.7);
+                 ctx.restore();
+             });
+         }
+
+         function drawRopes() {
+             ropes.forEach(rope => {
+                 ctx.strokeStyle = '#8b4513'; // SaddleBrown
+                 ctx.lineWidth = 3;
+                 ctx.beginPath();
+                 ctx.moveTo(rope.x, rope.y); // Anchor point
+                 // Simple vertical line for rope
+                 ctx.lineTo(rope.x, rope.y + rope.length);
+                  // Draw anchor point visual
+                 ctx.fillStyle = '#cd853f'; // Peru
+                 ctx.fillRect(rope.x - 5, rope.y - 5, 10, 10);
+                 ctx.stroke();
+                 ctx.lineWidth = 1;
+             });
+              // Draw player attached rope if any
+             if (player.grabbedRope) {
+                 ctx.strokeStyle = '#a0522d'; // Sienna
+                 ctx.lineWidth = 3;
+                 ctx.beginPath();
+                 ctx.moveTo(player.grabbedRope.x, player.grabbedRope.y);
+                 ctx.lineTo(player.x + player.w / 2, player.y + player.h / 2);
+                 ctx.stroke();
+                 ctx.lineWidth = 1;
+             }
+         }
+
+          function drawGrapple() {
+             if (!player.grapple) return;
+
+             ctx.strokeStyle = 'gray';
+             ctx.lineWidth = 2;
+             ctx.beginPath();
+             ctx.moveTo(player.x + player.w/2, player.y + player.h/2); // Start from player center
+             ctx.lineTo(player.grapple.hookX, player.grapple.hookY); // Go to hook position
+             ctx.stroke();
+
+             // Draw hook visual
+             ctx.fillStyle = 'darkgray';
+             ctx.beginPath();
+             ctx.arc(player.grapple.hookX, player.grapple.hookY, 5, 0, Math.PI * 2);
+             ctx.fill();
+              ctx.lineWidth = 1;
+
+              // Draw grapple points
+              grapplePoints.forEach(gp => {
+                  ctx.fillStyle = 'navy';
+                  ctx.beginPath();
+                  ctx.arc(gp.x, gp.y, 8, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.fillStyle = 'white';
+                  ctx.font = '10px Arial';
+                   ctx.textAlign = 'center';
+                   ctx.fillText('⚓', gp.x, gp.y + 4);
+              });
+         }
+
+
+         function drawBoss() {
+             if (!boss || !boss.active) return;
+             ctx.fillStyle = 'darkviolet';
+             ctx.fillRect(boss.x, boss.y, boss.w, boss.h);
+              // Simple face
+             ctx.fillStyle = 'red';
+             ctx.fillRect(boss.x + boss.w * 0.2, boss.y + boss.h * 0.2, boss.w * 0.6, boss.h * 0.2); // Angry eye slit
+             // Emoji
+             ctx.fillStyle = 'white';
+             ctx.font = `${boss.h * 0.6}px Arial`;
+             ctx.textAlign = 'center';
+             ctx.fillText('👾', boss.x + boss.w / 2, boss.y + boss.h * 0.75);
+
+              // Health Bar
+             const barWidth = boss.w;
+             const barHeight = 10;
+             const barX = boss.x;
+             const barY = boss.y - barHeight - 5;
+             const healthPercent = boss.health / BOSS_HEALTH;
+             ctx.fillStyle = 'red';
+             ctx.fillRect(barX, barY, barWidth, barHeight);
+             ctx.fillStyle = 'limegreen';
+             ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+             ctx.strokeStyle = 'black';
+             ctx.strokeRect(barX, barY, barWidth, barHeight);
+         }
+
+
+        function drawGoal() {
+            if (levelGoal && levelGoal.active) {
+                ctx.fillStyle = 'limegreen';
+                ctx.fillRect(levelGoal.x, levelGoal.y, levelGoal.w, levelGoal.h);
+                ctx.fillStyle = 'darkgreen';
+                ctx.font = `${levelGoal.h * 0.6}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText('🏁', levelGoal.x + levelGoal.w / 2, levelGoal.y + levelGoal.h * 0.7);
+            }
+        }
+
+        function drawUI() {
+             // Level Info is handled by the HTML div element now.
+             // Potentially add other UI elements like score, lives etc. here later
+        }
+
+        // --- Game Loop ---
+        function gameLoop() {
+            // Calculate time delta for consistent speed (optional, using fixed step for now)
+             const timeFactor = isSlowMotion ? SLOW_MOTION_FACTOR : 1;
+
+            // Update game state
+            if (!gamePaused && !levelComplete) {
+                 updatePlayer();
+                 updatePlatforms();
+                 updateEnemies();
+                 updateHazards();
+                 updateProjectiles();
+                 updateClones();
+                 updateBoss();
+            }
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Draw background? (Canvas style handles solid color)
+
+            // Draw game elements
+            drawEnvironmental();
+            drawRopes(); // Draw behind platforms?
+            drawGrapple();
+            drawPlatforms();
+            drawInteractives();
+             drawHazards(); // Draw hazards before items/enemies/player
+             drawItems();
+             drawClones();
+             drawEnemies();
+             drawBoss();
+             drawProjectiles();
+             drawGoal();
+             drawPlayer();
+             drawUI();
+
+             // Request next frame
+             requestAnimationFrame(gameLoop);
+         }
+
+         // --- Event Listeners ---
+         function handleKeyDown(e) {
+            let now = Date.now();
+             switch (e.key) {
+                 case 'ArrowLeft':
+                 case 'a':
+                      if (player.canDash && now - lastDashTap.time < DASH_TAP_THRESHOLD && lastDashTap.key === 'ArrowLeft') { keys.dash = true; }
+                      keys.left = true;
+                      lastDashTap = { time: now, key: 'ArrowLeft' };
+                      break;
+                 case 'ArrowRight':
+                 case 'd':
+                      if (player.canDash && now - lastDashTap.time < DASH_TAP_THRESHOLD && lastDashTap.key === 'ArrowRight') { keys.dash = true; }
+                      keys.right = true;
+                      lastDashTap = { time: now, key: 'ArrowRight' };
+                      break;
+                 case 'ArrowUp':
+                 case 'w':
+                 case ' ': // Spacebar
+                     keys.up = true; // For climbing primarily
+                     keys.jump = true;
+                     break;
+                 case 'ArrowDown':
+                 case 's':
+                     keys.down = true;
+                     if(player.canSlide || player.canClimb) e.preventDefault(); // Prevent page scroll if used for game action
+                     break;
+                 case 'Shift':
+                      if (player.canDash) keys.dash = true;
+                      break;
+                  case 'p': case 'P': if(player.canPhase) keys.phase = true; break;
+                  case 'h': case 'H': if(player.canGlide || player.hasMechanic('parachute')) keys.glide = true; break;
+                  case 'b': case 'B': if(player.canBomb) keys.bomb = true; break;
+                  case 's': case 'S': if(player.canShield) keys.shield = true; break; // 's' is already down, reuse for shield? No, use dedicated 'S' maybe? Sticking with 's' for now.
+                  case 'c': case 'C': if(player.canClone) keys.clone = true; break;
+                  case 't': case 'T': if(player.canSlowMo) keys.slowMo = true; break;
+                  case 'd': case 'D': if(player.canDisguise) keys.disguise = true; break; // 'd' is right, reuse? Use dedicated 'D'. No, stick with d. Ambiguous, let's map disguise to D.
+                  case 'f': case 'F': if(player.canSummon) keys.summon = true; break;
+                  case 'm': case 'M': if(player.canMorph) keys.morph = true; break;
+                  case 'e': case 'E': if(player.canGrabRope) keys.grabRope = true; break;
+                  case 'l': case 'L': if(player.canLaser) keys.laser = true; break;
+
+                 case 'r': // Restart level
+                 case 'R':
+                     loadLevel(currentLevelIndex);
+                     break;
+             }
+         }
+
+         function handleKeyUp(e) {
+             switch (e.key) {
+                 case 'ArrowLeft': case 'a': keys.left = false; break;
+                 case 'ArrowRight': case 'd': keys.right = false; break;
+                 case 'ArrowUp': case 'w': case ' ': keys.up = false; keys.jump = false; player.jumpHeld = false; break;
+                 case 'ArrowDown': case 's': keys.down = false; break;
+                 case 'Shift': keys.dash = false; break;
+                 case 'p': case 'P': keys.phase = false; break;
+                 case 'h': case 'H': keys.glide = false; break;
+                 case 'b': case 'B': keys.bomb = false; break; // Set to false on keyup
+                 case 's': case 'S': keys.shield = false; break;
+                 case 'c': case 'C': keys.clone = false; break;
+                 case 't': case 'T': keys.slowMo = false; slowMoToggle = false; break; // Ensure toggle reset on key up
+                 case 'd': case 'D': keys.disguise = false; break;
+                 case 'f': case 'F': keys.summon = false; break;
+                 case 'm': case 'M': keys.morph = false; break; // Set false on keyup to allow toggle
+                 case 'e': case 'E': keys.grabRope = false; player.ropeHeld = false; break; // Also reset ropeHeld on keyup
+                 case 'l': case 'L': keys.laser = false; break;
+             }
+         }
+
+         function handleMouseMove(e) {
+             const rect = canvas.getBoundingClientRect();
+             mouse.x = e.clientX - rect.left;
+             mouse.y = e.clientY - rect.top;
+         }
+
+         function handleMouseDown(e) {
+             if (e.button === 0) { // Left click
+                 mouse.down = true;
+                 if (player.canGrapple) keys.grapple = true;
+             }
+         }
+
+         function handleMouseUp(e) {
+              if (e.button === 0) {
+                 mouse.down = false;
+                  if (player.canGrapple) keys.grapple = false; // Release grapple trigger on mouse up
+              }
+         }
+
+        // Attach listeners
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+         canvas.addEventListener('mousemove', handleMouseMove);
+         canvas.addEventListener('mousedown', handleMouseDown);
+         canvas.addEventListener('mouseup', handleMouseUp);
+
+
+        // --- Start Game ---
+        console.log("Loading level 0...");
+        loadLevel(currentLevelIndex);
+        console.log("Starting game loop...");
+        gameLoop();
+
+    </script>
+
+</body>
+</html>

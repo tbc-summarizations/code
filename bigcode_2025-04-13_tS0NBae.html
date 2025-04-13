@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Bus Simulator - Enhanced</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            width: 100%;
+            background-color: #333;
+            font-family: Arial, sans-serif;
+            user-select: none; /* Prevent text selection */
+            -webkit-user-select: none; /* Safari */
+            -ms-user-select: none; /* IE 10+ */
+            touch-action: manipulation; /* Prevent zoom/pan on controls */
+        }
+
+        #game-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background-color: #eee;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Cab View Area */
+        #cab-view {
+            flex-grow: 1;
+            position: relative;
+            background-color: #555; /* Dark grey for dashboard base */
+            overflow: hidden;
+            display: flex;
+            flex-direction: column; /* Stack windshield above dashboard */
+        }
+
+        /* Windshield View */
+        #windshield-view {
+            flex-grow: 1; /* Take available space above dashboard */
+            background: linear-gradient(to bottom, #87CEEB 60%, #ADD8E6); /* Sky gradient */
+            border-bottom: 15px solid #333; /* Windshield frame bottom */
+            position: relative;
+            overflow: hidden;
+            perspective: 400px; /* For 3D effect */
+            display: flex;
+            align-items: flex-end; /* Align road to bottom */
+            z-index: 1; /* Ensure windshield is above mirrors but below dashboard elements */
+        }
+
+        #road-container {
+            width: 100%;
+            height: 60%; /* Height of the road area within the windshield */
+            position: relative;
+            transform-style: preserve-3d;
+        }
+
+        #road {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 500%; /* Make wider for steering effect */
+            height: 100%;
+            background-color: #666; /* Road grey */
+            background-image:
+                linear-gradient(rgba(255,255,255,0.5) 50%, transparent 50%), /* Center line */
+                linear-gradient(to right, transparent 10%, #bbb 10%, #bbb 11%, transparent 11%, transparent 89%, #bbb 89%, #bbb 90%, transparent 90%); /* Edge lines */
+            background-size:
+                100% 40px, /* Center line thickness and spacing */
+                100% 100%; /* Edge lines size */
+            background-repeat: repeat-y, no-repeat;
+            transform-origin: bottom center;
+            transform: translateX(-50%) rotateX(70deg) translateY(10px); /* Perspective transform */
+            background-position: 0 0; /* Initial position for animation */
+            transition: transform 0.1s linear; /* Smooth steering */
+        }
+
+        /* Bus Stops */
+        .bus-stop {
+            position: absolute;
+            width: 30px; /* Initial small width */
+            height: 50px; /* Initial small height */
+            background-color: #A0522D; /* Sienna brown */
+            border: 2px solid #555;
+            border-radius: 3px;
+            transform-origin: bottom center;
+            /* Start position will be set by JS */
+            z-index: 5; /* Above road, below dashboard */
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            font-size: 10px; /* Small initial font */
+            color: white;
+            padding-top: 2px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+        }
+        .bus-stop::before { /* Bus stop sign */
+            content: '🚌';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            background-color: #eee;
+            padding: 1px 3px;
+            border-radius: 2px;
+            border: 1px solid #555;
+        }
+
+
+        /* Dashboard Area */
+        #dashboard {
+            height: 160px; /* Increased height slightly */
+            background: linear-gradient(to bottom, #4a4a4a, #2a2a2a); /* Slightly lighter gradient */
+            border-top: 5px solid #111;
+            display: flex;
+            justify-content: space-between; /* Space out main elements */
+            align-items: center;
+            padding: 0 20px;
+            position: relative; /* For absolute positioning inside */
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.5); /* Shadow above dashboard */
+            z-index: 10; /* Ensure dashboard is above windshield content */
+        }
+
+        #steering-wheel {
+            width: 100px;
+            height: 100px;
+            background-color: #1a1a1a;
+            border-radius: 50%;
+            border: 8px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 50px; /* Emoji size */
+            color: #ccc;
+            transition: transform 0.1s linear;
+            position: relative; /* For pseudo-elements */
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.7);
+            order: 2; /* Center element */
+        }
+        /* Steering wheel spokes */
+         #steering-wheel::before {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 90%;
+            background-color: #444;
+            border-radius: 4px;
+            top: 5%;
+            left: calc(50% - 4px);
+            z-index: -1;
+         }
+         #steering-wheel::after {
+            content: '';
+            position: absolute;
+            height: 8px;
+            width: 90%;
+            background-color: #444;
+            border-radius: 4px;
+            left: 5%;
+            top: calc(50% - 4px);
+            z-index: -1;
+         }
+
+        #instrument-cluster {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+            order: 1; /* Left element */
+            background-color: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            min-width: 100px;
+        }
+
+        #speedometer {
+            font-size: 24px;
+            font-weight: bold;
+            background-color: #111;
+            padding: 5px 10px;
+            border-radius: 5px;
+            min-width: 80px;
+            text-align: center;
+            margin-bottom: 10px;
+            color: #00FF00; /* Green digital look */
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        #indicator-lights {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .indicator {
+            font-size: 20px;
+            color: #444; /* Off state */
+            transition: color 0.1s linear;
+        }
+        .indicator.on {
+            color: #FFC107; /* Amber */
+        }
+        .indicator.flash.on {
+            animation: blink 0.5s infinite step-start;
+        }
+
+        @keyframes blink {
+            50% { color: #444; }
+        }
+
+        #warning-lights {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-top: 5px;
+            font-size: 18px;
+            color: #ccc; /* Default color for icons */
+        }
+        #warning-lights .fuel { color: #FFA500; } /* Orange */
+        #warning-lights .temp { color: #FF4500; } /* OrangeRed */
+        #warning-lights .oil { color: #f44336; } /* Red */
+
+
+        #doors-indicator {
+            font-size: 14px;
+            color: #FF5555; /* Red when closed */
+            font-weight: bold;
+            margin-top: 5px;
+            background-color: rgba(0,0,0,0.4);
+            padding: 3px 6px;
+            border-radius: 4px;
+        }
+
+        #aux-controls-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            order: 3; /* Right element */
+            gap: 10px;
+        }
+
+         #indicator-buttons {
+             display: flex;
+             gap: 10px;
+             margin-bottom: 5px;
+         }
+
+         .indicator-btn {
+             width: 45px;
+             height: 45px;
+             border-radius: 8px;
+             border: none;
+             font-size: 20px;
+             cursor: pointer;
+             display: flex;
+             justify-content: center;
+             align-items: center;
+             color: white;
+             background-color: #6c757d; /* Grey */
+             box-shadow: 0 3px #444;
+             transition: background-color 0.1s ease, box-shadow 0.1s ease, transform 0.1s ease;
+         }
+         .indicator-btn:active {
+             box-shadow: 0 1px #333;
+             transform: translateY(2px);
+         }
+         .indicator-btn.active {
+             background-color: #FFC107; /* Amber when active */
+             color: #333;
+         }
+
+
+         #aux-controls {
+            display: flex;
+            gap: 15px;
+         }
+         .aux-button {
+             width: 50px;
+             height: 50px;
+             border-radius: 50%;
+             border: none;
+             font-size: 20px;
+             cursor: pointer;
+             display: flex;
+             justify-content: center;
+             align-items: center;
+             color: white;
+             box-shadow: 0 4px #555;
+             transition: background-color 0.1s ease, box-shadow 0.1s ease, transform 0.1s ease;
+         }
+         .aux-button:active {
+             box-shadow: 0 2px #333;
+             transform: translateY(2px);
+         }
+         #horn-btn { background-color: #03A9F4; } /* Blue */
+         #horn-btn:active { background-color: #0288d1; }
+         #doors-btn { background-color: #9C27B0; } /* Purple */
+         #doors-btn:active { background-color: #7b1fa2; }
+
+         /* Side Mirrors & Outer Indicators */
+        .mirror {
+            position: absolute;
+            top: 15%; /* Position relative to cab view */
+            width: 55px;
+            height: 85px;
+            background-color: #aaa;
+            border: 3px solid #333;
+            border-radius: 5px;
+            z-index: 5; /* Below dashboard but above windshield view elements */
+            box-shadow: 3px 3px 5px rgba(0,0,0,0.3);
+            overflow: hidden; /* Clip the indicator */
+        }
+        #left-mirror { left: 5px; transform: rotate(-15deg); }
+        #right-mirror { right: 5px; transform: rotate(15deg); }
+
+        .outer-indicator-flash {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            background-color: #FFC107; /* Amber */
+            opacity: 0; /* Hidden by default */
+            border-radius: 3px;
+            z-index: 6; /* Above mirror surface */
+            box-shadow: 0 0 5px #FFC107;
+        }
+        #outer-indicator-left { top: 20%; left: 20px; transform: rotate(-15deg); }
+        #outer-indicator-right { top: 20%; right: 20px; transform: rotate(15deg); }
+
+        .outer-indicator-flash.flash.on {
+            animation: outer-blink 0.5s infinite step-start;
+        }
+         @keyframes outer-blink {
+            50% { opacity: 0; }
+            100% { opacity: 0.8; }
+        }
+
+
+        /* Controls Area */
+        #controls {
+            height: 150px; /* Fixed height for controls */
+            background-color: #bbb;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr; /* SteerL, Acc, Brake, SteerR */
+            grid-template-rows: 1fr; /* Single row */
+            gap: 8px;
+            padding: 10px;
+            box-shadow: 0 -5px 10px rgba(0,0,0,0.2); /* Shadow above controls */
+        }
+
+        .control-button {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            border: none;
+            padding: 0; /* Remove padding, use flex for centering */
+            text-align: center;
+            font-size: 24px; /* Larger icons */
+            cursor: pointer;
+            border-radius: 8px;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            box-shadow: 0 4px #999;
+            transition: background-color 0.1s ease, box-shadow 0.1s ease, transform 0.1s ease;
+            height: 100%; /* Fill grid cell */
+        }
+        .control-button:active {
+            background-color: #45a049;
+            box-shadow: 0 2px #666;
+            transform: translateY(2px);
+        }
+
+        #steer-left { grid-column: 1; background-color: #FFC107; /* Yellow */ }
+        #steer-left:active { background-color: #e0a800; }
+        #steer-right { grid-column: 4; background-color: #FFC107; /* Yellow */ }
+        #steer-right:active { background-color: #e0a800; }
+
+        #accelerate { grid-column: 2; background-color: #4CAF50; /* Green */ }
+        #accelerate:active { background-color: #45a049; }
+        #brake { grid-column: 3; background-color: #f44336; /* Red */ }
+        #brake:active { background-color: #da190b; }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="cab-view">
+            <div id="windshield-view">
+                 <div id="road-container">
+                    <div id="road"></div>
+                    <!-- Bus stops will be added here dynamically -->
+                </div>
+                 <!-- Outer Indicator Flashes -->
+                 <div id="outer-indicator-left" class="outer-indicator-flash"></div>
+                 <div id="outer-indicator-right" class="outer-indicator-flash"></div>
+            </div>
+             <div id="left-mirror" class="mirror"></div>
+             <div id="right-mirror" class="mirror"></div>
+
+            <div id="dashboard">
+                <div id="instrument-cluster">
+                    <div id="speedometer">0 KPH</div>
+                    <div id="indicator-lights">
+                        <div id="indicator-left" class="indicator">⬅️</div>
+                        <div id="indicator-right" class="indicator">➡️</div>
+                    </div>
+                     <div id="warning-lights">
+                        <span class="fuel">⛽</span>
+                        <span class="temp">🌡️</span>
+                        <span class="oil">💧</span>
+                        <!-- Add more icons as needed -->
+                    </div>
+                    <div id="doors-indicator">Doors: Closed</div>
+                </div>
+
+                <div id="steering-wheel">☸️</div>
+
+                 <div id="aux-controls-container">
+                     <div id="indicator-buttons">
+                         <button id="indicator-left-btn" class="indicator-btn"> L </button>
+                         <button id="indicator-right-btn" class="indicator-btn"> R </button>
+                     </div>
+                     <div id="aux-controls">
+                        <button id="horn-btn" class="aux-button">🔊</button>
+                        <button id="doors-btn" class="aux-button">🚪</button>
+                    </div>
+                 </div>
+            </div>
+        </div>
+        <div id="controls">
+            <button id="steer-left" class="control-button">◀️</button>
+            <button id="accelerate" class="control-button">▲</button>
+            <button id="brake" class="control-button">▼</button>
+            <button id="steer-right" class="control-button">▶️</button>
+        </div>
+    </div>
+
+    <script>
+        const steeringWheel = document.getElementById('steering-wheel');
+        const road = document.getElementById('road');
+        const speedometer = document.getElementById('speedometer');
+        const doorsIndicator = document.getElementById('doors-indicator');
+        const windshieldView = document.getElementById('windshield-view');
+        const roadContainer = document.getElementById('road-container');
+
+        const accelerateBtn = document.getElementById('accelerate');
+        const brakeBtn = document.getElementById('brake');
+        const steerLeftBtn = document.getElementById('steer-left');
+        const steerRightBtn = document.getElementById('steer-right');
+        const hornBtn = document.getElementById('horn-btn');
+        const doorsBtn = document.getElementById('doors-btn');
+        const indicatorLeftBtn = document.getElementById('indicator-left-btn');
+        const indicatorRightBtn = document.getElementById('indicator-right-btn');
+        const indicatorLeftDash = document.getElementById('indicator-left');
+        const indicatorRightDash = document.getElementById('indicator-right');
+        const indicatorLeftOuter = document.getElementById('outer-indicator-left');
+        const indicatorRightOuter = document.getElementById('outer-indicator-right');
+
+
+        // Game State
+        let speed = 0; // Current speed in KPH
+        let steeringAngle = 0; // Current steering angle (-1 to 1, represents max turn)
+        let roadOffset = 0; // Horizontal offset of the road for steering effect
+        let roadTextureOffset = 0; // Vertical offset for road texture movement (represents distance)
+        let distanceTravelled = 0; // Total distance tracker
+
+        // Control State
+        let accelerating = false;
+        let braking = false;
+        let steeringLeft = false;
+        let steeringRight = false;
+        let doorsOpen = false;
+        let leftIndicatorOn = false;
+        let rightIndicatorOn = false;
+        let indicatorFlashState = false; // Used to toggle flash visuals
+        let lastFlashTime = 0;
+        const flashInterval = 500; // milliseconds
+
+        // Parameters
+        const maxSpeed = 80; // Max speed in KPH
+        const accelerationRate = 0.3; // KPH per frame when accelerating
+        const brakingRate = 0.8; // KPH per frame when braking
+        const friction = 0.05; // Speed lost per frame due to friction
+        const maxSteeringAngle = 35; // Max degrees rotation for steering wheel visual
+        const steeringSpeed = 1.5; // How fast the steering angle changes
+        const roadTurnFactor = 1.5; // How much the road appears to shift horizontally when steering
+
+        // Bus Stop State
+        const busStopInterval = 5000; // Spawn a bus stop every N units of distance (roadTextureOffset)
+        let nextBusStopDistance = busStopInterval;
+        let busStops = []; // Array to hold bus stop elements and their properties
+        const busStopSpawnX = 55; // % from center to spawn (e.g., 60% = slightly to the right)
+        const busStopMaxScale = 8; // Maximum scale factor for bus stops near the bottom
+        const busStopVanishY = 95; // % from top where bus stops disappear
+
+        // --- Control Event Listeners ---
+
+        function handleStart(event, action) {
+            event.preventDefault(); // Prevent default touch behavior
+            const target = event.currentTarget; // Get the button element
+            target.style.transform = 'translateY(2px)'; // Press effect for aux/indicator buttons
+            target.style.boxShadow = `0 ${action.includes('indicator') ? 1 : 2}px #333`;
+
+            switch(action) {
+                case 'accelerate': accelerating = true; break;
+                case 'brake': braking = true; break;
+                case 'steerLeft': steeringLeft = true; break;
+                case 'steerRight': steeringRight = true; break;
+                case 'horn':
+                    console.log("HONK!"); // Simple horn action
+                    // Optional: Add sound playback here
+                    break;
+                case 'doors':
+                    if (speed < 1) { // Only allow door operation when stopped
+                        doorsOpen = !doorsOpen;
+                        doorsIndicator.textContent = `Doors: ${doorsOpen ? 'Open' : 'Closed'}`;
+                        doorsIndicator.style.color = doorsOpen ? '#55FF55' : '#FF5555'; // Green when open, Red when closed
+                    }
+                    break;
+                case 'indicatorLeft':
+                    leftIndicatorOn = !leftIndicatorOn;
+                    rightIndicatorOn = false; // Cancel right if activating left
+                    updateIndicatorButtons();
+                    break;
+                case 'indicatorRight':
+                    rightIndicatorOn = !rightIndicatorOn;
+                    leftIndicatorOn = false; // Cancel left if activating right
+                    updateIndicatorButtons();
+                    break;
+            }
+        }
+
+        function handleEnd(event, action) {
+            event.preventDefault();
+            const target = event.currentTarget;
+             // Reset aux/indicator button style slightly delayed to ensure visibility
+            setTimeout(() => {
+                target.style.transform = 'translateY(0px)';
+                target.style.boxShadow = `0 ${action.includes('indicator') ? 3 : 4}px #555`; // Reset shadow
+            }, 50); // 50ms delay
+
+
+             switch(action) {
+                case 'accelerate': accelerating = false; break;
+                case 'brake': braking = false; break;
+                case 'steerLeft': steeringLeft = false; break;
+                case 'steerRight': steeringRight = false; break;
+                 // Horn and Doors are toggle/momentary, no specific end action needed here
+                 // Indicators toggle state in handleStart
+            }
+        }
+
+        function updateIndicatorButtons() {
+            indicatorLeftBtn.classList.toggle('active', leftIndicatorOn);
+            indicatorRightBtn.classList.toggle('active', rightIndicatorOn);
+            if (!leftIndicatorOn && !rightIndicatorOn) {
+                // Ensure flashing stops immediately if both are off
+                indicatorFlashState = false;
+                updateIndicatorVisuals();
+            }
+        }
+
+        function updateIndicatorVisuals() {
+             const showFlash = (leftIndicatorOn || rightIndicatorOn) && indicatorFlashState;
+
+             indicatorLeftDash.classList.toggle('on', leftIndicatorOn);
+             indicatorLeftDash.classList.toggle('flash', showFlash && leftIndicatorOn);
+             indicatorLeftOuter.classList.toggle('on', leftIndicatorOn);
+             indicatorLeftOuter.classList.toggle('flash', showFlash && leftIndicatorOn);
+
+             indicatorRightDash.classList.toggle('on', rightIndicatorOn);
+             indicatorRightDash.classList.toggle('flash', showFlash && rightIndicatorOn);
+             indicatorRightOuter.classList.toggle('on', rightIndicatorOn);
+             indicatorRightOuter.classList.toggle('flash', showFlash && rightIndicatorOn);
+        }
+
+        // Mouse events
+        accelerateBtn.addEventListener('mousedown', (e) => handleStart(e, 'accelerate'));
+        accelerateBtn.addEventListener('mouseup', (e) => handleEnd(e, 'accelerate'));
+        accelerateBtn.addEventListener('mouseleave', (e) => {if (accelerating) handleEnd(e, 'accelerate');});
+
+        brakeBtn.addEventListener('mousedown', (e) => handleStart(e, 'brake'));
+        brakeBtn.addEventListener('mouseup', (e) => handleEnd(e, 'brake'));
+        brakeBtn.addEventListener('mouseleave', (e) => {if (braking) handleEnd(e, 'brake');});
+
+        steerLeftBtn.addEventListener('mousedown', (e) => handleStart(e, 'steerLeft'));
+        steerLeftBtn.addEventListener('mouseup', (e) => handleEnd(e, 'steerLeft'));
+        steerLeftBtn.addEventListener('mouseleave', (e) => {if (steeringLeft) handleEnd(e, 'steerLeft');});
+
+        steerRightBtn.addEventListener('mousedown', (e) => handleStart(e, 'steerRight'));
+        steerRightBtn.addEventListener('mouseup', (e) => handleEnd(e, 'steerRight'));
+        steerRightBtn.addEventListener('mouseleave', (e) => {if (steeringRight) handleEnd(e, 'steerRight');});
+
+        hornBtn.addEventListener('mousedown', (e) => handleStart(e, 'horn'));
+        hornBtn.addEventListener('mouseup', (e) => handleEnd(e, 'horn')); // Reset style on mouseup
+        doorsBtn.addEventListener('mousedown', (e) => handleStart(e, 'doors'));
+        doorsBtn.addEventListener('mouseup', (e) => handleEnd(e, 'doors')); // Reset style on mouseup
+
+        indicatorLeftBtn.addEventListener('mousedown', (e) => handleStart(e, 'indicatorLeft'));
+        indicatorLeftBtn.addEventListener('mouseup', (e) => handleEnd(e, 'indicatorLeft')); // Reset style only
+        indicatorRightBtn.addEventListener('mousedown', (e) => handleStart(e, 'indicatorRight'));
+        indicatorRightBtn.addEventListener('mouseup', (e) => handleEnd(e, 'indicatorRight')); // Reset style only
+
+
+        // Touch events (ensure passive: false to allow preventDefault)
+        accelerateBtn.addEventListener('touchstart', (e) => handleStart(e, 'accelerate'), { passive: false });
+        accelerateBtn.addEventListener('touchend', (e) => handleEnd(e, 'accelerate'), { passive: false });
+
+        brakeBtn.addEventListener('touchstart', (e) => handleStart(e, 'brake'), { passive: false });
+        brakeBtn.addEventListener('touchend', (e) => handleEnd(e, 'brake'), { passive: false });
+
+        steerLeftBtn.addEventListener('touchstart', (e) => handleStart(e, 'steerLeft'), { passive: false });
+        steerLeftBtn.addEventListener('touchend', (e) => handleEnd(e, 'steerLeft'), { passive: false });
+
+        steerRightBtn.addEventListener('touchstart', (e) => handleStart(e, 'steerRight'), { passive: false });
+        steerRightBtn.addEventListener('touchend', (e) => handleEnd(e, 'steerRight'), { passive: false });
+
+        hornBtn.addEventListener('touchstart', (e) => handleStart(e, 'horn'), { passive: false });
+        hornBtn.addEventListener('touchend', (e) => handleEnd(e, 'horn'), { passive: false });
+        doorsBtn.addEventListener('touchstart', (e) => handleStart(e, 'doors'), { passive: false });
+        doorsBtn.addEventListener('touchend', (e) => handleEnd(e, 'doors'), { passive: false });
+
+        indicatorLeftBtn.addEventListener('touchstart', (e) => handleStart(e, 'indicatorLeft'), { passive: false });
+        indicatorLeftBtn.addEventListener('touchend', (e) => handleEnd(e, 'indicatorLeft'), { passive: false });
+        indicatorRightBtn.addEventListener('touchstart', (e) => handleStart(e, 'indicatorRight'), { passive: false });
+        indicatorRightBtn.addEventListener('touchend', (e) => handleEnd(e, 'indicatorRight'), { passive: false });
+
+
+        // --- Bus Stop Functions ---
+        function createBusStop(initialDistance) {
+            const stop = document.createElement('div');
+            stop.classList.add('bus-stop');
+            stop.textContent = ''; // Placeholder text or icon could go here
+
+            const stopData = {
+                element: stop,
+                distance: initialDistance // Store its initial distance 'down the road'
+            };
+
+            // Initial positioning (will be updated immediately in updateBusStops)
+            stop.style.left = `${busStopSpawnX}%`; // Start slightly off-center
+            stop.style.bottom = `0%`; // Start at the horizon line within the road container
+            stop.style.transform = `translateX(-50%) scale(0.1)`; // Start small
+
+            roadContainer.appendChild(stop); // Add to the road container for perspective
+            busStops.push(stopData);
+        }
+
+        function updateBusStops(distanceIncrement) {
+            for (let i = busStops.length - 1; i >= 0; i--) {
+                const stopData = busStops[i];
+                stopData.distance -= distanceIncrement; // Move stop 'closer'
+
+                if (stopData.distance < 0) { // Stop has passed the viewpoint (or very close)
+                    stopData.element.remove();
+                    busStops.splice(i, 1);
+                    continue;
+                }
+
+                // Calculate perspective effect: scale and vertical position
+                // This is a simplified perspective calculation
+                // Further distance = smaller scale, closer to horizon (higher Y visually)
+                // Closer distance = larger scale, lower on screen (lower Y visually)
+                const maxDistance = nextBusStopDistance; // Use spawn interval as reference max distance
+                const progress = 1 - (stopData.distance / maxDistance); // 0 = far, 1 = close
+
+                const scale = 0.1 + progress * (busStopMaxScale - 0.1); // Scale from 0.1 to maxScale
+                const posY = progress * busStopVanishY; // Y position from 0% to vanishY%
+
+                // Adjust horizontal position based on steering (roadOffset)
+                // The amount it shifts should decrease as it gets closer? No, keep simple for now.
+                const lateralOffset = roadOffset * (1-progress) * 0.05; // Less shift when closer? testing multiplier
+
+
+                stopData.element.style.transform = `translateX(calc(-50% + ${lateralOffset}px)) scale(${scale})`;
+                stopData.element.style.bottom = `${posY}%`;
+                 // Adjust font size based on scale for the sign potentially
+                stopData.element.style.fontSize = `${Math.max(6, scale * 1.5)}px`;
+                const sign = stopData.element.querySelector('::before'); // Access pseudo-element if needed via JS (complex, skip for now) or adjust base element font size only
+
+                // Adjust Z-index based on closeness? Optional.
+                // stopData.element.style.zIndex = 5 + Math.floor(progress * 5);
+            }
+        }
+
+
+        // --- Game Loop ---
+        let lastTimestamp = 0;
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTimestamp;
+            lastTimestamp = timestamp;
+
+            // Update indicator flash state
+            if (timestamp - lastFlashTime > flashInterval) {
+                if (leftIndicatorOn || rightIndicatorOn) {
+                    indicatorFlashState = !indicatorFlashState;
+                } else {
+                    indicatorFlashState = false; // Ensure it's off if no indicator is active
+                }
+                lastFlashTime = timestamp;
+                updateIndicatorVisuals(); // Update visuals based on new flash state
+            }
+
+
+            // 1. Handle Steering Input
+            const steerDelta = steeringSpeed / 60; // Approximate delta time adjustment
+            if (steeringLeft && steeringAngle > -1) {
+                steeringAngle -= steerDelta;
+            } else if (steeringRight && steeringAngle < 1) {
+                steeringAngle += steerDelta;
+            } else if (!steeringLeft && !steeringRight) {
+                // Auto-center steering gradually
+                if (Math.abs(steeringAngle) < 0.05) {
+                    steeringAngle = 0;
+                } else {
+                    steeringAngle -= Math.sign(steeringAngle) * steerDelta * 0.5;
+                }
+            }
+            steeringAngle = Math.max(-1, Math.min(1, steeringAngle)); // Clamp steering angle
+
+             // Auto-cancel indicator if steering returns to center significantly
+            if ((leftIndicatorOn && steeringAngle > -0.1) || (rightIndicatorOn && steeringAngle < 0.1)) {
+                 // Check if the wheel has moved *back* towards center from a turn
+                 // This simple check might cancel too early/late, needs refinement for realism
+                 // Maybe check if angle *was* significantly turned and *now* is near center
+            }
+
+
+            // 2. Handle Acceleration/Braking
+            let speedChange = 0;
+            if (accelerating && !doorsOpen) { // Cannot accelerate with doors open
+                speedChange += accelerationRate;
+            }
+            if (braking) {
+                speedChange -= brakingRate;
+            }
+
+            // Apply friction
+            speedChange -= friction;
+
+            speed += speedChange;
+
+            // Clamp speed
+            speed = Math.max(0, Math.min(maxSpeed, speed));
+            if (speed < 0.1) speed = 0; // Stop completely at low speed
+
+            // 3. Update Visuals
+
+            // Steering Wheel
+            steeringWheel.style.transform = `rotate(${steeringAngle * maxSteeringAngle}deg)`;
+
+            // Road Movement (Texture scroll + Horizontal shift)
+            const distanceIncrement = speed * 0.5; // How much 'distance' covered this frame
+            roadTextureOffset += distanceIncrement;
+            distanceTravelled += distanceIncrement; // Update total distance
+
+            // Road shifts opposite to steering direction, more effect at higher speed?
+            roadOffset -= steeringAngle * speed * roadTurnFactor * 0.01; // Adjusted multiplier
+
+            // Limit road offset to prevent going too far off
+            const maxRoadOffset = roadContainer.offsetWidth * 0.8; // Limit to 80% of container width roughly
+             roadOffset = Math.max(-maxRoadOffset, Math.min(maxRoadOffset, roadOffset));
+
+
+            // Apply road transformations
+            const currentTransform = `translateX(calc(-50% + ${roadOffset}px)) rotateX(70deg) translateY(10px)`;
+            road.style.transform = currentTransform;
+            road.style.backgroundPositionY = `${roadTextureOffset}px`;
+
+            // Speedometer
+            speedometer.textContent = `${Math.round(speed)} KPH`;
+
+            // 4. Update Bus Stops
+            updateBusStops(distanceIncrement);
+
+            // 5. Spawn New Bus Stops
+            if (distanceTravelled >= nextBusStopDistance) {
+                createBusStop(nextBusStopDistance); // Create stop at the 'horizon'
+                nextBusStopDistance += busStopInterval * (0.8 + Math.random() * 0.4); // Add some variation to interval
+            }
+
+
+            // 6. Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initial setup
+        updateIndicatorButtons();
+        updateIndicatorVisuals(); // Set initial indicator state (off)
+
+        // Start the game loop
+        requestAnimationFrame((timestamp) => {
+            lastTimestamp = timestamp; // Initialize timestamp
+            gameLoop(timestamp);
+        });
+
+    </script>
+</body>
+</html>

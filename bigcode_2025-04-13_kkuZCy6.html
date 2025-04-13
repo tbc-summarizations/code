@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artist Scramble Game</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #game-container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 90%;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #scrambled-word {
+            font-size: 2.5em;
+            font-weight: bold;
+            letter-spacing: 5px;
+            color: #007bff;
+            margin: 20px 0;
+            min-height: 50px; /* Ensure space even if word is short */
+            word-wrap: break-word; /* Handle very long names */
+        }
+        #guess-input {
+            padding: 10px;
+            font-size: 1.2em;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: calc(70% - 12px); /* Adjust width considering button */
+        }
+        #submit-guess {
+            padding: 10px 20px;
+            font-size: 1.2em;
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            transition: background-color 0.3s ease;
+        }
+        #submit-guess:hover {
+            background-color: #218838;
+        }
+        #feedback {
+            margin-top: 20px;
+            font-size: 1.1em;
+            min-height: 25px; /* Keep space for feedback */
+            color: #dc3545; /* Default to error color */
+        }
+        #feedback.correct {
+            color: #28a745; /* Success color */
+        }
+        #stats {
+            margin-top: 20px;
+            font-size: 1em;
+            color: #555;
+        }
+        #score, #remaining {
+            margin: 0 10px;
+            font-weight: bold;
+        }
+         #game-over {
+            font-size: 1.5em;
+            color: #007bff;
+            font-weight: bold;
+         }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>Artist Name Scramble</h1>
+        <div id="scrambled-word"></div>
+        <input type="text" id="guess-input" placeholder="Enter your guess">
+        <button id="submit-guess">Guess</button>
+        <div id="feedback"></div>
+        <div id="stats">
+            Score: <span id="score">0</span> | Remaining: <span id="remaining">0</span>
+        </div>
+        <div id="game-over" style="display: none;">
+            🎉 Congratulations! You've guessed all the artists! 🎉
+        </div>
+    </div>
+
+    <script>
+        const scrambledWordEl = document.getElementById('scrambled-word');
+        const guessInputEl = document.getElementById('guess-input');
+        const submitGuessBtn = document.getElementById('submit-guess');
+        const feedbackEl = document.getElementById('feedback');
+        const scoreEl = document.getElementById('score');
+        const remainingEl = document.getElementById('remaining');
+        const gameOverEl = document.getElementById('game-over');
+        const gameContainerEl = document.getElementById('game-container');
+
+        // Extracted artist list (duplicates removed)
+        const fullArtistList = [
+            "Kanye West", "The Beatles", "Eminem", "Drake", "Tyler, The Creator", "Kendrick Lamar", "Michael Jackson", "Travis Scott", "MF DOOM", "Death Grips",
+            "Metallica", "OutKast", "N.W.A.", "Dr. Dre", "Ice Cube", "Eazy-E", "MC Ren", "DJ Yella", "Arabian Prince", "Taylor Swift",
+            "Radiohead", "Pink Floyd", "Elvis Presley", "J. Cole", "A Tribe Called Quest", "Run The Jewels", "The Caretaker", "Aphex Twin", "Lady Gaga", "The Weeknd",
+            "Nirvana", "Kevin MacLeod", "Charli xcx", "XXXTENTACION", "JAY-Z", "Toby Fox", "Frank Ocean", "Playboi Carti", "David Bowie", "King Crimson",
+            "2Pac", "The Notorious B.I.G.", "Yuno Miles", "KSI", "Tones And I", "Rucka Rucka Ali", "Tom MacDonald", "JPEGMAFIA", "Kid Cudi", "Future",
+            "Logic", "JID", "Ty Dolla $ign", "Diddy", "Juice WRLD", "Godspeed You! Black Emperor", "Joji", "Quadeca", "Ed Sheeran", "Paul McCartney",
+            "John Lennon", "George Harrison", "Ringo Starr", "BROCKHAMPTON", "Lil Wayne", "Daft Punk", "Panda Eyes", "Teminite", "Miles Davis", "Marek Grechuta",
+            "Kult", "Yes", "The Cure", "Queen", "Lil Uzi Vert", "mgk", "Trippie Redd", "DJ Khaled", "Weezer", "Post Malone",
+            "Black Sabbath", "Charlie Puth", "Billie Eilish", "Elton John", "Rihanna", "Nas", "Yeat", "Macklemore", "DEMONDICE", "Bad Bunny",
+            "6ix9ine", "Lil Pump", "Metro Boomin", "Skrillex", "Mustard", "The Beach Boys", "Wu-Tang Clan", "Denzel Curry", "Danny Brown", "The Rolling Stones",
+            "21 Savage", "Frank Sinatra", "Bruno Mars", "Anderson .Paak", "Ronald Reagan", "A$AP Rocky", "Gorillaz", "Imagine Dragons", "MGMT", "Harry Styles",
+            "Olivia Rodrigo", "Granular", "Justin Bieber", "ABBA", "Korn", "Pinkfong", "Mata", "sanah", "Shakira", "50 Cent",
+            "Led Zeppelin", "AC/DC", "Simon & Garfunkel", "Twenty One Pilots", "Foster The People", "Arctic Monkeys", "Madonna", "Stevie Wonder", "Madlib", "my bloody valentine",
+            "Oasis", "Björk", "Aerosmith", "Adele", "Hozier", "Beyoncé", "Coldplay", "Guns N' Roses", "Ice Spice", "Johnny Cash",
+            "Hans Zimmer", "BTS", "Swans", "Mac Miller", "Earl Sweatshirt", "Charles Mingus", "Marvin Gaye", "Dua Lipa", "Ariana Grande", "C418",
+            "Laura Shigihara", "Coolio", "House of Pain", "TOTO", "Louis Armstrong", "Czerwone Gitary", "Stare Dobre Małżeństwo", "The Microphones", "Mount Eerie", "Method Man",
+            "Ol' Dirty Bastard", "Ghostface Killah", "GZA", "Raekwon", "RZA", "Cappadonna", "Masta Killa", "Inspectah Deck", "U-God", "\"Weird Al\" Yankovic",
+            "P C III", "Kidz Bop Kids", "Mariah Carey", "John Coltrane", "Snoop Dogg", "Ms. Lauryn Hill", "System Of A Down", "Prince", "Don Toliver", "Sheck Wes",
+            "TheFatRat", "Alan Walker", "Avicii", "AJR", "OneRepublic", "Tame Impala", "Luis Fonsi", "J Balvin", "Ozuna", "Nicki Minaj",
+            "Cardi B", "Young Thug", "Soulja Boy", "Sia", "SZA", "Sabrina Carpenter", "Childish Gambino", "Chance the Rapper", "French Montana", "Your Favorite Martian",
+            "KIDS SEE GHOSTS", "Dimrain47", "Magdalena Bay", "Black Country, New Road", "Fishmans", "Mach-Hommy", "Neutral Milk Hotel", "The Velvet Underground", "Nico", "Joy Division",
+            "Talking Heads", "Slint", "Nick Drake", "Portishead", "Cocteau Twins", "The Smiths", "Slowdive", "Asian Glow", "Lil Baby", "Kate Bush",
+            "Lamp", "Ethel Cain", "DJ Shadow", "Sufjan Stevens", "Television", "Pixies", "Have A Nice Life", "Elliott Smith", "J Dilla", "smokedrope2016",
+            "FKA twigs", "The Halo Effect", "Jimi Hendrix", "Akira Yamaoka", "The Doors", "Talk Talk", "Bull of Heaven", "Merzbow", "Bob Dylan", "Nine Inch Nails",
+            "Lemon Demon", "Dream", "Logan Paul", "Jake Paul", "Central Cee", "Onision", "Pharoah Sanders", "Jeff Buckley", "Manchester Orchestra", "Juan Gabriel",
+            "Massive Attack", "Gunna", "DMX", "Y$", "King Gizzard & The Lizard Wizard", "I Hate The Beatles", "YAYAYI", "2003 Toyota Corolla", "Panchiko", "SpaceGhostPurrp",
+            "Bing Crosby", "The Odd Man Who Sings About Poop, Puke, And Pee", "The Gerogerigegege", "Lead Belly", "Capilla Flamenca", "Molchat Doma", "My Chemical Romance", "Limp Bizkit", "Falling In Reverse", "The Residents",
+            "Rick Astley", "Crazy Frog", "Tally Hall", "Mršavilo", "Death", "Leonard Cohen", "Sweet Trip", "The Avalanches", "Milton Nascimento", "Lô Borges",
+            "Seu Jorge", "Fiona Apple", "Sade", "Chico Buarque", "Shiro Sagisu", "Joanna Newsom", "Mobb Deep", "Mos Def", "Joni Mitchell", "Car Seat Headrest",
+            "Lil Ugly Mane", "Racionais MC's", "Gustavo Cerati", "Christopher Larkin", "Koji Kondo", "Freddie Gibbs", "Andrew Prahlow", "The Who", "Little Simz", "Boris",
+            "Jorge Ben", "Justice", "Alice in Chains", "Slum Village", "KevinTheCreep", "Electric Light Orchestra", "Bill Evans", "Count Basie", "Midge Ure", "Tears For Fears",
+            "Black", "Bon Jovi", "Vanilla Ice", "The Cranberries", "Xzibit", "The White Stripes", "The Killers", "Amy Winehouse", "Estelle", "Cults",
+            "Wolfgang Amadeus Mozart", "Ludwig van Beethoven", "Frédéric Chopin", "Johann Sebastian Bach", "Pyotr Ilyich Tchaikovsky", "Nina Simone", "Frank Zappa", "The Clash", "Public Enemy", "Depeche Mode",
+            "Daughters", "Lingua Ignota", "Ichiko Aoba", "Queens of the Stone Age", "Natural Snow Buildings", "Héctor Lavoe", "Willie Colón", "Stan Getz", "João Gilberto", "Art Blakey",
+            "The Jazz Messengers", "Maysa", "Wilhelm Furtwangler", "Elisabeth Schwarzkopf", "Orchester Der Bayreuther Festspiele", "Hans Hopf", "Elisabeth Höngen", "Chet Baker", "Hank Williams", "Kirsten Flagstad",
+            "Ludwig Suthaus", "Duke Ellington", "Jo Stafford", "Glenn Miller", "Xiu Xiu", "Alex U. Ischenkau", "Yoko Ono", "clipping.", "Billie Holiday", "Katy Perry",
+            "Maroon 5", "Lil Yachty", "Miley Cyrus", "Westside Gunn", "Vince Staples", "Jack Harlow", "Doja Cat", "billy woods", "Cypress Hill", "Sunday Service Choir",
+            "Bo Burnham", "Usher", "Palace Theatre Orchestra", "Herman Finck", "Olivier Tree", "Dschinghis Khan", "Daler Mehndi", "The Rah Band", "Panic! At The Disco", "Mareux",
+            "Sandy Marton", "Surf Curse", "Måneskin", "The Kid LAROI", "Nathan Evans", "Jim Yosef", "RIELL", "CORONA", "DJ Blyatman", "The Cardigans",
+            "twocolors", "Lena Raine", "Sub Urban", "Freddie Dredd", "Lil Nas X", "Griffinilla", "Lehre Jantar", "Elektryczne Gitary", "Pusha T", "Berliner Philharmoniker",
+            "London Symphony Orchestra", "James Brown", "Armin van Buuren", "Wiener Philharmoniker", "Nat \"King\" Cole", "Grateful Dead", "Gucci Mane", "Ray Charles", "Nick Cave", "Lil B",
+            "Body 13", "Michiru Aoyama", "Yung Oogway", "D12", "Wings", "The Quarrymen", "Plastic Ono Band", "Young Money", "Odd Future", "Dave Soldier",
+            "Black Hippy", "Jackson 5", "USA for Africa", "Artists For Haiti", "Huncho Jack", "Genesis", "Viktor Vaughn", "King Geedorah", "Roger Waters", "KMD",
+            "NehruvianDOOM", "DANGERDOOM", "21st Century Schizoid Band", "Doug Walker", "Fall Out Boy", "Jschlatt", "Nettspend", "Linkin Park", "Geordie Greep", "Jaydas",
+            "Adam Calhoun", "Dax", "Barack Obama", "Daniel Larson", "Hentai Dude", "Slump AK", "Kid Rock", "Bizarre", "Kodak Black", "Lil Dicky",
+            "Desiigner", "IceJJFish", "William Basinski", "Prurient", "天気予報", "The Flaming Lips", "Steve Lieberman, The Gangsta Rabbi", "John Cage", "Francisco López", "Terre Thaemlitz",
+            "秋", "The Haters", "Negativland", "The Alchemist", "Breakdancing Ronald Reagan", "Joe Biden", "Dan Bull", "The Strokes", "Lorde", "Lana Del Rey",
+            "Phoebe Bridgers", "Caroline Polachek", "Steve Reich", "Steve Reich Ensemble", "Songs: Ohia", "Mort Garson", "Andrew Lloyd Webber", "Tim Rice", "Masakatsu Takagi", "The Wailers",
+            "Henry Rollins", "Gangsta Rap", "femtanýl", "Bill Clinton", "Sexyy Red", "GloRilla", "645AR", "Team 10", "Masked Wolf", "YBN Nahmir",
+            "GAWNE", "GAYLE", "CORPSE", "LeviathanJPTV", "Yung Gravy", "bbno$", "Antonio Vivaldi", "Red House Painters", "Black Kray", "Sonic Youth",
+            "Pussy", "PARTYNEXTDOOR", "Whitney Houston", "R. Kelly", "Rush", "Charlie Parker", "Dizzy Gillespie", "Woody Guthrie", "Beach House", "Megadeth",
+            "Rage Against the Machine", "Deftones", "Interpol", "Animal Collective", "LCD Soundsystem", "Arcade Fire", "!!!", "Bon Iver", "Vampire Weekend", "Injury Reserve",
+            "Lukas Graham", "Mr.Kitty", "t.A.T.u.", "Marshmello", "Monty Python", "Tom Odell", "Alstroemeria Records", "Aqua", "The Living Tombstone", "Cher",
+            "Fornola Band", "HUGEL", "El Profesor", "Creo", "The Verve", "Eiffel 65", "Dögönes", "Carly Rae Jepsen", "Caramella Girls", "Caramell",
+            "George Michael", "Rednex", "Noisestorm", "Aaron Smith", "Luxlį", "Krono", "Donald Trump", "AURORA", "Bobby McFerrin", "O-Zone",
+            "Lost Sky", "Tangerine Kitty", "Lenka", "Survivor", "Blonde Redhead", "Lynyrd Skynyrd", "Riton", "Nightcrawlers", "PSY", "Annoying Orange",
+            "Manuel", "Cypis", "Pharrell Williams", "Janji", "Johnning", "Rag'n'Bone Man", "I SEE MONSTAS", "NERO", "The Dead South", "Deaf Kev",
+            "JT Music", "dłb", "Lady Pank", "Papa Roach", "Fools Garden", "R.E.M.", "LP", "Gary Jules", "Michael Andrews", "Mr. Zoob",
+            "The Chordettes", "Different Heaven", "EH!DE", "Ween", "Cartoon", "Ronnie Ferrari", "Yugopolis", "Maciej Maleńczuk", "Madness", "Marilyn Manson",
+            "Anarchic System", "Boney M.", "Epic Rap Battles of History", "Captainsparklez", "Chamillionaire", "Woodkid", "Max Coveri", "Darude", "Scatman John", "Gotye",
+            "Rockwell", "F-777", "Waterflame", "Bee Gees", "Logan Hugueny-Clark", "Gym Class Heroes", "Wowkie Da", "Unknown Brain", "CG5", "Aero Chord",
+            "MandoPony", "The Neighbourhood", "Eurythmics", "Annie Lennox", "Dave Stewart", "a-ha", "Sylwia Grzeszczak", "Oldelaf", "Princess Chelsea", "Europe",
+            "Ylvis", "Haddaway", "Flo Rida", "Pitbull", "Belinda", "Cartoons", "Village People", "Dead Or Alive", "Slinamota", "Ck9c",
+            "Skaldowie", "Happysad", "Hollywood String Quartet", "Alvin Dinkin", "Kurt Reher", "Arnold Schoenberg", "Bent", "GavinZBeats", "Sławomir", "Ken Carson",
+            "Destroy Lonely", "George Martin", "2hollis", "acloudyskye", "Low Roar", "Deltron 3030", "Zach Bryan", "Yma Sumac", "Stan Kenton", "André 3000",
+            "Big Boi", "Nick Mason", "Richard Wright", "David Gilmour", "Syd Barrett", "MF Grimm", "CZARFACE", "Epic Rap Battles of Cancer", "me&me", "Opeth",
+            "Ella Fitzgerald"
+        ];
+
+        let remainingArtists = [...fullArtistList];
+        let currentArtist = '';
+        let score = 0;
+
+        function scrambleWord(word) {
+            if (!word || word.length < 2) {
+                return word;
+            }
+            let chars = word.split('');
+            let scrambled;
+            let attempts = 0; // Prevent infinite loops for impossible scrambles
+            do {
+                for (let i = chars.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [chars[i], chars[j]] = [chars[j], chars[i]];
+                }
+                scrambled = chars.join('');
+                attempts++;
+            } while (scrambled === word && word.length > 1 && attempts < 10); // Rescramble if identical (and word has > 1 char)
+            return scrambled;
+        }
+
+        function displayNewWord() {
+            if (remainingArtists.length === 0) {
+                gameOverEl.style.display = 'block';
+                scrambledWordEl.textContent = '';
+                guessInputEl.disabled = true;
+                submitGuessBtn.disabled = true;
+                feedbackEl.textContent = '';
+                // Center the game over message if content shifts
+                gameContainerEl.style.display = 'flex';
+                gameContainerEl.style.flexDirection = 'column';
+                gameContainerEl.style.alignItems = 'center';
+                return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * remainingArtists.length);
+            currentArtist = remainingArtists[randomIndex];
+            remainingArtists.splice(randomIndex, 1); // Remove artist from remaining list
+
+            scrambledWordEl.textContent = scrambleWord(currentArtist);
+            guessInputEl.value = '';
+            guessInputEl.disabled = false;
+            submitGuessBtn.disabled = false;
+            feedbackEl.textContent = '';
+            feedbackEl.className = 'feedback'; // Reset feedback class
+            remainingEl.textContent = remainingArtists.length;
+            guessInputEl.focus();
+        }
+
+        function checkGuess() {
+            const userGuess = guessInputEl.value.trim();
+            if (!userGuess) return; // Ignore empty guesses
+
+            // Case-insensitive comparison
+            if (userGuess.toLowerCase() === currentArtist.toLowerCase()) {
+                score++;
+                scoreEl.textContent = score;
+                feedbackEl.textContent = 'Correct!';
+                feedbackEl.className = 'feedback correct'; // Add correct class
+                guessInputEl.disabled = true; // Disable input briefly
+                submitGuessBtn.disabled = true; // Disable button briefly
+
+                // Load the next word after a short delay
+                setTimeout(displayNewWord, 1000);
+            } else {
+                feedbackEl.textContent = 'Incorrect. Try again!';
+                feedbackEl.className = 'feedback'; // Ensure error class (default)
+                guessInputEl.select(); // Select the incorrect text for easy re-entry
+            }
+        }
+
+        submitGuessBtn.addEventListener('click', checkGuess);
+        guessInputEl.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent default form submission if it were in a form
+                checkGuess();
+            }
+        });
+
+        // Initial load
+        scoreEl.textContent = score;
+        remainingEl.textContent = remainingArtists.length;
+        displayNewWord();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>London Bus Info Finder</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            flex-grow: 1;
+        }
+
+        header {
+            background-color: #d32f2f; /* TfL Red */
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            border-radius: 8px 8px 0 0;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.8em;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 20px;
+        }
+
+        .tab-button {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background-color: transparent;
+            font-size: 1em;
+            font-weight: bold;
+            color: #555;
+            position: relative;
+            transition: color 0.3s ease;
+        }
+
+        .tab-button:hover {
+            color: #000;
+        }
+
+        .tab-button.active {
+            color: #d32f2f;
+        }
+
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #d32f2f;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-form input[type="text"] {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+
+        .search-form button {
+            padding: 10px 15px;
+            border: none;
+            background-color: #1976d2; /* TfL Blue */
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+
+        .search-form button:hover {
+            background-color: #115293;
+        }
+
+        .results-area {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            min-height: 100px;
+        }
+
+        .results-area p {
+            margin: 0 0 10px 0;
+        }
+
+        .results-area strong {
+             color: #1976d2;
+        }
+
+        .result-item {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-item span {
+            display: inline-block;
+            min-width: 120px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .loading-indicator, .error-message, .no-results {
+            text-align: center;
+            padding: 20px;
+            color: #777;
+            font-style: italic;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            font-size: 0.9em;
+            color: #888;
+            background-color: #eee;
+        }
+
+        /* Simple shapes/emojis */
+        .bus-icon::before { content: "🚌"; margin-right: 5px; }
+        .route-icon::before { content: "🗺️"; margin-right: 5px; }
+        .stop-icon::before { content: "📍"; margin-right: 5px; }
+        .operator-icon::before { content: "🏢"; margin-right: 5px; }
+        .status-on::before { content: "🟢"; margin-right: 5px; font-size: 0.8em; }
+        .status-off::before { content: "🔴"; margin-right: 5px; font-size: 0.8em; }
+        .status-unknown::before { content: "⚪"; margin-right: 5px; font-size: 0.8em; }
+        .info-icon::before { content: "ℹ️"; margin-right: 5px; }
+        .time-icon::before { content: "🕒"; margin-right: 5px; }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>London Bus Info Finder</h1>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="openTab(event, 'reg-search')">Search by Registration</button>
+            <button class="tab-button" onclick="openTab(event, 'route-search')">Search by Route</button>
+        </div>
+
+        <!-- Search by Registration Tab -->
+        <div id="reg-search" class="tab-content active">
+            <h2><span class="bus-icon"></span>Find Bus by Registration Plate</h2>
+            <form id="reg-form" class="search-form" onsubmit="searchByReg(event)">
+                <input type="text" id="reg-input" placeholder="e.g., LX09AXX" required>
+                <button type="submit">Search</button>
+            </form>
+            <div id="reg-results" class="results-area">
+                <p>Enter a registration plate above and click search.</p>
+            </div>
+        </div>
+
+        <!-- Search by Route Tab -->
+        <div id="route-search" class="tab-content">
+            <h2><span class="route-icon"></span>Find Route Information</h2>
+            <form id="route-form" class="search-form" onsubmit="searchByRoute(event)">
+                <input type="text" id="route-input" placeholder="e.g., 139 or 24" required>
+                <button type="submit">Search</button>
+            </form>
+            <div id="route-results" class="results-area">
+                <p>Enter a route number above and click search.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <footer>
+        <p>Data is simulated. Not real-time information. Inspired by bustimes.org and lvf.io.</p>
+    </footer>
+
+    <script>
+        // --- Simulated Data ---
+        const simulatedBusData = {
+            "LX09AXX": { reg: "LX09 AXX", type: "Double Decker", model: "ADL Enviro400", operator: "Arriva London", status: "On Route 139", lastSeen: "Oxford Street, 2 mins ago", garage: "AW - Ash Grove" },
+            "SN17TXX": { reg: "SN17 TXX", type: "Single Decker", model: "ADL Enviro200 MMC", operator: "Go-Ahead London", status: "Not in service", lastSeen: "Merton Garage, 1 hour ago", garage: "M - Merton" },
+            "LJ13AXX": { reg: "LJ13 AXX", type: "Double Decker", model: "Wrightbus New Routemaster", operator: "Arriva London", status: "On Route 139", lastSeen: "Baker Street Stn, 5 mins ago", garage: "AW - Ash Grove" },
+            "LTZ1101": { reg: "LTZ 1101", type: "Double Decker", model: "Wrightbus New Routemaster", operator: "Metroline", status: "On Route 24", lastSeen: "Trafalgar Square, just now", garage: "HT - Holloway" },
+            "YY65SXA": { reg: "YY65 SXA", type: "Single Decker", model: "Wrightbus StreetLite WF", operator: "Tower Transit", status: "On Route W15", lastSeen: "Leytonstone Stn, 8 mins ago", garage: "LI - Lea Interchange" },
+             "SK20AXF": { reg: "SK20 AXF", type: "Electric Double Decker", model: "ADL Enviro400EV City", operator: "Go-Ahead London", status: "Charging", lastSeen: "Waterloo Garage, 30 mins ago", garage: "Q - Camberwell" }
+        };
+
+        const simulatedRouteData = {
+            "139": {
+                route: "139",
+                start: "Waterloo Station",
+                end: "Golders Green Station",
+                via: "Trafalgar Square, Oxford Circus, Baker Street, Abbey Road",
+                operator: "Arriva London",
+                frequency: "Approx. every 8-12 mins (daytime)",
+                type: "Double Decker",
+                currentBuses: ["LX09AXX", "LJ13AXX", "LK66AXX"], // Example regs
+                stops: ["Waterloo", "Trafalgar Sq", "Piccadilly Circus", "Oxford Circus", "Baker St", "Lord's", "Golders Green"]
+            },
+            "24": {
+                route: "24",
+                start: "Pimlico",
+                end: "Hampstead Heath",
+                via: "Victoria, Westminster, Trafalgar Square, Leicester Square, Camden Town",
+                operator: "Metroline",
+                frequency: "Approx. every 6-10 mins (24 hour service)",
+                type: "Double Decker (New Routemaster)",
+                currentBuses: ["LTZ1101", "LTZ1105", "LTZ1110"], // Example regs
+                stops: ["Pimlico", "Victoria", "Westminster", "Trafalgar Sq", "Camden Town", "Hampstead Heath"]
+            },
+            "W15": {
+                route: "W15",
+                start: "Cogan Avenue Estate",
+                end: "Hackney Town Hall",
+                via: "Walthamstow Central, Leytonstone",
+                operator: "Tower Transit",
+                frequency: "Approx. every 10-15 mins",
+                type: "Single Decker",
+                currentBuses: ["YY65SXA", "SN64CTX", "YY18TLU"], // Example regs
+                stops: ["Cogan Ave", "Walthamstow", "Leytonstone", "Hackney Central"]
+            }
+        };
+
+        // --- Tab Functionality ---
+        function openTab(evt, tabName) {
+            let i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+                tabcontent[i].classList.remove("active");
+            }
+            tablinks = document.getElementsByClassName("tab-button");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].classList.remove("active");
+            }
+            document.getElementById(tabName).style.display = "block";
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }
+
+        // --- Search Functions ---
+
+        function showLoading(resultsAreaId) {
+            const resultsArea = document.getElementById(resultsAreaId);
+            resultsArea.innerHTML = '<p class="loading-indicator">Searching...</p>';
+        }
+
+        function displayRegResults(data) {
+            const resultsArea = document.getElementById('reg-results');
+            if (!data) {
+                 resultsArea.innerHTML = '<p class="no-results">❌ No information found for that registration plate.</p>';
+                 return;
+            }
+
+            let statusIcon = 'status-unknown';
+            if (data.status && data.status.toLowerCase().includes('on route')) {
+                statusIcon = 'status-on';
+            } else if (data.status && (data.status.toLowerCase().includes('not in service') || data.status.toLowerCase().includes('charging'))) {
+                statusIcon = 'status-off';
+            }
+
+
+            resultsArea.innerHTML = `
+                <h3><span class="bus-icon"></span>Bus Information: ${data.reg}</h3>
+                <div class="result-item"><span><span class="info-icon"></span>Type:</span> ${data.type || 'N/A'}</div>
+                <div class="result-item"><span><span class="info-icon"></span>Model:</span> ${data.model || 'N/A'}</div>
+                <div class="result-item"><span><span class="operator-icon"></span>Operator:</span> ${data.operator || 'N/A'}</div>
+                <div class="result-item"><span><span class="operator-icon"></span>Garage:</span> ${data.garage || 'N/A'}</div>
+                <div class="result-item"><span><span class="${statusIcon}"></span>Status:</span> ${data.status || 'Unknown'}</div>
+                <div class="result-item"><span><span class="time-icon"></span>Last Seen:</span> ${data.lastSeen || 'N/A'}</div>
+            `;
+        }
+
+         function displayRouteResults(data) {
+            const resultsArea = document.getElementById('route-results');
+             if (!data) {
+                 resultsArea.innerHTML = '<p class="no-results">❌ No information found for that route number.</p>';
+                 return;
+             }
+
+            let busListHtml = 'N/A';
+            if (data.currentBuses && data.currentBuses.length > 0) {
+                busListHtml = data.currentBuses.map(reg => {
+                    const busInfo = simulatedBusData[reg.toUpperCase().replace(/\s+/g, '')]; // Check if we have info for this bus
+                    return busInfo ? `${reg} (${busInfo.type})` : reg;
+                }).join(', ');
+            }
+
+            let stopsHtml = 'N/A';
+             if (data.stops && data.stops.length > 0) {
+                stopsHtml = data.stops.map(stop => `<span class="stop-icon"></span>${stop}`).join(' → ');
+            }
+
+
+            resultsArea.innerHTML = `
+                <h3><span class="route-icon"></span>Route Information: ${data.route}</h3>
+                <div class="result-item"><span><span class="stop-icon"></span>From:</span> ${data.start || 'N/A'}</div>
+                <div class="result-item"><span><span class="stop-icon"></span>To:</span> ${data.end || 'N/A'}</div>
+                <div class="result-item"><span><span class="info-icon"></span>Via:</span> ${data.via || 'N/A'}</div>
+                <div class="result-item"><span><span class="operator-icon"></span>Operator:</span> ${data.operator || 'N/A'}</div>
+                <div class="result-item"><span><span class="time-icon"></span>Frequency:</span> ${data.frequency || 'N/A'}</div>
+                <div class="result-item"><span><span class="bus-icon"></span>Vehicle Type:</span> ${data.type || 'N/A'}</div>
+                 <div class="result-item"><span><span class="stop-icon"></span>Key Stops:</span> ${stopsHtml}</div>
+                <div class="result-item"><span><span class="bus-icon"></span>Example Buses Currently Tracked:</span> ${busListHtml}</div>
+            `;
+        }
+
+        function searchByReg(event) {
+            event.preventDefault();
+            const regInput = document.getElementById('reg-input');
+            const query = regInput.value.trim().toUpperCase().replace(/\s+/g, ''); // Normalize input
+            showLoading('reg-results');
+
+            // Simulate network delay
+            setTimeout(() => {
+                 const result = simulatedBusData[query];
+                 displayRegResults(result);
+            }, 500); // 0.5 second delay
+        }
+
+        function searchByRoute(event) {
+            event.preventDefault();
+            const routeInput = document.getElementById('route-input');
+            const query = routeInput.value.trim().toUpperCase();
+            showLoading('route-results');
+
+            // Simulate network delay
+            setTimeout(() => {
+                const result = simulatedRouteData[query];
+                displayRouteResults(result);
+            }, 500); // 0.5 second delay
+        }
+
+        // Initialize the first tab
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelector('.tab-button.active').click();
+        });
+
+    </script>
+
+</body>
+</html>

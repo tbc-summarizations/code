@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reality Dictionary</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            line-height: 1.6;
+            padding: 20px;
+            background-color: #f4f7f9;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 700px;
+            width: 100%;
+            background-color: #ffffff;
+            padding: 30px 40px;
+            border-radius: 10px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e0e0e0;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 2em;
+        }
+        h1::after {
+            content: ' 🪄'; /* Simple emoji 'asset' */
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], textarea {
+            width: calc(100% - 24px); /* Account for padding/border */
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            box-sizing: border-box; /* Ensure padding doesn't add to width */
+            transition: border-color 0.3s ease;
+        }
+        input[type="text"]:focus, textarea:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: inherit; /* Match body font */
+        }
+        button {
+            padding: 12px 25px;
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: background 0.3s ease, transform 0.1s ease;
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button:hover {
+            background: linear-gradient(135deg, #2980b9, #3498db);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        #currentDefinitionDisplay, #consequenceDisplay {
+            margin-top: 25px;
+            padding: 18px;
+            border: 1px solid #e0e0e0;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            min-height: 50px;
+            word-wrap: break-word; /* Ensure long words don't overflow */
+            line-height: 1.5;
+        }
+        #currentDefinitionDisplay strong, #consequenceDisplay strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-size: 0.9em;
+            text-transform: uppercase;
+        }
+        .loading, .error {
+            font-style: italic;
+            color: #777;
+        }
+        .error {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .placeholder {
+             color: #999;
+             font-style: italic;
+        }
+
+        /* Simple shape 'assets' */
+        .shape-square {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background-color: #3498db;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        .shape-triangle {
+            display: inline-block;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 10px solid #e74c3c;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Reality Dictionary</h1>
+        <p>Enter a word and redefine it. The world <span class="shape-square"></span> will subtly (or drastically <span class="shape-triangle"></span>) shift based on your new meaning. Powered by PenguinAI.</p>
+
+        <div>
+            <label for="wordInput">Word to Redefine:</label>
+            <input type="text" id="wordInput" placeholder="e.g., 'gravity', 'silence', 'dream'">
+        </div>
+
+        <div id="currentDefinitionDisplay">
+            <strong>Current Definition:</strong>
+            <span id="currentDefinitionText" class="placeholder">[No definition set yet]</span>
+        </div>
+
+        <div>
+            <label for="newDefinitionInput">New Definition:</label>
+            <textarea id="newDefinitionInput" placeholder="Enter the new, reality-altering definition here."></textarea>
+        </div>
+
+        <button id="changeButton">Alter Reality (Change Definition)</button>
+
+        <div id="consequenceDisplay">
+            <strong>Real-World Consequence:</strong>
+            <span id="consequenceText" class="placeholder">[Consequences of your change will appear here...]</span>
+        </div>
+    </div>
+
+    <script>
+        const wordInput = document.getElementById('wordInput');
+        const newDefinitionInput = document.getElementById('newDefinitionInput');
+        const changeButton = document.getElementById('changeButton');
+        const currentDefinitionText = document.getElementById('currentDefinitionText');
+        const consequenceText = document.getElementById('consequenceText');
+        const currentDefinitionDisplay = document.getElementById('currentDefinitionDisplay');
+        const consequenceDisplay = document.getElementById('consequenceDisplay');
+
+        const apiUrl = 'https://penguinai.derpygamer2142.com/v1/chat/completions';
+        const modelId = 'llama-3.1-8b-instruct'; // The specified model
+
+        changeButton.addEventListener('click', async () => {
+            const word = wordInput.value.trim();
+            const newDefinition = newDefinitionInput.value.trim();
+
+            if (!word || !newDefinition) {
+                alert('⚠️ Please enter both a word and its new definition.');
+                return;
+            }
+
+            // Update UI immediately
+            currentDefinitionText.textContent = newDefinition;
+            currentDefinitionText.classList.remove('placeholder'); // Remove placeholder style if it was there
+            consequenceText.textContent = '🔄 Calculating reality shift... please wait...';
+            consequenceText.className = 'loading'; // Use class for styling
+            consequenceDisplay.style.borderColor = '#e0e0e0'; // Reset border
+
+            // --- AI Instruction ---
+            // This system prompt instructs the AI precisely on its role and expected output format.
+            const systemPrompt = `You are the 'Reality Engine', a powerful entity that observes and reports the immediate consequences when a word's definition is changed in the Universal Dictionary. Your task is *only* to describe the tangible, observable effect this change has on the world.
+
+Follow these rules STRICTLY:
+1.  **Role:** You are an objective observer reporting a consequence. Do NOT act like a chatbot, offer opinions, or explain yourself.
+2.  **Input:** You will receive a word and its *new* definition.
+3.  **Output:** Describe the *direct consequence* of this new definition taking effect in reality.
+4.  **Conciseness:** Your response MUST be 1-2 sentences maximum. Be brief and impactful.
+5.  **Focus:** The consequence must logically (within the premise of reality-bending definitions) follow from the *new definition*.
+6.  **Format:** Start directly with the consequence. Do not include preamble like "The consequence is..." or "Okay, here's the effect...". Just state what happens.
+
+Example 1:
+Word: Rain
+New Definition: Drops of liquid chocolate falling from the sky.
+Consequence: Clouds begin to drizzle warm, melted chocolate across the landscape. The air smells sweet and surfaces become sticky.
+
+Example 2:
+Word: Mirror
+New Definition: A surface that shows the viewer's innermost desire instead of their reflection.
+Consequence: People looking into mirrors now see visions of their deepest wishes – wealth, love, or perhaps just a good sandwich – staring back at them.
+
+Example 3:
+Word: Whisper
+New Definition: A sound that physically manifests as a small, glowing butterfly.
+Consequence: Whenever someone whispers, tiny, luminous butterflies flutter from their lips and dissipate moments later. Quiet conversations fill rooms with fleeting light.`;
+
+            const userPrompt = `The definition of the word '${word}' has just been changed in the Universal Dictionary.
+
+Word: ${word}
+New Definition: ${newDefinition}
+
+Describe the immediate, observable consequence of this change in the world.`;
+
+            const requestBody = {
+                model: modelId,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt }
+                ],
+                temperature: 0.7, // Add a bit of creativity
+                max_tokens: 80 // Ensure response stays relatively brief
+            };
+
+            // --- API Call ---
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // No API key header needed as per PenguinAI Proxy instructions for this endpoint
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                // Check response status
+                if (!response.ok) {
+                    let errorBody = `API Error ${response.status}: ${response.statusText}`;
+                    try {
+                        // Try to parse detailed error from PenguinAI if available
+                        const errorJson = await response.json();
+                        errorBody += ` - ${errorJson.error?.message || JSON.stringify(errorJson)}`;
+                    } catch (parseError) {
+                        // Ignore if error response is not JSON
+                    }
+                    throw new Error(errorBody);
+                }
+
+                const data = await response.json();
+
+                // --- Process Response ---
+                if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
+                    const consequence = data.choices[0].message.content.trim();
+                    consequenceText.textContent = consequence;
+                    consequenceText.className = ''; // Remove loading/placeholder class
+                } else {
+                    // Handle cases where the response structure is unexpected
+                    console.error('Unexpected API response structure:', data);
+                    throw new Error('Received an invalid response format from the Reality Engine.');
+                }
+
+            } catch (error) {
+                console.error('Error altering reality:', error);
+                consequenceText.textContent = `❌ Reality Distortion Error: ${error.message}`;
+                consequenceText.className = 'error'; // Apply error styling
+                consequenceDisplay.style.borderColor = '#e74c3c'; // Highlight error display
+                // Optionally revert the definition display if the effect failed
+                // currentDefinitionText.textContent = '[Definition change failed, please try again]';
+                // currentDefinitionText.classList.add('placeholder');
+            }
+        });
+
+        // Add slight interaction hint on focus for inputs
+        wordInput.addEventListener('focus', () => wordInput.style.borderColor = '#3498db');
+        wordInput.addEventListener('blur', () => wordInput.style.borderColor = '#ccc');
+        newDefinitionInput.addEventListener('focus', () => newDefinitionInput.style.borderColor = '#3498db');
+        newDefinitionInput.addEventListener('blur', () => newDefinitionInput.style.borderColor = '#ccc');
+
+    </script>
+</body>
+</html>

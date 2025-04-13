@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bus Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            background-color: #70c5ce; /* Sky blue */
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #windscreen {
+            flex-grow: 1;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #70c5ce 60%, #5a5a5a 60%); /* Sky and initial road */
+        }
+
+        #road {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%) perspective(200px) rotateX(45deg);
+            width: 600px; /* Wider road appearance due to perspective */
+            height: 100%; /* Extend road effect upwards */
+            background-color: #5a5a5a; /* Road color */
+            overflow: hidden;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        #road-lines {
+            position: absolute;
+            width: 100%;
+            height: 200%; /* Taller to allow vertical movement */
+            background: linear-gradient(
+                to bottom,
+                transparent 0%,
+                transparent 70%,
+                white 70%, /* Line color */
+                white 80%, /* Line thickness */
+                transparent 80%,
+                transparent 100%
+            );
+            background-size: 20px 100px; /* Width and spacing of dashes */
+            animation: moveRoad 0s linear infinite; /* Animation controlled by JS */
+            left: 50%;
+            transform: translateX(-50%);
+            will-change: background-position;
+        }
+
+        #scenery {
+            position: absolute;
+            bottom: 60%; /* Horizon line */
+            left: 0;
+            width: 100%;
+            height: 10%;
+            /* Simple scenery with shapes */
+            background: radial-gradient(circle at 10% 50%, #2a9d8f 20px, transparent 21px),
+                        radial-gradient(circle at 90% 60%, #2a9d8f 30px, transparent 31px),
+                        linear-gradient(to right, #e9c46a 5px, transparent 5px),
+                        linear-gradient(to right, transparent 95%, #e9c46a 5%),
+                        linear-gradient(to bottom, #264653 50%, transparent 50%); /* Ground color */
+             background-size: 100px 100px, 150px 150px, 100% 10px, 100% 10px, 100% 100%;
+             animation: moveScenery 0s linear infinite; /* Controlled by JS based on steering */
+             will-change: background-position;
+        }
+
+
+        @keyframes moveRoad {
+            0% { background-position-y: 0px; }
+            100% { background-position-y: 200px; } /* Moves twice the pattern height */
+        }
+
+        @keyframes moveScenery {
+             0% { background-position-x: 0%, 0%, 0%, 0%, 0%; }
+             100% { background-position-x: 0%, 0%, 0%, 0%, 0%; } /* JS will update this */
+        }
+
+
+        #dashboard {
+            height: 250px;
+            background-color: #222;
+            border-top: 5px solid #444;
+            position: relative;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            padding: 10px;
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
+        }
+
+        #steering-wheel {
+            width: 180px;
+            height: 180px;
+            border: 15px solid #111;
+            border-radius: 50%;
+            position: relative;
+            background-color: #333;
+            box-shadow: 0 0 10px rgba(0,0,0,0.7);
+            transition: transform 0.2s ease-out;
+        }
+        #steering-wheel::before {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 70px;
+            background-color: #111;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -100%);
+            border-radius: 5px;
+        }
+         #steering-wheel::after {
+            content: '🚌'; /* Bus emoji for horn */
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: #444;
+            border: 2px solid #111;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            cursor: pointer;
+         }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+         .pedals {
+             display: flex;
+             gap: 15px;
+             margin-top: 20px;
+         }
+
+        .controls button, .pedals button {
+            padding: 15px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #555;
+            color: white;
+            border: 2px solid #777;
+            border-radius: 8px;
+            box-shadow: 0 4px #333;
+            transition: all 0.1s ease;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        .controls button:active, .pedals button:active {
+            background-color: #444;
+            box-shadow: 0 2px #222;
+            transform: translateY(2px);
+        }
+
+        #status-display {
+            background-color: #1a1a1a;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            min-width: 150px;
+            text-align: center;
+        }
+
+        #speedometer {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0f0; /* Green digital look */
+            margin-bottom: 10px;
+        }
+
+        #status-indicators span {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 10px;
+            margin: 0 5px;
+            font-size: 12px;
+        }
+
+        .indicator-on {
+            background-color: #ffc107; /* Yellow for ON */
+            color: #333;
+            box-shadow: 0 0 5px #ffc107;
+        }
+
+        .indicator-off {
+            background-color: #444; /* Darker grey for OFF */
+            color: #888;
+        }
+
+         /* Wiper simulation - simple overlay */
+         #wiper {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 10px; /* Wiper thickness */
+            height: 180px; /* Wiper length */
+            background-color: rgba(0, 0, 0, 0.8);
+            transform-origin: bottom center;
+            transform: translateX(-50%) rotate(0deg);
+            z-index: 5; /* Below dashboard, above windscreen elements */
+            transition: transform 0.3s ease-in-out;
+            display: none; /* Initially off */
+         }
+
+         #wiper.active {
+             display: block;
+             animation: wipe 1.5s ease-in-out infinite;
+         }
+
+         @keyframes wipe {
+             0%, 100% { transform: translateX(-50%) rotate(-45deg); }
+             50% { transform: translateX(-50%) rotate(45deg); }
+         }
+
+        /* Simple Mirror Shapes */
+        #left-mirror, #right-mirror {
+            position: absolute;
+            top: 10px;
+            width: 60px;
+            height: 100px;
+            background-color: #aaa;
+            border: 3px solid #111;
+            border-radius: 5px;
+            z-index: 1; /* Above windscreen background */
+            box-shadow: 3px 3px 5px rgba(0,0,0,0.3);
+            opacity: 0.7;
+        }
+        #left-mirror { left: 10px; transform: perspective(50px) rotateY(15deg); }
+        #right-mirror { right: 10px; transform: perspective(50px) rotateY(-15deg); }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="windscreen">
+            <div id="left-mirror"></div>
+            <div id="right-mirror"></div>
+            <div id="scenery"></div>
+            <div id="road">
+                <div id="road-lines"></div>
+            </div>
+            <div id="wiper"></div>
+        </div>
+        <div id="dashboard">
+            <div class="controls">
+                <button id="btn-lights">Lights</button>
+                <button id="btn-doors">Doors</button>
+                <button id="btn-wiper">Wipers</button>
+            </div>
+
+            <div id="steering-wheel-container">
+                 <div id="steering-wheel"></div>
+                 <div style="text-align: center; margin-top: 5px;">
+                    <button id="btn-steer-left" style="min-width: 50px; padding: 10px;">◀</button>
+                    <button id="btn-steer-right" style="min-width: 50px; padding: 10px;">▶</button>
+                </div>
+            </div>
+
+
+            <div id="status-display">
+                <div id="speedometer">0 KPH</div>
+                <div id="status-indicators">
+                    Status:<br>
+                    <span id="indicator-lights" class="indicator-off">Lights</span>
+                    <span id="indicator-doors" class="indicator-on">Doors Open</span>
+                </div>
+                 <div id="gear-display" style="margin-top: 10px; color: #ccc;">Gear: N</div>
+            </div>
+
+            <div class="pedals">
+                <button id="btn-accelerate">Gas ▲</button>
+                <button id="btn-brake">Brake ▼</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const roadLines = document.getElementById('road-lines');
+        const scenery = document.getElementById('scenery');
+        const steeringWheel = document.getElementById('steering-wheel');
+        const speedometer = document.getElementById('speedometer');
+        const indicatorLights = document.getElementById('indicator-lights');
+        const indicatorDoors = document.getElementById('indicator-doors');
+        const gearDisplay = document.getElementById('gear-display');
+        const wiper = document.getElementById('wiper');
+
+        const btnAccelerate = document.getElementById('btn-accelerate');
+        const btnBrake = document.getElementById('btn-brake');
+        const btnSteerLeft = document.getElementById('btn-steer-left');
+        const btnSteerRight = document.getElementById('btn-steer-right');
+        const btnLights = document.getElementById('btn-lights');
+        const btnDoors = document.getElementById('btn-doors');
+        const btnWiper = document.getElementById('btn-wiper');
+        const hornButton = steeringWheel.querySelector('::after'); // Target pseudo-element's parent for click
+
+        let speed = 0; // KPH
+        let acceleration = 0.1;
+        let braking = 0.5;
+        let friction = 0.02;
+        let maxSpeed = 80;
+        let steeringAngle = 0; // Degrees, positive is right, negative is left
+        let maxSteeringAngle = 30; // Max visual angle for wheel
+        let steeringSpeed = 1.5; // How fast the wheel turns
+        let roadTurnFactor = 0; // How much the road appears to turn
+        let sceneryShift = 0; // Horizontal shift for scenery based on steering
+
+        let lightsOn = false;
+        let doorsOpen = true;
+        let wipersOn = false;
+        let gear = 'N'; // N, D, R
+
+        let accelerating = false;
+        let brakingActive = false;
+        let steeringLeft = false;
+        let steeringRight = false;
+
+        // --- Control Event Listeners ---
+
+        // Acceleration Pedal
+        btnAccelerate.addEventListener('mousedown', () => accelerating = true);
+        btnAccelerate.addEventListener('mouseup', () => accelerating = false);
+        btnAccelerate.addEventListener('mouseleave', () => accelerating = false);
+        btnAccelerate.addEventListener('touchstart', (e) => { e.preventDefault(); accelerating = true; });
+        btnAccelerate.addEventListener('touchend', (e) => { e.preventDefault(); accelerating = false; });
+
+        // Brake Pedal
+        btnBrake.addEventListener('mousedown', () => brakingActive = true);
+        btnBrake.addEventListener('mouseup', () => brakingActive = false);
+        btnBrake.addEventListener('mouseleave', () => brakingActive = false);
+        btnBrake.addEventListener('touchstart', (e) => { e.preventDefault(); brakingActive = true; });
+        btnBrake.addEventListener('touchend', (e) => { e.preventDefault(); brakingActive = false; });
+
+        // Steering Buttons
+        btnSteerLeft.addEventListener('mousedown', () => steeringLeft = true);
+        btnSteerLeft.addEventListener('mouseup', () => steeringLeft = false);
+        btnSteerLeft.addEventListener('mouseleave', () => steeringLeft = false);
+        btnSteerLeft.addEventListener('touchstart', (e) => { e.preventDefault(); steeringLeft = true; });
+        btnSteerLeft.addEventListener('touchend', (e) => { e.preventDefault(); steeringLeft = false; });
+
+        btnSteerRight.addEventListener('mousedown', () => steeringRight = true);
+        btnSteerRight.addEventListener('mouseup', () => steeringRight = false);
+        btnSteerRight.addEventListener('mouseleave', () => steeringRight = false);
+        btnSteerRight.addEventListener('touchstart', (e) => { e.preventDefault(); steeringRight = true; });
+        btnSteerRight.addEventListener('touchend', (e) => { e.preventDefault(); steeringRight = false; });
+
+        // Toggle Buttons
+        btnLights.addEventListener('click', toggleLights);
+        btnDoors.addEventListener('click', toggleDoors);
+        btnWiper.addEventListener('click', toggleWipers);
+
+        // Horn (on steering wheel center)
+        steeringWheel.addEventListener('click', honk);
+
+
+        // --- Functions ---
+
+        function toggleLights() {
+            lightsOn = !lightsOn;
+            updateStatusIndicators();
+             console.log(lightsOn ? "Lights ON" : "Lights OFF");
+             // Add visual effect if desired (e.g., change dashboard brightness slightly)
+        }
+
+        function toggleDoors() {
+            if (speed > 1) {
+                console.log("Cannot open doors while moving!");
+                alert("Cannot open doors while moving!");
+                return;
+            }
+            doorsOpen = !doorsOpen;
+            if(doorsOpen) {
+                 gear = 'N'; // Auto to Neutral when doors open
+                 updateGearDisplay();
+            }
+            updateStatusIndicators();
+            console.log(doorsOpen ? "Doors OPEN" : "Doors CLOSED");
+        }
+
+        function toggleWipers() {
+            wipersOn = !wipersOn;
+            wiper.classList.toggle('active', wipersOn);
+            console.log(wipersOn ? "Wipers ON" : "Wipers OFF");
+        }
+
+
+        function honk() {
+            console.log("HONK! 🚌");
+            // Simple visual feedback for horn
+            steeringWheel.style.transform = `rotate(${steeringAngle}deg) scale(1.05)`;
+            setTimeout(() => {
+                 steeringWheel.style.transform = `rotate(${steeringAngle}deg) scale(1)`;
+            }, 150);
+             // In a real game, you'd play a sound here.
+        }
+
+        function updateStatusIndicators() {
+            if (lightsOn) {
+                indicatorLights.classList.remove('indicator-off');
+                indicatorLights.classList.add('indicator-on');
+                indicatorLights.textContent = 'Lights ON';
+            } else {
+                indicatorLights.classList.remove('indicator-on');
+                indicatorLights.classList.add('indicator-off');
+                indicatorLights.textContent = 'Lights OFF';
+            }
+
+            if (doorsOpen) {
+                indicatorDoors.classList.remove('indicator-off');
+                indicatorDoors.classList.add('indicator-on');
+                indicatorDoors.textContent = 'Doors Open';
+            } else {
+                indicatorDoors.classList.remove('indicator-on');
+                indicatorDoors.classList.add('indicator-off');
+                indicatorDoors.textContent = 'Doors Closed';
+            }
+        }
+
+        function updateGearDisplay() {
+             gearDisplay.textContent = `Gear: ${gear}`;
+        }
+
+        function gameLoop() {
+            // --- Physics and State Update ---
+
+             // Select Gear (simplified: Gas implies 'D', Brake allows shift)
+             if (accelerating && !doorsOpen && gear === 'N') {
+                 gear = 'D';
+                 updateGearDisplay();
+             } else if (brakingActive && speed < 1 && gear === 'D') {
+                 // Allow shifting back to N when stopped and braking
+                 // gear = 'N'; // Or add specific shifter controls
+                 // updateGearDisplay();
+             }
+
+            // Steering Logic
+            let steerChange = 0;
+            if (steeringLeft) {
+                steerChange = -steeringSpeed;
+            }
+            if (steeringRight) {
+                steerChange = steeringSpeed;
+            }
+
+            steeringAngle += steerChange;
+
+            // Limit steering angle
+            steeringAngle = Math.max(-maxSteeringAngle, Math.min(maxSteeringAngle, steeringAngle));
+
+            // Auto-center steering slowly if not actively steering
+            if (!steeringLeft && !steeringRight) {
+                steeringAngle *= 0.9; // Gradually return to center
+                 if (Math.abs(steeringAngle) < 0.1) steeringAngle = 0;
+            }
+
+
+            // Acceleration Logic
+            if (accelerating && !doorsOpen && gear === 'D') {
+                speed += acceleration * (1 - speed / (maxSpeed * 1.5)); // Less acceleration near max speed
+            }
+
+            // Braking Logic
+            if (brakingActive) {
+                speed -= braking;
+            }
+
+            // Friction
+            speed -= friction;
+
+            // Prevent negative speed (unless reversing is implemented)
+            if (speed < 0) speed = 0;
+
+             // Clamp speed to max speed
+             speed = Math.min(speed, maxSpeed);
+
+
+            // --- Visual Updates ---
+
+            // Update Speedometer
+            speedometer.textContent = `${Math.round(speed)} KPH`;
+
+            // Update Steering Wheel visual
+            steeringWheel.style.transform = `rotate(${steeringAngle}deg)`;
+
+            // Update Road Animation Speed
+            // Faster animation duration = faster perceived speed
+             const roadAnimationDuration = speed > 0 ? (1 / speed) * 20 : 0; // Adjust multiplier for sensitivity
+             if (roadAnimationDuration > 0) {
+                 roadLines.style.animation = `moveRoad ${roadAnimationDuration}s linear infinite`;
+             } else {
+                 roadLines.style.animation = 'none'; // Stop animation if speed is 0
+             }
+
+             // Update Road Perspective/Turn based on steering (simple skew/translate)
+             // roadTurnFactor = -steeringAngle * 0.05; // How much road shifts side-to-side
+             roadTurnFactor = -steeringAngle * 0.5; // Adjust this multiplier for effect strength
+             road.style.transform = `translateX(calc(-50% + ${roadTurnFactor}px)) perspective(200px) rotateX(45deg)`;
+             // roadLines.style.transform = `translateX(calc(-50% + ${roadTurnFactor * 0.1}px))`; // Make lines shift less?
+
+
+             // Update Scenery Movement (parallax effect based on steering)
+            sceneryShift = steeringAngle * 1.5; // Scenery shifts opposite to turn direction
+            scenery.style.backgroundPositionX = `${sceneryShift}px, ${sceneryShift * 0.8}px, ${sceneryShift * 0.2}px, ${sceneryShift * 0.2}px, ${sceneryShift * 0.1}px`;
+
+
+
+            requestAnimationFrame(gameLoop); // Loop!
+        }
+
+        // --- Initial Setup ---
+        updateStatusIndicators();
+        updateGearDisplay();
+        requestAnimationFrame(gameLoop); // Start the game loop
+
+        // Prevent default touch behaviors that might interfere
+        document.body.addEventListener('touchstart', function(e) {
+            // Allow touches on buttons
+            if (e.target.tagName === 'BUTTON') return;
+            e.preventDefault();
+        }, { passive: false });
+        document.body.addEventListener('touchmove', function(e) {
+           e.preventDefault();
+        }, { passive: false });
+
+    </script>
+</body>
+</html>

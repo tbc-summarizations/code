@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>London Bus Info</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #d32f2f; /* TfL Red */
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .lookup-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: calc(100% - 22px); /* Adjust for padding */
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #0019a8; /* TfL Blue */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #00137f;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9e9e9;
+            border-radius: 4px;
+            display: none; /* Hidden by default */
+            border: 1px solid #ccc;
+        }
+        .results h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
+        .results p {
+            margin: 8px 0;
+        }
+        .results strong {
+           color: #0019a8;
+        }
+        .map-placeholder {
+            width: 100%;
+            height: 150px;
+            background-color: #a0d3e8; /* Light blue for map */
+            border: 1px solid #777;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #555;
+            font-size: 0.9rem;
+            margin-top: 15px;
+        }
+         .map-placeholder::before {
+            content: '🗺️ Map Area (Simulated)';
+            font-size: 1.2rem;
+        }
+        .error {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #777;
+        }
+        .shape-bus {
+            display: inline-block;
+            width: 20px;
+            height: 10px;
+            background-color: #d32f2f;
+            border-radius: 2px;
+            position: relative;
+            margin-right: 5px;
+        }
+        .shape-bus::before, .shape-bus::after {
+            content: '';
+            position: absolute;
+            bottom: -3px;
+            width: 4px;
+            height: 4px;
+            background-color: #333;
+            border-radius: 50%;
+        }
+        .shape-bus::before {
+            left: 3px;
+        }
+        .shape-bus::after {
+            right: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1><span class="shape-bus"></span> London Bus Information <span class="shape-bus"></span></h1>
+        <p style="text-align: center; color: #555;">Enter a bus registration plate or route number.</p>
+        <p style="text-align: center; font-style: italic; color: #888; font-size: 0.9em;">Note: This tool uses limited static example data. Real-time tracking and comprehensive data require external services not used here.</p>
+
+        <!-- Registration Plate Lookup -->
+        <div class="lookup-section">
+            <h2>Bus Registration Lookup</h2>
+            <form id="reg-form">
+                <label for="reg-input">Enter Bus Registration Plate:</label>
+                <input type="text" id="reg-input" name="registration" placeholder="e.g., LK17 AXP" required>
+                <button type="submit">Find Bus Info</button>
+            </form>
+            <div id="reg-results" class="results">
+                <!-- Registration info will be injected here -->
+            </div>
+        </div>
+
+        <!-- Route Lookup -->
+        <div class="lookup-section">
+            <h2>Bus Route Lookup</h2>
+            <form id="route-form">
+                <label for="route-input">Enter Bus Route Number:</label>
+                <input type="text" id="route-input" name="route" placeholder="e.g., 11 or W3" required>
+                <button type="submit">Find Route Info</button>
+            </form>
+            <div id="route-results" class="results">
+                <!-- Route info will be injected here -->
+            </div>
+        </div>
+
+        <div class="footer">
+             Inspired by bustimes.org and lvf.io | Static Data Demonstration
+        </div>
+    </div>
+
+    <script>
+        // --- Hardcoded Data (Simulating a Database/API) ---
+
+        // Example Bus Registration Data
+        const busData = {
+            'LK17AXP': {
+                reg: 'LK17 AXP',
+                makeModel: 'Alexander Dennis Enviro400H MMC',
+                operator: 'Metroline',
+                depot: 'Willesden (AC)',
+                status: 'On Route 98 towards Holborn',
+                location: 'Near Oxford Circus (Simulated)',
+                livery: 'TfL Red',
+                extraInfo: 'Hybrid Double Decker. Entered service in 2017.'
+            },
+            'SN61BGE': {
+                reg: 'SN61 BGE',
+                makeModel: 'Wright Eclipse Gemini 2 / Volvo B9TL',
+                operator: 'Stagecoach London',
+                depot: 'Plumstead (PD)',
+                status: 'Not currently tracking (Simulated)',
+                location: 'N/A',
+                livery: 'TfL Red',
+                extraInfo: 'Diesel Double Decker. Entered service in 2011.'
+            },
+            'YY66PVO': {
+                reg: 'YY66 PVO',
+                makeModel: 'Wright StreetDeck',
+                operator: 'Go-Ahead London Central',
+                depot: 'Stockwell (SW)',
+                status: 'On Route 11 towards Fulham Broadway',
+                location: 'Near Victoria Station (Simulated)',
+                livery: 'TfL Red',
+                extraInfo: 'Diesel Double Decker. Entered service in 2016.'
+            },
+             'LJ13GKN': {
+                reg: 'LJ13 GKN',
+                makeModel: 'Wright New Routemaster (NBfL)',
+                operator: 'Metroline',
+                depot: 'Holloway (HT)',
+                status: 'On Route 134 towards North Finchley',
+                location: 'Near Archway Station (Simulated)',
+                livery: 'TfL Red',
+                extraInfo: 'Hybrid "Borismaster". Entered service in 2013.'
+            },
+             'YX19ONU': {
+                reg: 'YX19 ONU',
+                makeModel: 'Alexander Dennis Enviro200 MMC',
+                operator: 'Abellio London',
+                depot: 'Walworth (WL)',
+                status: 'On Route C10 towards Canada Water',
+                location: 'Near Elephant & Castle (Simulated)',
+                livery: 'TfL Red',
+                extraInfo: 'Diesel Single Decker. Entered service in 2019.'
+            },
+             'BYD1804': {
+                reg: 'BYD1804 (LG71DYS)', // Example internal + plate
+                makeModel: 'BYD K8SR / ADL Enviro200EV MMC',
+                operator: 'Go-Ahead London Central',
+                depot: 'Camberwell (Q)',
+                status: 'On Route 35 towards Shoreditch',
+                location: 'Near Clapham Junction (Simulated)',
+                livery: 'TfL Red / Green Leaf (Electric)',
+                extraInfo: 'Fully Electric Single Decker. Entered service in 2021.'
+            }
+            // Add more sample registrations here if needed
+        };
+
+        // Example Bus Route Data
+        const routeData = {
+            '11': {
+                route: '11',
+                operator: 'Go-Ahead London Central (SW)',
+                start: 'Fulham Broadway Station',
+                end: 'Waterloo Station',
+                via: 'King\'s Road, Sloane Square, Victoria Stn, Westminster, Parliament Sq',
+                frequency: 'Approx. every 8-12 minutes (Simulated Day Frequency)',
+                vehicleType: 'Wright StreetDeck / New Routemaster (NBfL)',
+                notes: 'Central London route passing many landmarks.'
+            },
+            '98': {
+                route: '98',
+                operator: 'Metroline (AC)',
+                start: 'Willesden Bus Garage',
+                end: 'Holborn, Red Lion Square',
+                via: 'Kilburn High Road, Maida Vale, Marble Arch, Oxford Street, Holborn',
+                frequency: 'Approx. every 7-10 minutes (Simulated Day Frequency)',
+                vehicleType: 'ADL Enviro400H MMC (Hybrid)',
+                notes: 'Night Service N98 follows a similar path.'
+            },
+            'W3': {
+                route: 'W3',
+                operator: 'Arriva London North (AR)',
+                start: 'Finsbury Park Station',
+                end: 'Northumberland Park Station',
+                via: 'Manor House, Wood Green, Alexandra Palace, Hornsey',
+                frequency: 'Approx. every 6-9 minutes (Simulated Day Frequency)',
+                vehicleType: 'Various Double Deckers (e.g., ADL Enviro400, Wright Gemini)',
+                notes: 'Connects several North London transport hubs.'
+            },
+             '24': {
+                route: '24',
+                operator: 'Metroline Travel (HT)',
+                start: 'Hampstead Heath (South End Green)',
+                end: 'Pimlico (Grosvenor Road)',
+                via: 'Camden Town, Trafalgar Square, Victoria',
+                frequency: 'Approx. every 6-10 minutes (Simulated Day Frequency)',
+                vehicleType: 'Wright New Routemaster (NBfL)',
+                notes: 'First route fully converted to New Routemasters. 24-hour service.'
+            },
+             'C10': {
+                route: 'C10',
+                operator: 'Abellio London (WL)',
+                start: 'Canada Water Bus Station',
+                end: 'Victoria Station',
+                via: 'Rotherhithe, Bermondsey, Elephant & Castle, Lambeth North',
+                frequency: 'Approx. every 10-15 minutes (Simulated Day Frequency)',
+                vehicleType: 'ADL Enviro200 MMC (Single Decker)',
+                notes: 'Connects South London areas to Victoria.'
+            },
+             '35': {
+                route: '35',
+                operator: 'Go-Ahead London Central (Q)',
+                start: 'Clapham Junction Station',
+                end: 'Shoreditch High Street Station',
+                via: 'Brixton, Camberwell, Elephant & Castle, London Bridge, Liverpool Street',
+                frequency: 'Approx. every 7-12 minutes (Simulated Day Frequency)',
+                vehicleType: 'BYD/ADL Enviro200EV (Electric Single Decker)',
+                notes: 'One of London\'s fully electric bus routes.'
+            }
+            // Add more sample routes here if needed
+        };
+
+        // --- Event Listeners ---
+
+        const regForm = document.getElementById('reg-form');
+        const regInput = document.getElementById('reg-input');
+        const regResultsDiv = document.getElementById('reg-results');
+
+        const routeForm = document.getElementById('route-form');
+        const routeInput = document.getElementById('route-input');
+        const routeResultsDiv = document.getElementById('route-results');
+
+        regForm.addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevent page reload
+            const query = regInput.value.toUpperCase().replace(/\s+/g, ''); // Normalize input
+            displayRegInfo(query);
+        });
+
+        routeForm.addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevent page reload
+            const query = routeInput.value.toUpperCase().trim(); // Normalize input
+            displayRouteInfo(query);
+        });
+
+        // --- Display Functions ---
+
+        function displayRegInfo(reg) {
+            const bus = busData[reg];
+            let content = '';
+
+            if (bus) {
+                content = `
+                    <h3><span class="shape-bus"></span> Bus Info for ${bus.reg}</h3>
+                    <p><strong>Registration:</strong> ${bus.reg}</p>
+                    <p><strong>Make & Model:</strong> ${bus.makeModel}</p>
+                    <p><strong>Operator:</strong> ${bus.operator}</p>
+                    <p><strong>Depot:</strong> ${bus.depot}</p>
+                    <p><strong>Livery:</strong> ${bus.livery}</p>
+                    <p><strong>Current Status (Simulated):</strong> ${bus.status}</p>
+                    <p><strong>Last Known Location (Simulated):</strong> ${bus.location}</p>
+                    <p><strong>Details:</strong> ${bus.extraInfo}</p>
+                    <div class="map-placeholder"></div>
+                `;
+            } else {
+                content = `<p class="error">No information found for registration plate: ${regInput.value}. Please check the plate or try another (Examples: LK17AXP, SN61BGE, YY66PVO).</p>`;
+            }
+            regResultsDiv.innerHTML = content;
+            regResultsDiv.style.display = 'block';
+        }
+
+        function displayRouteInfo(routeNumber) {
+            const route = routeData[routeNumber];
+            let content = '';
+
+            if (route) {
+                content = `
+                    <h3><span class="shape-bus"></span> Route Info for ${route.route}</h3>
+                    <p><strong>Route Number:</strong> ${route.route}</p>
+                    <p><strong>Operator (Depot):</strong> ${route.operator}</p>
+                    <p><strong>Start Point:</strong> ${route.start}</p>
+                    <p><strong>End Point:</strong> ${route.end}</p>
+                    <p><strong>Key Stops/Areas:</strong> ${route.via}</p>
+                    <p><strong>Typical Vehicle Type:</strong> ${route.vehicleType}</p>
+                    <p><strong>Frequency (Simulated):</strong> ${route.frequency}</p>
+                    <p><strong>Notes:</strong> ${route.notes}</p>
+                     <div class="map-placeholder"></div>
+                `;
+            } else {
+                content = `<p class="error">No information found for route: ${routeInput.value}. Please check the route number or try another (Examples: 11, 98, W3, 24).</p>`;
+            }
+            routeResultsDiv.innerHTML = content;
+            routeResultsDiv.style.display = 'block';
+        }
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ask PenguinAI</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 700px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: calc(100% - 22px); /* Adjust for padding and border */
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 100px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .response-area {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9e9eb;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap; /* Preserve whitespace and line breaks */
+            word-wrap: break-word; /* Break long words */
+            min-height: 50px;
+            color: #333;
+        }
+        .response-area p {
+            margin: 0;
+        }
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ask PenguinAI</h1>
+        <textarea id="questionInput" placeholder="Enter your question here..."></textarea>
+        <button id="askButton">Ask AI</button>
+        <div class="response-area" id="responseArea">
+            <p>AI response will appear here.</p>
+        </div>
+        <div class="error" id="errorArea"></div>
+    </div>
+
+    <script>
+        const questionInput = document.getElementById('questionInput');
+        const askButton = document.getElementById('askButton');
+        const responseArea = document.getElementById('responseArea');
+        const errorArea = document.getElementById('errorArea');
+
+        const API_URL = 'https://penguinai.derpygamer2142.com/v1/chat/completions';
+        const MODEL_NAME = 'llama-3.1-8b-instruct';
+
+        askButton.addEventListener('click', async () => {
+            const question = questionInput.value.trim();
+
+            if (!question) {
+                errorArea.textContent = 'Please enter a question.';
+                responseArea.innerHTML = '<p>AI response will appear here.</p>'; // Reset response area
+                return;
+            }
+
+            errorArea.textContent = ''; // Clear previous errors
+            responseArea.innerHTML = '<p>Thinking...</p>'; // Show loading indicator
+            askButton.disabled = true; // Disable button while processing
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: MODEL_NAME,
+                         messages: [
+                            { role: 'system', content: 'You are a helpful AI assistant named PenguinAI. Respond to the user\'s query accurately and concisely. Do not include any introductory or concluding remarks unless necessary for clarity. Focus directly on answering the question. Format your response clearly.' }, // System instruction for the model
+                            { role: 'user', content: question }
+                         ]
+                         // Note: Parameters like max_tokens for response length are not specified in the provided API details, so they are not included.
+                         // Example structure for few-shot (not enabled for single input):
+                         // messages: [
+                         //     { role: 'system', content: '...' },
+                         //     { role: 'user', content: 'Example input 1' },
+                         //     { role: 'assistant', content: 'Example output 1' },
+                         //     { role: 'user', content: question }
+                         // ]
+                    })
+                });
+
+                if (!response.ok) {
+                     // Try to parse JSON error first, fallback to text
+                     let errorDetail = await response.text();
+                     try {
+                         const errorJson = JSON.parse(errorDetail);
+                         if (errorJson.error && errorJson.error.message) {
+                             errorDetail = errorJson.error.message;
+                         }
+                     } catch (e) {
+                         // Ignore JSON parsing error, use plain text
+                     }
+                    throw new Error(`API error: ${response.status} ${response.statusText} - ${errorDetail}`);
+                }
+
+                const data = await response.json();
+
+                if (data && data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content !== undefined) {
+                    responseArea.textContent = data.choices[0].message.content; // Use textContent to avoid potential XSS issues
+                } else {
+                    throw new Error('Invalid response format from API.');
+                }
+
+            } catch (error) {
+                console.error('Error fetching AI response:', error);
+                errorArea.textContent = `Failed to get response: ${error.message}`;
+                responseArea.innerHTML = '<p>Error.</p>'; // Indicate error in response area
+            } finally {
+                askButton.disabled = false; // Re-enable button
+            }
+        });
+    </script>
+</body>
+</html>

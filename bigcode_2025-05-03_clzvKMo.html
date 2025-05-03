@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CPR Challenge</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(to right, #6dd5ed, #2193b0); /* Simple gradient */
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #game-container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            width: 100%;
+            max-width: 450px;
+            box-sizing: border-box;
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 25px;
+            font-size: 2em;
+        }
+
+        #character {
+            font-size: 100px; /* Larger emoji */
+            margin-bottom: 20px;
+            transition: transform 0.2s ease-in-out; /* Faster transition for feedback */
+            display: inline-block; /* Allows transform */
+        }
+
+        #status {
+            font-size: 1.3em;
+            margin-bottom: 25px;
+            min-height: 1.5em; /* Reserve space */
+            color: #555;
+        }
+
+        #score {
+            font-size: 1.4em;
+            font-weight: bold;
+            margin-bottom: 25px;
+            color: #007bff;
+        }
+
+        #timer-bar-container {
+            width: 100%;
+            height: 25px; /* Taller bar */
+            background-color: #e0e0e0;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 30px;
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        #timer-bar {
+            width: 100%;
+            height: 100%;
+            background-color: #28a745; /* Green */
+            transition: width 0.1s linear, background-color 0.3s ease;
+        }
+
+        #cpr-button {
+            padding: 18px 35px; /* Larger button */
+            font-size: 1.8em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            width: 100%;
+            box-sizing: border-box;
+            font-weight: bold;
+        }
+
+        #cpr-button:hover {
+            background-color: #0056b3;
+        }
+
+        #cpr-button:active {
+            background-color: #004085;
+            transform: scale(0.98); /* Subtle press effect */
+        }
+
+        #cpr-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .game-over #character {
+            transform: translateY(30px) rotate(10deg); /* Slight tilt on collapse */
+        }
+
+        .game-over #status {
+            color: #dc3545; /* Red */
+            font-weight: bold;
+        }
+
+        .game-win #status {
+            color: #28a745; /* Green */
+            font-weight: bold;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #restart-button {
+             padding: 12px 25px;
+            font-size: 1.1em;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-top: 25px;
+            font-weight: bold;
+        }
+         #restart-button:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>CPR Challenge</h1>
+        <div id="character">🤕</div> <!-- Represents the character -->
+        <div id="score">Score: 0</div>
+        <div id="status">Press Perform CPR to start!</div>
+        <div id="timer-bar-container">
+            <div id="timer-bar"></div>
+        </div>
+        <button id="cpr-button">Perform CPR</button>
+        <button id="restart-button" class="hidden">Restart Game</button>
+    </div>
+
+    <script>
+        const characterEl = document.getElementById('character');
+        const statusEl = document.getElementById('status');
+        const scoreEl = document.getElementById('score');
+        const timerBarEl = document.getElementById('timer-bar');
+        const cprButton = document.getElementById('cpr-button');
+        const restartButton = document.getElementById('restart-button');
+        const gameContainer = document.getElementById('game-container');
+
+        let timerInterval;
+        let timeLeft = 100; // Percentage of time left
+        const timerSpeed = 50; // Milliseconds per tick (how often timer updates)
+        const timerDecreaseRate = 0.5; // Percentage decrease per tick
+        const collapseThreshold = 0; // When timer reaches 0, character collapses
+        const cprHealAmount = 15; // Percentage healed by one *successful* CPR action
+        const minCprInterval = 400; // Minimum milliseconds required between successful CPR presses
+
+        let gameActive = false;
+        let score = 0;
+        let lastCprTime = 0; // Timestamp of the last successful CPR press
+
+        function startGame() {
+            gameActive = true;
+            score = 0; // Reset score
+            lastCprTime = 0; // Reset last press time
+            timeLeft = 100;
+            characterEl.textContent = '🤕'; // Injured state
+            statusEl.textContent = 'Give CPR!';
+            updateScoreDisplay(); // Display initial score
+            timerBarEl.style.width = '100%';
+            timerBarEl.style.backgroundColor = '#28a745'; // Green
+            cprButton.disabled = false;
+            gameContainer.classList.remove('game-over', 'game-win');
+            restartButton.classList.add('hidden');
+
+            // Clear any existing interval before starting a new one
+            clearInterval(timerInterval);
+            timerInterval = setInterval(updateTimer, timerSpeed);
+        }
+
+        function updateTimer() {
+            if (!gameActive) return;
+
+            timeLeft -= timerDecreaseRate; // Decrease time
+
+            if (timeLeft <= collapseThreshold) {
+                endGame('timer'); // Collapse due to time running out
+            } else {
+                timerBarEl.style.width = timeLeft + '%';
+                // Change color based on time left
+                if (timeLeft < 20) {
+                    timerBarEl.style.backgroundColor = '#dc3545'; // Red
+                } else if (timeLeft < 50) {
+                    timerBarEl.style.backgroundColor = '#ffc107'; // Yellow/Orange
+                } else {
+                    timerBarEl.style.backgroundColor = '#28a745'; // Green
+                }
+            }
+        }
+
+        function performCPR() {
+            const currentTime = Date.now();
+
+            if (!gameActive) {
+                // First click starts the game
+                startGame();
+                lastCprTime = currentTime; // Set initial last time for interval check
+                return;
+            }
+
+            // Check for pressing too fast
+            const timeDiff = currentTime - lastCprTime;
+            if (timeDiff < minCprInterval) {
+                // Too fast! End the game.
+                endGame('too_fast');
+                return; // Stop processing this click as successful
+            }
+
+            // If not too fast, it's a valid press
+            lastCprTime = currentTime; // Update last successful press time
+            score++; // Increment score for a valid press
+            updateScoreDisplay(); // Update score display
+
+            // Apply healing effect
+            timeLeft += cprHealAmount;
+            if (timeLeft > 100) {
+                timeLeft = 100; // Don't exceed 100%
+            }
+             timerBarEl.style.width = timeLeft + '%';
+
+             // Give visual feedback on character for a successful press
+             characterEl.style.transform = 'scale(1.1)';
+             setTimeout(() => {
+                 characterEl.style.transform = 'scale(1)';
+             }, 100);
+
+             statusEl.textContent = 'Good press!'; // Feedback for valid press
+        }
+
+        function updateScoreDisplay() {
+            scoreEl.textContent = `Score: ${score}`;
+        }
+
+        function endGame(reason) {
+            gameActive = false;
+            clearInterval(timerInterval); // Stop the timer
+            cprButton.disabled = true; // Disable the CPR button
+            restartButton.classList.remove('hidden'); // Show restart button
+
+            // Clean up previous game state classes
+            gameContainer.classList.remove('game-over', 'game-win');
+
+            // Set final status message and character based on the reason
+            if (reason === 'win') {
+                statusEl.textContent = `Success! You saved them! 🎉 Final Score: ${score}`;
+                characterEl.textContent = '😊'; // Happy state
+                gameContainer.classList.add('game-win');
+            } else if (reason === 'too_fast') {
+                statusEl.textContent = `Failed! You pressed too fast! ⚡ Final Score: ${score}`;
+                characterEl.textContent = '😵'; // Dizzy/shocked state
+                gameContainer.classList.add('game-over'); // It's still a game over state
+            } else { // reason === 'timer' (or any other non-win reason like manual stop)
+                statusEl.textContent = `Failed! Time ran out! 💀 Final Score: ${score}`;
+                 characterEl.textContent = '💀'; // Collapsed state
+                gameContainer.classList.add('game-over');
+            }
+        }
+
+        // Event listeners
+        cprButton.addEventListener('click', performCPR);
+        restartButton.addEventListener('click', startGame);
+
+        // Initial state (before game starts)
+        cprButton.disabled = false; // Button is enabled to start the game
+        timerBarEl.style.width = '100%'; // Full bar initially
+        timerBarEl.style.backgroundColor = '#28a745'; // Green initially
+        statusEl.textContent = 'Press Perform CPR to start!';
+        updateScoreDisplay(); // Display initial score (0)
+
+    </script>
+</body>
+</html>

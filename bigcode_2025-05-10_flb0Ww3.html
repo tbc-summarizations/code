@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess The Artist</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; 
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5; 
+            color: #333;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #game-container {
+            background-color: #ffffff;
+            padding: 25px 30px; 
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); 
+            width: 100%;
+            max-width: 550px; 
+            margin-top: 20px; 
+        }
+
+        h1 {
+            color: #3f51b5; 
+            margin-bottom: 25px;
+            font-size: 2.2em; 
+            font-weight: 600;
+        }
+
+        #hint-area {
+            background-color: #e8eaf6; 
+            padding: 18px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            min-height: 60px; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #c5cae9; 
+        }
+
+        #hint-text {
+            font-size: 1.15em; 
+            color: #303f9f; 
+            font-weight: 500;
+            line-height: 1.5;
+        }
+
+        #tries-area {
+            margin-bottom: 20px;
+            font-size: 1.05em; 
+            color: #424242; 
+        }
+
+        #tries-count {
+            font-weight: bold;
+            /* Color is set dynamically in JS */
+        }
+        
+        #input-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px; 
+        }
+
+        #guess-input {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border: 1px solid #bdbdbd; 
+            border-radius: 6px;
+            font-size: 1em;
+            color: #212121; 
+        }
+        #guess-input::placeholder {
+            color: #757575; 
+        }
+        #guess-input:focus {
+            outline: none;
+            border-color: #3f51b5; 
+            box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.15); 
+        }
+
+        button {
+            padding: 12px 22px;
+            font-size: 1em;
+            font-weight: 500; 
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        button:hover:not(:disabled) {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        #submit-guess {
+            background-color: #3f51b5; 
+            color: white;
+        }
+        #submit-guess:hover:not(:disabled) {
+            background-color: #3949ab; 
+        }
+        #submit-guess:disabled {
+            background-color: #9fa8da; 
+            color: #e8eaf6;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        #play-again {
+            background-color: #43a047; 
+            color: white;
+            margin-top: 15px;
+            padding: 12px 25px; 
+        }
+        #play-again:hover {
+            background-color: #388e3c; 
+        }
+
+        #message-area {
+            min-height: 30px; 
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #message-text {
+            font-size: 1.1em;
+            font-weight: 500; 
+            padding: 8px 12px;
+            border-radius: 6px;
+            display: inline-block; 
+        }
+        .message-correct {
+            color: #1b5e20; /* Darker Green text */
+            background-color: #c8e6c9; /* Lighter Green background */
+        }
+        .message-incorrect {
+            color: #b71c1c; /* Darker Red text */
+            background-color: #ffcdd2; /* Lighter Red background */
+        }
+        .message-info {
+            color: #0d47a1; /* Darker Blue text */
+            background-color: #bbdefb; /* Lighter Blue background */
+        }
+
+        .hidden {
+            display: none !important; 
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>Guess The Artist 🎤</h1>
+        
+        <div id="hint-area">
+            <p id="hint-text">Loading hint...</p>
+        </div>
+
+        <div id="tries-area">
+            <p>Tries left: <span id="tries-count">5</span></p>
+        </div>
+
+        <div id="input-area">
+            <input type="text" id="guess-input" placeholder="Enter artist name">
+            <button id="submit-guess">Submit</button>
+        </div>
+
+        <div id="message-area">
+            <p id="message-text"></p>
+        </div>
+
+        <button id="play-again" class="hidden">Play Again</button>
+    </div>
+
+    <script>
+        const artists = [
+            "Kanye West", "The Beatles", "Eminem", "Drake", "Michael Jackson", "Travis Scott", "MF DOOM", "Metallica", "OutKast", "N.W.A.",
+            "Taylor Swift", "Radiohead", "Pink Floyd", "Elvis Presley", "J. Cole", "Lady Gaga", "The Weeknd", "Nirvana", "JAY-Z", "Frank Ocean",
+            "David Bowie", "King Crimson", "2Pac", "The Notorious B.I.G.", "Queen", "Daft Punk", "Miles Davis", "Post Malone", "Black Sabbath",
+            "Billie Eilish", "Elton John", "Rihanna", "Nas", "Wu-Tang Clan", "The Rolling Stones", "Frank Sinatra", "Bruno Mars", "Gorillaz",
+            "Imagine Dragons", "ABBA", "Led Zeppelin", "AC/DC", "Arctic Monkeys", "Madonna", "Stevie Wonder", "Oasis", "Björk", "Aerosmith",
+            "Adele", "Beyoncé", "Coldplay", "Guns N' Roses", "Johnny Cash", "Hans Zimmer", "BTS", "Marvin Gaye", "Dua Lipa", "Ariana Grande",
+            "Louis Armstrong", "\"Weird Al\" Yankovic", "Snoop Dogg", "System Of A Down", "Prince", "Alan Walker", "Tame Impala", "Nicki Minaj",
+            "Cardi B", "Childish Gambino", "The Velvet Underground", "Talking Heads", "Kate Bush", "Jimi Hendrix", "The Doors", "Bob Dylan",
+            "Nine Inch Nails", "My Chemical Romance", "Limp Bizkit", "Rick Astley", "Death", "The Who", "Alice in Chains", "Electric Light Orchestra",
+            "Bon Jovi", "The White Stripes", "The Killers", "Amy Winehouse", "Wolfgang Amadeus Mozart", "Frank Zappa", "The Clash", "Public Enemy",
+            "Depeche Mode", "Willie Colón", "Duke Ellington", "Maroon 5", "Doja Cat", "Bo Burnham", "Panic! At The Disco", "Lil Nas X",
+            "James Brown", "Grateful Dead", "Linkin Park", "The Strokes", "Lorde", "Lana Del Rey", "Antonio Vivaldi", "Sonic Youth",
+            "Whitney Houston", "Rush", "Megadeth", "Rage Against the Machine", "Deftones", "Interpol", "Arcade Fire", "Bon Iver",
+            "Vampire Weekend", "Marshmello", "Aqua", "Cher", "Carly Rae Jepsen", "George Michael", "Bee Gees", "The Neighbourhood",
+            "Eurythmics", "a-ha", "Dido", "Europe", "Haddaway", "Ylvis", "Pitbull", "Village People", "Slayer", "Anthrax", "André 3000",
+            "2003 Toyota Corolla", "Barack Obama", "Joe Biden", "Donald Trump", "Monty Python", "Annoying Orange"
+        ];
+
+        let currentArtistName = '';
+        let triesLeft = 5;
+        let currentHintLevel = 0;
+
+        const hintTextElement = document.getElementById('hint-text');
+        const triesCountElement = document.getElementById('tries-count');
+        const guessInputElement = document.getElementById('guess-input');
+        const submitGuessButton = document.getElementById('submit-guess');
+        const messageTextElement = document.getElementById('message-text');
+        const playAgainButton = document.getElementById('play-again');
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function getRevealedName(name, revealPercentage) {
+            let revealedChars = [];
+            const nameChars = name.split('');
+            
+            const characterIndicesToPotentiallyReveal = [];
+            nameChars.forEach((char, index) => {
+                if (char.match(/[a-zA-Z0-9À-ÿĀ-ž]/iu)) { // Match unicode alphanumeric characters
+                    characterIndicesToPotentiallyReveal.push(index);
+                }
+            });
+
+            shuffleArray(characterIndicesToPotentiallyReveal); 
+
+            const numCharsToReveal = Math.ceil(characterIndicesToPotentiallyReveal.length * revealPercentage);
+            
+            const revealedIndicesSet = new Set();
+            for (let i = 0; i < numCharsToReveal && i < characterIndicesToPotentiallyReveal.length; i++) {
+                revealedIndicesSet.add(characterIndicesToPotentiallyReveal[i]);
+            }
+
+            for (let i = 0; i < name.length; i++) {
+                if (name[i] === ' ') {
+                    revealedChars.push(' ');
+                } else if (name[i].match(/[a-zA-Z0-9À-ÿĀ-ž]/iu)) { 
+                    if (revealedIndicesSet.has(i)) {
+                        revealedChars.push(name[i]);
+                    } else {
+                        revealedChars.push('_');
+                    }
+                } else { 
+                    revealedChars.push(name[i]);
+                }
+            }
+           
+            let finalRevealedString = "";
+            for(let i=0; i < revealedChars.length; i++) {
+                finalRevealedString += revealedChars[i];
+                if (i < revealedChars.length - 1 && revealedChars[i] !== ' ' && revealedChars[i+1] !== ' ') {
+                     finalRevealedString += ' ';
+                }
+            }
+            return finalRevealedString.trim();
+        }
+        
+        function generateHint(artistName, level) {
+            const words = artistName.split(' ').filter(word => word.length > 0);
+            switch(level) {
+                case 0:
+                    if (words.length === 1) return "This artist's name is a single word or a hyphenated/connected term.";
+                    return `This artist's name consists of ${words.length} words.`;
+                case 1:
+                    const firstChar = artistName[0];
+                    const lastChar = artistName[artistName.length - 1];
+                    return `The name starts with '${firstChar}' and ends with '${lastChar}'.`;
+                case 2:
+                    return `The total length of the name (including spaces and punctuation) is ${artistName.length} characters.`;
+                case 3:
+                    return `Name structure: ${getRevealedName(artistName, 0.30)}`;
+                case 4:
+                    return `Name structure: ${getRevealedName(artistName, 0.60)}`;
+                default:
+                    return "No more hints!";
+            }
+        }
+
+        function displayHint() {
+            if (currentHintLevel < 5 && currentArtistName) {
+                const hint = generateHint(currentArtistName, currentHintLevel);
+                hintTextElement.textContent = hint;
+            }
+        }
+
+        function updateTriesDisplay() {
+            triesCountElement.textContent = triesLeft;
+            if (triesLeft === 1) { 
+                 triesCountElement.style.color = '#b71c1c'; 
+            } else if (triesLeft === 2) { 
+                 triesCountElement.style.color = '#d32f2f'; 
+            } else {
+                 triesCountElement.style.color = '#f44336'; 
+            }
+        }
+        
+        function showMessage(text, type) {
+            messageTextElement.textContent = text;
+            messageTextElement.className = ''; 
+            if (type === 'correct') {
+                messageTextElement.classList.add('message-correct');
+                messageTextElement.textContent = `✅ ${text}`;
+            } else if (type === 'incorrect') {
+                messageTextElement.classList.add('message-incorrect');
+                messageTextElement.textContent = `❌ ${text}`;
+            } else if (type === 'info') {
+                messageTextElement.classList.add('message-info');
+                messageTextElement.textContent = `ℹ️ ${text}`;
+            } else { 
+                messageTextElement.textContent = text; // No icon, clear background
+            }
+        }
+
+        function endGame(isCorrect) {
+            submitGuessButton.disabled = true;
+            guessInputElement.disabled = true;
+            playAgainButton.classList.remove('hidden');
+
+            const finalArtistName = currentArtistName; // Capture currentArtistName for clarity
+
+            if (isCorrect) {
+                showMessage(`Correct! The artist was ${finalArtistName}.`, 'correct');
+                 hintTextElement.textContent = finalArtistName; 
+                 hintTextElement.style.fontWeight = 'bold';
+                 hintTextElement.style.color = '#1b5e20'; 
+            } else {
+                showMessage(`Game Over! The artist was: ${finalArtistName}.`, 'info');
+                hintTextElement.textContent = finalArtistName; 
+                hintTextElement.style.fontWeight = 'bold';
+                hintTextElement.style.color = '#b71c1c'; 
+            }
+        }
+
+        function handleGuess() {
+            if (submitGuessButton.disabled) return;
+
+            const userGuess = guessInputElement.value.trim();
+            if (!userGuess) {
+                showMessage("Please enter a guess.", "info");
+                return;
+            }
+
+            const normalizedUserGuess = userGuess.toLowerCase().replace(/\s+/g, ' ');
+            const normalizedArtistName = currentArtistName.toLowerCase().replace(/\s+/g, ' ');
+
+            if (normalizedUserGuess === normalizedArtistName) {
+                endGame(true);
+            } else {
+                triesLeft--;
+                currentHintLevel++;
+                updateTriesDisplay(); 
+                if (triesLeft === 0) {
+                    endGame(false);
+                } else {
+                    showMessage("Incorrect. Here's another hint:", 'incorrect');
+                    displayHint(); 
+                    guessInputElement.value = ''; 
+                    guessInputElement.focus();
+                }
+            }
+        }
+
+        function initGame() {
+            const randomIndex = Math.floor(Math.random() * artists.length);
+            currentArtistName = artists[randomIndex];
+            
+            triesLeft = 5;
+            currentHintLevel = 0;
+
+            hintTextElement.style.fontWeight = '500'; 
+            hintTextElement.style.color = '#303f9f'; 
+
+            updateTriesDisplay(); 
+            displayHint();
+
+            guessInputElement.value = '';
+            guessInputElement.disabled = false;
+            guessInputElement.focus();
+            submitGuessButton.disabled = false;
+            
+            showMessage('', 'none'); 
+            playAgainButton.classList.add('hidden');
+        }
+
+        submitGuessButton.addEventListener('click', handleGuess);
+        guessInputElement.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                handleGuess();
+            }
+        });
+        playAgainButton.addEventListener('click', initGame);
+
+        document.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>

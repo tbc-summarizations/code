@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Car Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #2c3e50; /* Dark blue-grey background */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ecf0f1; /* Light text color */
+            overflow: hidden; /* Prevent scrollbars from flashing during setup */
+        }
+
+        #gameContainer {
+            text-align: center;
+            background-color: #34495e; /* Medium blue-grey */
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        #scoreBoard {
+            font-size: 28px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            color: #e74c3c; /* Contrasting color for score */
+        }
+
+        #gameArea {
+            width: 360px;
+            height: 500px;
+            background-color: #7f8c8d; /* Grey road color */
+            border: 5px solid #2c3e50; /* Dark border matching body */
+            position: relative;
+            overflow: hidden;
+            margin: 0 auto;
+            border-radius: 5px;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+        }
+
+        #car {
+            width: 50px;
+            height: 80px;
+            background-color: #e74c3c; /* Bright red car */
+            position: absolute;
+            bottom: 10px;
+            left: 155px; /* (360/2) - (50/2) */
+            border-radius: 10px 10px 2px 2px; /* Rounded top, slight round bottom */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            transition: left 0.05s linear; /* Smooth car movement slightly */
+        }
+
+        /* Simple windshield */
+        #car::before {
+            content: "";
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 36px;
+            height: 25px;
+            background: #aed6f1; /* Light blue */
+            border-radius: 5px 5px 2px 2px;
+            border: 2px solid #85c1e9;
+        }
+        
+        /* Simple headlights - using box-shadow for two lights */
+        #car::after {
+            content: "";
+            position: absolute;
+            top: 5px;
+            left: 8px;
+            width: 8px;
+            height: 8px;
+            background-color: #f1c40f; /* Yellow */
+            border-radius: 50%;
+            box-shadow: 26px 0 0 #f1c40f; /* Second light (8px width + 26px offset) */
+        }
+
+
+        .obstacle {
+            width: 60px; /* Obstacle width */
+            height: 40px; /* Obstacle height */
+            background-color: #5D6D7E; /* Darker grey obstacle */
+            position: absolute;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .message {
+            margin-top: 25px;
+            font-size: 20px;
+            color: #ecf0f1;
+            line-height: 1.5;
+        }
+        .message span {
+            font-weight: bold;
+            color: #f1c40f; /* Yellow for scores in messages */
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="scoreBoard">Score: <span id="scoreValue">0</span></div>
+        <div id="gameArea">
+            <div id="car"></div>
+            <!-- Obstacles will be added here by JavaScript -->
+        </div>
+        <div id="startMessage" class="message">
+            Press <b>Enter</b> to Start
+            <br><small>(Use Arrow Keys to Move)</small>
+        </div>
+        <div id="gameOverMessage" class="message" style="display:none;">
+            Game Over!
+            <br>Final Score: <span id="finalScore">0</span>
+            <br>Press <b>Enter</b> to Restart
+        </div>
+    </div>
+
+    <script>
+        const gameArea = document.getElementById('gameArea');
+        const car = document.getElementById('car');
+        const scoreValueDisplay = document.getElementById('scoreValue');
+        const startMessage = document.getElementById('startMessage');
+        const gameOverMessage = document.getElementById('gameOverMessage');
+        const finalScoreDisplay = document.getElementById('finalScore');
+
+        let gameAreaWidth;
+        let carWidth;
+        let carHeight; // For collision detection accuracy
+
+        let carX;
+        const CAR_SPEED = 25; // Pixels per move
+
+        let obstacles = [];
+        const OBSTACLE_WIDTH = 60; // Must match CSS
+        const OBSTACLE_HEIGHT = 40; // Must match CSS
+        let initialObstacleSpeed = 4;
+        let obstacleSpeed;
+        let initialObstacleCreationInterval = 2000; // ms
+        let obstacleCreationInterval;
+
+        let score;
+        let gameLoopInterval;
+        let obstacleGeneratorInterval;
+        let isPlaying = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize dimensions after DOM is ready
+            gameAreaWidth = gameArea.offsetWidth;
+            carWidth = car.offsetWidth;
+            carHeight = car.offsetHeight;
+
+            setupInitialState();
+            document.addEventListener('keydown', handleKeyPress);
+        });
+
+        function setupInitialState() {
+            // Set car to center initially for display purposes
+            car.style.left = ((gameAreaWidth - carWidth) / 2) + 'px';
+            
+            startMessage.style.display = 'block';
+            gameOverMessage.style.display = 'none';
+            isPlaying = false;
+            scoreValueDisplay.textContent = '0';
+        }
+
+        function startGame() {
+            if (isPlaying) return;
+            isPlaying = true;
+
+            startMessage.style.display = 'none';
+            gameOverMessage.style.display = 'none';
+
+            score = 0;
+            scoreValueDisplay.textContent = score;
+            obstacleSpeed = initialObstacleSpeed;
+            obstacleCreationInterval = initialObstacleCreationInterval;
+
+            // Clear existing obstacles from DOM and array
+            obstacles.forEach(obs => obs.remove());
+            obstacles = [];
+
+            // Reset car position
+            carX = (gameAreaWidth - carWidth) / 2;
+            car.style.left = carX + 'px';
+
+            // Clear any previous intervals
+            if (gameLoopInterval) clearInterval(gameLoopInterval);
+            if (obstacleGeneratorInterval) clearInterval(obstacleGeneratorInterval);
+            
+            gameLoopInterval = setInterval(gameLoop, 30); // Approx 33 FPS
+            obstacleGeneratorInterval = setInterval(createObstacle, obstacleCreationInterval);
+        }
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(gameLoopInterval);
+            clearInterval(obstacleGeneratorInterval);
+
+            finalScoreDisplay.textContent = score;
+            gameOverMessage.style.display = 'block';
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter' && !isPlaying) {
+                startGame();
+            } else if (isPlaying) {
+                if (e.key === 'ArrowLeft') {
+                    moveCar('left');
+                } else if (e.key === 'ArrowRight') {
+                    moveCar('right');
+                }
+            }
+        }
+
+        function moveCar(direction) {
+            if (!isPlaying) return;
+
+            if (direction === 'left') {
+                carX -= CAR_SPEED;
+            } else if (direction === 'right') {
+                carX += CAR_SPEED;
+            }
+
+            // Boundary checks
+            if (carX < 0) {
+                carX = 0;
+            }
+            if (carX + carWidth > gameAreaWidth) {
+                carX = gameAreaWidth - carWidth;
+            }
+            car.style.left = carX + 'px';
+        }
+
+        function createObstacle() {
+            if (!isPlaying) return;
+
+            const obstacle = document.createElement('div');
+            obstacle.classList.add('obstacle');
+            obstacle.style.width = OBSTACLE_WIDTH + 'px'; // Set via JS for consistency if needed
+            obstacle.style.height = OBSTACLE_HEIGHT + 'px'; // Set via JS for consistency if needed
+            
+            const obstacleX = Math.random() * (gameAreaWidth - OBSTACLE_WIDTH);
+            obstacle.style.left = obstacleX + 'px';
+            obstacle.style.top = (-OBSTACLE_HEIGHT) + 'px'; // Start just above the game area
+
+            gameArea.appendChild(obstacle);
+            obstacles.push(obstacle);
+        }
+
+        function moveObstacles() {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obstacle = obstacles[i];
+                let obstacleY = obstacle.offsetTop + obstacleSpeed;
+                obstacle.style.top = obstacleY + 'px';
+
+                if (obstacleY > gameArea.offsetHeight) {
+                    obstacle.remove();
+                    obstacles.splice(i, 1);
+                    score++;
+                    scoreValueDisplay.textContent = score;
+
+                    // Increase difficulty
+                    if (score > 0 && score % 5 === 0) { // Every 5 points
+                        obstacleSpeed = Math.min(15, obstacleSpeed + 0.3);
+                        if (obstacleCreationInterval > 600) { // Minimum spawn interval
+                            obstacleCreationInterval = Math.max(600, obstacleCreationInterval - 50);
+                            clearInterval(obstacleGeneratorInterval); // Clear old interval
+                            obstacleGeneratorInterval = setInterval(createObstacle, obstacleCreationInterval); // Set new interval
+                        }
+                    }
+                }
+            }
+        }
+
+        function checkCollision() {
+            const carRect = {
+                left: car.offsetLeft,
+                top: car.offsetTop,
+                right: car.offsetLeft + car.offsetWidth,
+                bottom: car.offsetTop + car.offsetHeight
+            };
+
+            for (const obstacle of obstacles) {
+                const obsRect = {
+                    left: obstacle.offsetLeft,
+                    top: obstacle.offsetTop,
+                    right: obstacle.offsetLeft + obstacle.offsetWidth,
+                    bottom: obstacle.offsetTop + obstacle.offsetHeight
+                };
+
+                // AABB collision detection
+                if (carRect.left < obsRect.right &&
+                    carRect.right > obsRect.left &&
+                    carRect.top < obsRect.bottom &&
+                    carRect.bottom > obsRect.top) {
+                    endGame();
+                    return; 
+                }
+            }
+        }
+
+        function gameLoop() {
+            if (!isPlaying) return;
+            moveObstacles();
+            checkCollision();
+        }
+
+    </script>
+</body>
+</html>

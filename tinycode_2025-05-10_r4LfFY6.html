@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+ <html lang="en">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Car Game</title>
+  <style>
+  body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #222;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: sans-serif;
+  color: white;
+  }
+
+  #gameContainer {
+  position: relative;
+  width: 800px;
+  height: 600px;
+  background-color: #333;
+  overflow: hidden;
+  border: 2px solid #555;
+  }
+
+  #car {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 30px;
+  background-color: red;
+  }
+
+  .obstacle {
+  position: absolute;
+  top: -50px;
+  width: 40px;
+  height: 40px;
+  background-color: yellow;
+  }
+
+  #score {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 20px;
+  }
+
+  #gameOver {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 30px;
+  display: none;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 20px;
+  border-radius: 5px;
+  }
+
+  #restartButton {
+  background-color: #4CAF50;
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 5px;
+  }
+  </style>
+ </head>
+ <body>
+
+  <div id="gameContainer">
+  <div id="score">Score: 0</div>
+  <div id="car"></div>
+  <div id="gameOver">
+  Game Over!
+  <button id="restartButton">Restart</button>
+  </div>
+  </div>
+
+  <script>
+  const gameContainer = document.getElementById('gameContainer');
+  const car = document.getElementById('car');
+  const scoreDisplay = document.getElementById('score');
+  const gameOverScreen = document.getElementById('gameOver');
+  const restartButton = document.getElementById('restartButton');
+
+  let score = 0;
+  let carPosition = 0;
+  let gameActive = true;
+  let obstacleSpeed = 3;
+  let obstacleSpawnRate = 1500;
+
+  function updateScore() {
+  score++;
+  scoreDisplay.textContent = 'Score: ' + score;
+  }
+
+  function moveCar(direction) {
+  if (!gameActive) return;
+
+  const step = 30;
+  if (direction === 'left' && carPosition > -300) {
+  carPosition -= step;
+  } else if (direction === 'right' && carPosition < 300) {
+  carPosition += step;
+  }
+  car.style.left = `calc(50% + ${carPosition}px)`;
+  }
+
+  function createObstacle() {
+  if (!gameActive) return;
+
+  const obstacle = document.createElement('div');
+  obstacle.classList.add('obstacle');
+  obstacle.style.left = `${Math.random() * (gameContainer.offsetWidth - 40)}px`;
+  gameContainer.appendChild(obstacle);
+
+  let obstaclePosition = -40;
+
+  function moveObstacle() {
+  if (!gameActive) return;
+
+  obstaclePosition += obstacleSpeed;
+  obstacle.style.top = `${obstaclePosition}px`;
+
+  if (obstaclePosition > gameContainer.offsetHeight) {
+  obstacle.remove();
+  }
+
+  if (checkCollision(obstacle)) {
+  gameOver();
+  }
+
+  if (obstacle.parentNode) {
+  requestAnimationFrame(moveObstacle);
+  }
+  }
+
+  moveObstacle();
+  }
+
+  function checkCollision(obstacle) {
+  const carRect = car.getBoundingClientRect();
+  const obstacleRect = obstacle.getBoundingClientRect();
+
+  return !(carRect.right < obstacleRect.left ||
+  carRect.left > obstacleRect.right ||
+  carRect.bottom < obstacleRect.top ||
+  carRect.top > obstacleRect.bottom);
+  }
+
+  function gameOver() {
+  gameActive = false;
+  gameOverScreen.style.display = 'block';
+  obstacleSpeed = 3;
+  obstacleSpawnRate = 1500;
+  }
+
+  function resetGame() {
+  gameActive = true;
+  score = 0;
+  carPosition = 0;
+  car.style.left = '50%';
+  scoreDisplay.textContent = 'Score: 0';
+  gameOverScreen.style.display = 'none';
+
+  const obstacles = document.querySelectorAll('.obstacle');
+  obstacles.forEach(obstacle => obstacle.remove());
+  }
+
+  document.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowLeft') {
+  moveCar('left');
+  } else if (event.key === 'ArrowRight') {
+  moveCar('right');
+  }
+  });
+
+  restartButton.addEventListener('click', () => {
+  resetGame();
+  });
+
+  setInterval(updateScore, 100);
+  setInterval(createObstacle, obstacleSpawnRate);
+
+  </script>
+ </body>
+ </html>

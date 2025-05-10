@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess The Artist</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #game-container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        h1 {
+            color: #1c1e21;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+
+        #tries-left {
+            margin-bottom: 20px;
+            font-weight: bold;
+            font-size: 18px;
+            color: #555;
+        }
+
+        #tries-left span {
+            color: #e74c3c;
+        }
+
+        #hints-area {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            min-height: 120px; /* To prevent layout jumps */
+            text-align: left;
+        }
+
+        #hints-area p {
+            margin: 8px 0;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #444;
+        }
+        
+        #hints-area p:first-child {
+            font-weight: bold;
+        }
+
+        #guess-input {
+            padding: 12px 15px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+            width: calc(70% - 25px);
+            box-sizing: border-box;
+        }
+
+        #guess-input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+
+        button {
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        #play-again {
+            background-color: #28a745;
+            margin-top: 20px;
+        }
+
+        #play-again:hover {
+            background-color: #1e7e34;
+        }
+
+        #feedback {
+            margin-top: 20px;
+            font-weight: bold;
+            font-size: 18px;
+            min-height: 25px; /* Reserve space */
+        }
+
+        .correct {
+            color: #28a745; /* Green */
+        }
+
+        .incorrect {
+            color: #dc3545; /* Red */
+        }
+        
+        .input-area {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 480px) {
+            #guess-input {
+                width: calc(100% - 120px); /* Adjust width for smaller screens */
+                margin-bottom: 10px;
+                margin-right: 0;
+            }
+            .input-area {
+                flex-direction: column;
+            }
+            #submit-guess {
+                width: 100px;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <h1>Guess The Artist 🎶</h1>
+        <div id="tries-left">Tries left: <span>5</span></div>
+        <div id="hints-area">
+            <p>Welcome! Click "Start Game" or guess if a game is in progress.</p>
+        </div>
+        <div class="input-area">
+            <input type="text" id="guess-input" placeholder="Enter artist name">
+            <button id="submit-guess">Submit</button>
+        </div>
+        <div id="feedback"></div>
+        <button id="play-again" style="display:inline-block;">Start Game</button>
+    </div>
+
+    <script>
+        const artistsData = [
+            {
+                name: "Kanye West",
+                hints: [
+                    "Known for wearing shutter shades early in his career. 🕶️",
+                    "Famously interrupted an awards show speech. 🎤",
+                    "Released an album titled 'My Beautiful Dark Twisted Fantasy'. ✨",
+                    "Married into a very famous reality TV family. 📺",
+                    "Hails from Chicago and often references the city in his music. 🏙️"
+                ]
+            },
+            {
+                name: "The Beatles",
+                hints: [
+                    "Four lads from Liverpool who caused a 'mania'. 🇬🇧",
+                    "Crossed Abbey Road for an iconic album cover. 🚶‍♂️🚶‍♂️🚶‍♂️🚶‍♂️",
+                    "Sang about a Yellow Submarine. 🟡🚤",
+                    "Their music often explored themes of love, peace, and psychedelia. ☮️🍄",
+                    "One member famously wore round glasses and advocated for peace. 👓"
+                ]
+            },
+            {
+                name: "Eminem",
+                hints: [
+                    "His alter ego is 'Slim Shady'. 😈",
+                    "Known for rapid-fire delivery and controversial lyrics. 🔥",
+                    "Starred in a semi-autobiographical film about his rise in Detroit's rap scene. 🎬",
+                    "His music often details struggles with poverty, addiction, and family. 🏠",
+                    "'Will the real ____ ____ please stand up?' 🧍‍♂️"
+                ]
+            },
+            {
+                name: "Drake",
+                hints: [
+                    "Started his career as an actor on a Canadian teen drama. 📺🇨🇦",
+                    "Popularized the 'Hotline Bling' dance. 💃📞",
+                    "Often associated with the motto 'Started from the Bottom'. 👇",
+                    "From Toronto, often referred to as 'The 6'. 🦉",
+                    "Known for blending singing and rapping, often about relationships and fame. 💔🏆"
+                ]
+            },
+            {
+                name: "Taylor Swift",
+                hints: [
+                    "Famously writes songs about her personal experiences and relationships. ✍️💔",
+                    "Has a dedicated fanbase known as 'Swifties'. 🧣",
+                    "Known for distinct 'eras' for each album, often with unique aesthetics. 🌈",
+                    "Transitioned from country prodigy to global pop superstar. 🤠🌟",
+                    "Currently re-recording her older albums to own her masters. 🎶🔄"
+                ]
+            },
+            {
+                name: "Radiohead",
+                hints: [
+                    "Released an album with a 'pay-what-you-want' model. 💻💸",
+                    "Known for their melancholic sound and experimental rock. 😟🎸",
+                    "Their hit 'Creep' initially made them famous, though they have a complex relationship with it. 👻",
+                    "The lead singer is known for his distinctive falsetto and emotive vocals. 🎤😥",
+                    "Their music often explores themes of alienation, technology, and dystopia. 🤖🏙️"
+                ]
+            },
+            {
+                name: "Michael Jackson",
+                hints: [
+                    "The 'King of Pop'. 👑🕺",
+                    "Famous for the 'moonwalk' dance. 🌙🚶",
+                    "Released the best-selling album of all time, 'Thriller'. 🧟‍♂️💿",
+                    "Started his career as a child star in a family band. 👨‍👩‍👧‍👦🎤",
+                    "Known for his signature single white glove. 🧤"
+                ]
+            },
+            {
+                name: "Kendrick Lamar",
+                hints: [
+                    "Hails from Compton, California, and often raps about his upbringing. 🌴",
+                    "Won a Pulitzer Prize for Music for one of his albums. 🏆📜",
+                    "Known for complex storytelling and socially conscious lyrics. 🗣️🌍",
+                    "His albums often have strong conceptual themes. 📖",
+                    "'Alright' became an anthem for social justice movements. 🙌"
+                ]
+            },
+            {
+                name: "Queen",
+                hints: [
+                    "Led by a flamboyant frontman with an incredible vocal range. 🎤👑",
+                    "Famous for their anthemic rock songs like 'We Will Rock You' and 'Bohemian Rhapsody'. 🎶🎸",
+                    "Performed an iconic set at Live Aid in 1985. 🏟️",
+                    "Their logo features the zodiac signs of the band members. ♋♌♍♍",
+                    "'Is this the real life? Is this just fantasy?' 🤔"
+                ]
+            },
+            {
+                name: "Nirvana",
+                hints: [
+                    "Pioneers of the grunge movement from Seattle. 🎸🌲",
+                    "Their breakthrough album featured a baby swimming on the cover. 👶💧",
+                    "The lead singer became an icon of teenage angst and disillusionment. 😠",
+                    "Known for a raw, distorted sound and introspective lyrics. 🔊💭",
+                    "'Smells Like Teen Spirit' was a defining song of the 90s. 👃👻"
+                ]
+            },
+            {
+                name: "Pink Floyd",
+                hints: [
+                    "Known for their progressive and psychedelic rock. 🌈🌀",
+                    "Iconic album cover features a prism dispersing light. 💎",
+                    "'The Dark Side of the Moon' is one of the best-selling albums ever. 🌑",
+                    "Often incorporated elaborate stage shows and visual effects. 🎆🐷",
+                    "Themes include conflict, greed, time, and mental illness. 🕰️💔"
+                ]
+            },
+            {
+                name: "JAY-Z",
+                hints: [
+                    "A highly successful rapper and businessman from Brooklyn. 🗽💼",
+                    "Married to another very famous musician. 🐝",
+                    "Known for albums like 'The Blueprint' and 'Reasonable Doubt'. 📜💎",
+                    "Co-founded Roc-A-Fella Records. 💿",
+                    "'Hova' or 'Jigga' are common nicknames for this artist."
+                ]
+            },
+            {
+                name: "Lady Gaga",
+                hints: [
+                    "Known for her avant-garde fashion and theatrical performances. 🎭👗",
+                    "Her fans are called 'Little Monsters'. 👾❤️",
+                    "Early hits include 'Poker Face' and 'Bad Romance'. 🃏💔",
+                    "Starred in the film 'A Star Is Born'. ⭐🎬",
+                    "Advocate for LGBTQ+ rights and mental health awareness. 🏳️‍🌈🧠"
+                ]
+            },
+            {
+                name: "Led Zeppelin",
+                hints: [
+                    "Pioneering English rock band of the 1970s. 🎸🇬🇧",
+                    "Famous for 'Stairway to Heaven'. ☁️🪜",
+                    "Known for blues-rock, hard rock, and folk rock influences. 🎶🔥",
+                    "Their four initial albums are often referred to by numbers or symbols (e.g., IV, ZOSO).",
+                    "The guitarist is known for playing a double-neck guitar. 🎸🎸"
+                ]
+            },
+            {
+                name: "Daft Punk",
+                hints: [
+                    "French electronic music duo known for wearing robot helmets. 🤖🤖🇫🇷",
+                    "Hits include 'Around the World' and 'Get Lucky'. 🌍🍀",
+                    "Their music heavily samples older funk and disco tracks. 🕺🎶",
+                    "Composed the soundtrack for the movie 'Tron: Legacy'. 🎬🌐",
+                    "Announced their split in 2021 with an emotional video. 💔💥"
+                ]
+            }
+        ];
+
+        let currentArtist;
+        let currentArtistName;
+        let triesLeft;
+        let hintsRevealedCount;
+        let gameActive;
+
+        const triesLeftSpan = document.querySelector("#tries-left span");
+        const hintsArea = document.getElementById("hints-area");
+        const guessInput = document.getElementById("guess-input");
+        const submitButton = document.getElementById("submit-guess");
+        const playAgainButton = document.getElementById("play-again");
+        const feedbackDiv = document.getElementById("feedback");
+
+        function startGame() {
+            gameActive = true;
+            triesLeft = 5;
+            hintsRevealedCount = 0; 
+            
+            const randomIndex = Math.floor(Math.random() * artistsData.length);
+            currentArtist = artistsData[randomIndex];
+            currentArtistName = currentArtist.name.toLowerCase();
+
+            updateTriesDisplay();
+            hintsArea.innerHTML = '';
+            feedbackDiv.textContent = '';
+            feedbackDiv.className = '';
+            guessInput.value = '';
+            guessInput.disabled = false;
+            guessInput.focus();
+            submitButton.disabled = false;
+            playAgainButton.textContent = "Play Again";
+            playAgainButton.style.display = 'none';
+
+            revealNewHint(); // Reveal the first hint
+        }
+
+        function updateTriesDisplay() {
+            triesLeftSpan.textContent = triesLeft;
+        }
+
+        function revealNewHint() {
+            if (hintsRevealedCount < currentArtist.hints.length) {
+                hintsRevealedCount++;
+                const hintText = currentArtist.hints[hintsRevealedCount - 1];
+                const p = document.createElement('p');
+                p.textContent = `Hint ${hintsRevealedCount}: ${hintText}`;
+                hintsArea.appendChild(p);
+            }
+        }
+
+        function handleGuess() {
+            if (!gameActive) return;
+
+            const userGuess = guessInput.value.trim().toLowerCase();
+            guessInput.value = ''; // Clear input after guess
+            guessInput.focus();
+
+            if (userGuess === '') {
+                feedbackDiv.textContent = "Please enter a guess.";
+                feedbackDiv.className = '';
+                return;
+            }
+
+            if (userGuess === currentArtistName) {
+                feedbackDiv.textContent = `Correct! 🎉 You guessed ${currentArtist.name}!`;
+                feedbackDiv.className = 'correct';
+                endGame(true);
+            } else {
+                triesLeft--;
+                updateTriesDisplay();
+                if (triesLeft > 0) {
+                    feedbackDiv.textContent = "Incorrect. Try again! 🤔";
+                    feedbackDiv.className = 'incorrect';
+                    revealNewHint();
+                } else {
+                    feedbackDiv.textContent = `Game Over! 😥 The artist was ${currentArtist.name}.`;
+                    feedbackDiv.className = 'incorrect';
+                    endGame(false);
+                }
+            }
+        }
+
+        function endGame(isWin) {
+            gameActive = false;
+            guessInput.disabled = true;
+            submitButton.disabled = true;
+            playAgainButton.style.display = 'inline-block';
+
+            if (!isWin) {
+                // Reveal all hints if the player lost and not all were shown
+                hintsArea.innerHTML = ''; // Clear partially revealed hints
+                currentArtist.hints.forEach((hintText, index) => {
+                    const p = document.createElement('p');
+                    p.textContent = `Hint ${index + 1}: ${hintText}`;
+                    hintsArea.appendChild(p);
+                });
+            }
+        }
+
+        submitButton.addEventListener('click', handleGuess);
+        guessInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleGuess();
+            }
+        });
+        playAgainButton.addEventListener('click', startGame);
+
+        // Initialize view before first game
+        guessInput.disabled = true;
+        submitButton.disabled = true;
+
+    </script>
+</body>
+</html>

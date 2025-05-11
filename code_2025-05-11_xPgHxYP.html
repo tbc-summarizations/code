@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bus Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #f0f0f0;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            width: 90%;
+            max-width: 800px;
+            height: 60vh;
+            background-color: #c0e0c0; /* Greenish background for landscape */
+            position: relative;
+            overflow: hidden;
+            border: 5px solid #555;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #road {
+            position: absolute;
+            bottom: 10%;
+            left: 0;
+            width: 100%;
+            height: 80px;
+            background-color: #333;
+            box-sizing: border-box;
+            border-top: 5px dashed #fff;
+            border-bottom: 5px dashed #fff;
+        }
+
+        .bus-stop {
+            position: absolute;
+            bottom: 18%;
+            width: 40px;
+            height: 50px;
+            background-color: rgba(200, 200, 50, 0.8); /* Yellowish stop area */
+            border: 2px solid #a0a020;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding-bottom: 5px;
+            font-size: 20px;
+            box-sizing: border-box;
+        }
+
+        .bus {
+            position: absolute;
+            bottom: 10%;
+            left: 50px; /* Starting position */
+            width: 80px;
+            height: 60px;
+            background-color: #007bff; /* Blue bus */
+            border: 3px solid #0056b3;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px; /* Bus emoji size */
+            transition: left 0.1s linear; /* Smooth movement */
+        }
+
+        .bus span {
+             /* Use emoji for bus */
+        }
+
+        .passenger-waiting {
+            position: absolute;
+            bottom: 25%; /* Above the stop */
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #dc3545; /* Red circle for waiting passenger */
+            border: 2px solid #c82333;
+            font-size: 18px; /* Emoji size */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1;
+        }
+
+        .passenger-onboard {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #28a745; /* Green circle for onboard passenger */
+            border: 2px solid #218838;
+            margin: 2px;
+            font-size: 18px; /* Emoji size */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .bus-interior {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        #ui {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 1.2em;
+        }
+
+        #controls {
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            margin: 0 5px;
+            cursor: pointer;
+        }
+
+        .signal {
+            position: absolute;
+            top: 10px; /* Inside the bus, at the top */
+            right: 10px;
+            font-size: 2em;
+            color: yellow; /* Yellow signal */
+            text-shadow: 0 0 5px black;
+            display: none; /* Hidden by default */
+            z-index: 2;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Basic Bus Simulator</h1>
+
+    <div id="game-container">
+        <div id="road"></div>
+        <!-- Bus Stops -->
+        <div class="bus-stop" style="left: 150px;">⏹️</div>
+        <div class="bus-stop" style="left: 350px;">⏹️</div>
+        <div class="bus-stop" style="left: 550px;">⏹️</div>
+
+        <!-- Passengers Waiting -->
+        <!-- These will be added dynamically -->
+
+        <div class="bus" id="bus">
+            <span>🚌</span>
+            <div class="bus-interior" id="bus-interior">
+                <!-- Onboard passengers will be added here -->
+            </div>
+            <div class="signal" id="stop-signal">🛑</div>
+        </div>
+    </div>
+
+    <div id="ui">
+        <p>Speed: <span id="speed">0</span> km/h</p>
+        <p>Passengers: <span id="passenger-count">0</span></p>
+        <p id="message"></p>
+    </div>
+
+    <div id="controls">
+        <button id="accelerate">Accelerate</button>
+        <button id="brake">Brake</button>
+        <button id="stop-at-stop">Stop at Stop</button>
+    </div>
+
+    <script>
+        const bus = document.getElementById('bus');
+        const busInterior = document.getElementById('bus-interior');
+        const speedDisplay = document.getElementById('speed');
+        const passengerCountDisplay = document.getElementById('passenger-count');
+        const stopSignal = document.getElementById('stop-signal');
+        const messageDisplay = document.getElementById('message');
+
+        const accelerateBtn = document.getElementById('accelerate');
+        const brakeBtn = document.getElementById('brake');
+        const stopAtStopBtn = document.getElementById('stop-at-stop');
+
+        const gameContainer = document.getElementById('game-container');
+        const busStops = document.querySelectorAll('.bus-stop');
+
+        let busPosition = 50; // Starting left position
+        let currentSpeed = 0;
+        const maxSpeed = 50;
+        const accelerationRate = 0.5;
+        const brakingRate = 1;
+        let passengersOnboard = [];
+        let passengersWaiting = []; // Store waiting passenger elements with their stop index
+        let gameLoopId;
+        let stopRequested = false;
+        let isMoving = false;
+
+        const stopPositions = Array.from(busStops).map(stop => parseInt(stop.style.left, 10));
+
+        // --- Game Loop ---
+        function gameLoop() {
+            updateBusPosition();
+            updateUI();
+            checkStopRequest();
+            checkArrivalAtStop();
+
+            if (isMoving) {
+                 gameLoopId = requestAnimationFrame(gameLoop);
+            } else {
+                // If not moving, wait for accelerate/brake button presses to restart loop
+            }
+        }
+
+        function startMoving() {
+             if (!isMoving) {
+                 isMoving = true;
+                 gameLoop();
+             }
+        }
+
+        function stopMoving() {
+             isMoving = false;
+             cancelAnimationFrame(gameLoopId);
+        }
+
+
+        // --- Bus Movement ---
+        function updateBusPosition() {
+            if (currentSpeed > 0) {
+                // Simple movement simulation: move bus based on speed
+                // Speed is in km/h, need to convert to pixels/frame
+                // Assuming 60 frames per second, and a scale factor
+                const pixelsPerFrame = (currentSpeed / 3600) * 50; // Arbitrary scale factor 50
+                busPosition += pixelsPerFrame;
+
+                // Wrap around the map
+                if (busPosition > gameContainer.offsetWidth) {
+                    busPosition = -bus.offsetWidth; // Start from left again
+                    messageDisplay.textContent = 'New route started!';
+                    // Maybe add new waiting passengers here for the next loop
+                    addRandomWaitingPassengers();
+                }
+
+                bus.style.left = busPosition + 'px';
+            } else {
+                 // If speed is 0, stop moving animation
+                 stopMoving();
+            }
+        }
+
+        // --- UI Updates ---
+        function updateUI() {
+            speedDisplay.textContent = Math.round(currentSpeed);
+            passengerCountDisplay.textContent = passengersOnboard.length;
+        }
+
+        // --- Passenger Logic ---
+        function addPassengerOnboard() {
+            const passenger = document.createElement('div');
+            passenger.classList.add('passenger-onboard');
+            passenger.textContent = '🚶'; // Person emoji
+            busInterior.appendChild(passenger);
+            passengersOnboard.push(passenger);
+            updateUI();
+
+            // 1 in 3 chance this passenger will request a stop later
+            if (Math.random() < 0.33) {
+                passenger.dataset.requestsStop = 'true';
+                console.log('Passenger onboard requesting stop later.');
+            }
+        }
+
+        function removePassengerOnboard() {
+             if (passengersOnboard.length > 0) {
+                 // Find a passenger that requested a stop
+                 const requestingPassengerIndex = passengersOnboard.findIndex(p => p.dataset.requestsStop === 'true');
+
+                 if (requestingPassengerIndex > -1) {
+                     const passengerToRemove = passengersOnboard[requestingPassengerIndex];
+                     busInterior.removeChild(passengerToRemove);
+                     passengersOnboard.splice(requestingPassengerIndex, 1);
+                     updateUI();
+                     messageDisplay.textContent = 'Passenger alighted.';
+                     return true; // Passenger removed
+                 }
+             }
+             return false; // No requesting passenger found or no passengers
+        }
+
+        function addWaitingPassenger(stopIndex) {
+            const stopElement = busStops[stopIndex];
+            const passenger = document.createElement('div');
+            passenger.classList.add('passenger-waiting');
+            passenger.textContent = '✋'; // Hand emoji indicating waiting
+            // Position relative to the stop
+            passenger.style.left = (parseInt(stopElement.style.left, 10) + stopElement.offsetWidth / 2 - passenger.offsetWidth / 2) + 'px';
+             passenger.style.bottom = (parseInt(stopElement.style.bottom, 10) + stopElement.offsetHeight + 5) + 'px'; // Position above the stop
+            gameContainer.appendChild(passenger);
+            passengersWaiting.push({ element: passenger, stopIndex: stopIndex });
+            messageDisplay.textContent = `Passenger waiting at stop ${stopIndex + 1}.`;
+        }
+
+        function removeWaitingPassenger(passengerElement) {
+            const index = passengersWaiting.findIndex(p => p.element === passengerElement);
+            if (index > -1) {
+                gameContainer.removeChild(passengerElement);
+                passengersWaiting.splice(index, 1);
+            }
+        }
+
+         function addRandomWaitingPassengers() {
+             // Add 1-3 waiting passengers at random stops when a new route starts
+             const numToAdd = Math.floor(Math.random() * 3) + 1;
+             for (let i = 0; i < numToAdd; i++) {
+                 const randomStopIndex = Math.floor(Math.random() * busStops.length);
+                 // Check if a passenger is already waiting at this stop (basic check)
+                 const existing = passengersWaiting.some(p => p.stopIndex === randomStopIndex);
+                 if (!existing) {
+                     addWaitingPassenger(randomStopIndex);
+                 }
+             }
+         }
+
+        // --- Stop Request Logic ---
+        function checkStopRequest() {
+            // Check if any onboard passenger requests a stop
+            const requestingPassenger = passengersOnboard.find(p => p.dataset.requestsStop === 'true');
+
+            if (requestingPassenger && !stopRequested) {
+                stopRequested = true;
+                stopSignal.style.display = 'block'; // Show the signal
+                messageDisplay.textContent = 'Stop requested!';
+                console.log('Passenger requested next stop.');
+            } else if (!requestingPassenger && stopRequested) {
+                 // If the passenger alighted or no one requests anymore
+                 stopRequested = false;
+                 stopSignal.style.display = 'none';
+            }
+        }
+
+        // --- Stop/Arrival Logic ---
+        function checkArrivalAtStop() {
+             if (currentSpeed > 0) return; // Only check when stopped
+
+             const busCenter = busPosition + bus.offsetWidth / 2;
+
+             // Check if bus is close to a stop
+             const arrivedStopIndex = stopPositions.findIndex(stopPos => {
+                 const stopCenter = stopPos + busStops[0].offsetWidth / 2;
+                 // Check if bus center is within +/- 30px of stop center
+                 return Math.abs(busCenter - stopCenter) < 30;
+             });
+
+             if (arrivedStopIndex > -1) {
+                 messageDisplay.textContent = `Arrived at Stop ${arrivedStopIndex + 1}.`;
+
+                 // Check for waiting passengers at this stop
+                 const passengersAtThisStop = passengersWaiting.filter(p => p.stopIndex === arrivedStopIndex);
+                 passengersAtThisStop.forEach(p => {
+                     removeWaitingPassenger(p.element);
+                     addPassengerOnboard();
+                     messageDisplay.textContent = `Picked up passenger at Stop ${arrivedStopIndex + 1}.`;
+                 });
+
+                 // Check if a passenger onboard requested this stop (or any stop)
+                 if (stopRequested && passengersOnboard.some(p => p.dataset.requestsStop === 'true')) {
+                      const alighted = removePassengerOnboard();
+                      if(alighted) {
+                          // Passenger successfully alighted
+                          stopRequested = false; // Reset signal after successful drop-off
+                          stopSignal.style.display = 'none';
+                      }
+                 }
+
+                 // After stopping and handling passengers, the bus is ready to move again
+                 // User needs to press accelerate
+             } else {
+                 messageDisplay.textContent = 'Stopped.';
+             }
+        }
+
+
+        // --- Controls ---
+        accelerateBtn.addEventListener('mousedown', () => {
+             // Use mousedown/mouseup or touchstart/touchend for continuous effect
+             messageDisplay.textContent = ''; // Clear message on action
+             startAccelerating();
+        });
+         accelerateBtn.addEventListener('mouseup', () => {
+             stopAccelerating();
+         });
+         accelerateBtn.addEventListener('touchstart', () => {
+             messageDisplay.textContent = ''; // Clear message on action
+             startAccelerating();
+         });
+         accelerateBtn.addEventListener('touchend', () => {
+             stopAccelerating();
+         });
+
+        brakeBtn.addEventListener('mousedown', () => {
+             messageDisplay.textContent = ''; // Clear message on action
+             startBraking();
+        });
+         brakeBtn.addEventListener('mouseup', () => {
+             stopBraking();
+         });
+         brakeBtn.addEventListener('touchstart', () => {
+             messageDisplay.textContent = ''; // Clear message on action
+             startBraking();
+         });
+         brakeBtn.addEventListener('touchend', () => {
+             stopBraking();
+         });
+
+        stopAtStopBtn.addEventListener('click', () => {
+            // This button acts as a request to stop when the bus is *near* a stop
+            // The actual stop happens when speed reaches 0 and checkArrivalAtStop is called
+            // For simplicity, this button just applies brakes until speed is 0
+            startBraking();
+        });
+
+
+        let accelerateInterval;
+        let brakeInterval;
+
+        function startAccelerating() {
+             if (brakeInterval) clearInterval(brakeInterval);
+             brakeInterval = null;
+             startMoving(); // Ensure game loop is running
+             if (!accelerateInterval) {
+                 accelerateInterval = setInterval(() => {
+                     currentSpeed = Math.min(maxSpeed, currentSpeed + accelerationRate);
+                 }, 50); // Accelerate every 50ms
+             }
+        }
+
+        function stopAccelerating() {
+             if (accelerateInterval) clearInterval(accelerateInterval);
+             accelerateInterval = null;
+        }
+
+        function startBraking() {
+             if (accelerateInterval) clearInterval(accelerateInterval);
+             accelerateInterval = null;
+             startMoving(); // Ensure game loop is running
+             if (!brakeInterval) {
+                 brakeInterval = setInterval(() => {
+                     currentSpeed = Math.max(0, currentSpeed - brakingRate);
+                     if (currentSpeed === 0) {
+                         stopBraking();
+                         stopMoving(); // Stop the game loop when speed hits 0
+                         checkArrivalAtStop(); // Check if we stopped at a stop
+                     }
+                 }, 50); // Brake every 50ms
+             }
+        }
+
+        function stopBraking() {
+             if (brakeInterval) clearInterval(brakeInterval);
+             brakeInterval = null;
+        }
+
+        // --- Initialization ---
+        function initGame() {
+             // Add some initial waiting passengers
+             addWaitingPassenger(0); // Stop 1
+             addWaitingPassenger(2); // Stop 3
+             messageDisplay.textContent = 'Game started! Accelerate to move.';
+        }
+
+        initGame();
+
+        // Start the game loop initially (it will stop if speed is 0)
+        // gameLoop(); // No, start it only when accelerate/brake is pressed
+    </script>
+
+</body>
+</html>

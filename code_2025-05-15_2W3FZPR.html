@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic's Reminiscence Struggle</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            overflow-y: auto;
+        }
+
+        #game-container {
+            background-color: #2d2d30;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            max-width: 900px;
+            width: 100%;
+            display: grid;
+            grid-template-areas:
+                "story sidebar"
+                "actions actions";
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+        }
+
+        #story-area {
+            grid-area: story;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #narrative-text {
+            font-size: 1.1em;
+            line-height: 1.6;
+            background-color: #3c3c3c;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 5px solid #569cd6;
+        }
+
+        #desktop-simulation {
+            background-color: #1a1a1a;
+            border: 2px solid #555;
+            border-radius: 5px;
+            height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 4em;
+            overflow: hidden; /* Ensure shapes don't overflow */
+            position: relative;
+        }
+
+        .desktop-item {
+            position: absolute;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #d4d4d4;
+        }
+
+        .square {
+            width: 50px;
+            height: 50px;
+            background-color: #61afef; /* Blue */
+            border: 2px solid #569cd6;
+            box-sizing: border-box;
+        }
+
+        .triangle {
+            width: 0;
+            height: 0;
+            border-left: 30px solid transparent;
+            border-right: 30px solid transparent;
+            border-bottom: 50px solid #98c379; /* Green */
+        }
+
+         .red-square {
+            width: 60px;
+            height: 60px;
+            background-color: #e06c75; /* Red */
+            border: 2px solid #be5046;
+            box-sizing: border-box;
+         }
+
+         .yellow-square {
+            width: 55px;
+            height: 55px;
+            background-color: #e5c07b; /* Yellow */
+            border: 2px solid #d19a66;
+            box-sizing: border-box;
+         }
+
+
+        #sidebar {
+            grid-area: sidebar;
+            background-color: #3c3c3c;
+            padding: 20px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #sidebar h3 {
+            color: #569cd6;
+            margin-top: 0;
+            border-bottom: 1px solid #555;
+            padding-bottom: 10px;
+        }
+
+        #problems-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #problems-list li {
+            background-color: #2d2d30;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            color: #e06c75; /* Red for problems */
+            border-left: 3px solid #e06c75;
+        }
+
+        #mood-indicator {
+            font-size: 2em;
+            text-align: center;
+            padding: 10px;
+            background-color: #2d2d30;
+            border-radius: 5px;
+        }
+
+        #actions-area {
+            grid-area: actions;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            padding-top: 20px;
+            border-top: 1px solid #555;
+        }
+
+        .action-button {
+            background-color: #61afef;
+            color: #1e1e1e;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+
+        .action-button:hover {
+            background-color: #569cd6;
+        }
+
+        .action-button:active {
+            transform: scale(0.98);
+        }
+
+        #ending-screen {
+            grid-area: story / span 2; /* Span across both columns */
+            background-color: #2d2d30;
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            border: 2px dashed #e06c75; /* Indicate failure */
+        }
+
+        #ending-screen h2 {
+             color: #e06c75; /* Red for failure */
+             font-size: 2em;
+             margin-bottom: 0;
+        }
+
+        #ending-text {
+            font-size: 1.2em;
+            line-height: 1.8;
+            color: #d4d4d4;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+             #game-container {
+                grid-template-areas:
+                    "story"
+                    "sidebar"
+                    "actions";
+                grid-template-columns: 1fr;
+             }
+
+             #desktop-simulation {
+                 height: 150px;
+             }
+
+             .desktop-item {
+                 font-size: 3em;
+             }
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="story-area">
+            <p id="narrative-text">Cosmic sits down at his computer, buzzing with anticipation. Today is the day he'll finally play 'Reminiscence', the modpack he's heard so much about. The download finished hours ago, a massive file promising countless hours of adventure and discovery. He double-clicks the launcher icon, heart pounding with excitement.</p>
+            <div id="desktop-simulation">
+                 <div class="desktop-item" style="top: 50px; left: 50px;"><div class="square"></div></div> <!-- Launcher icon -->
+                 <div class="desktop-item" style="top: 100px; left: 120px;">😊</div> <!-- Cosmic's current feeling -->
+            </div>
+        </div>
+        <div id="sidebar">
+            <h3>Problems Encountered 😵‍💫</h3>
+            <ul id="problems-list">
+                <!-- Problems will be added here -->
+            </ul>
+            <h3>Cosmic's Mood 🤔</h3>
+            <div id="mood-indicator">😊</div>
+        </div>
+        <div id="actions-area">
+            <button class="action-button" data-next-scene="launch_attempt_1">Launch Reminiscence</button>
+        </div>
+        <div id="ending-screen" class="hidden">
+            <h2>The Saga Ends</h2>
+            <p id="ending-text"></p>
+            <div class="desktop-item"><div class="red-square"></div></div> <!-- Sad/Broken icon -->
+        </div>
+    </div>
+
+    <script>
+        const narrativeTextElement = document.getElementById('narrative-text');
+        const desktopSimulationElement = document.getElementById('desktop-simulation');
+        const problemsListElement = document.getElementById('problems-list');
+        const moodIndicatorElement = document.getElementById('mood-indicator');
+        const actionsAreaElement = document.getElementById('actions-area');
+        const endingScreenElement = document.getElementById('ending-screen');
+        const gameContainerElement = document.getElementById('game-container');
+
+        let currentState = {
+            currentScene: 'start',
+            problems: [],
+            mood: '😊'
+        };
+
+        const gameData = {
+            scenes: {
+                start: {
+                    text: "Cosmic sits down at his computer, buzzing with anticipation. Today is the day he'll finally play 'Reminiscence', the modpack he's heard so much about. The download finished hours ago, a massive file promising countless hours of adventure and discovery. He double-clicks the launcher icon, heart pounding with excitement.",
+                    desktop: [
+                        { type: 'square', style: 'top: 50px; left: 50px;' },
+                        { type: 'emoji', content: '😊', style: 'top: 100px; left: 120px; font-size: 2em;' }
+                    ],
+                    options: [
+                        { text: "Launch Reminiscence", nextScene: 'launch_attempt_1' }
+                    ],
+                    mood: '😊'
+                },
+                launch_attempt_1: {
+                    text: "The launcher opens... then abruptly closes. No error message. Just... gone. Cosmic frowns. That's not a good start.",
+                    desktop: [
+                         { type: 'red-square', style: 'top: 70px; left: 70px;' }, // Crash indicator
+                         { type: 'emoji', content: '😕', style: 'top: 100px; left: 120px; font-size: 2em;' }
+                    ],
+                    options: [
+                        { text: "Check Crash Logs", nextScene: 'check_logs_1', effect: 'addProblem:Game crashes immediately on launch (no error)' },
+                        { text: "Try Launching Again", nextScene: 'launch_attempt_2', effect: 'addProblem:Game crashes immediately on launch (no error)' }
+                    ],
+                    mood: '😕'
+                },
+                 launch_attempt_2: {
+                    text: "Maybe it was a fluke? Cosmic clicks the launcher again. Same result. Closes instantly. Definitely not a fluke.",
+                    desktop: [
+                         { type: 'red-square', style: 'top: 70px; left: 70px;' }, // Crash indicator
+                         { type: 'emoji', content: '😟', style: 'top: 100px; left: 120px; font-size: 2em;' }
+                    ],
+                    options: [
+                         { text: "Check Crash Logs (Seriously This Time)", nextScene: 'check_logs_1' },
+                         { text: "Restart Computer", nextScene: 'restart_computer_1', effect: 'addProblem:Game crashes immediately on launch (no error)' }
+                    ],
+                    mood: '😟'
+                },
+                 restart_computer_1: {
+                     text: "Cosmic restarts his machine, hoping a fresh start will magically fix things. The computer boots up, he opens the launcher... and it still crashes immediately. The magic solution didn't work.",
+                     desktop: [
+                         { type: 'red-square', style: 'top: 70px; left: 70px;' }, // Crash indicator
+                         { type: 'emoji', content: '😩', style: 'top: 100px; left: 120px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Okay, NOW Check Crash Logs", nextScene: 'check_logs_1' },
+                          { text: "Reinstall the Modpack", nextScene: 'reinstall_modpack_1', effect: 'addProblem:Restarting computer did not fix crash' }
+                     ],
+                     mood: '😩'
+                 },
+                check_logs_1: {
+                    text: "He navigates through the game files and finds the crash report. It's... long. Lots of technical jargon. He scrolls down, looking for keywords. 'Java version mismatch'? 'Unsupported major.minor version'?",
+                     desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Error Log\n...\nJavaMismatch\n...' }, // Simulated log window
+                         { type: 'emoji', content: '🧐', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                    options: [
+                        { text: "Looks like a Java issue. Check Java Version", nextScene: 'check_java_1', effect: 'addProblem:Crash log indicates Java version mismatch' }
+                    ],
+                    mood: '🧐'
+                },
+                check_java_1: {
+                    text: "He checks his installed Java versions. He has Java 8. The modpack documentation *clearly* stated it needs Java 17. How did he miss that?",
+                    desktop: [
+                         { type: 'square', style: 'width: 100px; height: 80px; top: 50px; left: 50px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'Java 8\nDetected' }, // Java icon/window
+                         { type: 'emoji', content: '🤦', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                    ],
+                    options: [
+                        { text: "Download and Install Java 17", nextScene: 'install_java_17', effect: 'addProblem:Incorrect Java version installed' }
+                    ],
+                    mood: '🤦'
+                },
+                install_java_17: {
+                    text: "Downloading and installing Java 17 is straightforward. He makes sure to set it as the default or point the launcher to it. This *has* to be it. He launches the game again.",
+                    desktop: [
+                         { type: 'triangle', style: 'top: 70px; left: 70px; transform: rotate(180deg); border-bottom-color: #d4d4d4;' }, // Download arrow
+                         { type: 'emoji', content: '🤞', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                    ],
+                    options: [
+                        { text: "Launch Reminiscence (with Java 17)", nextScene: 'launch_attempt_3' }
+                    ],
+                    mood: '🤞'
+                },
+                launch_attempt_3: {
+                    text: "Success! The launcher opens! It gets past the initial crash! It's loading... loading... loading... The loading bar inches forward... and stops. Frozen. The game isn't responding.",
+                     desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Loading...\n[========  ]' }, // Simulated loading screen
+                         { type: 'emoji', content: '😬', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                    options: [
+                        { text: "Check Logs Again (Loading Stuck)", nextScene: 'check_logs_2', effect: 'addProblem:Game gets stuck on loading screen after Java fix' },
+                        { text: "Allocate More RAM", nextScene: 'allocate_ram_1', effect: 'addProblem:Game gets stuck on loading screen after Java fix' }
+                    ],
+                    mood: '😬'
+                },
+                allocate_ram_1: {
+                    text: "Maybe it needs more memory? Modpacks can be demanding. He goes into the launcher settings and allocates a generous 8GB of RAM. Surely, that's enough.",
+                     desktop: [
+                         { type: 'square', style: 'width: 120px; height: 90px; top: 40px; left: 40px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'Settings\nRAM: 8GB' }, // Settings window
+                         { type: 'emoji', content: '💪', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                    options: [
+                        { text: "Launch Reminiscence (More RAM)", nextScene: 'launch_attempt_4' }
+                    ],
+                    mood: '💪'
+                },
+                 launch_attempt_4: {
+                    text: "With increased RAM, he tries again. The loading bar... still stops at the same spot. No change. It seems RAM wasn't the bottleneck.",
+                     desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Loading...\n[========  ] (Frozen)' }, // Simulated loading screen (still frozen)
+                         { type: 'emoji', content: '😫', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                    options: [
+                        { text: "Check Logs (Again, More Frustrated)", nextScene: 'check_logs_2', effect: 'addProblem:Allocating more RAM did not fix loading freeze' },
+                        { text: "Search Online Forums", nextScene: 'search_forums_1', effect: 'addProblem:Allocating more RAM did not fix loading freeze' }
+                    ],
+                    mood: '😫'
+                 },
+                check_logs_2: {
+                    text: "The logs are now pointing to a specific mod during loading. 'Error initializing mod: xyz'. It seems there's a conflict or an issue with one of the mods within the pack itself.",
+                     desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Error Log\n...\nMod xyz Failed\n...' }, // Simulated log window showing mod error
+                         { type: 'emoji', content: '😠', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                    options: [
+                        { text: "Identify and Disable Mod 'xyz'", nextScene: 'disable_mod_xyz', effect: 'addProblem:Log shows error with specific mod during loading' },
+                         { text: "Search Online for 'Mod xyz loading error Reminiscence'", nextScene: 'search_forums_2', effect: 'addProblem:Log shows error with specific mod during loading' }
+                    ],
+                    mood: '😠'
+                },
+                 disable_mod_xyz: {
+                     text: "Finding the mod file is tricky within a large pack, but he manages it. He moves 'mod_xyz.jar' out of the mods folder. This *must* fix the conflict.",
+                     desktop: [
+                         { type: 'square', style: 'width: 100px; height: 80px; top: 50px; left: 50px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'Mods Folder\nmod_xyz.jar (Moved)' }, // Folder simulation
+                         { type: 'emoji', content: '🤞', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (Mod Disabled)", nextScene: 'launch_attempt_5' }
+                     ],
+                     mood: '🤞'
+                 },
+                 launch_attempt_5: {
+                     text: "He launches again. The loading bar... passes the previous point! Yes! But then it gets stuck a little further along. A different mod now seems to be causing issues, or perhaps the absence of 'mod_xyz' broke something else.",
+                      desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Loading...\n[=========== ] (Frozen)' }, // Simulated loading screen (frozen again)
+                         { type: 'emoji', content: '😤', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                         { text: "Check Logs (New Freeze Point)", nextScene: 'check_logs_3', effect: 'addProblem:Disabling mod xyz caused freeze at a new point / new mod error' },
+                         { text: "Reinstall the Modpack (Clean Start)", nextScene: 'reinstall_modpack_2', effect: 'addProblem:Disabling mod xyz caused freeze at a new point / new mod error' }
+                     ],
+                     mood: '😤'
+                 },
+                 check_logs_3: {
+                      text: "The new error points to 'mod_abc'. It seems removing 'mod_xyz' didn't solve the underlying issue, or maybe 'mod_abc' depended on 'mod_xyz'. This is getting complicated.",
+                       desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Error Log\n...\nMod abc Failed\n...' }, // Simulated log window showing new mod error
+                         { type: 'emoji', content: ' exasperated ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Search Online for 'Reminiscence loading freeze mod conflicts'", nextScene: 'search_forums_3', effect: 'addProblem:Log shows error with a different mod (abc)' },
+                          { text: "Try a Different Launcher (Maybe CurseForge/GDLauncher)", nextScene: 'try_different_launcher_1', effect: 'addProblem:Log shows error with a different mod (abc)' }
+                     ],
+                     mood: ' exasperated '
+                 },
+                 reinstall_modpack_1: {
+                     text: "Maybe the download was corrupted? He deletes the entire modpack folder and downloads it again. It takes a while. Once done, he tries to launch.",
+                     desktop: [
+                         { type: 'triangle', style: 'top: 70px; left: 70px; transform: rotate(180deg); border-bottom-color: #d4d4d4;' }, // Download arrow
+                         { type: 'emoji', content: '😐', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                         { text: "Launch Reminiscence (Fresh Install)", nextScene: 'launch_attempt_6' }
+                     ],
+                     mood: '😐'
+                 },
+                 reinstall_modpack_2: {
+                     text: "Okay, clean slate. Delete *everything* related to the modpack and download it *again*. This feels like Groundhog Day. Another long download. Another launch attempt.",
+                     desktop: [
+                         { type: 'triangle', style: 'top: 70px; left: 70px; transform: rotate(180deg); border-bottom-color: #d4d4d4;' }, // Download arrow
+                         { type: 'emoji', content: '😑', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (Super Fresh Install)", nextScene: 'launch_attempt_6', effect: 'addProblem:Multiple reinstalls did not fix issues' }
+                     ],
+                     mood: '😑'
+                 },
+                 launch_attempt_6: {
+                     text: "After the fresh install (or super fresh install), he launches. It gets past the initial crash (Java fix holds), but... it still freezes during loading, perhaps at a slightly different spot, or with a slightly different log message.",
+                      desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Loading...\n[==========  ] (Frozen)' }, // Simulated loading screen (still frozen)
+                         { type: 'emoji', content: '😩', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                         { text: "Check Logs (Again...)", nextScene: 'check_logs_4', effect: 'addProblem:Fresh reinstall did not fix loading freeze' },
+                         { text: "Search Online (Still Stuck)", nextScene: 'search_forums_3', effect: 'addProblem:Fresh reinstall did not fix loading freeze' }
+                     ],
+                     mood: '😩'
+                 },
+                 check_logs_4: {
+                      text: "The logs are a mess. Different errors pop up seemingly at random during loading. Sometimes it's a mod conflict, sometimes a texture error, sometimes something about entities. It feels like a house of cards collapsing.",
+                       desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Error Log\n...chaos...\nModErrorX\nTexErrorY\nEntErrorZ\n...' }, // Simulated chaotic log window
+                         { type: 'emoji', content: '😵‍💫', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Search Online for specific errors", nextScene: 'search_forums_4', effect: 'addProblem:Logs show multiple, inconsistent errors during loading' },
+                          { text: "Consider Graphics Drivers", nextScene: 'check_drivers_1', effect: 'addProblem:Logs show multiple, inconsistent errors during loading' }
+                     ],
+                     mood: '😵‍💫'
+                 },
+                 check_drivers_1: {
+                      text: "Could it be his graphics drivers? He checks. They seem up-to-date. Maybe a clean install of the drivers is needed?",
+                       desktop: [
+                         { type: 'square', style: 'width: 120px; height: 90px; top: 40px; left: 40px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'GPU Driver\nStatus: OK' }, // Driver check window
+                         { type: 'emoji', content: '🤔', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Perform a Clean Install of Graphics Drivers", nextScene: 'reinstall_drivers_1', effect: 'addProblem:Checking drivers: Status OK, but maybe clean install needed?' },
+                          { text: "Ignore Drivers for Now, Back to Logs/Forums", nextScene: 'check_logs_4' } // Loop back
+                     ],
+                     mood: '🤔'
+                 },
+                 reinstall_drivers_1: {
+                      text: "He uses a driver uninstaller tool and then installs the latest drivers from scratch. A long process, but worth it if it fixes the game. He launches Reminiscence again.",
+                       desktop: [
+                         { type: 'square', style: 'width: 100px; height: 80px; top: 50px; left: 50px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'Drivers\nReinstalled' }, // Driver window
+                         { type: 'emoji', content: '🤞', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (New Drivers)", nextScene: 'launch_attempt_7' }
+                     ],
+                     mood: '🤞'
+                 },
+                 launch_attempt_7: {
+                      text: "The loading bar... still gets stuck. Maybe it gets a tiny bit further, or maybe it's just wishful thinking. The logs still show various errors.",
+                       desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Loading...\n[============ ] (Frozen)' }, // Simulated loading screen (still frozen)
+                         { type: 'emoji', content: '😩', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                         { text: "Check Logs (Same Story)", nextScene: 'check_logs_4' }, // Loop back
+                         { text: "Search Online (Desperate)", nextScene: 'search_forums_4', effect: 'addProblem:Clean driver install did not fix loading freeze' }
+                     ],
+                     mood: '😩'
+                 },
+                search_forums_1: {
+                     text: "He searches online for 'Reminiscence loading stuck'. He finds threads! Many people have this issue! ...But most threads end with 'never figured it out' or suggest solutions he's already tried (Java, RAM). Some suggest obscure system settings or hardware issues.",
+                      desktop: [
+                         { type: 'square', style: 'width: 180px; height: 120px; top: 20px; left: 20px; background-color: #333; color: #d4d4d4; font-size: 0.4em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Forum: Stuck Loading\nUser1: Same issue!\nUser2: Try Java 17\nUser3: More RAM?\nUser4: Still broken :(' }, // Simulated forum window
+                         { type: 'emoji', content: '😩', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                    options: [
+                        { text: "Try an obscure forum suggestion (e.g., disable integrated graphics)", nextScene: 'obscure_fix_1', effect: 'addProblem:Online forums show issue is common, no clear fix' },
+                        { text: "Go back to checking logs", nextScene: 'check_logs_2' } // Loop back
+                    ],
+                    mood: '😩'
+                },
+                 search_forums_2: {
+                     text: "Searching specifically for 'Mod xyz loading error Reminiscence' yields a few results. Some say it's a known conflict with certain hardware, others say it's fixed in a newer (or older) version of the modpack. He's on the latest.",
+                      desktop: [
+                         { type: 'square', style: 'width: 180px; height: 120px; top: 20px; left: 20px; background-color: #333; color: #d4d4d4; font-size: 0.4em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Forum: Mod xyz Error\nUser A: My GTX card hates this mod\nUser B: Try older version\nUser C: Works fine for me?' }, // Simulated forum window
+                         { type: 'emoji', content: ' frustrated ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Try disabling the mod again (maybe he did it wrong?)", nextScene: 'disable_mod_xyz', effect: 'addProblem:Online forums suggest mod xyz conflict/hardware issue' }, // Loop back
+                          { text: "Look for alternative versions of the modpack", nextScene: 'try_different_version_1', effect: 'addProblem:Online forums suggest mod xyz conflict/hardware issue' }
+                     ],
+                     mood: ' frustrated '
+                 },
+                 search_forums_3: {
+                     text: "He's deep in the forums now. Endless threads, conflicting advice. 'Try OpenJ9 instead of HotSpot!' 'Delete your config folder!' 'It's your antivirus!' 'Your specific CPU/GPU combination is cursed!' He's trying to parse what might be relevant.",
+                      desktop: [
+                         { type: 'square', style: 'width: 180px; height: 120px; top: 20px; left: 20px; background-color: #333; color: #d4d4d4; font-size: 0.4em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Forum Hell\n...random fixes...\n...cursed hardware...\n...give up...' }, // Simulated forum hell
+                         { type: 'emoji', content: '🤯', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Try deleting the config folder", nextScene: 'delete_config_1', effect: 'addProblem:Forums suggest deleting config folder' },
+                          { text: "Try a different Java distribution (OpenJ9)", nextScene: 'try_openj9_1', effect: 'addProblem:Forums suggest different Java distribution' },
+                          { text: "Maybe it's antivirus/firewall?", nextScene: 'check_antivirus_1', effect: 'addProblem:Forums suggest antivirus/firewall interference' }
+                     ],
+                     mood: '🤯'
+                 },
+                 search_forums_4: {
+                     text: "He's exhausted the common fixes. The forums are now just a source of shared misery. People reporting the exact same inconsistent errors. There doesn't seem to be a single, reliable solution. Some people just... gave up.",
+                      desktop: [
+                         { type: 'square', style: 'width: 180px; height: 120px; top: 20px; left: 20px; background-color: #333; color: #d4d4d4; font-size: 0.4em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Forum: Still Broken\nUser X: Nothing works.\nUser Y: I quit.\nUser Z: Maybe next update?' }, // Simulated forum of despair
+                         { type: 'emoji', content: '😔', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Try one last random fix from the forums", nextScene: 'obscure_fix_2', effect: 'addProblem:Forums confirm issue is widespread and seemingly unfixable' },
+                          { text: "Accept Defeat", nextScene: 'ending_failure' }
+                     ],
+                     mood: '😔'
+                 },
+                 obscure_fix_1: {
+                      text: "Following a forum post, he delves into his graphics settings and tries to force the game to use his dedicated GPU, or disable integrated graphics entirely. It requires a computer restart.",
+                       desktop: [
+                         { type: 'square', style: 'width: 120px; height: 90px; top: 40px; left: 40px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'GPU Settings\nIntegrated: Off' }, // GPU settings window
+                         { type: 'emoji', content: ' hopeful ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (Obscure Fix 1)", nextScene: 'launch_attempt_8' }
+                     ],
+                     mood: ' hopeful '
+                 },
+                 obscure_fix_2: {
+                      text: "He finds a post suggesting clearing the Java cache, deleting specific temporary files, and sacrificing a small rubber chicken to the computer gods. He does the digital steps.",
+                       desktop: [
+                         { type: 'square', style: 'width: 100px; height: 80px; top: 50px; left: 50px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'Cache Cleared\nTemp Files Gone' }, // File system view
+                         { type: 'emoji', content: ' tired ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (Obscure Fix 2)", nextScene: 'launch_attempt_8' }
+                     ],
+                     mood: ' tired '
+                 },
+                 launch_attempt_8: {
+                     text: "Another attempt after trying a less common fix. The loading bar... you know the drill. It stops. Still broken.",
+                      desktop: [
+                         { type: 'square', style: 'width: 150px; height: 100px; top: 30px; left: 30px; background-color: #333; color: #d4d4d4; font-size: 0.5em; text-align: left; padding: 5px; overflow: hidden; box-sizing: border-box;' , content: 'Loading...\n[============= ] (Frozen)' }, // Simulated loading screen (still frozen)
+                         { type: 'emoji', content: ' frustrated ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                         { text: "Check Logs (Pointless)", nextScene: 'check_logs_4' }, // Loop back
+                         { text: "Back to the forums of despair", nextScene: 'search_forums_4', effect: 'addProblem:Obscure fixes did not resolve loading freeze' } // Loop back
+                     ],
+                     mood: ' frustrated '
+                 },
+                 delete_config_1: {
+                      text: "Deleting the config folder forces the game/modpack to regenerate default configuration files. Sometimes corrupted configs cause issues. He deletes it and launches.",
+                       desktop: [
+                         { type: 'square', style: 'width: 100px; height: 80px; top: 50px; left: 50px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'Config Folder\nDELETED' }, // Folder simulation
+                         { type: 'emoji', content: ' hopeful ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (New Configs)", nextScene: 'launch_attempt_8' } // Likely leads back to generic stuck
+                     ],
+                     mood: ' hopeful '
+                 },
+                 try_openj9_1: {
+                      text: "He downloads and installs OpenJ9, another Java distribution, and configures the launcher to use it. Some complex modpacks prefer it. Another lengthy process.",
+                       desktop: [
+                         { type: 'triangle', style: 'top: 70px; left: 70px; transform: rotate(180deg); border-bottom-color: #d4d4d4;' }, // Download arrow
+                         { type: 'emoji', content: ' hopeful ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (with OpenJ9)", nextScene: 'launch_attempt_8' } // Likely leads back to generic stuck
+                     ],
+                     mood: ' hopeful '
+                 },
+                 check_antivirus_1: {
+                      text: "He checks his antivirus and firewall settings. Could they be blocking something? He adds exceptions for the game and launcher folders, just in case.",
+                       desktop: [
+                         { type: 'square', style: 'width: 120px; height: 90px; top: 40px; left: 40px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'Antivirus\nExceptions Added' }, // Antivirus window
+                         { type: 'emoji', content: ' thoughtful ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (Antivirus Exceptions)", nextScene: 'launch_attempt_8' } // Likely leads back to generic stuck
+                     ],
+                     mood: ' thoughtful '
+                 },
+                 try_different_launcher_1: {
+                      text: "Maybe the issue is with the default launcher? He installs CurseForge or GDLauncher and tries to install/launch Reminiscence through that instead.",
+                       desktop: [
+                         { type: 'square', style: 'width: 100px; height: 80px; top: 50px; left: 50px; background-color: #333; color: #d4d4d4; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;', content: 'New Launcher\nInstalling...' }, // New launcher icon
+                         { type: 'emoji', content: ' hopeful ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (Different Launcher)", nextScene: 'launch_attempt_8', effect: 'addProblem:Trying different launcher did not fix issue' } // Likely leads back to generic stuck
+                     ],
+                     mood: ' hopeful '
+                 },
+                 try_different_version_1: {
+                      text: "He looks on the modpack page. There's a slightly older version available. Maybe the latest update introduced a bug? He downloads and installs the previous version.",
+                       desktop: [
+                         { type: 'triangle', style: 'top: 70px; left: 70px; transform: rotate(180deg); border-bottom-color: #d4d4d4;' }, // Download arrow
+                         { type: 'emoji', content: ' hopeful ', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                     ],
+                     options: [
+                          { text: "Launch Reminiscence (Older Version)", nextScene: 'launch_attempt_8', effect: 'addProblem:Trying older modpack version did not fix issue' } // Likely leads back to generic stuck
+                     ],
+                     mood: ' hopeful '
+                 },
+                ending_failure: {
+                    text: "Cosmic stares at the frozen loading screen. Hours. Days, even, spread across a week. He's tried everything he can think of, everything the internet suggested. Java versions, RAM allocation, driver reinstalls, config tweaks, different launchers, different modpack versions, disabling mods, sacrificing metaphorical chickens. Nothing worked. The modpack, 'Reminiscence', remains tantalizingly out of reach, a digital ghost on his hard drive. He sighs, leans back in his chair, and accepts the cold, hard truth.",
+                    desktop: [
+                        { type: 'red-square', style: 'width: 180px; height: 120px; top: 20px; left: 20px; background-color: #333; color: #e06c75; font-size: 0.6em; text-align: center; padding: 5px; box-sizing: border-box;' , content: 'ERROR\nFAILED TO LAUNCH\n😭' }, // Final failure screen
+                        { type: 'emoji', content: '😭', style: 'top: 120px; left: 150px; font-size: 2em;' }
+                    ],
+                    options: [], // No more actions
+                    mood: '😭'
+                }
+            }
+        };
+
+        function updateUI() {
+            const scene = gameData.scenes[currentState.currentScene];
+
+            // Update Narrative Text
+            narrativeTextElement.textContent = scene.text;
+
+            // Update Desktop Simulation
+            desktopSimulationElement.innerHTML = ''; // Clear previous items
+            if (scene.desktop) {
+                scene.desktop.forEach(item => {
+                    const itemElement = document.createElement('div');
+                    itemElement.classList.add('desktop-item');
+                    itemElement.style.cssText = item.style;
+                    if (item.type === 'square') {
+                        const shape = document.createElement('div');
+                        shape.classList.add('square');
+                         if (item.content) shape.textContent = item.content;
+                         itemElement.appendChild(shape);
+                    } else if (item.type === 'red-square') {
+                        const shape = document.createElement('div');
+                        shape.classList.add('red-square');
+                         if (item.content) shape.textContent = item.content;
+                         itemElement.appendChild(shape);
+                    } else if (item.type === 'yellow-square') {
+                        const shape = document.createElement('div');
+                        shape.classList.add('yellow-square');
+                         if (item.content) shape.textContent = item.content;
+                         itemElement.appendChild(shape);
+                    } else if (item.type === 'triangle') {
+                         const shape = document.createElement('div');
+                         shape.classList.add('triangle');
+                         itemElement.appendChild(shape);
+                    }
+                    else if (item.type === 'emoji') {
+                        itemElement.textContent = item.content;
+                    }
+                    desktopSimulationElement.appendChild(itemElement);
+                });
+            }
+
+            // Update Problems List
+            problemsListElement.innerHTML = '';
+            currentState.problems.forEach(problem => {
+                const li = document.createElement('li');
+                li.textContent = problem;
+                problemsListElement.appendChild(li);
+            });
+
+            // Update Mood Indicator
+            moodIndicatorElement.textContent = scene.mood || currentState.mood; // Use scene mood if specified, otherwise current state
+
+            // Update Actions
+            actionsAreaElement.innerHTML = ''; // Clear previous buttons
+            if (scene.options && scene.options.length > 0) {
+                scene.options.forEach(option => {
+                    const button = document.createElement('button');
+                    button.classList.add('action-button');
+                    button.textContent = option.text;
+                    button.dataset.nextScene = option.nextScene;
+                    if (option.effect) {
+                        button.dataset.effect = option.effect;
+                    }
+                    button.addEventListener('click', handleActionClick);
+                    actionsAreaElement.appendChild(button);
+                });
+                 actionsAreaElement.classList.remove('hidden');
+            } else {
+                actionsAreaElement.classList.add('hidden');
+            }
+
+            // Handle Ending Screen
+            if (currentState.currentScene === 'ending_failure') {
+                 narrativeTextElement.classList.add('hidden');
+                 desktopSimulationElement.classList.add('hidden');
+                 gameContainerElement.style.gridTemplateAreas = '"story" "sidebar"'; /* Adjust layout for ending */
+                 gameContainerElement.style.gridTemplateColumns = '1fr';
+                 endingScreenElement.classList.remove('hidden');
+                 document.getElementById('ending-text').textContent = scene.text;
+                 // Move final desktop simulation to ending screen if desired, or keep separate
+                 // For now, just display ending text and potentially a final emoji/shape
+                 const finalDesktop = endingScreenElement.querySelector('.desktop-item');
+                 if(finalDesktop) {
+                     finalDesktop.innerHTML = '';
+                      if (scene.desktop && scene.desktop.length > 0) {
+                          const finalItem = scene.desktop[0]; // Use the first item for simplicity
+                           if (finalItem.type === 'red-square') {
+                                const shape = document.createElement('div');
+                                shape.classList.add('red-square');
+                                shape.style.width = '80px';
+                                shape.style.height = '80px';
+                                shape.style.position = 'static'; // Remove absolute positioning for ending screen
+                                shape.textContent = finalItem.content ? finalItem.content.split('\n').pop() : '😭'; // Show just the emoji/final status
+                                finalDesktop.appendChild(shape);
+                            } else if (finalItem.type === 'emoji') {
+                                finalDesktop.textContent = finalItem.content;
+                            }
+                      } else {
+                          finalDesktop.textContent = '😭'; // Default sad emoji
+                      }
+                 }
+
+            } else {
+                 narrativeTextElement.classList.remove('hidden');
+                 desktopSimulationElement.classList.remove('hidden');
+                 gameContainerElement.style.gridTemplateAreas = ' "story sidebar" "actions actions"';
+                 gameContainerElement.style.gridTemplateColumns = '2fr 1fr';
+                 endingScreenElement.classList.add('hidden');
+            }
+        }
+
+        function handleActionClick(event) {
+            const nextScene = event.target.dataset.nextScene;
+            const effect = event.target.dataset.effect;
+
+            if (effect) {
+                const [effectType, effectData] = effect.split(':');
+                if (effectType === 'addProblem') {
+                    currentState.problems.push(effectData);
+                }
+                // Add other effects here if needed
+            }
+
+            currentState.currentScene = nextScene;
+            updateUI();
+        }
+
+        // Initial setup
+        updateUI();
+
+    </script>
+</body>
+</html>

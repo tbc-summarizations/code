@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic vs. Reminiscence</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --text-color: #e94560;
+            --primary-color: #0f3460;
+            --secondary-color: #533483;
+            --accent-color: #e94560;
+            --card-bg: #16213e;
+            --border-radius: 8px;
+            --padding: 20px;
+            --margin-bottom: 15px;
+            --transition-speed: 0.5s;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: var(--padding);
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            max-width: 95%;
+            width: 500px;
+            text-align: center;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeIn 1s forwards;
+            display: flex;
+            flex-direction: column;
+            min-height: 60vh;
+            justify-content: space-between;
+        }
+
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            color: var(--accent-color);
+            margin-top: 0;
+            margin-bottom: var(--padding);
+            font-size: 1.8em;
+        }
+
+        p {
+            margin-bottom: var(--margin-bottom);
+            font-size: 1em;
+            text-align: left;
+        }
+
+        .choices {
+            display: flex;
+            flex-direction: column;
+            gap: var(--margin-bottom);
+            margin-top: var(--padding);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            border: none;
+            padding: 12px 20px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color var(--transition-speed) ease, transform 0.1s ease;
+            width: 100%;
+            text-align: center;
+        }
+
+        button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background-color: #3e2f5b;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .ending {
+            margin-top: var(--padding);
+            text-align: center;
+        }
+
+        .ending h2 {
+            color: var(--accent-color);
+            margin-bottom: var(--margin-bottom);
+        }
+
+        .ending p {
+            text-align: center;
+            margin-bottom: var(--padding);
+        }
+
+        .asset {
+            display: inline-block;
+            margin: 0 5px;
+            vertical-align: middle;
+            font-size: 1.5em;
+        }
+
+        .emoji {
+            filter: grayscale(50%); /* Make emojis fit the theme a bit */
+        }
+
+        .secret-trigger {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            font-size: 3em;
+            cursor: pointer;
+            opacity: 0; /* Initially hidden */
+            transition: opacity var(--transition-speed) ease;
+            z-index: 100;
+        }
+
+        .secret-trigger.visible {
+            opacity: 0.1; /* Make it slightly visible */
+        }
+
+        .secret-trigger:hover {
+            opacity: 0.5; /* More visible on hover */
+        }
+
+        /* Mobile specific adjustments */
+        @media (max-width: 600px) {
+            .container {
+                padding: var(--padding) 15px;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+
+            p {
+                font-size: 0.95em;
+            }
+
+            button {
+                padding: 10px 15px;
+                font-size: 0.95em;
+            }
+
+            .secret-trigger {
+                font-size: 2em;
+                bottom: 5px;
+                right: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="game-container">
+        <div id="game-content">
+            <h1 id="game-title">Cosmic vs. Reminiscence</h1>
+            <p id="game-text">Cosmic heard about the Reminiscence modpack. People say it's a beautiful, challenging, expert-level journey through Minecraft.<br><br>He decides he *must* play it. Little does he know, the true challenge isn't the modpack itself, but getting it to run.</p>
+
+            <div class="choices" id="game-choices">
+                <button id="start-button">Begin the Saga</button>
+            </div>
+
+            <div id="ending-screen" class="hidden ending">
+                <h2 id="ending-title"></h2>
+                <p id="ending-text"></p>
+                <button id="restart-button">Try Again? (Restart)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="secret-trigger" class="secret-trigger hidden">❓</div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const gameTitle = document.getElementById('game-title');
+        const gameText = document.getElementById('game-text');
+        const gameChoices = document.getElementById('game-choices');
+        const endingScreen = document.getElementById('ending-screen');
+        const endingTitle = document.getElementById('ending-title');
+        const endingText = document.getElementById('ending-text');
+        const restartButton = document.getElementById('restart-button');
+        const secretTrigger = document.getElementById('secret-trigger');
+
+        let currentState = 'intro';
+        let frustrationLevel = 0;
+        let attempts = 0;
+        const maxFrustration = 10; // How many failures before the default ending
+        let secretFound = false;
+
+        const states = {
+            intro: {
+                title: 'Cosmic vs. Reminiscence',
+                text: "Cosmic heard about the Reminiscence modpack. People say it's a beautiful, challenging, expert-level journey through Minecraft.<br><br>He decides he *must* play it. Little does he know, the true challenge isn't the modpack itself, but getting it to run.",
+                choices: [
+                    { text: 'Begin the Saga', next: 'download' }
+                ]
+            },
+            download: {
+                title: 'Step 1: The Download',
+                text: 'Cosmic goes to the modpack page. It\'s a big file. <span class="asset emoji">📦</span><br>He clicks download.',
+                choices: [
+                    { text: 'Download Complete', next: 'java_check' }
+                ]
+            },
+            java_check: {
+                title: 'Step 2: Java Version',
+                text: 'The modpack requires a specific Java version, like Java 8 or 17. Cosmic has Java installed, but which version?<br><br>He checks the command line... <span class="asset">💻</span>',
+                choices: [
+                    { text: 'It\'s the right version!', next: 'installation' },
+                    { text: 'It\'s the wrong version...', next: 'install_java' }
+                ]
+            },
+            install_java: {
+                title: 'Step 2a: Installing Java',
+                text: 'Okay, need to install the correct Java version. Finds the installer. <span class="asset emoji">⬇️</span><br><br>Installs it... hopefully it doesn\'t conflict with the old one.',
+                choices: [
+                    { text: 'Installation successful!', next: 'installation' },
+                    { text: 'Installer failed. Permissions issue? <span class="asset">❌</span>', next: 'frustration', effect: { frustration: 2, text: 'The Java installer failed. Cosmic sighs.' } },
+                    { text: 'Installed, but Minecraft still uses the old Java. <span class="asset">🤔</span>', next: 'frustration', effect: { frustration: 1, text: 'Minecraft ignores the new Java installation.' } }
+                ]
+            },
+            installation: {
+                title: 'Step 3: Installation',
+                text: 'Using a launcher like MultiMC or CurseForge. Imports the modpack. <span class="asset emoji">✨</span><br><br>Files are extracted, dependencies downloaded.',
+                choices: [
+                    { text: 'Installation finished. Ready to launch!', next: 'allocate_ram' },
+                    { text: 'Installer crashed during dependency download. <span class="asset">💥</span>', next: 'frustration', effect: { frustration: 2, text: 'The installer crashed. Cosmic feels a cold dread.' } },
+                    { text: 'Missing files reported. <span class="asset">📁❓</span>', next: 'frustration', effect: { frustration: 1, text: 'Some files are missing. Great.' } }
+                ]
+            },
+            allocate_ram: {
+                title: 'Step 4: Allocating RAM',
+                text: 'Modpacks need RAM. How much is enough? Too little and it crashes, too much and Java itself crashes. <span class="asset">🧠</span><br><br>The pack recommends 8GB.',
+                choices: [
+                    { text: 'Allocate 8GB. Seems reasonable.', next: 'first_launch' },
+                    { text: 'Allocate 4GB. Maybe that\'s enough?', next: 'frustration', effect: { frustration: 1, text: 'Allocated 4GB. Probably not enough.' } },
+                    { text: 'Allocate 16GB. More is better, right? <span class="asset emoji">🚀</span>', next: 'frustration', effect: { frustration: 2, text: 'Allocated 16GB. That might be too much for Java.' } }
+                ]
+            },
+            first_launch: {
+                title: 'Step 5: The First Launch',
+                text: 'Deep breath. Click "Play". The launcher starts... <span class="asset emoji">▶️</span><br><br>The Mojang logo appears... then the loading screen...<br><br>What happens next?',
+                choices: [
+                    { text: 'It crashes immediately! <span class="asset">🔥</span>', next: 'crash_log' },
+                    { text: 'It freezes on "Loading Worldgen". <span class="asset">❄️</span>', next: 'frustration', effect: { frustration: 2, text: 'Frozen on worldgen. A classic.' } },
+                    { text: 'It gets to the main menu! (Secret path, unlikely first try)', next: 'end_good_secret', weight: 0.05 } // Low probability
+                ]
+            },
+            crash_log: {
+                title: 'Step 6: The Crash Log',
+                text: 'A crash report! A wall of text! <span class="asset">📄</span><br><br>Cosmic stares at it. "java.lang.RuntimeException: Could not execute entrypoint stage \'main\' EARLY" ... "Caused by: java.lang.reflect.InvocationTargetException"... "at net.minecraft.client.main.Main.main" ...<br><br>It\'s mostly gibberish.',
+                choices: [
+                    { text: 'Try to read the crash log.', next: 'read_log' },
+                    { text: 'Ignore the log, try launching again.', next: 'frustration', effect: { frustration: 1, text: 'Ignored the log. Probably not wise.' } },
+                    { text: 'Search the error message online.', next: 'search_forums' }
+                ]
+            },
+            read_log: {
+                title: 'Step 6a: Reading the Log',
+                text: 'Scrolling... scrolling... Ah, maybe this line? "Mod \'Example Mod\' (exampleid) v1.0 is missing required dependency \'Another Mod\' v2.0" <span class="asset">🧩❓</span><br><br>Dependency hell.',
+                choices: [
+                    { text: 'Okay, need to find and add "Another Mod".', next: 'dependency_fix' },
+                    { text: 'Delete "Example Mod". Who needs it anyway? <span class="asset emoji">🗑️</span>', next: 'frustration', effect: { frustration: 2, text: 'Deleted a mod. Hope it wasn\'t important.' } }
+                ]
+            },
+            dependency_fix: {
+                title: 'Step 6b: Fixing Dependencies',
+                text: 'Searches for "Another Mod" v2.0. Downloads it. <span class="asset emoji">➕</span> Puts it in the mods folder.<br><br>Time to launch again.',
+                choices: [
+                     { text: 'Launch again.', next: 'launch_again' },
+                     { text: 'Check *all* mod versions and dependencies manually. <span class="asset">📋</span>', next: 'frustration', effect: { frustration: 1, text: 'Manual check... this will take hours.' } }
+                ]
+            },
+            search_forums: {
+                title: 'Step 6c: Searching the Forums',
+                text: 'Copies the main error line. Pastes it into Google. <span class="asset emoji">🔍</span><br><br>Finds a forum post... someone had the same issue! <span class="asset emoji">🤝</span>',
+                choices: [
+                    { text: 'The post says to update graphics drivers.', next: 'update_drivers' },
+                    { text: 'The post says it\'s a known bug, no fix yet. <span class="asset emoji">😭</span>', next: 'frustration', effect: { frustration: 3, text: 'Found a post... it\'s a known bug with no fix.' } },
+                    { text: 'The post suggests deleting the config folder. <span class="asset emoji">🧹</span>', next: 'delete_config' }
+                ]
+            },
+            update_drivers: {
+                title: 'Step 6c-i: Updating Drivers',
+                text: 'Updates graphics drivers. Requires a system restart. <span class="asset emoji">🔄</span><br><br>System restarts... feels fresh. Launch again?',
+                choices: [
+                    { text: 'Launch again.', next: 'launch_again' },
+                    { text: 'Check other drivers too, just in case. <span class="asset">🔩</span>', next: 'frustration', effect: { frustration: 1, text: 'Checking other drivers... deep dive now.' } }
+                ]
+            },
+             delete_config: {
+                title: 'Step 6c-ii: Deleting Configs',
+                text: 'Deletes the entire config folder. The game will regenerate default configs. <span class="asset emoji">🔥📁</span><br><br>Risky, but maybe it works. Launch again?',
+                choices: [
+                    { text: 'Launch again.', next: 'launch_again' },
+                    { text: 'Backup the config folder first. <span class="asset emoji">💾</span>', next: 'frustration', effect: { frustration: 0, text: 'Backed up configs. Smart, but took time.' } } // Doesn't increase frustration, just delays
+                ]
+            },
+            launch_again: {
+                title: 'Step 7: Launching Again',
+                text: 'Okay, fixed something (maybe?). Click "Play" again. <span class="asset emoji">▶️</span><br><br>The Mojang logo... loading screen...<br><br>What now?',
+                choices: [
+                    { text: 'Crashes again! Same error? <span class="asset">🔥</span>', next: 'crash_log', effect: { frustration: 1, text: 'Crashed again. Deja vu.' } },
+                    { text: 'Crashes with a *new* error! <span class="asset">⚡</span>', next: 'new_crash_log', effect: { frustration: 2, text: 'A *new* error! Progress...?' } },
+                    { text: 'Gets a little further, then freezes. <span class="asset">🥶</span>', next: 'frustration', effect: { frustration: 2, text: 'Froze further in. Still frozen.' } },
+                     { text: 'It gets to the main menu! (Still possible, but unlikely)', next: 'end_good_secret', weight: 0.1 } // Slightly higher probability after attempts
+                ]
+            },
+            new_crash_log: {
+                 title: 'Step 7a: New Crash Log',
+                 text: 'A different error! "java.lang.IllegalStateException: Failed to load asset tag minecraft:blocks/needs_iron_tool" <span class="asset">🧱❓</span><br><br>Something about block tags?',
+                 choices: [
+                    { text: 'Search this new error.', next: 'search_forums' }, // Re-use search state
+                    { text: 'Maybe the modpack download was corrupted? <span class="asset emoji">🔄⬇️</span>', next: 'redownload', effect: { frustration: 3, text: 'Considering redownloading the whole pack.' } },
+                    { text: 'Try a different version of the modpack? <span class="asset emoji">⬆️⬇️</span>', next: 'try_different_version', effect: { frustration: 2, text: 'Trying a different modpack version.' } }
+                 ]
+            },
+            redownload: {
+                title: 'Step 8: Redownloading',
+                text: 'Deletes the entire modpack instance. <span class="asset emoji">💥🗑️</span><br><br>Starts the massive download all over again. <span class="asset emoji">🐌</span><br><br>Hours later... it\'s done.',
+                choices: [
+                     { text: 'Try installing and launching the fresh download.', next: 'installation', effect: { frustration: 0, text: 'Redownloaded. Starting over feels... clean?' } } // Reset some frustration? Or just add time. Let's just add time (narrative).
+                ]
+            },
+             try_different_version: {
+                title: 'Step 9: Different Version',
+                text: 'The modpack has multiple versions. Maybe the latest is unstable? <span class="asset">🕰️</span><br><br>Cosmic decides to try an older, supposedly more stable version.',
+                choices: [
+                    { text: 'Download and install the older version.', next: 'installation', effect: { frustration: 2, text: 'Trying an older version. Fingers crossed.' } },
+                     { text: 'Try the *newest* beta version instead. <span class="asset emoji">🧪</span>', next: 'frustration', effect: { frustration: 3, text: 'Trying a beta version. Bold move.' } }
+                ]
+            },
+            frustration: {
+                title: 'Frustration Mounts',
+                text: (effect) => effect.text || 'Cosmic encounters another setback. The frustration builds.',
+                choices: [
+                    { text: 'Keep troubleshooting.', next: 'launch_again' },
+                    { text: 'Search online again.', next: 'search_forums' },
+                    { text: 'Take a break... (and maybe give up)', next: 'check_frustration' }
+                ],
+                 onEnter: (effect) => {
+                     frustrationLevel += effect.frustration;
+                     attempts++;
+                     if (frustrationLevel >= maxFrustration && !secretFound) {
+                         // Make the secret trigger visible after reaching high frustration
+                         secretTrigger.classList.remove('hidden');
+                         secretTrigger.classList.add('visible');
+                         secretTrigger.style.pointerEvents = 'auto'; // Enable clicks
+                     }
+                 }
+            },
+            check_frustration: {
+                title: 'Checking Resolve',
+                text: 'Cosmic feels the weight of repeated failures. <span class="asset emoji">😔</span><br><br>Hours spent, no game played. Is it worth it?',
+                choices: [
+                    { text: 'Yes! Never give up!', next: 'launch_again' },
+                     { text: 'Maybe... maybe it\'s time to stop.', next: 'end_bad_default' }
+                ]
+            },
+            end_bad_default: {
+                title: 'The End: Defeated',
+                text: `Cosmic closes the launcher. He's tired. The Reminiscence modpack sits there, a monument to his failed attempts. <span class="asset emoji">🏳️</span><br><br>He never got it working. He plays something else instead. The adventure remains unplayed.<br><br>Frustration Level: ${frustrationLevel}<br>Attempts: ${attempts}`,
+                choices: [], // No choices, only restart
+                isEnding: true,
+                endingType: 'bad'
+            },
+            end_good_secret: {
+                title: 'The Secret Ending: Success!',
+                text: 'Against all odds, after trying that one obscure thing / getting incredibly lucky...<br><br>The loading screen finishes! The main menu appears! <span class="asset emoji">🎉</span><br><br>Reminiscence is running! Cosmic stares in disbelief, then smiles. The journey can finally begin.<span class="asset emoji">🗺️</span><br><br>Frustration Level: ${frustrationLevel} (It was worth it!)<br>Attempts: ${attempts} (Perseverance pays off?)',
+                choices: [], // No choices, only restart
+                isEnding: true,
+                endingType: 'good'
+            },
+             secret_path_activated: {
+                title: 'A Glimmer of Hope?',
+                text: 'Cosmic noticed something... strange. A tiny, almost invisible detail. <span class="asset emoji">✨🔍</span><br><br>Could this be the key? It\'s an unconventional approach, something not mentioned in forums...',
+                choices: [
+                     { text: 'Investigate the strange detail.', next: 'final_secret_attempt' },
+                     { text: 'Ignore it, probably a glitch. <span class="asset emoji">🤷</span>', next: 'launch_again', effect: { frustration: 1, text: 'Ignored the strange sign. Back to the grind.' } }
+                ]
+             },
+            final_secret_attempt: {
+                title: 'The Final Gambit',
+                text: 'Following the cryptic clue, Cosmic tries something completely different. Adjusting a hidden config value, running a specific command outside the launcher... <span class="asset emoji">🔑</span><br><br>He holds his breath and clicks "Play" one last time.',
+                choices: [
+                    { text: 'Launch the game with the tweak.', next: 'end_good_secret' } // This path guarantees the good ending
+                ]
+            }
+        };
+
+        function updateGame(stateKey, effect = {}) {
+            // Apply effects before changing state
+            if (states[stateKey].onEnter) {
+                states[stateKey].onEnter(effect);
+            } else if (effect.frustration !== undefined) {
+                 frustrationLevel += effect.frustration;
+                 attempts++;
+                 if (frustrationLevel >= maxFrustration && !secretFound) {
+                     secretTrigger.classList.remove('hidden');
+                     secretTrigger.classList.add('visible');
+                     secretTrigger.style.pointerEvents = 'auto';
+                 }
+            }
+
+            currentState = stateKey;
+            const state = states[currentState];
+
+            gameTitle.textContent = state.title;
+            // Handle dynamic text (like frustration level)
+            gameText.innerHTML = typeof state.text === 'function' ? state.text(effect) : state.text;
+
+            gameChoices.innerHTML = ''; // Clear previous choices
+
+            if (state.isEnding) {
+                 gameChoices.classList.add('hidden');
+                 endingScreen.classList.remove('hidden');
+                 endingTitle.textContent = state.title;
+                 endingText.innerHTML = typeof state.text === 'function' ? state.text({}) : state.text; // Render ending text
+            } else {
+                 gameChoices.classList.remove('hidden');
+                 endingScreen.classList.add('hidden');
+
+                 state.choices.forEach(choice => {
+                     const button = document.createElement('button');
+                     button.innerHTML = choice.text;
+
+                     // Add probability for certain choices
+                     const shouldTakePath = Math.random() < (choice.weight || 1); // Default weight is 1 (100%)
+
+                     if (shouldTakePath) {
+                         button.addEventListener('click', () => {
+                             updateGame(choice.next, choice.effect);
+                         });
+                     } else {
+                         // If probability fails, lead to frustration or a default failure path
+                         button.addEventListener('click', () => {
+                              const failureState = choice.failureNext || 'frustration';
+                              const failureEffect = choice.failureEffect || { frustration: 1, text: `That path failed. Cosmic hit a wall. ${choice.text} didn't work.` };
+                              updateGame(failureState, failureEffect);
+                         });
+                         // Optionally change button text to indicate failure likelihood or just let it happen
+                         // button.textContent += ' (Risky)';
+                     }
+
+
+                     gameChoices.appendChild(button);
+                 });
+
+                 // Check if we should force bad ending due to frustration
+                 if (frustrationLevel >= maxFrustration && !state.choices.some(c => c.next === 'end_good_secret') && currentState !== 'secret_path_activated' && currentState !== 'final_secret_attempt') {
+                      // If frustration is maxed and we aren't already on the secret path or good ending path,
+                      // and no current choice leads to the good ending directly (like the first_launch lucky chance),
+                      // add a "Give Up" choice or force the ending.
+                      // Let's add a prominent "Give Up" choice.
+                       const giveUpButton = document.createElement('button');
+                       giveUpButton.textContent = 'This is hopeless. Give up.';
+                       giveUpButton.style.backgroundColor = '#c0392b'; // Reddish color
+                       giveUpButton.addEventListener('click', () => {
+                           updateGame('end_bad_default');
+                       });
+                       gameChoices.appendChild(giveUpButton);
+                 }
+            }
+
+            // Ensure secret trigger is visible only if frustration is high enough and it hasn't been found yet
+             if (frustrationLevel >= maxFrustration && !secretFound && !state.isEnding && currentState !== 'secret_path_activated' && currentState !== 'final_secret_attempt') {
+                 secretTrigger.classList.remove('hidden');
+                 secretTrigger.classList.add('visible');
+                 secretTrigger.style.pointerEvents = 'auto';
+             } else {
+                 secretTrigger.classList.add('hidden');
+                 secretTrigger.classList.remove('visible');
+                 secretTrigger.style.pointerEvents = 'none'; // Disable clicks when hidden
+             }
+
+        }
+
+        function restartGame() {
+            frustrationLevel = 0;
+            attempts = 0;
+            secretFound = false;
+            secretTrigger.classList.add('hidden');
+            secretTrigger.classList.remove('visible');
+            secretTrigger.style.pointerEvents = 'none';
+            updateGame('intro');
+        }
+
+        // Initial state
+        updateGame('intro');
+
+        // Add event listener for the initial start button (it's replaced later)
+        // We need to delegate or re-add listeners. Let's re-add.
+        // Or even better, let the updateGame function handle the first state too.
+        // The initial button is handled by the updateGame('intro') call's choice processing.
+
+        // Add event listener for restart button
+        restartButton.addEventListener('click', restartGame);
+
+        // Add event listener for the secret trigger
+        secretTrigger.addEventListener('click', () => {
+            if (frustrationLevel >= maxFrustration && !secretFound) {
+                 secretFound = true; // Prevent finding it again
+                 secretTrigger.classList.add('hidden'); // Hide it once found
+                 secretTrigger.classList.remove('visible');
+                 secretTrigger.style.pointerEvents = 'none';
+                 updateGame('secret_path_activated'); // Transition to the secret path
+            }
+        });
+
+    </script>
+
+</body>
+</html>

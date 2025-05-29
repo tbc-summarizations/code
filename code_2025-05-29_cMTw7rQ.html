@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Top Down Shooter</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+        canvas { border: 1px solid #333; background-color: #000; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 800;
+        canvas.height = 600;
+
+        // Game State
+        let wave = 1;
+        let score = 0;
+        let gameOver = false;
+        let upgradeMode = false;
+        let upgradeOptions = [];
+
+        // Player
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            size: 30,
+            speed: 5,
+            health: 100,
+            maxHealth: 100,
+            fireRate: 300, // milliseconds between shots
+            lastShotTime: 0,
+            bullets: [],
+            moving: { up: false, down: false, left: false, right: false },
+            bulletSpeed: 7,
+            bulletSize: 5,
+            bulletColor: '#ff0'
+        };
+
+        // Enemies
+        let enemies = [];
+        const enemyTypes = [
+            { size: 20, speed: 2, health: 10, color: '#f00', score: 10 }, // Basic (Square)
+            { size: 30, speed: 1.5, health: 25, color: '#0f0', score: 20 }, // Tanky (Circle)
+            { size: 15, speed: 3.5, health: 5, color: '#00f', score: 5 }   // Fast (Triangle)
+        ];
+
+        // Input Handling
+        document.addEventListener('keydown', (e) => {
+            if (gameOver) {
+                 // Restart game on space press after game over
+                if (e.key === ' ') {
+                    resetGame();
+                }
+                return;
+            }
+
+            if (upgradeMode) {
+                // Handle upgrade selection (keys 1, 2, 3)
+                if (e.key >= '1' && e.key <= '3') {
+                    const optionIndex = parseInt(e.key) - 1;
+                    if (optionIndex >= 0 && optionIndex < upgradeOptions.length) {
+                        applyUpgrade(upgradeOptions[optionIndex].type);
+                        upgradeMode = false;
+                        spawnWave();
+                    }
+                }
+            } else {
+                // Handle movement
+                if (e.key === 'w' || e.key === 'ArrowUp') player.moving.up = true;
+                if (e.key === 's' || e.key === 'ArrowDown') player.moving.down = true;
+                if (e.key === 'a' || e.key === 'ArrowLeft') player.moving.left = true;
+                if (e.key === 'd' || e.key === 'ArrowRight') player.moving.right = true;
+
+                // Handle shooting (space key)
+                if (e.key === ' ') shoot();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (gameOver || upgradeMode) return;
+
+            if (e.key === 'w' || e.key === 'ArrowUp') player.moving.up = false;
+            if (e.key === 's' || e.key === 'ArrowDown') player.moving.down = false;
+            if (e.key === 'a' || e.key === 'ArrowLeft') player.moving.left = false;
+            if (e.key === 'd' || e.key === 'ArrowRight') player.moving.right = false;
+        });
+
+        // Game Functions
+        function shoot() {
+            const now = Date.now();
+            if (now - player.lastShotTime > player.fireRate) {
+                 let dx = 0, dy = 0;
+                 // Determine direction based on player movement if moving, otherwise default up
+                 if (player.moving.up) dy -= 1;
+                 if (player.moving.down) dy += 1;
+                 if (player.moving.left) dx -= 1;
+                 if (player.moving.right) dx += 1;
+
+                 // If not moving, shoot up by default
+                 if (dx === 0 && dy === 0) {
+                     dy = -1;
+                 } else {
+                     // Normalize direction vector if moving diagonally
+                     const magnitude = Math.sqrt(dx * dx + dy * dy);
+                     if (magnitude > 0) {
+                         dx /= magnitude;
+                         dy /= magnitude;
+                     }
+                 }
+
+
+                const bullet = {
+                    x: player.x,
+                    y: player.y,
+                    size: player.bulletSize,
+                    speed: player.bulletSpeed,
+                    color: player.bulletColor,
+                    dx: dx,
+                    dy: dy
+                };
+
+                player.bullets.push(bullet);
+                player.lastShotTime = now;
+            }
+        }
+
+        function spawnWave() {
+            enemies = [];
+            const numEnemies = Math.min(50, wave * 5 + (wave - 1) * 2); // More enemies each wave, caps at 50
+            const enemySpeedMultiplier = 1 + (wave - 1) * 0.08; // Enemies get faster
+            const enemyHealthMultiplier = 1 + (wave - 1) * 0.1; // Enemies get tougher
+
+            for (let i = 0; i < numEnemies; i++) {
+                // Randomly position enemies outside visible canvas area
+                let x, y;
+                const edge = Math.random(); // 0-1
+                const padding = 100; // Spawn distance outside canvas
+
+                if (edge < 0.25) { // Top edge
+                    x = Math.random() * canvas.width;
+                    y = -padding;
+                } else if (edge < 0.5) { // Bottom edge
+                    x = Math.random() * canvas.width;
+                    y = canvas.height + padding;
+                } else if (edge < 0.75) { // Left edge
+                    x = -padding;
+                    y = Math.random() * canvas.height;
+                } else { // Right edge
+                    x = canvas.width + padding;
+                    y = Math.random() * canvas.height;
+                }
+
+                // Randomly pick an enemy type, weighted towards basic types initially
+                 let typeIndex;
+                 if (wave < 3) {
+                     typeIndex = 0; // Only basic enemies in early waves
+                 } else if (wave < 6) {
+                     typeIndex = Math.random() < 0.8 ? 0 : 1; // Introduce tanky
+                 } else {
+                     typeIndex = Math.floor(Math.random() * enemyTypes.length); // All types
+                 }
+
+                const type = enemyTypes[typeIndex];
+
+                enemies.push({
+                    x: x,
+                    y: y,
+                    size: type.size,
+                    speed: type.speed * enemySpeedMultiplier,
+                    health: type.health * enemyHealthMultiplier,
+                    maxHealth: type.health * enemyHealthMultiplier, // Store max for health bar
+                    color: type.color,
+                    scoreValue: type.score,
+                    type: typeIndex // Store type index
+                });
+            }
+        }
+
+        function enterUpgradeMode() {
+            upgradeMode = true;
+            // Generate 3 random unique upgrade options
+            const availableUpgrades = [
+                'increaseMaxHealth',
+                'increaseFireRate',
+                'increaseSpeed',
+                'healPlayer',
+                'increaseBulletSpeed',
+                'increaseBulletSize',
+                'increaseBulletDamage' // New upgrade
+            ];
+
+            upgradeOptions = [];
+             // Ensure unique options
+            const pickedTypes = new Set();
+            while (upgradeOptions.length < 3 && pickedTypes.size < availableUpgrades.length) {
+                 const randomIndex = Math.floor(Math.random() * availableUpgrades.length);
+                 const type = availableUpgrades[randomIndex];
+                 if (!pickedTypes.has(type)) {
+                     pickedTypes.add(type);
+                     let description = '';
+                     let emoji = '';
+
+                     switch(type) {
+                         case 'increaseMaxHealth': description = '+50 Max Health'; emoji = '❤️'; break;
+                         case 'increaseFireRate': description = '+20% Fire Rate'; emoji = '🔥'; break;
+                         case 'increaseSpeed': description = '+1 Speed'; emoji = '👟'; break;
+                         case 'healPlayer': description = 'Heal to Full Health'; emoji = '🩹'; break;
+                         case 'increaseBulletSpeed': description = '+1 Bullet Speed'; emoji = '💨'; break;
+                         case 'increaseBulletSize': description = '+1 Bullet Size'; emoji = '💥'; break;
+                         case 'increaseBulletDamage': description = '+5 Bullet Damage'; emoji = '🗡️'; break;
+                         default: description = 'Unknown Upgrade'; emoji = '❓';
+                     }
+                    upgradeOptions.push({ type: type, description: description, emoji: emoji });
+                 }
+            }
+
+
+            // Clear enemies and bullets during upgrade
+            enemies = [];
+            player.bullets = [];
+        }
+
+        function applyUpgrade(type) {
+            switch(type) {
+                case 'increaseMaxHealth':
+                    player.maxHealth += 50;
+                    player.health = player.maxHealth; // Heal on max health upgrade
+                    break;
+                case 'increaseFireRate':
+                    player.fireRate *= 0.8; // Decrease time between shots by 20%
+                    break;
+                case 'increaseSpeed':
+                    player.speed += 1;
+                    break;
+                case 'healPlayer':
+                    player.health = player.maxHealth;
+                    break;
+                 case 'increaseBulletSpeed':
+                    player.bulletSpeed += 1;
+                    break;
+                 case 'increaseBulletSize':
+                     player.bulletSize += 1;
+                     break;
+                 case 'increaseBulletDamage':
+                     if (!player.bulletDamage) player.bulletDamage = 10; // Initialize
+                     player.bulletDamage += 5;
+                     break;
+            }
+             // Ensure fireRate doesn't go below a minimum
+            if (player.fireRate < 50) player.fireRate = 50;
+             // Ensure bullet size doesn't get too big
+            if (player.bulletSize > 15) player.bulletSize = 15;
+             // Ensure bullet speed doesn't get too fast
+            if (player.bulletSpeed > 20) player.bulletSpeed = 20;
+
+        }
+
+        function update() {
+            if (gameOver || upgradeMode) return;
+
+            // Move Player
+            let dx = 0, dy = 0;
+            if (player.moving.up) dy -= 1;
+            if (player.moving.down) dy += 1;
+            if (player.moving.left) dx -= 1;
+            if (player.moving.right) dx += 1;
+
+            // Normalize diagonal movement
+            const magnitude = Math.sqrt(dx * dx + dy * dy);
+            if (magnitude > 0) {
+                dx /= magnitude;
+                dy /= magnitude;
+            }
+
+            player.x += dx * player.speed;
+            player.y += dy * player.speed;
+
+            // Clamp player position to canvas bounds
+            player.x = Math.max(player.size / 2, Math.min(canvas.width - player.size / 2, player.x));
+            player.y = Math.max(player.size / 2, Math.min(canvas.height - player.size / 2, player.y));
+
+
+            // Update Bullets
+            player.bullets.forEach(bullet => {
+                bullet.x += bullet.dx * bullet.speed;
+                bullet.y += bullet.dy * bullet.speed;
+            });
+
+            // Remove off-screen bullets
+            player.bullets = player.bullets.filter(bullet =>
+                bullet.x > -10 && bullet.x < canvas.width + 10 && bullet.y > -10 && bullet.y < canvas.height + 10
+            );
+
+            // Update Enemies
+            enemies.forEach(enemy => {
+                // Move towards player
+                const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                enemy.x += Math.cos(angle) * enemy.speed;
+                enemy.y += Math.sin(angle) * enemy.speed;
+            });
+
+            // Collision Detection (Bullets vs Enemies)
+            const bulletDamage = player.bulletDamage || 10; // Default damage if not upgraded
+            for (let i = player.bullets.length - 1; i >= 0; i--) {
+                const bullet = player.bullets[i];
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+
+                    const dist = Math.sqrt((bullet.x - enemy.x) ** 2 + (bullet.y - enemy.y) ** 2);
+                    if (dist < bullet.size / 2 + enemy.size / 2) {
+                        // Collision!
+                        enemy.health -= bulletDamage;
+                        player.bullets.splice(i, 1); // Remove bullet
+                        i--; // Adjust index after removal
+
+                        if (enemy.health <= 0) {
+                            score += enemy.scoreValue;
+                            enemies.splice(j, 1); // Remove enemy
+                        }
+                        break; // Bullet can only hit one enemy
+                    }
+                }
+            }
+
+             // Collision Detection (Enemies vs Player)
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                const dist = Math.sqrt((player.x - enemy.x) ** 2 + (player.y - enemy.y) ** 2);
+
+                // Basic collision distance check. Could add knockback or continuous damage.
+                // Simplification: if distance is less than sum of radii, remove enemy and take damage.
+                if (dist < player.size / 2 + enemy.size / 2) {
+                    // Collision! Player takes damage
+                    player.health -= 15; // Basic collision damage
+                    enemies.splice(i, 1); // Remove enemy on collision
+
+                    if (player.health <= 0) {
+                        gameOver = true;
+                        break; // Stop processing if player is dead
+                    }
+                }
+            }
+
+            // Check for wave completion
+            if (enemies.length === 0 && !upgradeMode && !gameOver) {
+                wave++;
+                enterUpgradeMode();
+            }
+        }
+
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameOver) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2 - 50);
+                ctx.font = '24px Arial';
+                ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2);
+                 ctx.font = '18px Arial';
+                ctx.fillText('Press SPACE to Restart', canvas.width / 2, canvas.height / 2 + 50);
+                return; // Stop rendering game elements
+            }
+
+            if (upgradeMode) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.9)'; // Dark overlay
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = '#fff';
+                ctx.font = '36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Wave ${wave - 1} Complete!`, canvas.width / 2, canvas.height / 4);
+                ctx.font = '28px Arial';
+                ctx.fillText('Choose Your Upgrade (Press 1, 2, or 3)', canvas.width / 2, canvas.height / 4 + 60);
+
+                ctx.font = '24px Arial';
+                const startY = canvas.height / 2;
+                upgradeOptions.forEach((option, index) => {
+                    ctx.fillText(`${index + 1}. ${option.emoji} ${option.description}`, canvas.width / 2, startY + index * 50);
+                });
+
+                return; // Stop rendering game elements
+            }
+
+            // Draw Player (Triangle pointing up)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y - player.size / 2); // Top point
+            ctx.lineTo(player.x - player.size / 2, player.y + player.size / 2); // Bottom-left
+            ctx.lineTo(player.x + player.size / 2, player.y + player.size / 2); // Bottom-right
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw Player Health Bar
+            const healthBarWidth = player.size * 1.5;
+            const healthBarHeight = 5;
+            const healthBarX = player.x - healthBarWidth / 2;
+            const healthBarY = player.y + player.size / 2 + 5;
+            const currentHealthWidth = (player.health / player.maxHealth) * healthBarWidth;
+
+            ctx.fillStyle = '#555'; // Background
+            ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+            ctx.fillStyle = player.health > player.maxHealth * 0.6 ? '#0f0' : (player.health > player.maxHealth * 0.25 ? '#ff0' : '#f00'); // Green, Yellow, or Red
+            ctx.fillRect(healthBarX, healthBarY, currentHealthWidth, healthBarHeight);
+            ctx.strokeStyle = '#fff';
+            ctx.strokeRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+
+
+            // Draw Bullets (Circles)
+            player.bullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color;
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, bullet.size / 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Draw Enemies (Shapes based on type)
+            enemies.forEach(enemy => {
+                ctx.fillStyle = enemy.color;
+                // Draw different shapes for different types
+                if (enemy.type === 0) { // Basic (Square)
+                     ctx.fillRect(enemy.x - enemy.size / 2, enemy.y - enemy.size / 2, enemy.size, enemy.size);
+                } else if (enemy.type === 1) { // Tanky (Circle)
+                     ctx.beginPath();
+                     ctx.arc(enemy.x, enemy.y, enemy.size / 2, 0, Math.PI * 2);
+                     ctx.fill();
+                } else if (enemy.type === 2) { // Fast (Triangle)
+                     ctx.beginPath();
+                     ctx.moveTo(enemy.x, enemy.y - enemy.size / 2); // Top
+                     ctx.lineTo(enemy.x - enemy.size / 2, enemy.y + enemy.size / 2); // Bottom-left
+                     ctx.lineTo(enemy.x + enemy.size / 2, enemy.y + enemy.size / 2); // Bottom-right
+                     ctx.closePath();
+                     ctx.fill();
+                }
+
+                // Draw Enemy Health Bar
+                const enemyHealthBarWidth = enemy.size * 1.2;
+                const enemyHealthBarHeight = 3;
+                const enemyHealthBarX = enemy.x - enemyHealthBarWidth / 2;
+                const enemyHealthBarY = enemy.y - enemy.size / 2 - enemyHealthBarHeight - 2;
+                const enemyCurrentHealthWidth = (enemy.health / enemy.maxHealth) * enemyHealthBarWidth;
+
+                ctx.fillStyle = '#555'; // Background
+                ctx.fillRect(enemyHealthBarX, enemyHealthBarY, enemyHealthBarWidth, enemyHealthBarHeight);
+                 ctx.fillStyle = enemy.health > enemy.maxHealth * 0.6 ? '#0f0' : (enemy.health > enemy.maxHealth * 0.25 ? '#ff0' : '#f00'); // Green, Yellow, or Red
+                ctx.fillRect(enemyHealthBarX, enemyHealthBarY, enemyCurrentHealthWidth, enemyHealthBarHeight);
+            });
+
+            // Draw UI (Score, Wave, Player Health)
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Score: ${score}`, 10, 25);
+            ctx.fillText(`Wave: ${wave}`, 10, 50);
+            ctx.fillText(`Health: ${Math.max(0, Math.ceil(player.health))}`, 10, 75); // Display rounded health
+        }
+
+        function resetGame() {
+            wave = 1;
+            score = 0;
+            gameOver = false;
+            upgradeMode = false;
+            upgradeOptions = [];
+
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.health = player.maxHealth = 100;
+            player.speed = 5;
+            player.fireRate = 300;
+            player.lastShotTime = 0;
+            player.bullets = [];
+            player.bulletSpeed = 7;
+            player.bulletSize = 5;
+            player.bulletDamage = 10; // Reset damage
+
+            enemies = [];
+            player.moving = { up: false, down: false, left: false, right: false };
+
+            spawnWave(); // Start the first wave again
+        }
+
+        // Game Loop
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game
+        spawnWave(); // Start the first wave
+        gameLoop(); // Start the loop
+
+    </script>
+</body>
+</html>

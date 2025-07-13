@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neshtek's Pigeon Quest</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Sky blue */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            color: #333;
+        }
+        canvas {
+            background-color: #aaddff; /* Lighter sky */
+            border: 2px solid #555;
+            display: block;
+            position: relative;
+        }
+        #game-container {
+            position: relative;
+            width: 800px; /* Canvas width */
+            height: 600px; /* Canvas height */
+            overflow: hidden;
+        }
+        #dialogue-box, #game-over-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            border: 2px solid #333;
+            padding: 20px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            display: none; /* Hidden by default */
+            z-index: 100;
+            width: 70%;
+            max-width: 500px;
+            border-radius: 10px;
+        }
+        #dialogue-text {
+            margin-bottom: 20px;
+            font-size: 1.2em;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #dialogue-button, #restart-button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+        #dialogue-button:hover, #restart-button:hover {
+            background-color: #45a049;
+        }
+        #game-over-screen h2 {
+            font-size: 2em;
+            color: #D32F2F;
+            margin-bottom: 20px;
+        }
+        #game-over-screen.win h2 {
+            color: #2E7D32;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="dialogue-box">
+            <p id="dialogue-text"></p>
+            <button id="dialogue-button">Next</button>
+        </div>
+        <div id="game-over-screen">
+            <h2 id="game-over-message"></h2>
+            <button id="restart-button">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const dialogueBox = document.getElementById('dialogue-box');
+        const dialogueText = document.getElementById('dialogue-text');
+        const dialogueButton = document.getElementById('dialogue-button');
+
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const gameOverMessage = document.getElementById('game-over-message');
+        const restartButton = document.getElementById('restart-button');
+
+        // Game State Variables
+        let gameState = 'playing'; // 'playing', 'dialogue', 'bossfight', 'won', 'lost'
+        let girlsCollected = 0;
+        let currentGirlIndex = -1;
+        let dialogueProgress = 0;
+
+        // Player (Neshtek)
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            width: 30,
+            height: 20,
+            dx: 0,
+            dy: 0,
+            speed: 3
+        };
+
+        // Pigeon Girls (10 total)
+        const pigeonGirls = [];
+        const girlDialogues = [
+            // Girl 1
+            ["Hey there, handsome. What's a cool pigeon like you doing around here?", "I'm Neshtek, just looking for a beautiful pigeon like you to share the city with.", "Oh, you charmer! Tell me more...", "You've got a way with words, Neshtek. Alright, you've convinced me! ❤️"],
+            // Girl 2
+            ["Squawk! Who are you?", "I'm Neshtek, and I couldn't help but notice your lovely feathers.", "My feathers? Nobody ever complimented my feathers before!", "You're different, Neshtek. I like that. I'm yours! ❤️"],
+            // Girl 3
+            ["Are you lost, little bird?", "No, I found exactly what I was looking for: you.", "Oh, my! Such boldness!", "Alright, you're quite persuasive. I'm in! ❤️"],
+            // Girl 4
+            ["Mind if I finish my bread crumb in peace?", "Only if you'll let me share the next one with you, beautiful.", "Heh, you're funny. And kinda cute.", "Okay, you can have the next crumb and my heart! ❤️"],
+            // Girl 5
+            ["*Preens feathers elegantly*", "Excuse me, I believe I just fell for you.", "Smooth, very smooth. But can you keep up?", "I think I can! Let's fly together, Neshtek! ❤️"],
+            // Girl 6
+            ["Another day, another worm. Sigh.", "Why the long face, lovely? Every day is an adventure with the right company.", "You think so? You might be right.", "Alright, you've brightened my day. And my future! ❤️"],
+            // Girl 7
+            ["*Looks at you suspiciously*", "Don't be shy, my dear. I only have good intentions and a lot of charm.", "Charm, huh? Prove it.", "You just did. Let's go! ❤️"],
+            // Girl 8
+            ["Are you new to this rooftop?", "I go where the most beautiful pigeons are, and today, that's here.", "You're quite the flatterer.", "And you're quite the catch! I'm yours! ❤️"],
+            // Girl 9
+            ["I'm busy contemplating the meaning of flight.", "Perhaps the meaning is to fly together, with someone special.", "Hmm, an interesting philosophy. Tell me more...", "You've opened my eyes, Neshtek. Let's explore the skies! ❤️"]
+        ];
+
+        function createPigeonGirl(index) {
+            let x, y;
+            let attempts = 0;
+            const minDistance = 100; // Minimum distance between girls and player spawn
+            do {
+                x = Math.random() * (canvas.width - 50) + 25;
+                y = Math.random() * (canvas.height - 50) + 25;
+                attempts++;
+                if (attempts > 100) break; // Prevent infinite loop
+            } while (
+                Math.abs(x - player.x) < minDistance &&
+                Math.abs(y - player.y) < minDistance
+            );
+
+            return {
+                x: x,
+                y: y,
+                width: 25,
+                height: 25,
+                convinced: false,
+                dialogueIndex: 0,
+                dialogueLines: girlDialogues[index] || ["You've reached me!", "I'm [REDACTED], prepare to fight!"] // For [REDACTED]
+            };
+        }
+
+        for (let i = 0; i < 10; i++) {
+            pigeonGirls.push(createPigeonGirl(i));
+        }
+
+        // Boss Fight Variables for [REDACTED]
+        let bossFightObstacles = [];
+        let bossFightTimer = 0;
+        const bossFightDuration = 60 * 5; // 5 seconds at 60 FPS
+        let bossFightHits = 0;
+        const maxBossHits = 3;
+
+        function initGame() {
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.dx = 0;
+            player.dy = 0;
+
+            girlsCollected = 0;
+            currentGirlIndex = -1;
+            dialogueProgress = 0;
+            gameState = 'playing';
+
+            dialogueBox.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+
+            // Reset pigeon girls
+            pigeonGirls.length = 0; // Clear existing
+            for (let i = 0; i < 10; i++) {
+                pigeonGirls.push(createPigeonGirl(i));
+            }
+
+            // Reset boss fight
+            bossFightObstacles = [];
+            bossFightTimer = 0;
+            bossFightHits = 0;
+        }
+
+        // Drawing Functions
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
+
+            // Rotate based on direction (simple, could be more complex)
+            if (player.dx < 0) ctx.scale(-1, 1); // Flip horizontally if moving left
+
+            // Body (simple triangle for pigeon)
+            ctx.fillStyle = '#666'; // Grey pigeon body
+            ctx.beginPath();
+            ctx.moveTo(-player.width / 2, 0);
+            ctx.lineTo(player.width / 2, -player.height / 2);
+            ctx.lineTo(player.width / 2, player.height / 2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.stroke();
+
+            // Head (circle)
+            ctx.beginPath();
+            ctx.arc(player.width / 2 - 5, 0, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#666';
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.stroke();
+
+            // Eye
+            ctx.beginPath();
+            ctx.arc(player.width / 2 - 2, -3, 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'black';
+            ctx.fill();
+
+            // Beak
+            ctx.beginPath();
+            ctx.moveTo(player.width / 2 + 3, 0);
+            ctx.lineTo(player.width / 2 + 8, -2);
+            ctx.lineTo(player.width / 2 + 8, 2);
+            ctx.closePath();
+            ctx.fillStyle = 'orange';
+            ctx.fill();
+            ctx.strokeStyle = 'darkorange';
+            ctx.stroke();
+
+            // Neshtek's Golden Chain (simple circle)
+            ctx.beginPath();
+            ctx.arc(-player.width / 4, player.height / 4, 7, 0, Math.PI * 2);
+            ctx.fillStyle = 'gold';
+            ctx.fill();
+            ctx.strokeStyle = '#DAA520';
+            ctx.stroke();
+            ctx.fillStyle = 'white'; // A little glint
+            ctx.fillRect(-player.width / 4 - 2, player.height / 4 - 2, 4, 4);
+
+            // Neshtek's Cool Ass Cap (simple square)
+            ctx.fillStyle = 'red'; // Cap color
+            ctx.fillRect(player.width / 2 - 15, -player.height / 2 - 5, 15, 5); // Main part
+            ctx.fillRect(player.width / 2 - 18, -player.height / 2, 5, 3); // Brim
+            ctx.strokeStyle = 'darkred';
+            ctx.strokeRect(player.width / 2 - 15, -player.height / 2 - 5, 15, 5);
+            ctx.strokeRect(player.width / 2 - 18, -player.height / 2, 5, 3);
+
+
+            ctx.restore();
+        }
+
+        function drawPigeonGirls() {
+            pigeonGirls.forEach((girl, index) => {
+                if (!girl.convinced) {
+                    ctx.fillStyle = '#FFC0CB'; // Pink for pigeon girls
+                    ctx.beginPath();
+                    ctx.arc(girl.x + girl.width / 2, girl.y + girl.height / 2, girl.width / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#FF69B4'; // Darker pink
+                    ctx.stroke();
+
+                    // Eyes
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath();
+                    ctx.arc(girl.x + girl.width / 2 - 5, girl.y + girl.height / 2 - 5, 2, 0, Math.PI * 2);
+                    ctx.arc(girl.x + girl.width / 2 + 5, girl.y + girl.height / 2 - 5, 2, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Beak
+                    ctx.fillStyle = 'orange';
+                    ctx.beginPath();
+                    ctx.moveTo(girl.x + girl.width / 2, girl.y + girl.height / 2 + 3);
+                    ctx.lineTo(girl.x + girl.width / 2 - 4, girl.y + girl.height / 2 + 8);
+                    ctx.lineTo(girl.x + girl.width / 2 + 4, girl.y + girl.height / 2 + 8);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = 'darkorange';
+                    ctx.stroke();
+
+                    // Heart emoji for un-convinced girls
+                    ctx.font = '16px Arial';
+                    ctx.fillText('💖', girl.x + girl.width / 2 - 8, girl.y - 5);
+
+                    // If it's the last girl and not convinced, indicate boss fight
+                    if (index === 9 && girlsCollected === 9 && !girl.convinced) {
+                        ctx.fillStyle = 'red';
+                        ctx.font = '18px Arial';
+                        ctx.fillText('😈', girl.x + girl.width / 2 - 8, girl.y + girl.height + 15);
+                    }
+                }
+            });
+        }
+
+        function drawBossFight() {
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.3)'; // Red overlay for boss fight
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            bossFightObstacles.forEach(obstacle => {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                ctx.strokeStyle = 'darkred';
+                ctx.strokeRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            });
+
+            // Display hits taken
+            ctx.fillStyle = 'black';
+            ctx.font = '24px Arial';
+            ctx.fillText(`Hits: ${bossFightHits}/${maxBossHits}`, 10, 30);
+
+            // Display timer
+            ctx.fillText(`Time: ${Math.ceil((bossFightDuration - bossFightTimer) / 60)}s`, canvas.width - 150, 30);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawPlayer();
+            drawPigeonGirls();
+
+            if (gameState === 'bossfight') {
+                drawBossFight();
+            }
+
+            // Display girls collected
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Girls: ${girlsCollected}/10`, 10, canvas.height - 10);
+        }
+
+        // Update Functions
+        function updatePlayer() {
+            player.x += player.dx;
+            player.y += player.dy;
+
+            // Keep player within canvas bounds
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (player.y < 0) player.y = 0;
+            if (player.y + player.height > canvas.height) player.y = canvas.height - player.height;
+        }
+
+        function checkCollisions() {
+            if (gameState !== 'playing') return;
+
+            pigeonGirls.forEach((girl, index) => {
+                if (!girl.convinced) {
+                    // Simple AABB collision detection
+                    if (player.x < girl.x + girl.width &&
+                        player.x + player.width > girl.x &&
+                        player.y < girl.y + girl.height &&
+                        player.y + player.height > girl.y) {
+
+                        // Collision detected
+                        if (index === 9) { // Last girl, [REDACTED]
+                            if (girlsCollected === 9) {
+                                startBossFight();
+                            } else {
+                                // Can't interact with [REDACTED] until 9 girls are collected
+                                // Maybe show a hint or do nothing
+                            }
+                        } else { // Regular girl
+                            startDialogue(index);
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateBossFight() {
+            bossFightTimer++;
+
+            // Spawn obstacles
+            if (bossFightTimer % 60 === 0 && bossFightTimer < bossFightDuration - 60) { // Spawn every second, stop before end
+                const obstacleWidth = 30;
+                const obstacleHeight = 30;
+                const obstacleSpeed = 5;
+                const spawnSide = Math.floor(Math.random() * 4); // 0:top, 1:right, 2:bottom, 3:left
+
+                let x, y, dx, dy;
+
+                switch (spawnSide) {
+                    case 0: // From top
+                        x = Math.random() * (canvas.width - obstacleWidth);
+                        y = -obstacleHeight;
+                        dx = 0;
+                        dy = obstacleSpeed;
+                        break;
+                    case 1: // From right
+                        x = canvas.width;
+                        y = Math.random() * (canvas.height - obstacleHeight);
+                        dx = -obstacleSpeed;
+                        dy = 0;
+                        break;
+                    case 2: // From bottom
+                        x = Math.random() * (canvas.width - obstacleWidth);
+                        y = canvas.height;
+                        dx = 0;
+                        dy = -obstacleSpeed;
+                        break;
+                    case 3: // From left
+                        x = -obstacleWidth;
+                        y = Math.random() * (canvas.height - obstacleHeight);
+                        dx = obstacleSpeed;
+                        dy = 0;
+                        break;
+                }
+                bossFightObstacles.push({ x, y, width: obstacleWidth, height: obstacleHeight, dx, dy });
+            }
+
+            // Move and check collision for obstacles
+            bossFightObstacles = bossFightObstacles.filter(obstacle => {
+                obstacle.x += obstacle.dx;
+                obstacle.y += obstacle.dy;
+
+                // Collision with player
+                if (player.x < obstacle.x + obstacle.width &&
+                    player.x + player.width > obstacle.x &&
+                    player.y < obstacle.y + obstacle.height &&
+                    player.y + player.height > obstacle.y) {
+                    bossFightHits++;
+                    // Remove obstacle after hit
+                    return false;
+                }
+
+                // Remove obstacles that are off-screen
+                return obstacle.x > -obstacle.width && obstacle.x < canvas.width &&
+                       obstacle.y > -obstacle.height && obstacle.y < canvas.height;
+            });
+
+            if (bossFightHits >= maxBossHits) {
+                endGame('lost');
+            }
+
+            if (bossFightTimer >= bossFightDuration) {
+                // If Neshtek survives the duration
+                pigeonGirls[9].convinced = true;
+                girlsCollected++;
+                endGame('won');
+            }
+        }
+
+        function update() {
+            if (gameState === 'playing') {
+                updatePlayer();
+                checkCollisions();
+            } else if (gameState === 'bossfight') {
+                updatePlayer(); // Player can still move during boss fight
+                updateBossFight();
+            }
+        }
+
+        // Dialogue System
+        function startDialogue(girlIdx) {
+            gameState = 'dialogue';
+            currentGirlIndex = girlIdx;
+            dialogueProgress = 0;
+            dialogueBox.style.display = 'block';
+            displayDialogue();
+        }
+
+        function displayDialogue() {
+            const girl = pigeonGirls[currentGirlIndex];
+            dialogueText.textContent = girl.dialogueLines[dialogueProgress];
+        }
+
+        function advanceDialogue() {
+            dialogueProgress++;
+            const girl = pigeonGirls[currentGirlIndex];
+
+            if (dialogueProgress < girl.dialogueLines.length) {
+                displayDialogue();
+            } else {
+                // Dialogue finished
+                girl.convinced = true;
+                girlsCollected++;
+                dialogueBox.style.display = 'none';
+                gameState = 'playing';
+                currentGirlIndex = -1;
+                dialogueProgress = 0;
+
+                if (girlsCollected === 10) {
+                    endGame('won');
+                }
+            }
+        }
+        dialogueButton.addEventListener('click', advanceDialogue);
+
+        // Boss Fight Logic
+        function startBossFight() {
+            gameState = 'bossfight';
+            dialogueBox.style.display = 'none'; // Ensure dialogue box is hidden
+            bossFightObstacles = [];
+            bossFightTimer = 0;
+            bossFightHits = 0;
+            // Optionally, move player to center for boss fight
+            player.x = canvas.width / 2 - player.width / 2;
+            player.y = canvas.height / 2 - player.height / 2;
+        }
+
+        // Game Over / Win
+        function endGame(status) {
+            gameState = status;
+            gameOverScreen.style.display = 'block';
+            if (status === 'won') {
+                gameOverScreen.classList.add('win');
+                gameOverMessage.textContent = "CONGRATULATIONS! NESHTEK GOT ALL HIS PIGEON BITCHES!";
+            } else if (status === 'lost') {
+                gameOverScreen.classList.remove('win');
+                gameOverMessage.textContent = "GAME OVER! NESHTEK FAILED TO GET HIS BITCH!";
+            }
+        }
+        restartButton.addEventListener('click', initGame);
+
+        // Keyboard Input
+        document.addEventListener('keydown', e => {
+            if (gameState === 'playing' || gameState === 'bossfight') {
+                if (e.key === 'ArrowRight' || e.key === 'd') {
+                    player.dx = player.speed;
+                } else if (e.key === 'ArrowLeft' || e.key === 'a') {
+                    player.dx = -player.speed;
+                } else if (e.key === 'ArrowUp' || e.key === 'w') {
+                    player.dy = -player.speed;
+                } else if (e.key === 'ArrowDown' || e.key === 's') {
+                    player.dy = player.speed;
+                }
+            }
+            // Allow advancing dialogue with spacebar or enter key
+            if (gameState === 'dialogue' && (e.key === ' ' || e.key === 'Enter')) {
+                advanceDialogue();
+            }
+        });
+
+        document.addEventListener('keyup', e => {
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'ArrowLeft' || e.key === 'a') {
+                player.dx = 0;
+            }
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'ArrowDown' || e.key === 's') {
+                player.dy = 0;
+            }
+        });
+
+        // Game Loop
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize and Start Game
+        initGame();
+        gameLoop();
+    </script>
+</body>
+</html>

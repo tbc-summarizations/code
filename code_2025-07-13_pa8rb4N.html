@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meethexep's Grand Adventure</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Sky blue */
+            font-family: 'Press Start 2P', cursive;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        #game-container {
+            width: 90vw;
+            height: 70vh;
+            max-width: 1200px;
+            max-height: 800px;
+            background-color: #A0D2EB;
+            border: 8px solid #4A4E69;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* --- Sucks Ass Game Part Styles --- */
+        #world {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #87CEEB 50%, #7CFC00 50%); /* Sky and grass */
+            transition: background 1s ease-in-out;
+        }
+
+        #meethexep {
+            position: absolute;
+            bottom: 10%;
+            left: 10%;
+            width: 80px;
+            height: 80px;
+            font-size: 60px;
+            text-align: center;
+            line-height: 80px;
+            z-index: 10;
+            transition: transform 0.3s ease-out;
+            animation: idle-suck 1s infinite alternate;
+        }
+
+        @keyframes idle-suck {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-5px); }
+        }
+
+        #scooter {
+            position: absolute;
+            bottom: 8%;
+            left: calc(10% - 20px);
+            width: 100px;
+            height: 60px;
+            font-size: 60px;
+            text-align: center;
+            line-height: 60px;
+            z-index: 9;
+            animation: scooter-suck 0.5s infinite alternate;
+        }
+
+        @keyframes scooter-suck {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(5px); }
+        }
+
+        #girl-area {
+            position: absolute;
+            bottom: 10%;
+            right: 15%;
+            width: 100px;
+            height: 100px;
+            font-size: 80px;
+            text-align: center;
+            line-height: 100px;
+            z-index: 10;
+            display: none; /* Hidden until a girl appears */
+            animation: girl-appear 0.5s ease-out forwards;
+        }
+
+        @keyframes girl-appear {
+            0% { transform: translateY(50px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+
+        #dialogue-box {
+            position: absolute;
+            bottom: 2%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70%;
+            background-color: #FFF;
+            border: 4px solid #4A4E69;
+            padding: 15px;
+            box-sizing: border-box;
+            text-align: center;
+            font-size: 1.2em;
+            z-index: 20;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #dialogue-text {
+            margin-bottom: 15px;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #choices button {
+            background-color: #6A0572;
+            color: white;
+            border: 2px solid #3F0344;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 0.9em;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        #choices button:hover {
+            background-color: #8C079C;
+            transform: translateY(-2px);
+        }
+
+        #game-status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border: 2px solid #4A4E69;
+            font-size: 0.8em;
+            z-index: 30;
+        }
+
+        /* --- Boss Fight Styles (AAA-like) --- */
+        #boss-fight-area {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #1a0a2a, #0d0510);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            z-index: 50;
+            filter: grayscale(0.2) contrast(1.2);
+            transition: filter 0.5s ease-in-out;
+        }
+
+        @keyframes boss-pulse {
+            0% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.05); filter: brightness(1.5) drop-shadow(0 0 15px #ff00ff); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+
+        @keyframes boss-glow {
+            0% { box-shadow: 0 0 10px #ff00ff, 0 0 20px #00ffff; }
+            50% { box-shadow: 0 0 30px #ff00ff, 0 0 60px #00ffff; }
+            100% { box-shadow: 0 0 10px #ff00ff, 0 0 20px #00ffff; }
+        }
+
+        @keyframes energy-orb {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+        }
+
+        @keyframes background-shift {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 100% 100%; }
+        }
+
+        #boss {
+            font-size: 150px;
+            animation: boss-pulse 2s infinite alternate, boss-glow 3s infinite ease-in-out;
+            position: relative;
+            z-index: 51;
+            cursor: pointer;
+            text-shadow: 0 0 10px #ff00ff, 0 0 20px #00ffff;
+        }
+
+        #boss-health-bar-container {
+            width: 60%;
+            height: 30px;
+            background-color: #333;
+            border: 3px solid #ff00ff;
+            margin-top: 30px;
+            position: relative;
+            z-index: 52;
+            box-shadow: 0 0 10px #00ffff;
+        }
+
+        #boss-health-bar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(to right, #00ffff, #ff00ff);
+            transition: width 0.1s linear;
+            filter: blur(0.5px);
+        }
+
+        #boss-instructions {
+            color: #fff;
+            font-size: 1.5em;
+            margin-top: 20px;
+            text-shadow: 0 0 5px #ff00ff;
+            animation: text-flicker 1s infinite alternate;
+        }
+
+        @keyframes text-flicker {
+            0% { opacity: 1; text-shadow: 0 0 5px #ff00ff; }
+            50% { opacity: 0.8; text-shadow: 0 0 10px #00ffff; }
+            100% { opacity: 1; text-shadow: 0 0 5px #ff00ff; }
+        }
+
+        .boss-hit-effect {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(255, 0, 255, 0.7) 0%, rgba(0, 255, 255, 0) 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: energy-orb 0.5s ease-out forwards;
+            z-index: 50;
+            filter: blur(5px);
+            transform: translate(-50%, -50%);
+        }
+
+        /* --- Win/Lose Screens --- */
+        .end-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 3em;
+            color: white;
+            text-shadow: 4px 4px 0 rgba(0,0,0,0.7);
+            z-index: 100;
+            background-color: rgba(0,0,0,0.8);
+        }
+
+        #win-screen {
+            background-color: rgba(0, 128, 0, 0.8);
+        }
+
+        #lose-screen {
+            background-color: rgba(128, 0, 0, 0.8);
+        }
+
+        .end-screen button {
+            margin-top: 30px;
+            background-color: #6A0572;
+            color: white;
+            border: 4px solid #3F0344;
+            padding: 15px 30px;
+            cursor: pointer;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 1.5em;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .end-screen button:hover {
+            background-color: #8C079C;
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="world"></div>
+        <div id="meethexep">🐱</div>
+        <div id="scooter">🛴</div>
+        <div id="girl-area"></div>
+        <div id="dialogue-box">
+            <div id="dialogue-text"></div>
+            <div id="choices"></div>
+        </div>
+        <div id="game-status">Girls: <span id="girls-count">0</span>/10</div>
+
+        <div id="boss-fight-area">
+            <div id="boss">👾</div>
+            <div id="boss-health-bar-container">
+                <div id="boss-health-bar"></div>
+            </div>
+            <div id="boss-instructions">CLICK THE BOSS! DEFEAT [REDACTED]!</div>
+        </div>
+
+        <div id="win-screen" class="end-screen">
+            <div>YOU WIN! MEETHEXEP IS THE ULTIMATE LADIES' MAN!</div>
+            <button onclick="resetGame()">Play Again?</button>
+        </div>
+
+        <div id="lose-screen" class="end-screen">
+            <div>YOU LOST! MEETHEXEP IS A FAILURE!</div>
+            <button onclick="resetGame()">Try Again?</button>
+        </div>
+    </div>
+
+    <script>
+        const meethexep = document.getElementById('meethexep');
+        const scooter = document.getElementById('scooter');
+        const girlArea = document.getElementById('girl-area');
+        const dialogueBox = document.getElementById('dialogue-box');
+        const dialogueText = document.getElementById('dialogue-text');
+        const choicesDiv = document.getElementById('choices');
+        const girlsCountSpan = document.getElementById('girls-count');
+        const bossFightArea = document.getElementById('boss-fight-area');
+        const boss = document.getElementById('boss');
+        const bossHealthBar = document.getElementById('boss-health-bar');
+        const winScreen = document.getElementById('win-screen');
+        const loseScreen = document.getElementById('lose-screen');
+        const world = document.getElementById('world');
+
+        let gameState = {
+            girlsGotten: 0,
+            currentGirlIndex: 0,
+            girlsAvailable: [],
+            gamePhase: 'walking', // 'walking', 'dialogue', 'boss_fight', 'win', 'lose'
+            bossHealth: 100,
+            dialogueProgress: 0,
+            currentGirl: null,
+            maxGirlsToGet: 9 // Before the final one
+        };
+
+        const girlEmotes = ['👧', '👩', '👱‍♀️', '💁‍♀️', '🧜‍♀️']; // Simple emojis for girls
+
+        const girlsData = [
+            { name: "Kärt", emote: girlEmotes[0], dialogue: [
+                { text: "Hey there, Meethexep. Nice scooter.", choices: [{ text: "Thanks!", next: 1 }, { text: "It's a Kukirin G3.", next: 2 }] },
+                { text: "Cool. So, what do you do for fun?", choices: [{ text: "Ride my scooter.", result: "fail" }, { text: "Listen to Estonian folk metal.", result: "success" }] },
+                { text: "Oh, a scooter enthusiast! Impressive.", choices: [{ text: "Yeah, it's fast.", result: "fail" }, { text: "It helps me explore.", result: "success" }] }
+            ]},
+            { name: "Mari", emote: girlEmotes[1], dialogue: [
+                { text: "Hello. You look... unique.", choices: [{ text: "I'm a cat-boy.", next: 1 }, { text: "I'm Meethexep.", next: 2 }] },
+                { text: "A cat-boy? Interesting. Do you purr?", choices: [{ text: "Only for special people.", result: "success" }, { text: "No, that's weird.", result: "fail" }] },
+                { text: "Meethexep, right. What's your favorite Estonian food?", choices: [{ text: "Blood sausage.", result: "fail" }, { text: "Kiluvõileib.", result: "success" }] }
+            ]},
+            { name: "Liis", emote: girlEmotes[2], dialogue: [
+                { text: "Hey! Is that a Kukirin G3? So cool!", choices: [{ text: "It is!", next: 1 }, { text: "You know scooters?", next: 2 }] },
+                { text: "Totally! My dream scooter. Can I try it?", choices: [{ text: "No way.", result: "fail" }, { text: "Maybe, if you're nice.", result: "success" }] },
+                { text: "I love scooters! What's the top speed?", choices: [{ text: "It's more about the journey.", result: "success" }, { text: "100 km/h!", result: "fail" }] }
+            ]},
+            { name: "Katrin", emote: girlEmotes[3], dialogue: [
+                { text: "Oh, a local.", choices: [{ text: "I live here.", next: 1 }, { text: "Yes, I am Meethexep.", next: 2 }] },
+                { text: "Right. What's your opinion on Estonian weather?", choices: [{ text: "It's always cold.", result: "fail" }, { text: "It has its charm.", result: "success" }] },
+                { text: "Meethexep. Are you into pixel art?", choices: [{ text: "No, I prefer realism.", result: "fail" }, { text: "It's growing on me.", result: "success" }] }
+            ]},
+            { name: "Kadri", emote: girlEmotes[4], dialogue: [
+                { text: "Greetings, traveler.", choices: [{ text: "I'm not a traveler.", next: 1 }, { text: "Greetings back.", next: 2 }] },
+                { text: "Then what are you? A local cat-person?", choices: [{ text: "Yes, and I seek companionship.", result: "success" }, { text: "I'm just a guy.", result: "fail" }] },
+                { text: "A simple greeting. What's your quest?", choices: [{ text: "To get girls.", result: "fail" }, { text: "To experience life.", result: "success" }] }
+            ]},
+            { name: "Maarja", emote: girlEmotes[0], dialogue: [
+                { text: "Wow, your scooter looks fast!", choices: [{ text: "It is.", next: 1 }, { text: "Wanna ride?", next: 2 }] },
+                { text: "So, what's the most exciting place you've ridden it?", choices: [{ text: "The supermarket.", result: "fail" }, { text: "Through the forest trails.", result: "success" }] },
+                { text: "Ride? Maybe! What kind of music do you like?", choices: [{ text: "Anything loud.", result: "fail" }, { text: "Something with a good beat for riding.", result: "success" }] }
+            ]},
+            { name: "Anna", emote: girlEmotes[1], dialogue: [
+                { text: "You have an interesting aura.", choices: [{ text: "Is that good?", next: 1 }, { text: "I try.", next: 2 }] },
+                { text: "It's... unique. Do you believe in destiny?", choices: [{ text: "No, it's all random.", result: "fail" }, { text: "Perhaps, for some things.", result: "success" }] },
+                { text: "Trying is good. What's your biggest dream?", choices: [{ text: "To own more scooters.", result: "fail" }, { text: "To find true connection.", result: "success" }] }
+            ]},
+            { name: "Kristiina", emote: girlEmotes[2], dialogue: [
+                { text: "Hi! Are you from around here?", choices: [{ text: "Yes, born and raised.", next: 1 }, { text: "I'm just passing through.", next: 2 }] },
+                { text: "Cool! What's your favorite local spot?", choices: [{ text: "My bed.", result: "fail" }, { text: "The old lighthouse.", result: "success" }] },
+                { text: "Passing through? Where are you headed?", choices: [{ text: "Nowhere in particular.", result: "fail" }, { text: "Wherever adventure takes me.", result: "success" }] }
+            ]},
+            { name: "Triin", emote: girlEmotes[3], dialogue: [
+                { text: "Hey, cat-boy! You look like you're on a mission.", choices: [{ text: "I am!", next: 1 }, { text: "Just chilling.", next: 2 }] },
+                { text: "What kind of mission?", choices: [{ text: "To collect all the girls.", result: "fail" }, { text: "To experience everything life offers.", result: "success" }] },
+                { text: "Chilling is good. What's your favorite season in Estonia?", choices: [{ text: "Summer, obviously.", result: "fail" }, { text: "Autumn, for the colors.", result: "success" }] }
+            ]}
+        ];
+
+        function initGame() {
+            gameState.girlsGotten = 0;
+            gameState.currentGirlIndex = 0;
+            gameState.girlsAvailable = [...girlsData]; // Reset available girls
+            gameState.gamePhase = 'walking';
+            gameState.bossHealth = 100;
+            gameState.dialogueProgress = 0;
+            gameState.currentGirl = null;
+
+            updateGameStatus();
+            hideAllScreens();
+            world.style.background = 'linear-gradient(to bottom, #87CEEB 50%, #7CFC00 50%)';
+            meethexep.style.display = 'block';
+            scooter.style.display = 'block';
+            dialogueBox.style.display = 'none';
+            girlArea.style.display = 'none';
+            bossFightArea.style.display = 'none';
+
+            spawnGirl(); // Start the game by spawning the first girl
+        }
+
+        function updateGameStatus() {
+            girlsCountSpan.textContent = gameState.girlsGotten;
+        }
+
+        function spawnGirl() {
+            if (gameState.girlsGotten >= gameState.maxGirlsToGet) {
+                startBossFight();
+                return;
+            }
+
+            dialogueBox.style.display = 'none';
+            girlArea.style.display = 'none';
+            gameState.gamePhase = 'walking';
+
+            // Simulate walking around for a bit
+            setTimeout(() => {
+                let girlToSpawn;
+                if (gameState.girlsAvailable.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * gameState.girlsAvailable.length);
+                    girlToSpawn = gameState.girlsAvailable[randomIndex];
+                    gameState.currentGirl = girlToSpawn;
+                    gameState.dialogueProgress = 0;
+
+                    girlArea.textContent = girlToSpawn.emote;
+                    girlArea.style.display = 'block';
+                    startDialogue(girlToSpawn);
+                } else {
+                    // This should ideally not happen if logic ensures enough girls
+                    // But as a fallback, if we run out, we might need to reset or handle
+                    console.error("Ran out of unique girls to spawn!");
+                    initGame(); // A crude reset
+                }
+            }, 1000); // Simulate a short walk
+        }
+
+        function startDialogue(girl) {
+            gameState.gamePhase = 'dialogue';
+            dialogueBox.style.display = 'flex';
+            displayDialogue(girl.dialogue[gameState.dialogueProgress]);
+        }
+
+        function displayDialogue(dialogueNode) {
+            dialogueText.textContent = dialogueNode.text;
+            choicesDiv.innerHTML = '';
+
+            dialogueNode.choices.forEach(choice => {
+                const button = document.createElement('button');
+                button.textContent = choice.text;
+                button.onclick = () => handleChoice(choice);
+                choicesDiv.appendChild(button);
+            });
+        }
+
+        function handleChoice(choice) {
+            const currentGirlData = gameState.currentGirl;
+            const currentDialogueNode = currentGirlData.dialogue[gameState.dialogueProgress];
+
+            if (choice.result) { // This choice leads to a success/fail state
+                if (choice.result === "success") {
+                    gameState.girlsGotten++;
+                    updateGameStatus();
+                    alert(`You got ${currentGirlData.name}!`); // Simple feedback
+                    // Remove girl from available list so she's not repeated
+                    gameState.girlsAvailable = gameState.girlsAvailable.filter(g => g.name !== currentGirlData.name);
+                } else {
+                    alert(`You lost ${currentGirlData.name}! She walked away.`); // Simple feedback
+                    // Girl is lost, but still available for later if not enough others
+                    // For "sucks ass" part, we just move on to next girl without removing her from pool
+                }
+                spawnGirl(); // Move to the next girl or boss fight
+            } else if (choice.next !== undefined) { // This choice leads to another dialogue node
+                gameState.dialogueProgress = choice.next;
+                displayDialogue(currentGirlData.dialogue[gameState.dialogueProgress]);
+            }
+        }
+
+        // --- Boss Fight Logic ---
+        function startBossFight() {
+            gameState.gamePhase = 'boss_fight';
+            meethexep.style.display = 'none';
+            scooter.style.display = 'none';
+            girlArea.style.display = 'none';
+            dialogueBox.style.display = 'none';
+            bossFightArea.style.display = 'flex';
+            bossHealthBar.style.width = '100%';
+            boss.style.animation = 'boss-pulse 2s infinite alternate, boss-glow 3s infinite ease-in-out';
+            world.style.background = 'radial-gradient(circle at center, #1a0a2a, #0d0510)'; // Dark dramatic background
+
+            boss.onclick = hitBoss;
+
+            // Adding a dynamic background effect for AAA feel
+            world.style.backgroundSize = '200% 200%';
+            world.style.animation = 'background-shift 10s linear infinite alternate';
+        }
+
+        function hitBoss(event) {
+            if (gameState.gamePhase !== 'boss_fight') return;
+
+            gameState.bossHealth -= 5; // Each hit reduces health
+            if (gameState.bossHealth < 0) gameState.bossHealth = 0;
+            bossHealthBar.style.width = gameState.bossHealth + '%';
+
+            // Visual feedback for hit
+            const hitEffect = document.createElement('div');
+            hitEffect.className = 'boss-hit-effect';
+            hitEffect.style.left = `${event.clientX - bossFightArea.getBoundingClientRect().left}px`;
+            hitEffect.style.top = `${event.clientY - bossFightArea.getBoundingClientRect().top}px`;
+            bossFightArea.appendChild(hitEffect);
+            setTimeout(() => hitEffect.remove(), 500); // Remove effect after animation
+
+            // More complex visual feedback on boss itself
+            boss.style.transform = 'scale(0.9)';
+            boss.style.filter = 'brightness(2) saturate(2)';
+            setTimeout(() => {
+                boss.style.transform = 'scale(1)';
+                boss.style.filter = 'none';
+            }, 100);
+
+
+            if (gameState.bossHealth <= 0) {
+                endBossFight(true);
+            }
+        }
+
+        function endBossFight(win) {
+            bossFightArea.style.display = 'none';
+            if (win) {
+                winScreen.style.display = 'flex';
+                world.style.animation = 'none'; // Stop background animation
+            } else {
+                loseScreen.style.display = 'flex';
+                world.style.animation = 'none'; // Stop background animation
+            }
+            gameState.gamePhase = win ? 'win' : 'lose';
+        }
+
+        function hideAllScreens() {
+            winScreen.style.display = 'none';
+            loseScreen.style.display = 'none';
+        }
+
+        function resetGame() {
+            hideAllScreens();
+            initGame();
+        }
+
+        // Initialize the game when the page loads
+        document.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>

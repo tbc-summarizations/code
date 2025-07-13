@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pigeon Pimp: Neshtek's Quest</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            font-family: 'Arial', sans-serif;
+            color: #eee;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            width: 1000px;
+            height: 600px;
+            background-color: #3a5; /* Green park-like background */
+            position: relative;
+            border: 5px solid #555;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        #neshtek {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background-color: #888; /* Pigeon body color */
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+            cursor: grab;
+            user-select: none;
+            transition: transform 0.05s linear;
+            z-index: 100;
+        }
+
+        #neshtek .cap {
+            position: absolute;
+            top: -15px;
+            font-size: 25px;
+            transform: rotate(-15deg);
+        }
+
+        #neshtek .chain {
+            position: absolute;
+            bottom: -5px;
+            font-size: 20px;
+            color: gold;
+        }
+
+        .pigeon-girl {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: #fdd; /* Pinkish for girls */
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 25px;
+            z-index: 50;
+        }
+
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 8px 15px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+            font-size: 18px;
+            z-index: 150;
+        }
+
+        #dialogue-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            padding: 30px;
+            background-color: rgba(0, 0, 0, 0.85);
+            border: 3px solid #eee;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 200;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+        }
+
+        #dialogue-text {
+            font-size: 20px;
+            margin-bottom: 25px;
+            line-height: 1.4;
+        }
+
+        #dialogue-options button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            margin: 8px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        #dialogue-options button:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #boss-fight-area {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(100, 0, 0, 0.9); /* Dark red for intensity */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 250;
+            color: white;
+            font-size: 24px;
+            text-shadow: 0 0 10px black;
+        }
+
+        #boss-fight-area h2 {
+            margin-bottom: 20px;
+            font-size: 36px;
+        }
+
+        #boss-fight-area p {
+            font-size: 22px;
+            margin-bottom: 40px;
+        }
+
+        #redacted-boss {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 80px;
+            animation: pulse 1.5s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { transform: translateX(-50%) scale(1); }
+            to { transform: translateX(-50%) scale(1.1); }
+        }
+
+        #boss-obstacles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .obstacle {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: purple; /* Obstacle color */
+            border-radius: 5px;
+            animation: fall linear forwards;
+        }
+
+        @keyframes fall {
+            from { transform: translateY(0); }
+            to { transform: translateY(600px); }
+        }
+
+        #end-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            color: white;
+            text-align: center;
+        }
+
+        #end-message {
+            font-size: 48px;
+            margin-bottom: 30px;
+        }
+
+        #restart-button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 20px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        #restart-button:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="neshtek">
+            <span class="cap">🧢</span>
+            <span class="chain">🔗</span>
+            🐦
+        </div>
+        <div id="score">Bitches Acquired: 0/10</div>
+
+        <div id="dialogue-box" class="hidden">
+            <p id="dialogue-text"></p>
+            <div id="dialogue-options"></div>
+        </div>
+
+        <div id="boss-fight-area" class="hidden">
+            <h2>The Final Challenge: [REDACTED]</h2>
+            <p>Dodge the incoming obstacles for 15 seconds!</p>
+            <div id="redacted-boss">😈</div>
+            <div id="boss-obstacles"></div>
+            <div style="position: absolute; bottom: 20px; right: 20px; font-size: 20px;">Time: <span id="boss-timer">15</span>s</div>
+        </div>
+
+        <div id="end-screen" class="hidden">
+            <h2 id="end-message"></h2>
+            <button id="restart-button">Play Again?</button>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const neshtek = document.getElementById('neshtek');
+        const scoreDisplay = document.getElementById('score');
+        const dialogueBox = document.getElementById('dialogue-box');
+        const dialogueText = document.getElementById('dialogue-text');
+        const dialogueOptions = document.getElementById('dialogue-options');
+        const bossFightArea = document.getElementById('boss-fight-area');
+        const redactedBoss = document.getElementById('redacted-boss');
+        const bossObstaclesContainer = document.getElementById('boss-obstacles');
+        const bossTimerDisplay = document.getElementById('boss-timer');
+        const endScreen = document.getElementById('end-screen');
+        const endMessage = document.getElementById('end-message');
+        const restartButton = document.getElementById('restart-button');
+
+        let neshtekX = 50;
+        let neshtekY = 50;
+        const neshtekSpeed = 5;
+        const neshtekSize = 50;
+
+        let pigeonsGot = 0;
+        const totalPigeonsNeeded = 10;
+        const maxRegularPigeonsOnScreen = 5; // How many regular pigeon girls are visible at once
+
+        let activePigeonGirls = []; // Stores DOM elements of visible pigeon girls
+        let pigeonGirlData = []; // Pool of dialogue data for regular girls
+
+        let currentInteractingPigeon = null;
+        let isDialogueActive = false;
+        let isBossFightActive = false;
+        let gameRunning = true;
+        let keysPressed = {};
+
+        // Boss fight variables
+        let bossFightTimer;
+        let bossFightInterval;
+        let obstacleSpawnInterval;
+        let bossNeshtekX = gameContainer.offsetWidth / 2 - neshtekSize / 2;
+        let bossNeshtekY = gameContainer.offsetHeight - neshtekSize - 20;
+
+        const regularPigeonDialogues = [
+            {
+                introText: "Hey there, handsome. You got something sparkly for me?",
+                choices: [
+                    { text: "Yeah, my golden chain! ✨", outcome: 'success', response: "Ooh, shiny! You're quite the charmer, Neshtek! I'm yours!" },
+                    { text: "Nah, just my good looks.", outcome: 'fail', response: "Good looks don't pay the bills, buddy. Beat it." }
+                ]
+            },
+            {
+                introText: "Oh, a pigeon with a cap! You must be important. Convince me.",
+                choices: [
+                    { text: "I'm Neshtek, the baddest bird in town. My cap says it all.", outcome: 'success', response: "Mmm, confident. I like that. Let's fly, big boy!" },
+                    { text: "I just found it, honestly.", outcome: 'fail', response: "Boring. I thought you were unique. Next!" }
+                ]
+            },
+            {
+                introText: "You look like you've seen things. Tell me a tale.",
+                choices: [
+                    { text: "I once outsmarted a hawk for a baguette crumb.", outcome: 'success', response: "A true survivor! I'm impressed, Neshtek." },
+                    { text: "My life is pretty boring, actually.", outcome: 'fail', response: "Yawn. Find someone else to bore." }
+                ]
+            },
+            {
+                introText: "What's a cool pigeon like you doing in a place like this?",
+                choices: [
+                    { text: "Looking for the finest feather in the flock, and I found her.", outcome: 'success', response: "Smooth talker! You got me, Neshtek." },
+                    { text: "Just passing through.", outcome: 'fail', response: "Then keep passing. I'm busy." }
+                ]
+            },
+            {
+                introText: "You seem... different. What's your secret?",
+                choices: [
+                    { text: "It's the Neshtek charm, baby. Irresistible.", outcome: 'success', response: "It certainly is! I'm smitten." },
+                    { text: "I don't have a secret.", outcome: 'fail', response: "Then you're not as interesting as I thought." }
+                ]
+            },
+            {
+                introText: "My feathers are ruffled. Can you cheer me up?",
+                choices: [
+                    { text: "I know the best spot for dropped fries downtown.", outcome: 'success', response: "Fries?! You're a dream come true, Neshtek!" },
+                    { text: "I'm not a comedian.", outcome: 'fail', response: "Then don't waste my time." }
+                ]
+            },
+            {
+                introText: "Are you single? Asking for a friend... (it's me).",
+                choices: [
+                    { text: "Only if you're ready to fly with the best.", outcome: 'success', response: "I'm more than ready! Lead the way, Neshtek!" },
+                    { text: "That's a bit forward, isn't it?", outcome: 'fail', response: "If you can't handle a direct approach, you can't handle me." }
+                ]
+            },
+            {
+                introText: "What's your favorite thing about being a pigeon?",
+                choices: [
+                    { text: "The freedom to soar and the thrill of the city.", outcome: 'success', response: "A true free spirit! I admire that, Neshtek." },
+                    { text: "Pooping on statues.", outcome: 'fail', response: "Gross! Get away from me!" }
+                ]
+            },
+            {
+                introText: "I'm looking for a partner in crime. Are you up for mischief?",
+                choices: [
+                    { text: "Mischief is my middle name. Let's cause some chaos.", outcome: 'success', response: "My kind of bird! Let's get into trouble, Neshtek!" },
+                    { text: "I prefer to stay out of trouble.", outcome: 'fail', response: "Too boring for me. Bye!" }
+                ]
+            }
+        ];
+
+        function initGame() {
+            pigeonsGot = 0;
+            gameRunning = true;
+            isDialogueActive = false;
+            isBossFightActive = false;
+            keysPressed = {};
+
+            // Clear existing elements
+            activePigeonGirls.forEach(girl => girl.remove());
+            activePigeonGirls = [];
+            bossObstaclesContainer.innerHTML = '';
+            clearTimeout(bossFightTimer);
+            clearInterval(bossFightInterval);
+            clearInterval(obstacleSpawnInterval);
+
+            // Reset Neshtek position
+            neshtekX = gameContainer.offsetWidth / 2 - neshtekSize / 2;
+            neshtekY = gameContainer.offsetHeight / 2 - neshtekSize / 2;
+            neshtek.style.transform = `translate(${neshtekX}px, ${neshtekY}px)`;
+            neshtek.style.display = 'flex'; // Ensure Neshtek is visible
+
+            // Hide all overlays
+            dialogueBox.classList.add('hidden');
+            bossFightArea.classList.add('hidden');
+            endScreen.classList.add('hidden');
+
+            updateScoreDisplay();
+            spawnRegularPigeonGirls();
+
+            gameLoop();
+        }
+
+        function updateScoreDisplay() {
+            scoreDisplay.textContent = `Bitches Acquired: ${pigeonsGot}/${totalPigeonsNeeded}`;
+        }
+
+        function spawnRegularPigeonGirls() {
+            while (activePigeonGirls.length < maxRegularPigeonsOnScreen) {
+                const newGirl = createPigeonGirl();
+                activePigeonGirls.push(newGirl);
+                gameContainer.appendChild(newGirl);
+            }
+        }
+
+        function createPigeonGirl() {
+            const girl = document.createElement('div');
+            girl.classList.add('pigeon-girl');
+            girl.textContent = '🕊️'; // Default emoji for a girl
+
+            // Random position, avoiding Neshtek's initial spawn area
+            let x, y;
+            const minDistance = 150; // Minimum distance from Neshtek's center
+            do {
+                x = Math.random() * (gameContainer.offsetWidth - 40);
+                y = Math.random() * (gameContainer.offsetHeight - 40);
+            } while (
+                Math.abs(x - neshtekX) < minDistance &&
+                Math.abs(y - neshtekY) < minDistance
+            );
+
+            girl.style.left = `${x}px`;
+            girl.style.top = `${y}px`;
+
+            // Assign a random dialogue from the pool
+            const dialogueIndex = Math.floor(Math.random() * regularPigeonDialogues.length);
+            girl.dataset.dialogueIndex = dialogueIndex;
+
+            return girl;
+        }
+
+        function updateNeshtekPosition() {
+            if (isDialogueActive || isBossFightActive || !gameRunning) return;
+
+            let newX = neshtekX;
+            let newY = neshtekY;
+
+            if (keysPressed['ArrowUp'] || keysPressed['w']) newY -= neshtekSpeed;
+            if (keysPressed['ArrowDown'] || keysPressed['s']) newY += neshtekSpeed;
+            if (keysPressed['ArrowLeft'] || keysPressed['a']) newX -= neshtekSpeed;
+            if (keysPressed['ArrowRight'] || keysPressed['d']) newX += neshtekSpeed;
+
+            // Boundary checks
+            newX = Math.max(0, Math.min(newX, gameContainer.offsetWidth - neshtekSize));
+            newY = Math.max(0, Math.min(newY, gameContainer.offsetHeight - neshtekSize));
+
+            neshtekX = newX;
+            neshtekY = newY;
+            neshtek.style.transform = `translate(${neshtekX}px, ${neshtekY}px)`;
+        }
+
+        function checkCollisions() {
+            if (isDialogueActive || isBossFightActive || !gameRunning) return;
+
+            const neshtekRect = neshtek.getBoundingClientRect();
+            const gameRect = gameContainer.getBoundingClientRect();
+
+            // Adjust Neshtek's rect to be relative to gameContainer
+            const neshtekGameRect = {
+                left: neshtekX,
+                top: neshtekY,
+                right: neshtekX + neshtekSize,
+                bottom: neshtekY + neshtekSize
+            };
+
+            for (let i = 0; i < activePigeonGirls.length; i++) {
+                const girl = activePigeonGirls[i];
+                const girlRect = girl.getBoundingClientRect();
+
+                // Adjust girl's rect to be relative to gameContainer
+                const girlGameRect = {
+                    left: girl.offsetLeft,
+                    top: girl.offsetTop,
+                    right: girl.offsetLeft + girl.offsetWidth,
+                    bottom: girl.offsetTop + girl.offsetHeight
+                };
+
+                if (neshtekGameRect.left < girlGameRect.right &&
+                    neshtekGameRect.right > girlGameRect.left &&
+                    neshtekGameRect.top < girlGameRect.bottom &&
+                    neshtekGameRect.bottom > girlGameRect.top) {
+                    
+                    isDialogueActive = true;
+                    currentInteractingPigeon = girl;
+                    showDialogue(parseInt(girl.dataset.dialogueIndex));
+                    break;
+                }
+            }
+        }
+
+        function showDialogue(dialogueIndex) {
+            const dialogue = regularPigeonDialogues[dialogueIndex];
+            dialogueText.textContent = dialogue.introText;
+            dialogueOptions.innerHTML = ''; // Clear previous options
+
+            dialogue.choices.forEach((choice, index) => {
+                const button = document.createElement('button');
+                button.textContent = choice.text;
+                button.onclick = () => handleDialogueChoice(choice);
+                dialogueOptions.appendChild(button);
+            });
+
+            dialogueBox.classList.remove('hidden');
+        }
+
+        function handleDialogueChoice(choice) {
+            dialogueBox.classList.add('hidden');
+            isDialogueActive = false;
+
+            // Remove the interacted pigeon girl
+            if (currentInteractingPigeon) {
+                currentInteractingPigeon.remove();
+                activePigeonGirls = activePigeonGirls.filter(girl => girl !== currentInteractingPigeon);
+                currentInteractingPigeon = null;
+            }
+
+            if (choice.outcome === 'success') {
+                pigeonsGot++;
+                updateScoreDisplay();
+                // Display success response briefly if desired, or just proceed
+                // console.log("Success: " + choice.response); 
+            } else {
+                // Display failure response briefly
+                // console.log("Failure: " + choice.response);
+            }
+
+            // Spawn a new pigeon girl if we haven't reached the boss fight trigger
+            if (pigeonsGot < totalPigeonsNeeded - 1) { // -1 because the 10th is boss
+                spawnRegularPigeonGirls();
+            } else if (pigeonsGot === totalPigeonsNeeded - 1) {
+                // Trigger boss fight when 9 pigeons are acquired
+                startBossFight();
+            }
+        }
+
+        function startBossFight() {
+            gameRunning = false;
+            isBossFightActive = true;
+            neshtek.style.display = 'none'; // Hide Neshtek from main game area
+            
+            // Move Neshtek to boss fight area
+            neshtek.style.left = `${bossNeshtekX}px`;
+            neshtek.style.top = `${bossNeshtekY}px`;
+            neshtek.style.transform = 'none'; // Reset transform for direct positioning
+            neshtek.style.display = 'flex'; // Show Neshtek in boss fight context
+
+            bossFightArea.classList.remove('hidden');
+            bossObstaclesContainer.innerHTML = ''; // Clear any old obstacles
+
+            let timeRemaining = 15;
+            bossTimerDisplay.textContent = timeRemaining;
+
+            bossFightInterval = setInterval(() => {
+                timeRemaining--;
+                bossTimerDisplay.textContent = timeRemaining;
+                if (timeRemaining <= 0) {
+                    clearInterval(bossFightInterval);
+                    clearInterval(obstacleSpawnInterval);
+                    pigeonsGot++; // Successfully got the last pigeon
+                    endGame(true);
+                }
+            }, 1000);
+
+            obstacleSpawnInterval = setInterval(spawnObstacle, 500); // Spawn an obstacle every 0.5 seconds
+        }
+
+        function spawnObstacle() {
+            if (!isBossFightActive) return;
+
+            const obstacle = document.createElement('div');
+            obstacle.classList.add('obstacle');
+            obstacle.style.left = `${Math.random() * (gameContainer.offsetWidth - 30)}px`;
+            obstacle.style.animationDuration = `${Math.random() * 2 + 1.5}s`; // 1.5 to 3.5 seconds
+            bossObstaclesContainer.appendChild(obstacle);
+
+            // Set a timeout to check collision when obstacle reaches Neshtek's height
+            const obstacleDuration = parseFloat(obstacle.style.animationDuration) * 1000;
+            setTimeout(() => {
+                checkBossObstacleCollision(obstacle);
+                obstacle.remove(); // Remove obstacle after it falls off screen
+            }, obstacleDuration);
+        }
+
+        function checkBossObstacleCollision(obstacle) {
+            if (!isBossFightActive || !gameRunning) return;
+
+            const neshtekRect = neshtek.getBoundingClientRect();
+            const obstacleRect = obstacle.getBoundingClientRect();
+
+            if (neshtekRect.left < obstacleRect.right &&
+                neshtekRect.right > obstacleRect.left &&
+                neshtekRect.top < obstacleRect.bottom &&
+                neshtekRect.bottom > obstacleRect.top) {
+                
+                clearInterval(bossFightInterval);
+                clearInterval(obstacleSpawnInterval);
+                endGame(false); // Neshtek hit an obstacle, game over
+            }
+        }
+
+        function endGame(win) {
+            gameRunning = false;
+            isDialogueActive = false;
+            isBossFightActive = false;
+            
+            neshtek.style.display = 'none'; // Hide Neshtek
+            dialogueBox.classList.add('hidden');
+            bossFightArea.classList.add('hidden');
+            activePigeonGirls.forEach(girl => girl.remove()); // Remove all girls
+
+            endScreen.classList.remove('hidden');
+            if (win) {
+                endMessage.textContent = "CONGRATULATIONS, NESHTEK! YOU GOT ALL 10 BITCHES!";
+                endMessage.style.color = '#7bff00';
+            } else {
+                endMessage.textContent = "GAME OVER! [REDACTED] WAS TOO MUCH FOR YOU, NESHTEK!";
+                endMessage.style.color = '#ff0000';
+            }
+        }
+
+        // Event Listeners for Neshtek movement (Boss fight movement uses these too)
+        document.addEventListener('keydown', (e) => {
+            keysPressed[e.key.toLowerCase()] = true;
+            if (isBossFightActive) { // Specific movement for boss fight
+                if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
+                    bossNeshtekX = Math.max(0, bossNeshtekX - neshtekSpeed * 10); // Faster movement for dodging
+                } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
+                    bossNeshtekX = Math.min(gameContainer.offsetWidth - neshtekSize, bossNeshtekX + neshtekSpeed * 10);
+                }
+                neshtek.style.left = `${bossNeshtekX}px`;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keysPressed[e.key.toLowerCase()] = false;
+        });
+
+        restartButton.addEventListener('click', initGame);
+
+        // Game loop
+        function gameLoop() {
+            if (gameRunning) {
+                updateNeshtekPosition();
+                if (!isDialogueActive && !isBossFightActive) {
+                    checkCollisions();
+                }
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize the game when the page loads
+        initGame();
+    </script>
+</body>
+</html>

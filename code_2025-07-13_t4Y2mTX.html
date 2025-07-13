@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pigeon Pimp</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #87CEEB; /* Sky blue */
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            width: 800px;
+            height: 600px;
+            background-color: #ADD8E6; /* Lighter blue */
+            border: 5px solid #555;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #player-pigeon {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: transparent;
+            font-size: 36px;
+            text-align: center;
+            line-height: 40px;
+            cursor: grab;
+            z-index: 10;
+        }
+        .pigeon-gurl {
+            position: absolute;
+            width: 35px;
+            height: 35px;
+            background-color: transparent;
+            font-size: 32px;
+            text-align: center;
+            line-height: 35px;
+            cursor: pointer;
+            z-index: 5;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: #333;
+            font-weight: bold;
+            z-index: 20;
+        }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 36px;
+            color: #000;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 20px 40px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 25;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="player-pigeon">🐦</div>
+        <div id="score">Score: 0</div>
+        <div id="message">Press Arrow Keys to Fly!</div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const playerPigeon = document.getElementById('player-pigeon');
+        const scoreDisplay = document.getElementById('score');
+        const messageDisplay = document.getElementById('message');
+
+        const containerWidth = gameContainer.offsetWidth;
+        const containerHeight = gameContainer.offsetHeight;
+        const playerSize = 40;
+        const gurlSize = 35;
+
+        let playerX = containerWidth / 2 - playerSize / 2;
+        let playerY = containerHeight / 2 - playerSize / 2;
+        let score = 0;
+        let gameRunning = false;
+        let pigeonGurls = [];
+        const maxGurls = 5; // Number of pigeon gurls to have on screen
+
+        const playerSpeed = 8; // Pixels per frame
+
+        const keys = {}; // To track pressed keys for continuous movement
+
+        document.addEventListener('keydown', (e) => {
+            if (!gameRunning) {
+                gameRunning = true;
+                messageDisplay.style.display = 'none';
+                gameLoop(); // Start the game loop
+            }
+            keys[e.key] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        function updatePlayerPosition() {
+            if (keys['ArrowUp']) {
+                playerY -= playerSpeed;
+            }
+            if (keys['ArrowDown']) {
+                playerY += playerSpeed;
+            }
+            if (keys['ArrowLeft']) {
+                playerX -= playerSpeed;
+            }
+            if (keys['ArrowRight']) {
+                playerX += playerSpeed;
+            }
+
+            // Clamp player position within game boundaries
+            playerX = Math.max(0, Math.min(playerX, containerWidth - playerSize));
+            playerY = Math.max(0, Math.min(playerY, containerHeight - playerSize));
+
+            playerPigeon.style.left = `${playerX}px`;
+            playerPigeon.style.top = `${playerY}px`;
+        }
+
+        function createPigeonGurl() {
+            const gurlDiv = document.createElement('div');
+            gurlDiv.classList.add('pigeon-gurl');
+            gurlDiv.textContent = '🕊️'; // Emoji for pigeon gurl
+            
+            // Random position, ensuring it's within bounds and not too close to player initially
+            let randX, randY;
+            let collisionDetected = true;
+            let attempts = 0;
+            const minDistance = 100; // Minimum distance from player
+
+            while(collisionDetected && attempts < 50) { // Try a few times to find a good spot
+                randX = Math.random() * (containerWidth - gurlSize);
+                randY = Math.random() * (containerHeight - gurlSize);
+
+                // Check distance from player
+                const dist = Math.sqrt(Math.pow(randX - playerX, 2) + Math.pow(randY - playerY, 2));
+                if (dist > minDistance) {
+                    collisionDetected = false;
+                }
+                attempts++;
+            }
+
+            gurlDiv.style.left = `${randX}px`;
+            gurlDiv.style.top = `${randY}px`;
+            gameContainer.appendChild(gurlDiv);
+
+            pigeonGurls.push({
+                element: gurlDiv,
+                x: randX,
+                y: randY,
+                width: gurlSize,
+                height: gurlSize
+            });
+        }
+
+        function checkCollisions() {
+            for (let i = pigeonGurls.length - 1; i >= 0; i--) {
+                const gurl = pigeonGurls[i];
+
+                // Simple AABB collision detection
+                if (playerX < gurl.x + gurl.width &&
+                    playerX + playerSize > gurl.x &&
+                    playerY < gurl.y + gurl.height &&
+                    playerY + playerSize > gurl.y)
+                {
+                    // Collision detected!
+                    score++;
+                    scoreDisplay.textContent = `Score: ${score}`;
+                    gameContainer.removeChild(gurl.element); // Remove the collected gurl
+                    pigeonGurls.splice(i, 1); // Remove from array
+
+                    // Add a new gurl to replace the collected one
+                    createPigeonGurl();
+                }
+            }
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            updatePlayerPosition();
+            checkCollisions();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initial setup
+        playerPigeon.style.left = `${playerX}px`;
+        playerPigeon.style.top = `${playerY}px`;
+
+        // Populate initial gurls
+        for (let i = 0; i < maxGurls; i++) {
+            createPigeonGurl();
+        }
+
+        // Show initial message
+        messageDisplay.style.display = 'block';
+    </script>
+</body>
+</html>

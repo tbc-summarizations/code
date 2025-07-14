@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox-like Experience</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #222;
+            font-family: sans-serif;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none; /* Prevent text selection during drag */
+        }
+
+        #game-container {
+            width: 800px; /* Viewport width */
+            height: 600px; /* Viewport height */
+            perspective: 1000px; /* 3D perspective for the scene */
+            overflow: hidden;
+            position: relative;
+            border: 2px solid #555;
+            background-color: #333;
+            cursor: grab; /* Default cursor for grabbing */
+        }
+
+        #scene {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            transform-style: preserve-3d; /* Crucial for nested 3D elements */
+            transform: rotateX(-20deg) rotateY(0deg); /* Initial camera angle */
+            transform-origin: center center; /* Rotate around center of scene */
+            transition: transform 0.1s linear; /* Smooth camera movement */
+        }
+
+        #baseplate {
+            width: 1000px; /* Large enough to fill the scene */
+            height: 1000px;
+            background-color: #55aa55; /* Iconic Roblox green */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            /* Rotate to lay flat (X-axis), then translate to center it and move it back in Z-space */
+            transform: translate(-50%, -50%) rotateX(90deg) translateZ(-200px);
+            transform-origin: center center;
+
+            /* Grid pattern for the baseplate */
+            background-image:
+                linear-gradient(0deg, transparent 99%, rgba(0,0,0,0.2) 99.5%),
+                linear-gradient(90deg, transparent 99%, rgba(0,0,0,0.2) 99.5%);
+            background-size: 50px 50px; /* Size of grid cells */
+        }
+
+        #avatar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            /* Position avatar's base (feet) on the baseplate's Z-level (-200px) */
+            /* Avatar is 40px wide, so -20px for horizontal center */
+            /* Avatar is 160px tall (60 legs + 60 torso + 40 head).
+               Offset Y by half its height (80px) to place its base at the scene's Y-center.
+               This assumes the scene origin (0,0) is at the center of the viewport. */
+            transform: translate3d(-20px, 80px, -200px);
+            transform-style: preserve-3d;
+            transition: transform 0.2s ease-out; /* For jumping animation */
+        }
+
+        /* Avatar parts - styled as simple block shapes */
+        .head {
+            width: 40px;
+            height: 40px;
+            background-color: #FFCC00; /* Yellow */
+            position: absolute;
+            /* Position relative to #avatar container's origin (bottom center) */
+            transform: translate3d(0px, -120px, 0px); /* Above torso */
+        }
+
+        .torso {
+            width: 40px;
+            height: 60px;
+            background-color: #0066FF; /* Blue */
+            position: absolute;
+            transform: translate3d(0px, -60px, 0px); /* Above legs */
+        }
+
+        .left-arm, .right-arm {
+            width: 20px;
+            height: 60px;
+            background-color: #00AA00; /* Green */
+            position: absolute;
+        }
+        .left-arm {
+            transform: translate3d(-20px, -60px, 0px); /* Aligned with torso, to its left */
+        }
+        .right-arm {
+            transform: translate3d(40px, -60px, 0px); /* Aligned with torso, to its right */
+        }
+
+        .left-leg, .right-leg {
+            width: 20px;
+            height: 60px;
+            background-color: #BB0000; /* Red */
+            position: absolute;
+            /* Positioned directly at the #avatar container's origin (bottom center) */
+        }
+        .left-leg {
+            transform: translate3d(0px, 0px, 0px);
+        }
+        .right-leg {
+            transform: translate3d(20px, 0px, 0px);
+        }
+
+        /* Jumping animation */
+        .jumping {
+            animation: jump 0.6s ease-out forwards;
+        }
+
+        @keyframes jump {
+            0% { transform: translate3d(-20px, 80px, -200px); }
+            50% { transform: translate3d(-20px, 80px - 100px, -200px); } /* Jump up 100px */
+            100% { transform: translate3d(-20px, 80px, -200px); } /* Land back */
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="scene">
+            <div id="baseplate"></div>
+            <div id="avatar">
+                <div class="head"></div>
+                <div class="torso"></div>
+                <div class="left-arm"></div>
+                <div class="right-arm"></div>
+                <div class="left-leg"></div>
+                <div class="right-leg"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const avatar = document.getElementById('avatar');
+        const scene = document.getElementById('scene');
+        const gameContainer = document.getElementById('game-container');
+
+        let isJumping = false;
+        let isDragging = false;
+        let startX, startY;
+        let currentRotationX = -20; // Initial X rotation
+        let currentRotationY = 0;   // Initial Y rotation
+
+        // Jumping functionality
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space' && !isJumping) {
+                isJumping = true;
+                avatar.classList.add('jumping');
+                avatar.addEventListener('animationend', () => {
+                    avatar.classList.remove('jumping');
+                    isJumping = false;
+                }, { once: true }); // Ensure listener is removed after one use
+            }
+        });
+
+        // Camera (scene) rotation functionality
+        gameContainer.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            gameContainer.style.cursor = 'grabbing';
+            scene.style.transition = 'none'; // Disable transition during drag for responsiveness
+        });
+
+        gameContainer.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            // Adjust sensitivity for rotation
+            const sensitivity = 0.2;
+
+            currentRotationY += deltaX * sensitivity;
+            currentRotationX -= deltaY * sensitivity; // Invert Y for intuitive vertical camera movement
+
+            // Clamp X rotation to prevent camera flipping upside down
+            currentRotationX = Math.max(-90, Math.min(90, currentRotationX));
+
+            scene.style.transform = `rotateX(${currentRotationX}deg) rotateY(${currentRotationY}deg)`;
+
+            startX = e.clientX; // Update start position for next delta calculation
+            startY = e.clientY;
+        });
+
+        gameContainer.addEventListener('mouseup', () => {
+            isDragging = false;
+            gameContainer.style.cursor = 'grab';
+            scene.style.transition = 'transform 0.1s linear'; // Re-enable transition after drag
+        });
+
+        gameContainer.addEventListener('mouseleave', () => {
+            isDragging = false;
+            gameContainer.style.cursor = 'grab';
+            scene.style.transition = 'transform 0.1s linear'; // Re-enable transition after mouse leaves container
+        });
+    </script>
+</body>
+</html>

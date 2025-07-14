@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox Baseplate Experience</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #333; /* Dark background like Roblox Studio */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Roblox', sans-serif; /* Placeholder font, Roblox uses custom fonts */
+            perspective: 1500px; /* Provides a 3D viewing context */
+            transform-style: preserve-3d;
+        }
+
+        /* Game Container acting as the world view */
+        .game-container {
+            position: relative;
+            width: 800px; /* Visible width of the game area */
+            height: 600px; /* Visible height of the game area */
+            background-color: #555; /* Slightly lighter background for the game area */
+            overflow: hidden; /* Hide anything outside this box */
+            transform-style: preserve-3d;
+            transform: rotateX(20deg) rotateY(0deg) translateZ(-200px); /* Initial tilt and push back for perspective */
+            border-radius: 8px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+            transition: transform 0.1s linear; /* Smooth camera movement */
+        }
+
+        /* Baseplate - the iconic green grid ground */
+        .baseplate {
+            position: absolute;
+            bottom: 0; /* Aligned to the bottom of the game container */
+            left: -600px; /* Extend beyond left edge */
+            width: 2000px; /* Large enough to fill the perspective */
+            height: 2000px; /* Large enough to fill the perspective */
+            background-color: #508050; /* Roblox baseplate green */
+            background-image:
+                repeating-linear-gradient(0deg, #407040 0, #407040 1px, transparent 1px, transparent 50px),
+                repeating-linear-gradient(90deg, #407040 0, #407040 1px, transparent 1px, transparent 50px);
+            background-size: 50px 50px; /* Size of the grid cells */
+            transform: translateZ(-500px) rotateX(90deg); /* Lay flat on the Z plane, pushed back */
+            transform-origin: center center;
+            box-sizing: border-box;
+            border-top: 2px solid #306030; /* Darker edge for definition */
+            border-left: 2px solid #306030;
+        }
+
+        /* Noob Avatar - composed of simple blocks */
+        .noob-avatar {
+            position: absolute;
+            width: 40px; /* Approximate Roblox character width */
+            height: 100px; /* Approximate Roblox character height (head + torso + legs) */
+            transform-style: preserve-3d;
+            bottom: 0; /* Starts at the baseplate level */
+            left: calc(50% - 20px); /* Center horizontally initially */
+            transform: translate3d(0, 0, 0); /* Initial position */
+            transition: transform 0.05s linear; /* Smooth avatar movement */
+        }
+
+        .noob-part {
+            position: absolute;
+            border: 1px solid rgba(0,0,0,0.2); /* Subtle borders for block separation */
+            box-sizing: border-box;
+            transform-style: preserve-3d;
+        }
+
+        /* Noob Head */
+        .head {
+            width: 40px;
+            height: 40px;
+            background-color: #FFFF00; /* Iconic yellow */
+            top: 0;
+            left: 0;
+            transform: translateZ(0);
+        }
+
+        /* Noob Torso */
+        .torso {
+            width: 40px;
+            height: 60px;
+            background-color: #0000FF; /* Iconic blue */
+            top: 40px; /* Below head */
+            left: 0;
+            transform: translateZ(0);
+        }
+
+        /* Noob Arms */
+        .arm {
+            width: 20px;
+            height: 50px;
+            background-color: #C0C0C0; /* Iconic grey */
+            top: 40px; /* Aligned with torso top */
+            transform: translateZ(0);
+        }
+
+        .left-arm {
+            left: -20px; /* To the left of the torso */
+        }
+
+        .right-arm {
+            left: 40px; /* To the right of the torso */
+        }
+
+        /* Noob Legs */
+        .leg {
+            width: 20px;
+            height: 50px;
+            background-color: #008000; /* Iconic green */
+            top: 100px; /* Below torso (40px head + 60px torso) */
+            transform: translateZ(0);
+        }
+
+        .left-leg {
+            left: 0; /* Left leg aligned with left side of torso */
+        }
+
+        .right-leg {
+            left: 20px; /* Right leg aligned with right side of torso */
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="baseplate"></div>
+        <div class="noob-avatar">
+            <div class="noob-part head"></div>
+            <div class="noob-part torso"></div>
+            <div class="noob-part arm left-arm"></div>
+            <div class="noob-part arm right-arm"></div>
+            <div class="noob-part leg left-leg"></div>
+            <div class="noob-part leg right-leg"></div>
+        </div>
+    </div>
+
+    <script>
+        const avatar = document.querySelector('.noob-avatar');
+        const gameContainer = document.querySelector('.game-container');
+
+        // Player's 3D position relative to the baseplate
+        let playerX = 0; // Horizontal (left/right)
+        let playerY = 0; // Vertical (up/down, 0 is ground)
+        let playerZ = 0; // Depth (forward/backward)
+
+        const playerSpeed = 5; // Movement speed
+        const jumpStrength = 15; // Initial upward velocity for jump
+        const gravity = 0.8; // Downward acceleration
+        const groundY = 0; // Y position when on the ground
+
+        let isJumping = false;
+        let yVelocity = 0; // Current vertical velocity
+
+        const keys = {}; // To track pressed keys
+
+        // Listen for key presses and releases
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        function updatePlayerPosition() {
+            // Horizontal and Depth Movement (WASD)
+            if (keys['KeyW']) { // Move forward (into the screen)
+                playerZ += playerSpeed;
+            }
+            if (keys['KeyS']) { // Move backward (out of the screen)
+                playerZ -= playerSpeed;
+            }
+            if (keys['KeyA']) { // Move left
+                playerX -= playerSpeed;
+            }
+            if (keys['KeyD']) { // Move right
+                playerX += playerSpeed;
+            }
+
+            // Jumping (Spacebar)
+            if (keys['Space'] && !isJumping) {
+                isJumping = true;
+                yVelocity = jumpStrength; // Give an initial upward push
+            }
+
+            // Apply gravity and update vertical position if jumping
+            if (isJumping) {
+                playerY += yVelocity;
+                yVelocity -= gravity;
+
+                // If player hits or goes below the ground
+                if (playerY <= groundY) {
+                    playerY = groundY; // Snap to ground
+                    isJumping = false; // Not jumping anymore
+                    yVelocity = 0; // Stop vertical movement
+                }
+            }
+
+            // Apply the calculated 3D position to the avatar's transform
+            // playerX directly maps to translateX
+            // -playerY is used for translateY because positive Y in CSS moves down,
+            // but for playerY, positive means moving up from the ground.
+            // playerZ directly maps to translateZ
+            avatar.style.transform = `translate3d(${playerX}px, ${-playerY}px, ${playerZ}px)`;
+
+            // Optional: Move the camera (game-container) to follow the player
+            // This would make the player appear more central while the world moves.
+            // For a "Roblox feel" where the player moves on a static baseplate, moving the character is more direct.
+            // gameContainer.style.transform = `rotateX(20deg) rotateY(0deg) translateZ(-200px) translate3d(${-playerX}px, ${playerY}px, ${-playerZ}px)`;
+        }
+
+        // Main game loop
+        function gameLoop() {
+            updatePlayerPosition(); // Update player's state
+            requestAnimationFrame(gameLoop); // Request next frame for smooth animation
+        }
+
+        gameLoop(); // Start the game loop
+    </script>
+</body>
+</html>

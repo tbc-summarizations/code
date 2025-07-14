@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox-like Experience</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000; /* Void color */
+            font-family: sans-serif;
+            color: #fff;
+            user-select: none; /* Prevent text selection */
+            cursor: grab; /* Indicate draggable camera */
+        }
+
+        body.dragging {
+            cursor: grabbing;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            perspective: 800px; /* FOV simulation - a common value for a wide-ish view */
+            overflow: hidden;
+            position: relative;
+            transform-style: preserve-3d;
+        }
+
+        #camera {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            transform-style: preserve-3d;
+            transform: translateZ(0); /* Initial camera position */
+        }
+
+        #world {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            transform-style: preserve-3d;
+            transform-origin: center center;
+            transition: transform 0.05s linear; /* Smooth movement for world */
+        }
+
+        /* Baseplate */
+        #baseplate {
+            position: absolute;
+            width: 10000px; /* Very large baseplate */
+            height: 10000px;
+            background-color: #4CAF50; /* Roblox green */
+            transform: rotateX(90deg) translateZ(-50px); /* Flat on XZ-plane, slightly below 0 Y */
+            transform-origin: center center;
+            top: 50%;
+            left: 50%;
+            margin-left: -5000px;
+            margin-top: -5000px;
+            box-shadow: 0 0 100px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Noob Character */
+        #noob {
+            position: absolute;
+            width: 60px; /* Character width */
+            height: 100px; /* Character height for positioning */
+            transform-style: preserve-3d;
+            transform: translate3d(0, 0, 0); /* Relative to world */
+            left: 50%;
+            top: 50%;
+            margin-left: -30px; /* Center horizontally */
+            margin-top: -100px; /* Position base at Y=0 */
+            z-index: 100; /* Ensure it's above baseplate */
+        }
+
+        .noob-part {
+            position: absolute;
+            transform-style: preserve-3d;
+            border: 2px solid rgba(0,0,0,0.2);
+            box-sizing: border-box;
+            background-color: #FFDE00; /* Default yellow for head/limbs */
+        }
+
+        #noob-head {
+            width: 40px;
+            height: 40px;
+            top: 0;
+            left: 10px; /* Centered on noob width */
+            background-color: #FFDE00;
+            transform: translateZ(0);
+        }
+
+        #noob-torso {
+            width: 60px;
+            height: 60px;
+            top: 40px; /* Below head */
+            left: 0;
+            background-color: #007FFF; /* Blue for torso */
+            transform: translateZ(0);
+        }
+
+        #noob-left-arm, #noob-right-arm {
+            width: 20px;
+            height: 50px;
+            background-color: #FFDE00;
+            top: 45px; /* Aligned with torso top */
+            transform-origin: top center;
+            transform: translateZ(0);
+        }
+        #noob-left-arm { left: -20px; } /* To the left of torso */
+        #noob-right-arm { left: 60px; } /* To the right of torso */
+
+        #noob-left-leg, #noob-right-leg {
+            width: 20px;
+            height: 50px;
+            background-color: #007FFF;
+            top: 100px; /* Below torso */
+            transform-origin: top center;
+            transform: translateZ(0);
+        }
+        #noob-left-leg { left: 10px; } /* Aligned with torso center */
+        #noob-right-leg { left: 30px; } /* Aligned with torso center */
+
+        /* Animations (simplified R6) */
+        .noob-part.animated {
+            transition: transform 0.2s ease-in-out;
+        }
+
+        /* Walking animation */
+        .noob-walking #noob-left-arm { transform: rotateX(-20deg) translateZ(0); }
+        .noob-walking #noob-right-arm { transform: rotateX(20deg) translateZ(0); }
+        .noob-walking #noob-left-leg { transform: rotateX(20deg) translateZ(0); }
+        .noob-walking #noob-right-leg { transform: rotateX(-20deg) translateZ(0); }
+
+        /* Jumping/Falling pose */
+        .noob-jumping #noob-torso { transform: translateY(-5px) rotateX(-5deg) translateZ(0); }
+        .noob-jumping #noob-head { transform: translateY(-5px) rotateX(5deg) translateZ(0); }
+        .noob-jumping #noob-left-arm, .noob-jumping #noob-right-arm { transform: rotateX(10deg) translateY(-5px) translateZ(0); }
+        .noob-jumping #noob-left-leg, .noob-jumping #noob-right-leg { transform: rotateX(-10deg) translateY(-5px) translateZ(0); }
+
+        /* Idle animation (subtle breathing/sway) */
+        .noob-idle #noob-torso { animation: idleSway 2s ease-in-out infinite alternate; }
+        .noob-idle #noob-head { animation: idleHead 2s ease-in-out infinite alternate; }
+
+        @keyframes idleSway {
+            from { transform: translateY(0px) rotateY(0deg); }
+            to { transform: translateY(-2px) rotateY(2deg); }
+        }
+        @keyframes idleHead {
+            from { transform: translateY(0px) rotateY(0deg); }
+            to { transform: translateY(-1px) rotateY(-2deg); }
+        }
+
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #eee;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="instructions">
+        W/A/S/D: Move<br>
+        Space: Jump<br>
+        Click & Drag: Look around
+    </div>
+    <div id="game-container">
+        <div id="camera">
+            <div id="world">
+                <div id="baseplate"></div>
+                <div id="noob">
+                    <div id="noob-head" class="noob-part"></div>
+                    <div id="noob-torso" class="noob-part"></div>
+                    <div id="noob-left-arm" class="noob-part"></div>
+                    <div id="noob-right-arm" class="noob-part"></div>
+                    <div id="noob-left-leg" class="noob-part"></div>
+                    <div id="noob-right-leg" class="noob-part"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const world = document.getElementById('world');
+        const noob = document.getElementById('noob');
+        const gameContainer = document.getElementById('game-container');
+
+        // Player state
+        let playerX = 0;
+        let playerY = 0; // Y is up/down axis
+        let playerZ = 0; // Z is forward/backward axis
+        let playerRotationY = 0; // Yaw (left/right rotation of player/camera)
+
+        // Movement parameters
+        const moveSpeed = 7;
+        const jumpStrength = 100;
+        const gravity = 8; // Increased gravity for faster fall
+        const voidLevel = -500; // Y-level where player "dies"
+
+        let velocityY = 0;
+        let isGrounded = true;
+        let isJumping = false;
+        let animationFrameId = null;
+
+        // Camera offset from player (Roblox-like third-person camera)
+        // These values are relative to the player's local space
+        const cameraOffsetX = 0;
+        const cameraOffsetY = -70; // Slightly above player's head level
+        const cameraOffsetZ = 250; // Behind player for third-person view
+
+        // Input state
+        const keys = {
+            w: false,
+            a: false,
+            s: false,
+            d: false,
+            space: false
+        };
+
+        // Mouse look state
+        let isDragging = false;
+        let lastMouseX = 0;
+        const mouseSensitivity = 0.3; // Adjust sensitivity for camera rotation
+
+        // Add 'animated' class to all parts for transitions
+        document.querySelectorAll('.noob-part').forEach(part => {
+            part.classList.add('animated');
+        });
+
+        // Event Listeners for Keyboard Input
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'w') keys.w = true;
+            if (e.key === 'a') keys.a = true;
+            if (e.key === 's') keys.s = true;
+            if (e.key === 'd') keys.d = true;
+            if (e.key === ' ' && isGrounded) { // Only jump if grounded
+                keys.space = true;
+                isJumping = true;
+                isGrounded = false;
+                velocityY = jumpStrength;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'w') keys.w = false;
+            if (e.key === 'a') keys.a = false;
+            if (e.key === 's') keys.s = false;
+            if (e.key === 'd') keys.d = false;
+            if (e.key === ' ') keys.space = false;
+        });
+
+        // Event Listeners for Mouse Look
+        gameContainer.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            document.body.classList.add('dragging');
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            document.body.classList.remove('dragging');
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaX = e.clientX - lastMouseX;
+                playerRotationY += deltaX * mouseSensitivity;
+                lastMouseX = e.clientX;
+            }
+        });
+
+        // Animation Update Function
+        let walkCycleTime = 0;
+        const walkCycleSpeed = 0.005; // Speed of arm/leg swing
+
+        function updatePlayerAnimations() {
+            const isMoving = keys.w || keys.a || keys.s || keys.d;
+
+            // Remove all specific animation classes first
+            noob.classList.remove('noob-walking', 'noob-jumping', 'noob-idle');
+
+            if (!isGrounded) {
+                noob.classList.add('noob-jumping');
+                // Reset arm/leg transforms when jumping to prevent walking animation interference
+                document.getElementById('noob-left-arm').style.transform = `rotateX(0deg) translateZ(0)`;
+                document.getElementById('noob-right-arm').style.transform = `rotateX(0deg) translateZ(0)`;
+                document.getElementById('noob-left-leg').style.transform = `rotateX(0deg) translateZ(0)`;
+                document.getElementById('noob-right-leg').style.transform = `rotateX(0deg) translateZ(0)`;
+            } else if (isMoving) {
+                noob.classList.add('noob-walking');
+                // Update walk cycle time
+                walkCycleTime += walkCycleSpeed;
+                const swingAmount = Math.sin(walkCycleTime) * 25; // Max 25 degrees swing
+
+                document.getElementById('noob-left-arm').style.transform = `rotateX(${swingAmount}deg) translateZ(0)`;
+                document.getElementById('noob-right-arm').style.transform = `rotateX(${-swingAmount}deg) translateZ(0)`;
+                document.getElementById('noob-left-leg').style.transform = `rotateX(${-swingAmount}deg) translateZ(0)`;
+                document.getElementById('noob-right-leg').style.transform = `rotateX(${swingAmount}deg) translateZ(0)`;
+            } else {
+                noob.classList.add('noob-idle');
+                // Reset arm/leg transforms when idle
+                document.getElementById('noob-left-arm').style.transform = `rotateX(0deg) translateZ(0)`;
+                document.getElementById('noob-right-arm').style.transform = `rotateX(0deg) translateZ(0)`;
+                document.getElementById('noob-left-leg').style.transform = `rotateX(0deg) translateZ(0)`;
+                document.getElementById('noob-right-leg').style.transform = `rotateX(0deg) translateZ(0)`;
+            }
+        }
+
+
+        // Main Game Loop
+        function gameLoop() {
+            let moved = false;
+            let moveX = 0;
+            let moveZ = 0;
+
+            const rad = playerRotationY * (Math.PI / 180); // Convert degrees to radians for trigonometric functions
+
+            // Calculate movement based on keys pressed and current player rotation
+            if (keys.w) {
+                moveZ += Math.cos(rad) * moveSpeed;
+                moveX += Math.sin(rad) * moveSpeed;
+                moved = true;
+            }
+            if (keys.s) {
+                moveZ -= Math.cos(rad) * moveSpeed;
+                moveX -= Math.sin(rad) * moveSpeed;
+                moved = true;
+            }
+            if (keys.a) {
+                moveZ += Math.cos(rad - Math.PI / 2) * moveSpeed; // Strafe left
+                moveX += Math.sin(rad - Math.PI / 2) * moveSpeed;
+                moved = true;
+            }
+            if (keys.d) {
+                moveZ += Math.cos(rad + Math.PI / 2) * moveSpeed; // Strafe right
+                moveX += Math.sin(rad + Math.PI / 2) * moveSpeed;
+                moved = true;
+            }
+
+            // Apply horizontal movement
+            playerX += moveX;
+            playerZ += moveZ;
+
+            // Apply gravity
+            if (!isGrounded) {
+                velocityY -= gravity;
+            }
+            playerY += velocityY;
+
+            // Ground check: The baseplate is conceptually at Y=0 for the player's feet.
+            if (playerY <= 0) {
+                playerY = 0; // Snap to ground
+                velocityY = 0;
+                isGrounded = true;
+                isJumping = false;
+            } else {
+                isGrounded = false;
+            }
+
+            // Void kill: If player falls below the void level, reset position
+            if (playerY < voidLevel) {
+                playerX = 0;
+                playerY = 0;
+                playerZ = 0;
+                playerRotationY = 0;
+                velocityY = 0;
+                isGrounded = true;
+                isJumping = false;
+                console.log("Fell into the void! Resetting...");
+            }
+
+            // Update player animations based on current state
+            updatePlayerAnimations();
+
+            // Calculate camera position and rotation relative to the world
+            // The camera is effectively fixed at (0,0,0) looking into the world.
+            // To simulate camera movement around the player, we move the *world* in the opposite direction.
+            // Also, the world is rotated around the Y-axis to simulate player turning.
+
+            // Calculate the camera's actual position in world space
+            // This involves rotating the camera offset around the player's Y-axis, then adding player's position
+            const rotatedCameraOffsetX = cameraOffsetX * Math.cos(rad) - cameraOffsetZ * Math.sin(rad);
+            const rotatedCameraOffsetZ = cameraOffsetX * Math.sin(rad) + cameraOffsetZ * Math.cos(rad);
+
+            // Apply these transformations to the world
+            // The world moves opposite to the camera
+            const worldTranslateX = -(playerX + rotatedCameraOffsetX);
+            const worldTranslateY = -(playerY + cameraOffsetY);
+            const worldTranslateZ = -(playerZ + rotatedCameraOffsetZ);
+
+            world.style.transform = `
+                rotateY(${-playerRotationY}deg)
+                translate3d(${worldTranslateX}px, ${worldTranslateY}px, ${worldTranslateZ}px)
+            `;
+
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game loop when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+             gameLoop();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apology App</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Prevent body scroll */
+        }
+        .chat-container {
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 500px;
+            height: 90vh; /* Set a fixed height for the chat window */
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .chat-header {
+            background-color: #007bff;
+            color: #fff;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 1.1em;
+            font-weight: bold;
+            flex-shrink: 0; /* Prevent header from shrinking */
+        }
+        .chat-header .back-arrow,
+        .chat-header .menu-dots {
+            font-size: 1.5em;
+            cursor: pointer;
+        }
+        .message-display-area {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background-color: #e5ddd5;
+        }
+        .message-bubble {
+            background-color: #dcf8c6; /* Green for sent messages */
+            border-radius: 10px;
+            padding: 10px 15px;
+            max-width: 80%;
+            align-self: flex-end; /* Align to right for sent messages */
+            word-wrap: break-word;
+            box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
+            line-height: 1.4;
+            white-space: pre-wrap; /* Preserve line breaks from textarea */
+        }
+        .typing-area {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #eee;
+            background-color: #f9f9f9;
+            align-items: center;
+            flex-shrink: 0; /* Prevent typing area from shrinking */
+        }
+        #apologyInput {
+            flex-grow: 1;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            font-size: 1em;
+            resize: none; /* Disable textarea resize handle */
+            min-height: 40px;
+            max-height: 150px; /* Limit height of textarea */
+            overflow-y: auto;
+            margin-right: 10px;
+            box-sizing: border-box;
+        }
+        #apologyInput:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+        }
+        #sendButton {
+            background-color: #ccc; /* Default grey */
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5em;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            flex-shrink: 0;
+        }
+        #sendButton.active {
+            background-color: #007bff; /* Blue when active */
+        }
+        .reactions-area {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            padding: 20px;
+            border-top: 1px solid #eee;
+            background-color: #f9f9f9;
+            display: none; /* Hidden by default */
+            flex-shrink: 0;
+            overflow-y: auto; /* Allow reactions area to scroll if many reactions */
+        }
+        .reaction {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 0.9em;
+            color: #555;
+            text-align: center;
+        }
+        .reaction .emoji {
+            font-size: 2.5em;
+            margin-bottom: 5px;
+        }
+        .reaction .name {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <span class="back-arrow">⬅️</span>
+            <span class="contact-name">Group Chat</span>
+            <span class="menu-dots">⋮</span>
+        </div>
+        <div class="message-display-area" id="messageDisplayArea">
+            <!-- Sent message will appear here -->
+        </div>
+        <div class="typing-area">
+            <textarea id="apologyInput" placeholder="Type your apology..."></textarea>
+            <button id="sendButton">⬆️</button>
+        </div>
+        <div class="reactions-area" id="reactionsArea">
+            <!-- Reactions will be dynamically added here -->
+        </div>
+    </div>
+
+    <script>
+        const apologySentence = "Sorry for interrupting. I just wanna apologise for my sins.\n\nI'm sorry. I didn't mean it. You all know that I'm in every single dramas, with me being against you all. I'm probably the terrible person here, not trying to be suicidal or anything. I had depression for 10 years, and yes, that's possible. Babies can get depression, kinda stupid I know. Compared to you all, my life is worse. I have a abusive family, I had cancer, the disease, at age 5 or 6. It was not good, not the best. Even I got several dog attacks, it was painful but I survived. I know you all still hate me, nobody likes me as a friend anyways. I'm trying to fix my personality, so that you guys can be better than my stupid self. But, my sins just can't get away from my brain. It feels like I'm in a dimension of something, that a thing lasts permanently. You may found me as a guilty person, but please, I will promise that these sins will not be repeated and never will. Accept or deny my apology, I'm done writing.";
+        let apologyIndex = 0;
+        let isTypingComplete = false;
+
+        const apologyInput = document.getElementById('apologyInput');
+        const sendButton = document.getElementById('sendButton');
+        const messageDisplayArea = document.getElementById('messageDisplayArea');
+        const reactionsArea = document.getElementById('reactionsArea');
+
+        apologyInput.addEventListener('keydown', (event) => {
+            event.preventDefault(); // Prevent actual key input
+
+            if (!isTypingComplete && apologyIndex < apologySentence.length) {
+                apologyInput.value += apologySentence[apologyIndex];
+                apologyIndex++;
+                apologyInput.scrollTop = apologyInput.scrollHeight; // Auto-scroll to show new text
+
+                if (apologyIndex === apologySentence.length) {
+                    isTypingComplete = true;
+                    apologyInput.placeholder = "Press Send to apologize...";
+                    sendButton.classList.add('active'); // Activate send button style
+                }
+            }
+        });
+
+        sendButton.addEventListener('click', () => {
+            if (isTypingComplete) {
+                // Create the message bubble
+                const messageBubble = document.createElement('div');
+                messageBubble.classList.add('message-bubble');
+                messageBubble.textContent = apologyInput.value;
+                messageDisplayArea.appendChild(messageBubble);
+
+                // Clear and hide the typing area elements
+                apologyInput.value = '';
+                apologyInput.style.display = 'none';
+                sendButton.style.display = 'none';
+                apologyInput.readOnly = true; // Ensure it can't be typed into anymore
+
+                // Show reactions
+                reactionsArea.style.display = 'flex';
+
+                const reactions = [
+                    { name: "Alex", emoji: "❤️" },
+                    { name: "Sam", emoji: "👍" },
+                    { name: "Jordan", emoji: "😢" },
+                    { name: "Taylor", emoji: "🙏" },
+                    { name: "Casey", emoji: "🤷‍♀️" },
+                    { name: "Chris", emoji: "😮" },
+                    { name: "Jamie", emoji: "🙄" },
+                    { name: "Pat", emoji: "🤔" },
+                    { name: "Morgan", emoji: "😒" },
+                    { name: "Drew", emoji: "🥺" }
+                ];
+
+                reactions.forEach(reactionData => {
+                    const reactionDiv = document.createElement('div');
+                    reactionDiv.classList.add('reaction');
+
+                    const emojiSpan = document.createElement('span');
+                    emojiSpan.classList.add('emoji');
+                    emojiSpan.textContent = reactionData.emoji;
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.classList.add('name');
+                    nameSpan.textContent = reactionData.name;
+
+                    reactionDiv.appendChild(emojiSpan);
+                    reactionDiv.appendChild(nameSpan);
+                    reactionsArea.appendChild(reactionDiv);
+                });
+
+                // Scroll to the bottom of the message area to show the sent message and reactions
+                messageDisplayArea.scrollTop = messageDisplayArea.scrollHeight;
+            }
+        });
+
+        // Focus on the input field when the page loads for immediate typing
+        apologyInput.focus();
+    </script>
+</body>
+</html>

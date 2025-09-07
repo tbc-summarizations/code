@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grapefruit & Trees Game</title>
+    <style>
+        :root {
+            --game-width: 400px;
+            --game-height: 600px;
+            --grapefruit-size: 40px;
+            --tree-color: #2c5234;
+            --trunk-color: #5c3c20;
+            --gap-height: 200px;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #e0f7fa;
+            font-family: 'Arial', sans-serif;
+            color: #333;
+        }
+
+        #game-container {
+            width: var(--game-width);
+            height: var(--game-height);
+            background-color: #87CEEB;
+            border: 5px solid #333;
+            overflow: hidden;
+            position: relative;
+            cursor: pointer;
+        }
+
+        #grapefruit {
+            width: var(--grapefruit-size);
+            height: var(--grapefruit-size);
+            background: radial-gradient(circle, #ffb8b8, #ff6347);
+            border-radius: 50%;
+            border: 2px solid #c84a32;
+            position: absolute;
+            left: 60px;
+            top: 50%;
+            transform: translateY(-50%);
+            transition: transform 0.1s linear;
+        }
+
+        .tree {
+            position: absolute;
+            width: 80px;
+            height: 100%;
+            right: -80px; /* Start off-screen */
+        }
+
+        .tree-part {
+            position: absolute;
+            width: 100%;
+            background-color: var(--trunk-color);
+        }
+        
+        .tree-part::after {
+            content: '';
+            position: absolute;
+            width: 90px;
+            height: 40px;
+            left: -5px;
+            background-color: var(--tree-color);
+            border: 3px solid #1e3823;
+        }
+
+        .tree-top {
+            top: 0;
+            bottom: var(--gap-height);
+        }
+
+        .tree-top::after {
+           bottom: -3px;
+        }
+        
+        .tree-bottom {
+            bottom: 0;
+        }
+
+        .tree-bottom::after {
+           top: -3px;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 3em;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: white;
+            z-index: 20;
+        }
+
+        .overlay h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        .overlay p {
+            font-size: 1.2em;
+            margin: 5px 0;
+        }
+
+        .overlay button {
+            padding: 10px 20px;
+            font-size: 1.2em;
+            border: 2px solid white;
+            background-color: #ff6347;
+            color: white;
+            cursor: pointer;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="score">0</div>
+        <div id="grapefruit"></div>
+        
+        <div id="start-screen" class="overlay">
+            <h1>Grapefruit & Trees</h1>
+            <p>Click or Press Space to make the grapefruit jump.</p>
+            <p>Avoid the trees!</p>
+            <button id="start-button">Start Game</button>
+        </div>
+
+        <div id="game-over-screen" class="overlay hidden">
+            <h1>Game Over</h1>
+            <p>Final Score: <span id="final-score">0</span></p>
+            <button id="restart-button">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const gameContainer = document.getElementById('game-container');
+            const grapefruit = document.getElementById('grapefruit');
+            const scoreDisplay = document.getElementById('score');
+            const startScreen = document.getElementById('start-screen');
+            const gameOverScreen = document.getElementById('game-over-screen');
+            const startButton = document.getElementById('start-button');
+            const restartButton = document.getElementById('restart-button');
+            const finalScoreDisplay = document.getElementById('final-score');
+
+            // Game settings
+            const gameWidth = 400;
+            const gameHeight = 600;
+            const grapefruitSize = 40;
+            const gravity = 0.5;
+            const jumpStrength = -8;
+            const treeSpeed = -2.5;
+            const treeGap = 200;
+            const treeSpawnInterval = 1800; // ms
+
+            // Game state
+            let grapefruitVelocity = 0;
+            let grapefruitTop = gameHeight / 2 - grapefruitSize / 2;
+            let score = 0;
+            let trees = [];
+            let gameLoopId;
+            let treeSpawnId;
+            let isGameOver = true;
+
+            function startGame() {
+                isGameOver = false;
+                grapefruitVelocity = 0;
+                grapefruitTop = gameHeight / 2 - grapefruitSize / 2;
+                grapefruit.style.top = `${grapefruitTop}px`;
+                grapefruit.style.transform = 'rotate(0deg)';
+                score = 0;
+                scoreDisplay.textContent = score;
+
+                // Clear any existing trees
+                trees.forEach(tree => tree.element.remove());
+                trees = [];
+
+                startScreen.classList.add('hidden');
+                gameOverScreen.classList.add('hidden');
+                scoreDisplay.classList.remove('hidden');
+
+                gameLoopId = requestAnimationFrame(gameLoop);
+                treeSpawnId = setInterval(createTree, treeSpawnInterval);
+            }
+
+            function gameLoop() {
+                if (isGameOver) return;
+
+                // Grapefruit physics
+                grapefruitVelocity += gravity;
+                grapefruitTop += grapefruitVelocity;
+                grapefruit.style.top = `${grapefruitTop}px`;
+                
+                // Add a little rotation for effect
+                grapefruit.style.transform = `rotate(${grapefruitVelocity * 2}deg)`;
+
+
+                // Boundary check
+                if (grapefruitTop <= 0 || grapefruitTop + grapefruitSize >= gameHeight) {
+                    endGame();
+                    return;
+                }
+
+                // Move and check trees
+                moveTrees();
+                checkCollisions();
+                
+                gameLoopId = requestAnimationFrame(gameLoop);
+            }
+            
+            function moveTrees() {
+                let scored = false;
+                trees.forEach(tree => {
+                    tree.left += treeSpeed;
+                    tree.element.style.left = `${tree.left}px`;
+
+                    // Score point
+                    if (!tree.passed && tree.left < 60 - 80) { // grapefruit left pos - tree width
+                        tree.passed = true;
+                        scored = true;
+                    }
+
+                    // Remove off-screen trees
+                    if (tree.left < -80) {
+                        tree.element.remove();
+                    }
+                });
+                
+                if (scored) {
+                    score++;
+                    scoreDisplay.textContent = score;
+                }
+                
+                trees = trees.filter(tree => tree.left >= -80);
+            }
+
+            function createTree() {
+                const gapTop = Math.random() * (gameHeight - treeGap - 100) + 50; // 50px padding top/bottom
+                
+                const treeElement = document.createElement('div');
+                treeElement.classList.add('tree');
+
+                const topPart = document.createElement('div');
+                topPart.classList.add('tree-part', 'tree-top');
+                topPart.style.height = `${gapTop}px`;
+                
+                const bottomPart = document.createElement('div');
+                bottomPart.classList.add('tree-part', 'tree-bottom');
+                bottomPart.style.height = `${gameHeight - gapTop - treeGap}px`;
+
+                treeElement.appendChild(topPart);
+                treeElement.appendChild(bottomPart);
+                
+                gameContainer.appendChild(treeElement);
+
+                trees.push({
+                    element: treeElement,
+                    left: gameWidth,
+                    gapTop: gapTop,
+                    passed: false
+                });
+            }
+
+            function checkCollisions() {
+                const grapefruitRect = grapefruit.getBoundingClientRect();
+                
+                for (const tree of trees) {
+                    const treeRects = Array.from(tree.element.children).map(child => child.getBoundingClientRect());
+                    
+                    for (const rect of treeRects) {
+                        if (
+                            grapefruitRect.right > rect.left &&
+                            grapefruitRect.left < rect.right &&
+                            grapefruitRect.bottom > rect.top &&
+                            grapefruitRect.top < rect.bottom
+                        ) {
+                            endGame();
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            function endGame() {
+                if (isGameOver) return;
+                isGameOver = true;
+                cancelAnimationFrame(gameLoopId);
+                clearInterval(treeSpawnId);
+                finalScoreDisplay.textContent = score;
+                gameOverScreen.classList.remove('hidden');
+                scoreDisplay.classList.add('hidden');
+            }
+
+            function handleJump(e) {
+                if (isGameOver) return;
+                // Allow jump with spacebar or mouse click
+                if (e.code === 'Space' || e.type === 'mousedown') {
+                    grapefruitVelocity = jumpStrength;
+                }
+            }
+
+            // Event Listeners
+            startButton.addEventListener('click', startGame);
+            restartButton.addEventListener('click', startGame);
+            document.addEventListener('keydown', handleJump);
+            gameContainer.addEventListener('mousedown', handleJump);
+        });
+    </script>
+</body>
+</html>

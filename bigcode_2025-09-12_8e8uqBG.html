@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Green Tea Addiction: The Platformer</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #e8f5e9; /* Light green background */
+            color: #2e7d32; /* Dark green text */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            font-size: 2.5em;
+            text-shadow: 2px 2px #c8e6c9;
+        }
+        p {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+        canvas {
+            border: 5px solid #388e3c;
+            background-color: #a5d6a7; /* Lighter green canvas background */
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Green Tea Addiction</h1>
+    <p>You need your fix! Collect all the green tea cups (🍵).<br>Use <strong>Arrow Keys</strong> to move and <strong>Spacebar</strong> to jump.</p>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game constants
+        const GRAVITY = 0.6;
+        const PLAYER_SPEED = 5;
+        const JUMP_POWER = 15;
+        const FRICTION = 0.8;
+
+        // Game state
+        let score = 0;
+        let gameOver = false;
+        let gameWon = false;
+
+        // Player object
+        const player = {
+            x: 50,
+            y: 500,
+            width: 30,
+            height: 40,
+            dx: 0, // velocity x
+            dy: 0, // velocity y
+            onGround: false,
+            color: '#2e7d32' // A dark green square
+        };
+
+        // Input handling
+        const keys = {
+            right: false,
+            left: false,
+            up: false
+        };
+
+        // Platforms definition
+        const platforms = [
+            // Ground
+            { x: 0, y: 580, width: canvas.width, height: 20 },
+            // Level platforms
+            { x: 150, y: 500, width: 120, height: 15 },
+            { x: 350, y: 440, width: 100, height: 15 },
+            { x: 500, y: 360, width: 130, height: 15 },
+            { x: 300, y: 280, width: 100, height: 15 },
+            { x: 100, y: 220, width: 120, height: 15 },
+            { x: 450, y: 150, width: 80, height: 15 },
+            { x: 650, y: 250, width: 150, height: 15 },
+            { x: 0, y: 100, width: 100, height: 15 },
+        ];
+        const platformColor = '#6d4c41'; // Brownish color for platforms
+
+        // Collectibles (Green Tea Cups)
+        const collectibles = [
+            { x: 200, y: 470, size: 20, collected: false },
+            { x: 400, y: 410, size: 20, collected: false },
+            { x: 550, y: 330, size: 20, collected: false },
+            { x: 330, y: 250, size: 20, collected: false },
+            { x: 150, y: 190, size: 20, collected: false },
+            { x: 465, y: 120, size: 20, collected: false },
+            { x: 720, y: 220, size: 20, collected: false },
+            { x: 50, y: 70, size: 20, collected: false },
+        ];
+
+        // Event Listeners
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft') keys.left = true;
+            if (e.code === 'ArrowRight') keys.right = true;
+            if (e.code === 'Space') keys.up = true;
+            // Restart game on 'Enter' if over
+            if (gameOver && e.code === 'Enter') {
+                resetGame();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft') keys.left = false;
+            if (e.code === 'ArrowRight') keys.right = false;
+            if (e.code === 'Space') keys.up = false;
+        });
+        
+        function resetGame() {
+            score = 0;
+            gameOver = false;
+            gameWon = false;
+            player.x = 50;
+            player.y = 500;
+            player.dx = 0;
+            player.dy = 0;
+            collectibles.forEach(c => c.collected = false);
+            gameLoop();
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+        }
+
+        function drawPlatforms() {
+            ctx.fillStyle = platformColor;
+            platforms.forEach(platform => {
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            });
+        }
+
+        function drawCollectibles() {
+            ctx.font = '24px Arial';
+            collectibles.forEach(item => {
+                if (!item.collected) {
+                    ctx.fillText('🍵', item.x, item.y);
+                }
+            });
+        }
+
+        function drawUI() {
+            ctx.fillStyle = '#1b5e20';
+            ctx.font = '24px "Courier New", Courier, monospace';
+            ctx.fillText(`Tea Collected: ${score} / ${collectibles.length}`, 10, 30);
+            
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '60px "Courier New", Courier, monospace';
+                ctx.textAlign = 'center';
+
+                if (gameWon) {
+                    ctx.fillText('YOU GOT YOUR FIX!', canvas.width / 2, canvas.height / 2 - 40);
+                    ctx.font = '30px "Courier New", Courier, monospace';
+                    ctx.fillText('You are satisfied... for now.', canvas.width / 2, canvas.height / 2 + 10);
+                } else {
+                    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 40);
+                    ctx.font = '30px "Courier New", Courier, monospace';
+                    ctx.fillText('Fell into despair (and off the screen).', canvas.width / 2, canvas.height / 2 + 10);
+                }
+                
+                ctx.font = '20px "Courier New", Courier, monospace';
+                ctx.fillText("Press 'Enter' to play again", canvas.width / 2, canvas.height / 2 + 60);
+                ctx.textAlign = 'left';
+            }
+        }
+        
+        function updatePlayer() {
+            // Horizontal movement
+            if (keys.left) {
+                player.dx = -PLAYER_SPEED;
+            } else if (keys.right) {
+                player.dx = PLAYER_SPEED;
+            }
+
+            // Jumping
+            if (keys.up && player.onGround) {
+                player.dy = -JUMP_POWER;
+                player.onGround = false;
+            }
+            
+            // Apply physics
+            player.dx *= FRICTION;
+            player.dy += GRAVITY;
+            player.x += player.dx;
+            player.y += player.dy;
+            player.onGround = false; // Assume not on ground until collision check proves otherwise
+        }
+
+        function checkCollisions() {
+            // Player vs Platforms
+            platforms.forEach(platform => {
+                if (player.x < platform.x + platform.width &&
+                    player.x + player.width > platform.x &&
+                    player.y < platform.y + platform.height &&
+                    player.y + player.height > platform.y) {
+                    
+                    // Collision resolution (only handle top collision)
+                    // Check if player was above the platform in the previous frame
+                    if (player.dy >= 0 && (player.y + player.height - player.dy) <= platform.y) {
+                        player.y = platform.y - player.height;
+                        player.dy = 0;
+                        player.onGround = true;
+                    }
+                }
+            });
+
+            // Player vs Canvas boundaries
+            if (player.x < 0) {
+                player.x = 0;
+                player.dx = 0;
+            }
+            if (player.x + player.width > canvas.width) {
+                player.x = canvas.width - player.width;
+                player.dx = 0;
+            }
+            // Game over if fall off bottom
+            if (player.y > canvas.height) {
+                gameOver = true;
+                gameWon = false;
+            }
+            
+            // Player vs Collectibles
+            collectibles.forEach(item => {
+                if (!item.collected &&
+                    player.x < item.x + item.size &&
+                    player.x + player.width > item.x &&
+                    player.y < item.y + item.size &&
+                    player.y + player.height > item.y) {
+                    
+                    item.collected = true;
+                    score++;
+                }
+            });
+            
+            // Check for win condition
+            if (score === collectibles.length) {
+                gameOver = true;
+                gameWon = true;
+            }
+        }
+        
+        function gameLoop() {
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update game objects
+            if (!gameOver) {
+                updatePlayer();
+                checkCollisions();
+            }
+            
+            // Draw game objects
+            drawPlatforms();
+            drawCollectibles();
+            drawPlayer();
+            drawUI();
+            
+            // Request next frame
+            if (!gameOver) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+
+</body>
+</html>

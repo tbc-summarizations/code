@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Natural Disaster Survival</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #333;
+            color: white;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+
+        #game-container {
+            width: 800px;
+            height: 600px;
+            background-color: #87CEEB; /* Sky Blue */
+            position: relative;
+            overflow: hidden;
+            border: 2px solid #000;
+        }
+
+        #ui-sidebar {
+            width: 200px;
+            height: 600px;
+            background-color: #2a2a2a;
+            border: 2px solid #000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #player-list {
+            flex-grow: 1;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        #player-list h3 {
+            margin-top: 0;
+            text-align: center;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+        .player-entry {
+            padding: 2px 5px;
+            border-radius: 3px;
+            margin-bottom: 3px;
+        }
+        .player-entry.survived { background-color: #2c5e3a; }
+        .player-entry.deceased { background-color: #7d2a2a; text-decoration: line-through; }
+
+
+        #chat-box {
+            height: 200px;
+            background-color: #1e1e1e;
+            padding: 10px;
+            overflow-y: auto;
+            border-top: 2px solid #000;
+            font-size: 12px;
+        }
+        .chat-message {
+            margin-bottom: 5px;
+        }
+        .chat-message strong { color: #4e9af1; }
+
+        #top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+            font-size: 18px;
+            z-index: 100;
+        }
+
+        .character {
+            position: absolute;
+            width: 30px;
+            height: 40px;
+            box-sizing: border-box;
+        }
+        
+        #player {
+            background-color: #007bff;
+            border: 2px solid #000;
+        }
+
+        .npc {
+            border: 2px solid #000;
+        }
+        
+        .platform {
+            position: absolute;
+            background-color: #8B4513; /* SaddleBrown */
+            border: 2px solid #2F1B0C;
+        }
+
+        .map-element {
+            position: absolute;
+        }
+
+        /* Disaster Elements */
+        #flood-water {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0;
+            background-color: rgba(24, 69, 153, 0.7);
+            transition: height 30s linear;
+            z-index: 50;
+        }
+
+        .meteor {
+            position: absolute;
+            width: 25px;
+            height: 25px;
+            background-color: red;
+            border-radius: 50%;
+            border: 2px solid orange;
+            z-index: 60;
+            box-shadow: 0 0 15px 5px rgba(255, 165, 0, 0.7);
+        }
+        
+        .explosion {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background-color: orange;
+            border-radius: 50%;
+            z-index: 59;
+            animation: explosion-fade 0.5s forwards;
+        }
+
+        @keyframes explosion-fade {
+            from { transform: scale(0.1); opacity: 1; }
+            to { transform: scale(1); opacity: 0; }
+        }
+
+        #tornado {
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 40px solid transparent;
+            border-right: 40px solid transparent;
+            border-bottom: 200px solid #555;
+            z-index: 70;
+            opacity: 0.8;
+            animation: spin 0.2s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .lava-ball {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: #ff4500;
+            border-radius: 50%;
+            border: 2px solid #ff0;
+            z-index: 60;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <div id="game-container">
+            <div id="top-bar">Waiting for next round...</div>
+            <div id="map-container"></div>
+            <div id="disaster-container"></div>
+            <!-- Characters will be dynamically added here -->
+        </div>
+        <div id="ui-sidebar">
+            <div id="player-list">
+                <h3>Players</h3>
+                <div id="players-content"></div>
+            </div>
+            <div id="chat-box">
+                <div id="chat-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const topBar = document.getElementById('top-bar');
+        const mapContainer = document.getElementById('map-container');
+        const disasterContainer = document.getElementById('disaster-container');
+        const playersContent = document.getElementById('players-content');
+        const chatContent = document.getElementById('chat-content');
+
+        // Game Constants
+        const GRAVITY = 0.5;
+        const PLAYER_SPEED = 4;
+        const JUMP_FORCE = 12;
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 600;
+
+        // Game State
+        let gameState = 'INTERMISSION'; // INTERMISSION, PREPARING, SURVIVING, GAMEOVER
+        let timer = 15;
+        let currentMap = null;
+        let currentDisaster = null;
+        let characters = [];
+        let player;
+
+        const maps = [
+            {
+                name: "Glass Tower",
+                platforms: [
+                    { x: 0, y: 580, width: 800, height: 20, color: '#666' }, // Ground
+                    { x: 100, y: 480, width: 600, height: 20, color: '#add8e6' },
+                    { x: 150, y: 380, width: 500, height: 20, color: '#add8e6' },
+                    { x: 200, y: 280, width: 400, height: 20, color: '#add8e6' },
+                    { x: 250, y: 180, width: 300, height: 20, color: '#add8e6' },
+                    { x: 325, y: 80, width: 150, height: 20, color: '#add8e6' },
+                ],
+                spawnPoints: [{x: 385, y: 540}]
+            },
+            {
+                name: "Coastal Lighthouse",
+                platforms: [
+                    { x: 0, y: 580, width: 800, height: 20, color: '#D2B48C' }, // Sand
+                    { x: 0, y: 500, width: 200, height: 80, color: '#8B4513' }, // Dock
+                    { x: 600, y: 450, width: 150, height: 130, color: '#C0C0C0' }, // Lighthouse Base
+                    { x: 625, y: 350, width: 100, height: 100, color: '#C0C0C0' },
+                    { x: 640, y: 200, width: 70, height: 150, color: '#C0C0C0' },
+                    { x: 630, y: 180, width: 90, height: 20, color: '#C0C0C0' },
+                ],
+                spawnPoints: [{x: 50, y: 460}]
+            },
+            {
+                name: "Volcano Island",
+                platforms: [
+                    { x: 0, y: 580, width: 800, height: 20, color: '#3A3A3A' }, // Ground
+                    { x: 250, y: 400, width: 300, height: 180, color: '#555' }, // Volcano
+                    { x: 300, y: 350, width: 200, height: 50, color: '#555' },
+                    { x: 350, y: 300, width: 100, height: 50, color: '#555' },
+                    { x: 50, y: 500, width: 100, height: 80, color: '#8B4513' },
+                    { x: 650, y: 520, width: 100, height: 60, color: '#8B4513' },
+                ],
+                spawnPoints: [{x: 100, y: 460}, {x: 700, y: 480}]
+            }
+        ];
+
+        const disasters = [
+            { name: "Flood", emoji: "🌊" },
+            { name: "Meteor Shower", emoji: "☄️" },
+            { name: "Tornado", emoji: "🌪️" },
+            { name: "Volcano Eruption", emoji: "🌋" },
+        ];
+        
+        const npcNames = ["CoolGuest", "BuilderMan22", "NoobSlayer_x", "EpicGamer", "RobloxFan1", "Surviver101", "DisasterPro", "Player2", "TestAcc"];
+
+        // Input Handling
+        const keys = {
+            ArrowUp: false,
+            ArrowLeft: false,
+            ArrowRight: false,
+            w: false,
+            a: false,
+            d: false
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if (keys[e.key] !== undefined) keys[e.key] = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            if (keys[e.key] !== undefined) keys[e.key] = false;
+        });
+
+        class Character {
+            constructor(id, isPlayer = false, name) {
+                this.id = id;
+                this.isPlayer = isPlayer;
+                this.name = name;
+                this.element = document.createElement('div');
+                this.element.id = isPlayer ? 'player' : `npc-${id}`;
+                this.element.className = 'character';
+                if (!isPlayer) {
+                    this.element.classList.add('npc');
+                    this.element.style.backgroundColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                }
+                gameContainer.appendChild(this.element);
+
+                this.x = 0;
+                this.y = 0;
+                this.vx = 0;
+                this.vy = 0;
+                this.width = 30;
+                this.height = 40;
+                this.onGround = false;
+                this.isAlive = true;
+
+                // AI state for NPCs
+                this.ai = {
+                    moveDirection: 0,
+                    moveTimer: Math.random() * 100,
+                    jumpTimer: Math.random() * 200 + 100
+                };
+            }
+            
+            reset(spawnPoint) {
+                this.x = spawnPoint.x + (Math.random() - 0.5) * 50;
+                this.y = spawnPoint.y;
+                this.vx = 0;
+                this.vy = 0;
+                this.isAlive = true;
+                this.element.style.display = 'block';
+                this.element.style.filter = 'none';
+            }
+
+            update() {
+                if (!this.isAlive) return;
+
+                if (this.isPlayer) {
+                    this.handleInput();
+                } else {
+                    this.handleAI();
+                }
+
+                // Apply physics
+                this.vy += GRAVITY;
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Collision with boundaries
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > GAME_WIDTH) this.x = GAME_WIDTH - this.width;
+
+                this.onGround = false;
+                // Collision with platforms
+                currentMap.platforms.forEach(p => {
+                    if (this.x + this.width > p.x && this.x < p.x + p.width &&
+                        this.y + this.height > p.y && this.y + this.height < p.y + p.height + this.vy) {
+                        this.y = p.y - this.height;
+                        this.vy = 0;
+                        this.onGround = true;
+                    }
+                });
+
+                // Update element position
+                this.element.style.left = `${this.x}px`;
+                this.element.style.top = `${this.y}px`;
+                
+                if (this.y > GAME_HEIGHT) {
+                    this.die();
+                }
+            }
+
+            handleInput() {
+                if (keys.ArrowLeft || keys.a) {
+                    this.vx = -PLAYER_SPEED;
+                } else if (keys.ArrowRight || keys.d) {
+                    this.vx = PLAYER_SPEED;
+                } else {
+                    this.vx = 0;
+                }
+                if ((keys.ArrowUp || keys.w) && this.onGround) {
+                    this.vy = -JUMP_FORCE;
+                }
+            }
+
+            handleAI() {
+                 this.ai.moveTimer--;
+                 this.ai.jumpTimer--;
+
+                 if (this.ai.moveTimer <= 0) {
+                     this.ai.moveDirection = Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+                     this.ai.moveTimer = Math.random() * 120 + 60; // 1-3 seconds
+                 }
+
+                 if (this.ai.jumpTimer <= 0 && this.onGround && Math.random() < 0.1) {
+                     this.vy = -JUMP_FORCE * (Math.random() * 0.5 + 0.5); // Jump with random force
+                     this.ai.jumpTimer = Math.random() * 200 + 100;
+                 }
+                 
+                 this.vx = this.ai.moveDirection * (PLAYER_SPEED * 0.7);
+            }
+            
+            die() {
+                if (this.isAlive) {
+                    this.isAlive = false;
+                    this.element.style.filter = 'grayscale(100%)';
+                    if (!this.isPlayer) {
+                        setTimeout(() => this.element.style.display = 'none', 1000);
+                    }
+                }
+            }
+        }
+        
+        function updatePlayerList() {
+            playersContent.innerHTML = '';
+            characters.forEach(char => {
+                const entry = document.createElement('div');
+                entry.className = 'player-entry';
+                entry.classList.add(char.isAlive ? 'survived' : 'deceased');
+                entry.textContent = char.name;
+                playersContent.appendChild(entry);
+            });
+        }
+        
+        function addChatMessage(name, message) {
+            const msg = document.createElement('div');
+            msg.className = 'chat-message';
+            msg.innerHTML = `<strong>${name}:</strong> ${message}`;
+            chatContent.appendChild(msg);
+            chatContent.scrollTop = chatContent.scrollHeight;
+        }
+
+        function buildMap() {
+            mapContainer.innerHTML = '';
+            currentMap.platforms.forEach(p => {
+                const platformEl = document.createElement('div');
+                platformEl.className = 'platform';
+                platformEl.style.left = `${p.x}px`;
+                platformEl.style.top = `${p.y}px`;
+                platformEl.style.width = `${p.width}px`;
+                platformEl.style.height = `${p.height}px`;
+                if(p.color) platformEl.style.backgroundColor = p.color;
+                mapContainer.appendChild(platformEl);
+            });
+            if (currentMap.name === "Volcano Island") {
+                const volcanoTop = document.createElement('div');
+                volcanoTop.className = 'map-element';
+                volcanoTop.style.cssText = `
+                    left: 375px; top: 250px;
+                    width: 50px; height: 50px;
+                    background: #300; border-radius: 50%;
+                    border: 5px solid #400;
+                `;
+                mapContainer.appendChild(volcanoTop);
+            }
+        }
+        
+        function spawnCharacters() {
+            const spawnPoint = currentMap.spawnPoints[Math.floor(Math.random() * currentMap.spawnPoints.length)];
+            characters.forEach(char => char.reset(spawnPoint));
+        }
+
+        // --- Disaster Logic ---
+        let disasterState = {};
+        
+        function startDisaster() {
+            disasterContainer.innerHTML = '';
+            disasterState = {};
+            
+            if (currentDisaster.name === "Flood") {
+                const water = document.createElement('div');
+                water.id = 'flood-water';
+                disasterContainer.appendChild(water);
+                setTimeout(() => { // Use timeout to allow CSS to apply before transition
+                    water.style.height = `${GAME_HEIGHT * 0.9}px`;
+                }, 100);
+                addChatMessage('Server', 'The water is rising!');
+            } else if (currentDisaster.name === "Meteor Shower") {
+                disasterState.interval = setInterval(spawnMeteor, 500);
+                addChatMessage('Server', 'Look out for meteors!');
+            } else if (currentDisaster.name === "Tornado") {
+                const tornado = document.createElement('div');
+                tornado.id = 'tornado';
+                disasterContainer.appendChild(tornado);
+                disasterState.element = tornado;
+                disasterState.x = -80;
+                disasterState.y = GAME_HEIGHT - 200;
+                disasterState.vx = 2;
+                disasterState.vy = (Math.random() - 0.5) * 2;
+                addChatMessage('Server', 'A tornado is approaching!');
+            } else if (currentDisaster.name === "Volcano Eruption") {
+                disasterState.interval = setInterval(spawnLavaBall, 300);
+                 addChatMessage('Server', 'The volcano is erupting!');
+            }
+        }
+
+        function updateDisaster() {
+            if (currentDisaster.name === "Flood") {
+                const waterLevel = document.getElementById('flood-water').getBoundingClientRect().top - gameContainer.getBoundingClientRect().top;
+                characters.forEach(char => {
+                    if (char.isAlive && char.y + char.height > waterLevel) {
+                        char.die();
+                    }
+                });
+            } else if (currentDisaster.name === "Meteor Shower") {
+                document.querySelectorAll('.meteor').forEach(meteor => {
+                    let top = parseFloat(meteor.style.top) + 15;
+                    meteor.style.top = `${top}px`;
+                    if (top > GAME_HEIGHT) {
+                        meteor.remove();
+                    } else {
+                         handleProjectileCollision(meteor, 60);
+                    }
+                });
+            } else if (currentDisaster.name === "Tornado") {
+                disasterState.x += disasterState.vx;
+                disasterState.y += disasterState.vy;
+
+                if (disasterState.x > GAME_WIDTH || disasterState.x < -80) disasterState.vx *= -1;
+                if (disasterState.y < 0 || disasterState.y > GAME_HEIGHT - 200) disasterState.vy *= -1;
+
+                disasterState.element.style.left = `${disasterState.x}px`;
+                disasterState.element.style.top = `${disasterState.y}px`;
+                
+                const tornadoCenterX = disasterState.x + 40;
+                characters.forEach(char => {
+                    if(char.isAlive) {
+                        const dist = Math.hypot(char.x - tornadoCenterX, char.y - (disasterState.y + 150));
+                        if (dist < 80) {
+                            char.vx += (tornadoCenterX - char.x) * 0.1;
+                            char.vy += (disasterState.y + 150 - char.y) * 0.1 - 1; // suck upwards
+                        }
+                    }
+                });
+
+            } else if (currentDisaster.name === "Volcano Eruption") {
+                document.querySelectorAll('.lava-ball').forEach(lava => {
+                    const data = disasterState[lava.id];
+                    if (!data) return;
+                    
+                    data.vy += GRAVITY * 0.5;
+                    data.x += data.vx;
+                    data.y += data.vy;
+
+                    lava.style.left = `${data.x}px`;
+                    lava.style.top = `${data.y}px`;
+
+                    if (data.y > GAME_HEIGHT) {
+                        delete disasterState[lava.id];
+                        lava.remove();
+                    } else {
+                         handleProjectileCollision(lava, 40);
+                    }
+                });
+            }
+        }
+        
+        function handleProjectileCollision(projectile, explosionSize) {
+            const pRect = projectile.getBoundingClientRect();
+             characters.forEach(char => {
+                if (char.isAlive) {
+                    const cRect = char.element.getBoundingClientRect();
+                    if (pRect.left < cRect.right && pRect.right > cRect.left &&
+                        pRect.top < cRect.bottom && pRect.bottom > cRect.top) {
+                        char.die();
+                        createExplosion(pRect.left, pRect.top, explosionSize);
+                        projectile.remove();
+                    }
+                }
+            });
+            currentMap.platforms.forEach(plat => {
+                 if (pRect.left < plat.x + plat.width && pRect.right > plat.x &&
+                     pRect.top < plat.y + plat.height && pRect.bottom > plat.y) {
+                    createExplosion(pRect.left, pRect.top, explosionSize);
+                    projectile.remove();
+                 }
+            });
+        }
+        
+        function stopDisaster() {
+             if (disasterState.interval) {
+                clearInterval(disasterState.interval);
+            }
+            // Let some visuals like explosions fade out naturally
+            setTimeout(() => {
+                 disasterContainer.innerHTML = '';
+            }, 2000);
+        }
+        
+        function spawnMeteor() {
+            const meteor = document.createElement('div');
+            meteor.className = 'meteor';
+            const x = Math.random() * GAME_WIDTH;
+            meteor.style.left = `${x}px`;
+            meteor.style.top = '-30px';
+            disasterContainer.appendChild(meteor);
+        }
+        
+        function spawnLavaBall() {
+            const lava = document.createElement('div');
+            const id = `lava-${Date.now()}-${Math.random()}`;
+            lava.id = id;
+            lava.className = 'lava-ball';
+            
+            const startX = 400, startY = 250;
+            disasterState[id] = {
+                x: startX,
+                y: startY,
+                vx: (Math.random() - 0.5) * 20,
+                vy: -Math.random() * 10 - 10
+            };
+            lava.style.left = `${startX}px`;
+            lava.style.top = `${startY}px`;
+            disasterContainer.appendChild(lava);
+        }
+        
+        function createExplosion(x, y, size) {
+             const explosion = document.createElement('div');
+             explosion.className = 'explosion';
+             explosion.style.left = `${x - size / 2 - gameContainer.getBoundingClientRect().left}px`;
+             explosion.style.top = `${y - size / 2 - gameContainer.getBoundingClientRect().top}px`;
+             explosion.style.width = `${size}px`;
+             explosion.style.height = `${size}px`;
+             disasterContainer.appendChild(explosion);
+             setTimeout(() => explosion.remove(), 500);
+        }
+
+        // --- Main Game Loop ---
+        function gameLoop() {
+            // Update characters
+            if (gameState === 'SURVIVING' || gameState === 'PREPARING' || gameState === 'GAMEOVER') {
+                characters.forEach(char => char.update());
+            }
+            if(gameState === 'SURVIVING') {
+                updateDisaster();
+                updatePlayerList();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function stateManager() {
+            timer--;
+            
+            switch (gameState) {
+                case 'INTERMISSION':
+                    topBar.innerHTML = `Intermission: Next round in ${timer}s`;
+                    if (timer <= 0) {
+                        gameState = 'PREPARING';
+                        currentMap = maps[Math.floor(Math.random() * maps.length)];
+                        currentDisaster = disasters[Math.floor(Math.random() * disasters.length)];
+                        
+                        buildMap();
+                        spawnCharacters();
+                        updatePlayerList();
+                        addChatMessage('Server', `Next map is: ${currentMap.name}`);
+                        
+                        timer = 10;
+                    }
+                    break;
+                    
+                case 'PREPARING':
+                    topBar.innerHTML = `🗺️ Map: ${currentMap.name} | ${currentDisaster.emoji} Disaster in ${timer}s`;
+                    if (timer <= 3 && timer > 0) {
+                        const randomChar = characters.filter(c => c.isAlive)[Math.floor(Math.random() * characters.length)];
+                        if(randomChar) {
+                            addChatMessage(randomChar.name, `Incoming ${currentDisaster.name}!`);
+                        }
+                    }
+                    if (timer <= 0) {
+                        gameState = 'SURVIVING';
+                        startDisaster();
+                        timer = 45; // Survival time
+                    }
+                    break;
+
+                case 'SURVIVING':
+                    topBar.innerHTML = `SURVIVE! ${currentDisaster.emoji} ${currentDisaster.name} | Time left: ${timer}s`;
+                    if (timer <= 0) {
+                        gameState = 'GAMEOVER';
+                        stopDisaster();
+                        const survivors = characters.filter(c => c.isAlive).map(c => c.name);
+                        topBar.innerHTML = `Round Over! Survivors: ${survivors.length > 0 ? survivors.join(', ') : 'None'}`;
+                        addChatMessage('Server', 'The round has ended.');
+                        timer = 10;
+                    }
+                    break;
+                    
+                case 'GAMEOVER':
+                    if (timer <= 0) {
+                        gameState = 'INTERMISSION';
+                        mapContainer.innerHTML = '';
+                        disasterContainer.innerHTML = '';
+                        characters.forEach(c => c.element.style.display = 'none');
+                        timer = 15;
+                    }
+                    break;
+            }
+        }
+        
+        function init() {
+            // Create player
+            player = new Character(0, true, "You (Player)");
+            characters.push(player);
+            
+            // Create NPCs
+            for (let i = 0; i < npcNames.length; i++) {
+                characters.push(new Character(i + 1, false, npcNames[i]));
+            }
+            
+            updatePlayerList();
+            
+            setInterval(stateManager, 1000);
+            gameLoop();
+            
+            addChatMessage('System', 'Welcome to Natural Disaster Survival!');
+        }
+        
+        init();
+    </script>
+
+</body>
+</html>

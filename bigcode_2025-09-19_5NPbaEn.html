@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Natural Survival Clone</title>
+    <style>
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes flash {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Arial', sans-serif;
+            background-color: #333;
+            color: white;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: #87CEEB; /* Default sky color */
+            transition: background-color 2s ease;
+        }
+
+        #game-container.shaking {
+            animation: shake 0.5s infinite;
+        }
+
+        #disaster-alert {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 0, 0, 0.7);
+            padding: 10px 30px;
+            border-radius: 10px;
+            border: 2px solid #ff6666;
+            font-size: 2em;
+            font-weight: bold;
+            z-index: 100;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        #timer {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.5em;
+            font-weight: bold;
+            z-index: 100;
+        }
+
+        #island {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80vw;
+            height: 25vh;
+            background-color: #228B22; /* Green grass */
+            border-top: 20px solid #8B4513; /* Brown dirt */
+            z-index: 10;
+        }
+
+        .player {
+            position: absolute;
+            width: 20px;
+            height: 30px;
+            background-color: #f0f; /* Default color, will be randomized */
+            border: 1px solid black;
+            bottom: 5px; /* Stand on the island */
+            transition: transform 0.2s;
+            z-index: 11;
+        }
+
+        #player-list {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 200px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            padding: 10px;
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 50;
+        }
+
+        #player-list h3 {
+            margin-top: 0;
+            text-align: center;
+            border-bottom: 1px solid white;
+            padding-bottom: 5px;
+        }
+
+        #player-list ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #player-list li {
+            padding: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-indicator.alive { background-color: #00ff00; }
+        .status-indicator.dead { background-color: #ff0000; }
+
+        /* Disaster Effects */
+        #flood-water {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0;
+            background-color: #0000FF;
+            opacity: 0.7;
+            z-index: 5;
+            transition: height 30s linear;
+        }
+
+        .meteor {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-color: #FF4500;
+            border-radius: 50%;
+            box-shadow: 0 0 15px 5px #ff8c00;
+            z-index: 20;
+            top: -50px;
+            transition: transform 1.5s linear;
+        }
+        
+        .crater {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: #3b1e00;
+            border-radius: 50%;
+            z-index: 12;
+        }
+
+        #lightning-flash-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            z-index: 200;
+            pointer-events: none;
+            opacity: 0;
+        }
+
+        #lightning-flash-overlay.flash {
+            animation: flash 0.3s linear;
+        }
+        
+        .lightning-bolt {
+            position: absolute;
+            z-index: 201;
+            width: 10px;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,0,0) 0%,
+                rgba(255,255,0,1) 50%,
+                rgba(255,255,0,0) 100%
+            );
+            transform: skewX(-20deg);
+            opacity: 0;
+            animation: flash 0.3s;
+        }
+
+        #tornado {
+            position: absolute;
+            font-size: 150px;
+            z-index: 30;
+            opacity: 0.8;
+            top: 50%;
+            left: -200px;
+            animation: spin 1s infinite linear;
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="disaster-alert">Intermission</div>
+        <div id="timer">00:30</div>
+
+        <div id="island">
+            <!-- Players will be added here by JS -->
+        </div>
+
+        <!-- Disaster Elements -->
+        <div id="flood-water"></div>
+        <div id="lightning-flash-overlay"></div>
+        <div id="tornado">🌪️</div>
+
+        <div id="player-list">
+            <h3>Survivors</h3>
+            <ul id="players-ul">
+                <!-- Player list will be generated here by JS -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const disasterAlert = document.getElementById('disaster-alert');
+        const timerDisplay = document.getElementById('timer');
+        const island = document.getElementById('island');
+        const playerListUl = document.getElementById('players-ul');
+
+        const disasters = ['Flood', 'Meteor Shower', 'Earthquake', 'Thunderstorm', 'Tornado'];
+        let currentDisaster = null;
+        let gameInterval;
+        let disasterInterval;
+
+        const playerNames = [
+            "ProGamer123", "CoolCat", "ShadowNinja", "PixelPioneer", "LavaGirl",
+            "AquaMarine", "SpeedyGonzales", "EpicBuilder", "DiamondHunter", "NoobSlayer_X"
+        ];
+
+        let players = [];
+
+        function setupPlayers() {
+            island.innerHTML = '';
+            playerListUl.innerHTML = '';
+            players = [];
+            playerNames.forEach(name => {
+                const playerEl = document.createElement('div');
+                playerEl.className = 'player';
+                const randomColor = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+                playerEl.style.backgroundColor = randomColor;
+                playerEl.style.left = `${10 + Math.random() * 80}%`;
+                island.appendChild(playerEl);
+
+                const listItem = document.createElement('li');
+                listItem.innerHTML = `${name} <span class="status-indicator alive"></span>`;
+                playerListUl.appendChild(listItem);
+                
+                players.push({ name, element: playerEl, listItem, alive: true });
+            });
+        }
+
+        function startTimer(duration, onComplete) {
+            let timer = duration;
+            updateTimerDisplay(timer);
+            gameInterval = setInterval(() => {
+                timer--;
+                updateTimerDisplay(timer);
+                if (timer <= 0) {
+                    clearInterval(gameInterval);
+                    onComplete();
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        }
+
+        function resetGame() {
+            if (disasterInterval) clearInterval(disasterInterval);
+            gameContainer.classList.remove('shaking');
+            gameContainer.style.backgroundColor = '#87CEEB';
+            document.getElementById('flood-water').style.height = '0px';
+            document.querySelectorAll('.meteor, .crater, .lightning-bolt').forEach(el => el.remove());
+            const tornado = document.getElementById('tornado');
+            tornado.style.transition = 'none';
+            tornado.style.left = '-200px';
+
+            setupPlayers();
+        }
+
+        function startIntermission() {
+            resetGame();
+            currentDisaster = null;
+            disasterAlert.textContent = 'Intermission';
+            disasterAlert.style.backgroundColor = 'rgba(0, 128, 0, 0.7)';
+            startTimer(15, selectDisaster);
+        }
+
+        function selectDisaster() {
+            const disaster = disasters[Math.floor(Math.random() * disasters.length)];
+            currentDisaster = disaster;
+            disasterAlert.textContent = `Incoming: ${disaster}!`;
+            disasterAlert.style.backgroundColor = 'rgba(255, 165, 0, 0.7)';
+            startTimer(5, () => startDisaster(disaster));
+        }
+
+        function startDisaster(disaster) {
+            disasterAlert.textContent = disaster;
+            disasterAlert.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
+
+            switch (disaster) {
+                case 'Flood':
+                    startFlood();
+                    break;
+                case 'Meteor Shower':
+                    startMeteorShower();
+                    break;
+                case 'Earthquake':
+                    startEarthquake();
+                    break;
+                case 'Thunderstorm':
+                    startThunderstorm();
+                    break;
+                case 'Tornado':
+                    startTornado();
+                    break;
+            }
+            startTimer(45, endRound);
+        }
+
+        function endRound() {
+            if (disasterInterval) clearInterval(disasterInterval);
+            disasterAlert.textContent = 'Survivors!';
+            disasterAlert.style.backgroundColor = 'rgba(0, 255, 0, 0.7)';
+            startTimer(5, startIntermission);
+        }
+
+        // --- DISASTER IMPLEMENTATIONS ---
+
+        function startFlood() {
+            gameContainer.style.backgroundColor = '#4682B4';
+            const water = document.getElementById('flood-water');
+            setTimeout(() => {
+                water.style.height = '80vh';
+            }, 100); // Small delay to ensure transition works
+        }
+
+        function startMeteorShower() {
+            gameContainer.style.backgroundColor = '#4B0082'; // Dark purple sky
+            disasterInterval = setInterval(() => {
+                const meteor = document.createElement('div');
+                meteor.className = 'meteor';
+                const startX = Math.random() * 100;
+                meteor.style.left = `${startX}vw`;
+                gameContainer.appendChild(meteor);
+
+                setTimeout(() => {
+                    const islandRect = island.getBoundingClientRect();
+                    const meteorRect = meteor.getBoundingClientRect();
+                    const impactY = islandRect.top - meteorRect.height;
+                    
+                    meteor.style.transform = `translateY(${impactY}px)`;
+                    
+                    setTimeout(() => {
+                         // Check if meteor hits the island
+                        const islandLeftEdge = (window.innerWidth - island.clientWidth) / 2;
+                        const islandRightEdge = islandLeftEdge + island.clientWidth;
+                        if(meteorRect.left > islandLeftEdge && meteorRect.left < islandRightEdge) {
+                             const crater = document.createElement('div');
+                             crater.className = 'crater';
+                             crater.style.left = `${meteor.offsetLeft - crater.offsetWidth/2}px`;
+                             crater.style.bottom = `${island.clientHeight - 20}px`;
+                             island.appendChild(crater);
+                        }
+                        meteor.remove();
+                    }, 1500);
+                }, 100);
+            }, 700);
+        }
+
+        function startEarthquake() {
+            gameContainer.classList.add('shaking');
+            disasterInterval = setInterval(() => {
+                // Periodically move players a bit to simulate losing balance
+                players.forEach(p => {
+                    if (p.alive) {
+                        const currentLeft = parseFloat(p.element.style.left);
+                        const newLeft = currentLeft + (Math.random() - 0.5) * 2;
+                        p.element.style.left = `${Math.max(0, Math.min(98, newLeft))}%`;
+                    }
+                });
+            }, 200);
+        }
+
+        function startThunderstorm() {
+            gameContainer.style.backgroundColor = '#2F4F4F'; // Dark slate gray
+            const flashOverlay = document.getElementById('lightning-flash-overlay');
+
+            disasterInterval = setInterval(() => {
+                flashOverlay.classList.add('flash');
+                
+                // Create a bolt
+                const bolt = document.createElement('div');
+                bolt.className = 'lightning-bolt';
+                bolt.style.left = `${Math.random() * 100}vw`;
+                gameContainer.appendChild(bolt);
+
+                setTimeout(() => {
+                    flashOverlay.classList.remove('flash');
+                    bolt.remove();
+                }, 300);
+            }, Math.random() * 3000 + 2000);
+        }
+        
+        function startTornado() {
+            gameContainer.style.backgroundColor = '#708090'; // Slate gray
+            const tornado = document.getElementById('tornado');
+            tornado.style.left = '-200px';
+            tornado.style.top = `${Math.random() * 30 + 30}%`;
+            tornado.style.transition = 'left 20s linear';
+
+            setTimeout(() => {
+                tornado.style.left = '110vw';
+            }, 100);
+        }
+
+        // --- INITIALIZE GAME ---
+        window.onload = () => {
+            startIntermission();
+        };
+    </script>
+</body>
+</html>

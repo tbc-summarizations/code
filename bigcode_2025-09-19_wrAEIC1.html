@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disaster Survival Sim</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+        #game-container {
+            width: 900px;
+            height: 600px;
+            background-color: #87CEEB; /* Sky Blue */
+            border: 5px solid #000;
+            position: relative;
+            overflow: hidden;
+        }
+        #game-world {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+        .platform {
+            position: absolute;
+            background-color: #228B22; /* Forest Green */
+            border-top: 5px solid #006400; /* Dark Green */
+        }
+        #ground {
+            bottom: 0;
+            width: 100%;
+            height: 50px;
+        }
+        .building {
+            position: absolute;
+            bottom: 50px;
+            border: 3px solid #111;
+        }
+        #tall-building {
+            width: 120px;
+            height: 450px;
+            left: 100px;
+            background-color: #A9A9A9; /* Dark Gray */
+        }
+        .ledge {
+            position: absolute;
+            width: 25px;
+            height: 10px;
+            background-color: #696969; /* Dim Gray */
+            right: -25px;
+            border: 2px solid #111;
+        }
+        #medium-building {
+            width: 180px;
+            height: 200px;
+            right: 150px;
+            background-color: #D2B48C; /* Tan */
+        }
+        #medium-building-roof {
+            width: 180px;
+            height: 20px;
+            bottom: 250px; /* 200 height + 50 ground */
+            right: 150px;
+            background-color: #8B4513; /* Saddle Brown */
+        }
+        #door {
+            position: absolute;
+            width: 40px;
+            height: 70px;
+            background-color: #654321;
+            bottom: 0px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .character {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            font-size: 20px;
+            text-align: center;
+            line-height: 20px;
+            transition: transform 0.1s;
+        }
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            text-align: center;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 24px;
+            z-index: 100;
+        }
+        #disaster-alert {
+            color: #FF4136;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        /* Disaster Styles */
+        #flood-water {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 0;
+            background-color: #0074D9;
+            opacity: 0.7;
+            z-index: 50;
+            transition: height 1s linear;
+        }
+        .meteor {
+            position: absolute;
+            width: 25px;
+            height: 25px;
+            background-color: #FF4136;
+            border-radius: 50%;
+            border: 3px solid #FF851B;
+            z-index: 51;
+            box-shadow: 0 0 15px #FF4136;
+        }
+        #tornado {
+            position: absolute;
+            font-size: 100px;
+            z-index: 52;
+            opacity: 0;
+            animation: spin 0.5s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="ui-container">
+            <div id="timer">Next round starts soon...</div>
+            <div id="disaster-alert"></div>
+        </div>
+        <div id="game-world">
+            <div id="ground" class="platform"></div>
+            
+            <div id="tall-building" class="building">
+                <!-- Ledges for climbing -->
+                <div class="ledge platform" style="bottom: 50px;"></div>
+                <div class="ledge platform" style="bottom: 110px; right: auto; left: -25px;"></div>
+                <div class="ledge platform" style="bottom: 170px;"></div>
+                <div class="ledge platform" style="bottom: 230px; right: auto; left: -25px;"></div>
+                <div class="ledge platform" style="bottom: 290px;"></div>
+                <div class="ledge platform" style="bottom: 350px; right: auto; left: -25px;"></div>
+                <div class="ledge platform" style="bottom: 410px;"></div>
+                <div id="tall-building-roof" class="platform" style="bottom: 500px; left: 100px; width: 120px; height: 10px;"></div>
+            </div>
+
+            <div id="medium-building" class="building">
+                <div id="door"></div>
+            </div>
+            <div id="medium-building-roof" class="platform"></div>
+
+            <!-- Player and Bots will be added here by JS -->
+        </div>
+
+        <!-- Disaster Elements -->
+        <div id="flood-water"></div>
+        <div id="tornado">🌪️</div>
+
+    </div>
+
+    <script>
+        const gameWorld = document.getElementById('game-world');
+        const ground = document.getElementById('ground');
+        const timerDisplay = document.getElementById('timer');
+        const disasterAlert = document.getElementById('disaster-alert');
+
+        // Game Settings
+        const GRAVITY = 0.5;
+        const JUMP_FORCE = -12;
+        const PLAYER_SPEED = 4;
+        const BOT_COUNT = 5;
+
+        // Game State
+        let keys = {};
+        let bots = [];
+        let platforms = [];
+        let roundTime = 0;
+        let intermissionTime = 15;
+        let currentDisaster = 'none';
+        
+        // Player State
+        const player = {
+            el: null,
+            x: 450,
+            y: 530,
+            vx: 0,
+            vy: 0,
+            width: 20,
+            height: 20,
+            onGround: false,
+            isDead: false,
+            emoji: '😀'
+        };
+
+        // Disaster Definitions
+        const disasters = {
+            none: { duration: 15, name: "Intermission" },
+            flood: { duration: 30, name: "Flood" },
+            meteorShower: { duration: 25, name: "Meteor Shower" },
+            tornado: { duration: 35, name: "Tornado" }
+        };
+        let disasterState = {};
+
+        function createCharacter(isPlayer, id) {
+            const charEl = document.createElement('div');
+            charEl.classList.add('character');
+            if (isPlayer) {
+                charEl.id = 'player';
+                charEl.innerHTML = player.emoji;
+                player.el = charEl;
+            } else {
+                charEl.id = 'bot-' + id;
+                charEl.innerHTML = ['🤖', '👽', '👾', '🤠', '🤡'][Math.floor(Math.random() * 5)];
+            }
+            gameWorld.appendChild(charEl);
+            return charEl;
+        }
+
+        function isColliding(rect1, rect2) {
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        }
+        
+        function getBoundingBox(element) {
+            return {
+                x: parseFloat(element.style.left) || 0,
+                y: parseFloat(element.style.top) || 0,
+                width: element.offsetWidth,
+                height: element.offsetHeight
+            }
+        }
+        
+        function updateCharacter(char) {
+            if (char.isDead) {
+                if(char.el.innerHTML !== '💀'){
+                    char.el.innerHTML = '💀';
+                    char.el.style.transform = `rotate(90deg)`;
+                }
+                return;
+            }
+
+            // Horizontal Movement
+            char.x += char.vx;
+            
+            // Apply Gravity
+            char.vy += GRAVITY;
+            char.y += char.vy;
+            char.onGround = false;
+
+            // Platform Collision
+            platforms.forEach(p => {
+                const platRect = { x: p.offsetLeft, y: p.offsetTop, width: p.offsetWidth, height: p.offsetHeight };
+                const charRect = { x: char.x, y: char.y, width: char.width, height: char.height };
+                
+                // Check collision from above (landing on platform)
+                if (char.vy > 0 && isColliding(
+                    {...charRect, y: char.y - char.vy}, // Previous Y position
+                    platRect
+                ) && char.y + char.height > platRect.y) {
+                    char.y = platRect.y - char.height;
+                    char.vy = 0;
+                    char.onGround = true;
+                }
+            });
+            
+            // World boundaries
+            if (char.x < 0) char.x = 0;
+            if (char.x + char.width > gameWorld.offsetWidth) char.x = gameWorld.offsetWidth - char.width;
+            if (char.y + char.height > 600) { // Fell off world
+                char.isDead = true;
+            }
+
+            // Update DOM element
+            char.el.style.left = char.x + 'px';
+            char.el.style.top = char.y + 'px';
+            
+            // Flip character sprite
+            if (char.vx > 0) char.el.style.transform = 'scaleX(1)';
+            if (char.vx < 0) char.el.style.transform = 'scaleX(-1)';
+        }
+
+        function handlePlayerInput() {
+            if (player.isDead) {
+                player.vx = 0;
+                return;
+            };
+            
+            player.vx = 0;
+            if (keys['ArrowLeft'] || keys['a']) {
+                player.vx = -PLAYER_SPEED;
+            }
+            if (keys['ArrowRight'] || keys['d']) {
+                player.vx = PLAYER_SPEED;
+            }
+            if ((keys['ArrowUp'] || keys['w'] || keys[' ']) && player.onGround) {
+                player.vy = JUMP_FORCE;
+                player.onGround = false;
+            }
+        }
+        
+        function updateBotAI(bot) {
+            if (bot.isDead) {
+                bot.vx = 0;
+                return;
+            };
+
+            // Simple AI
+            if (!bot.ai) {
+                bot.ai = { decisionTimer: 0, direction: 1 };
+            }
+
+            bot.ai.decisionTimer -= 1;
+            if (bot.ai.decisionTimer <= 0) {
+                const action = Math.random();
+                if (action < 0.4) { // Move
+                    bot.ai.direction = Math.random() < 0.5 ? -1 : 1;
+                    bot.vx = bot.ai.direction * (PLAYER_SPEED / 2);
+                } else if (action < 0.6) { // Stop
+                    bot.vx = 0;
+                } else if (action < 0.7 && bot.onGround) { // Jump
+                    bot.vy = JUMP_FORCE;
+                }
+                bot.ai.decisionTimer = Math.random() * 120 + 60; // New decision in 1-3 seconds
+            }
+            
+            // Disaster specific AI
+            if (currentDisaster === 'flood') {
+                // Try to go up
+                if (bot.onGround && bot.y > 500 - disasterState.waterLevel) {
+                     bot.vy = JUMP_FORCE;
+                }
+            }
+            if (currentDisaster === 'meteorShower') {
+                // Panic and run
+                 bot.vx = bot.ai.direction * PLAYER_SPEED;
+            }
+
+        }
+
+        // --- DISASTER LOGIC ---
+        function startDisaster(disasterName) {
+            currentDisaster = disasterName;
+            const disaster = disasters[disasterName];
+            roundTime = disaster.duration;
+            disasterAlert.textContent = `INCOMING: ${disaster.name}!`;
+
+            if (disasterName === 'flood') {
+                disasterState.waterEl = document.getElementById('flood-water');
+                disasterState.waterLevel = 0;
+                disasterState.waterEl.style.height = '0px';
+            }
+            if (disasterName === 'meteorShower') {
+                disasterState.meteors = [];
+                disasterState.spawnTimer = 0;
+            }
+            if (disasterName === 'tornado') {
+                disasterState.tornadoEl = document.getElementById('tornado');
+                disasterState.tornadoEl.style.opacity = '1';
+                disasterState.tx = -100;
+                disasterState.ty = 300 + (Math.random() * 150);
+                disasterState.tvx = 3 + Math.random() * 2;
+            }
+        }
+
+        function updateDisasters() {
+            if (currentDisaster === 'flood') {
+                disasterState.waterLevel += 0.2;
+                disasterState.waterEl.style.height = disasterState.waterLevel + 'px';
+
+                const waterSurfaceY = 600 - disasterState.waterLevel;
+                if (!player.isDead && player.y + player.height > waterSurfaceY) player.isDead = true;
+                bots.forEach(bot => {
+                    if (!bot.isDead && bot.y + bot.height > waterSurfaceY) bot.isDead = true;
+                });
+            }
+            if (currentDisaster === 'meteorShower') {
+                disasterState.spawnTimer--;
+                if(disasterState.spawnTimer <= 0) {
+                    const meteorEl = document.createElement('div');
+                    meteorEl.className = 'meteor';
+                    const mx = Math.random() * 900;
+                    meteorEl.style.left = mx + 'px';
+                    meteorEl.style.top = '-50px';
+                    gameWorld.appendChild(meteorEl);
+                    disasterState.meteors.push({ el: meteorEl, x: mx, y: -50, vy: 5 + Math.random() * 5 });
+                    disasterState.spawnTimer = 15; // spawn every 1/4 second
+                }
+
+                disasterState.meteors.forEach((m, index) => {
+                    m.y += m.vy;
+                    m.el.style.top = m.y + 'px';
+                    if (m.y > 600) {
+                        m.el.remove();
+                        disasterState.meteors.splice(index, 1);
+                    } else {
+                        const meteorRect = getBoundingBox(m.el);
+                        if (!player.isDead && isColliding(getBoundingBox(player.el), meteorRect)) player.isDead = true;
+                        bots.forEach(bot => {
+                            if (!bot.isDead && isColliding(getBoundingBox(bot.el), meteorRect)) bot.isDead = true;
+                        });
+                    }
+                });
+            }
+             if (currentDisaster === 'tornado') {
+                disasterState.tx += disasterState.tvx;
+                disasterState.tornadoEl.style.left = disasterState.tx + 'px';
+                disasterState.tornadoEl.style.top = disasterState.ty + 'px';
+
+                if(disasterState.tx > 1000) {
+                    disasterState.tx = -100;
+                    disasterState.ty = 300 + (Math.random() * 150);
+                }
+
+                const tornadoRect = getBoundingBox(disasterState.tornadoEl);
+                if (!player.isDead && isColliding(getBoundingBox(player.el), tornadoRect)) player.isDead = true;
+                bots.forEach(bot => {
+                    if (!bot.isDead && isColliding(getBoundingBox(bot.el), tornadoRect)) bot.isDead = true;
+                });
+            }
+        }
+
+        function endDisaster() {
+            disasterAlert.textContent = (player.isDead ? "YOU DIED" : "YOU SURVIVED!")
+            if (currentDisaster === 'flood') {
+                disasterState.waterEl.style.height = '0px';
+            }
+            if (currentDisaster === 'meteorShower') {
+                disasterState.meteors.forEach(m => m.el.remove());
+                disasterState.meteors = [];
+            }
+            if (currentDisaster === 'tornado') {
+                disasterState.tornadoEl.style.opacity = '0';
+            }
+            currentDisaster = 'none';
+            roundTime = intermissionTime;
+        }
+
+        function gameLoop() {
+            handlePlayerInput();
+            updateCharacter(player);
+
+            bots.forEach(bot => {
+                updateBotAI(bot);
+                updateCharacter(bot);
+            });
+            
+            if (currentDisaster !== 'none') {
+                 updateDisasters();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function roundTimer() {
+            if (roundTime > 0) {
+                roundTime--;
+                const text = currentDisaster === 'none' ? 'Next disaster in:' : 'Time left:';
+                timerDisplay.textContent = `${text} ${roundTime}s`;
+            } else {
+                if (currentDisaster !== 'none') {
+                    endDisaster();
+                } else {
+                    startNewRound();
+                }
+            }
+        }
+
+        function startNewRound() {
+            // Reset players and bots
+            player.isDead = false;
+            player.x = 450;
+            player.y = 400;
+            player.vy = 0;
+            player.el.innerHTML = player.emoji;
+            player.el.style.transform = 'none';
+
+            bots.forEach(bot => {
+                bot.isDead = false;
+                bot.x = Math.random() * 850;
+                bot.y = 400;
+                bot.vy = 0;
+                bot.el.innerHTML = bot.emoji;
+                bot.el.style.transform = 'none';
+            });
+            
+            const disasterNames = Object.keys(disasters).filter(d => d !== 'none');
+            const nextDisaster = disasterNames[Math.floor(Math.random() * disasterNames.length)];
+            startDisaster(nextDisaster);
+        }
+
+        function init() {
+            // Create player
+            createCharacter(true);
+            
+            // Create bots
+            for (let i = 0; i < BOT_COUNT; i++) {
+                const bot = {
+                    el: createCharacter(false, i),
+                    x: Math.random() * 850,
+                    y: 530,
+                    vx: 0,
+                    vy: 0,
+                    width: 20,
+                    height: 20,
+                    onGround: false,
+                    isDead: false,
+                    emoji: ['🤖', '👽', '👾', '🤠', '🤡'][Math.floor(Math.random() * 5)]
+                };
+                bots.push(bot);
+            }
+            
+            // Collect all platforms
+            document.querySelectorAll('.platform').forEach(p => platforms.push(p));
+
+            // Keyboard listeners
+            window.addEventListener('keydown', (e) => keys[e.key] = true);
+            window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+            // Start timers and game loop
+            roundTime = intermissionTime;
+            setInterval(roundTimer, 1000);
+            gameLoop();
+        }
+
+        init();
+    </script>
+</body>
+</html>

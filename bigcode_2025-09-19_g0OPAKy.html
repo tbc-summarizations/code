@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Plane Racer</title>
+    <style>
+        :root {
+            --plane-color: #ff4500;
+            --obstacle-color: #444;
+            --road-color: #666;
+            --stripe-color: #fff;
+            --sky-color: #87ceeb;
+            --horizon-color: #add8e6;
+            --ground-color: #228b22;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, var(--sky-color) 0%, var(--horizon-color) 60%, var(--ground-color) 60%);
+            font-family: 'Courier New', Courier, monospace;
+            color: white;
+            text-shadow: 2px 2px 4px #000;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            perspective: 600px;
+            perspective-origin: 50% 50%;
+        }
+
+        #world {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            transform: translateY(20%); /* Push the world down a bit */
+        }
+
+        #player {
+            width: 80px;
+            height: 20px;
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform-style: preserve-3d;
+            transform: translateX(-50%) translateZ(50px);
+            transition: transform 0.1s linear;
+        }
+        
+        #player::before { /* Main Body */
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 40px solid transparent;
+            border-right: 40px solid transparent;
+            border-bottom: 60px solid var(--plane-color);
+            transform: rotateX(-90deg) translateY(-20px) translateZ(-30px);
+            filter: drop-shadow(0 30px 10px rgba(0,0,0,0.4));
+        }
+
+        #player::after { /* Tail */
+            content: '🔺';
+            font-size: 24px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-50%) rotateX(-90deg) translateZ(-65px);
+            color: var(--plane-color);
+        }
+
+        .road-segment {
+            width: 800px;
+            height: 1px; /* The segments are just lines in 3D space */
+            background: var(--road-color);
+            position: absolute;
+            left: 50%;
+            transform-style: preserve-3d;
+            transform: translateX(-50%) rotateX(90deg); /* Lay it flat */
+        }
+        
+        .road-segment::before, .road-segment::after { /* Stripes */
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 100px;
+            background: var(--stripe-color);
+            top: -50px;
+        }
+        
+        .road-segment::before {
+            left: 150px;
+        }
+        
+        .road-segment::after {
+            right: 150px;
+        }
+
+        .obstacle {
+            width: 100px;
+            height: 100px;
+            position: absolute;
+            left: 50%;
+            transform-style: preserve-3d;
+            transform-origin: center center;
+        }
+
+        .obstacle-face {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background-color: var(--obstacle-color);
+            border: 2px solid #222;
+            opacity: 0.9;
+        }
+
+        .front  { transform: translateZ(50px); }
+        .back   { transform: rotateY(180deg) translateZ(50px); }
+        .right  { transform: rotateY(90deg) translateZ(50px); }
+        .left   { transform: rotateY(-90deg) translateZ(50px); }
+        .top    { transform: rotateX(90deg) translateZ(50px); }
+        .bottom { transform: rotateX(-90deg) translateZ(50px); }
+        
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        #score {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 2em;
+        }
+
+        #message-box {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            pointer-events: all;
+            cursor: pointer;
+        }
+
+        #message-box h1 {
+            margin: 0 0 10px 0;
+            font-size: 3em;
+        }
+
+        #message-box p {
+            margin: 0;
+            font-size: 1.2em;
+        }
+        
+        .hidden {
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="world">
+            <div id="player"></div>
+        </div>
+    </div>
+
+    <div id="ui">
+        <div id="score">Score: 0</div>
+        <div id="message-box">
+            <h1>3D PLANE RACER</h1>
+            <p>Use [A] and [D] or Arrow Keys to move.<br>Avoid the blocks.<br><br>Click to Start</p>
+        </div>
+    </div>
+
+    <script>
+        const world = document.getElementById('world');
+        const player = document.getElementById('player');
+        const scoreElement = document.getElementById('score');
+        const messageBox = document.getElementById('message-box');
+
+        // Game State
+        let gameState = {
+            running: false,
+            score: 0,
+            speed: 5,
+            player: {
+                x: 0,
+                targetX: 0,
+                width: 80,
+                z: 50,
+                sensitivity: 15
+            },
+            world: {
+                roadWidth: 800,
+                roadSegments: 50,
+                segmentLength: 100, // Z-axis distance between segments
+                curve: 0
+            },
+            obstacles: [],
+            numObstacles: 10
+        };
+
+        const keys = {};
+
+        // --- INITIALIZATION ---
+        function init() {
+            // Create Road
+            for (let i = 0; i < gameState.world.roadSegments; i++) {
+                const segment = document.createElement('div');
+                segment.className = 'road-segment';
+                segment.style.transform = `translateX(-50%) rotateX(90deg) translateZ(${i * gameState.world.segmentLength}px)`;
+                world.appendChild(segment);
+            }
+
+            // Create Obstacles
+            for (let i = 0; i < gameState.numObstacles; i++) {
+                const obstacleElement = document.createElement('div');
+                obstacleElement.className = 'obstacle';
+                obstacleElement.innerHTML = `
+                    <div class="obstacle-face front"></div>
+                    <div class="obstacle-face back"></div>
+                    <div class="obstacle-face right"></div>
+                    <div class="obstacle-face left"></div>
+                    <div class="obstacle-face top"></div>
+                    <div class="obstacle-face bottom"></div>
+                `;
+                world.appendChild(obstacleElement);
+                
+                const obstacle = {
+                    element: obstacleElement,
+                    x: 0,
+                    y: 0,
+                    z: 0,
+                    width: 100,
+                    height: 100,
+                    depth: 100
+                };
+                gameState.obstacles.push(obstacle);
+                resetObstacle(obstacle);
+            }
+
+            messageBox.addEventListener('click', startGame);
+            document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+            document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+        }
+
+        function resetObstacle(obstacle) {
+            const maxPos = (gameState.world.roadWidth / 2) - obstacle.width;
+            obstacle.x = Math.random() * maxPos * 2 - maxPos;
+            obstacle.y = -obstacle.height / 2; // on the ground
+            // Place it far away, spread out
+            obstacle.z = Math.random() * gameState.world.roadSegments * gameState.world.segmentLength + 500;
+        }
+
+        function startGame() {
+            gameState.running = true;
+            gameState.score = 0;
+            gameState.speed = 5;
+            gameState.world.curve = 0;
+            gameState.player.x = 0;
+            gameState.player.targetX = 0;
+            
+            gameState.obstacles.forEach(resetObstacle);
+
+            messageBox.classList.add('hidden');
+            gameLoop();
+        }
+
+        function gameOver() {
+            gameState.running = false;
+            messageBox.querySelector('h1').innerText = 'GAME OVER';
+            messageBox.querySelector('p').innerHTML = `Your Score: ${Math.floor(gameState.score)}<br><br>Click to Restart`;
+            messageBox.classList.remove('hidden');
+        }
+
+        // --- GAME LOOP ---
+        function gameLoop(timestamp) {
+            if (!gameState.running) return;
+
+            update();
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update() {
+            // Increase speed and score over time
+            gameState.speed += 0.003;
+            gameState.score += gameState.speed / 10;
+            
+            // --- Player Movement ---
+            if (keys['a'] || keys['arrowleft']) {
+                gameState.player.targetX -= gameState.player.sensitivity;
+            }
+            if (keys['d'] || keys['arrowright']) {
+                gameState.player.targetX += gameState.player.sensitivity;
+            }
+            
+            // Clamp player position to road width
+            const roadLimit = gameState.world.roadWidth / 2 - gameState.player.width / 2;
+            gameState.player.targetX = Math.max(-roadLimit, Math.min(roadLimit, gameState.player.targetX));
+
+            // Smoothly move player to target X
+            gameState.player.x += (gameState.player.targetX - gameState.player.x) * 0.1;
+
+            // --- World Movement ---
+            const roadSegments = world.querySelectorAll('.road-segment');
+            const totalRoadLength = gameState.world.roadSegments * gameState.world.segmentLength;
+
+            // Introduce random curving
+            gameState.world.curve += (Math.random() - 0.5) * 0.05;
+            gameState.world.curve = Math.max(-0.5, Math.min(0.5, gameState.world.curve));
+
+            let currentRoadX = 0;
+            roadSegments.forEach(segment => {
+                let zPos = parseFloat(segment.style.transform.split('translateZ(')[1]);
+                zPos -= gameState.speed;
+                currentRoadX += gameState.world.curve;
+
+                if (zPos < -gameState.world.segmentLength) {
+                    zPos += totalRoadLength;
+                    currentRoadX = 0; // Reset curve effect on loop
+                }
+                segment.style.transform = `translateX(-50%) translateX(${currentRoadX}px) rotateX(90deg) translateZ(${zPos}px)`;
+            });
+
+            // Update Obstacles & Check Collision
+            gameState.obstacles.forEach(obstacle => {
+                obstacle.z -= gameState.speed;
+                
+                // If obstacle is behind player, reset it
+                if (obstacle.z < -obstacle.depth) {
+                    resetObstacle(obstacle);
+                }
+
+                // Collision Detection (simple AABB)
+                const playerZ = gameState.player.z;
+                if (obstacle.z < playerZ + 20 && // Player length is approx 20
+                    obstacle.z + obstacle.depth > playerZ &&
+                    obstacle.x < gameState.player.x + gameState.player.width / 2 &&
+                    obstacle.x + obstacle.width > gameState.player.x - gameState.player.width / 2)
+                {
+                    gameOver();
+                }
+            });
+        }
+
+        function render() {
+            // Render Player
+            const playerTilt = (gameState.player.x - gameState.player.targetX) * 0.5;
+            player.style.transform = `translateX(-50%) translateX(${gameState.player.x}px) translateZ(${gameState.player.z}px) rotateZ(${-playerTilt}deg) rotateX(-5deg)`;
+
+            // Render Obstacles
+            gameState.obstacles.forEach(obstacle => {
+                obstacle.element.style.transform = `translateX(-50%) translateX(${obstacle.x}px) translateY(${obstacle.y}px) translateZ(${obstacle.z}px) rotateY(${obstacle.z * 0.2}deg)`;
+            });
+            
+            // Render UI
+            scoreElement.innerText = `Score: ${Math.floor(gameState.score)}`;
+        }
+
+        // --- Start ---
+        init();
+
+    </script>
+</body>
+</html>

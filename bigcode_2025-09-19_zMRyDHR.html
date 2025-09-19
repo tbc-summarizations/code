@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Disaster Survival</title>
+    <style>
+        :root {
+            --game-width: 800px;
+            --game-height: 500px;
+            --ui-height: 200px;
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --accent-color: #ff4500;
+            --safe-color: #2ecc71;
+            --warn-color: #f1c40f;
+            --danger-color: #e74c3c;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            border: 2px solid var(--accent-color);
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.5);
+        }
+
+        #status-bar {
+            background-color: #2c2c2c;
+            padding: 10px;
+            text-align: center;
+            font-size: 1.2em;
+            border-bottom: 2px solid var(--accent-color);
+        }
+
+        #status-bar span {
+            margin: 0 15px;
+        }
+
+        #game-world {
+            width: var(--game-width);
+            height: var(--game-height);
+            background-color: #3d3d3d;
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .player {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            font-size: 20px;
+            line-height: 20px;
+            text-align: center;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 10;
+        }
+
+        .player-label {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            padding: 1px 4px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+        
+        .ai-Max { background-color: gold; color: black; }
+        .ai-Med3 { background-color: silver; color: black; }
+        .ai-Med2 { background-color: #cd7f32; color: black; }
+        .ai-Med1 { background-color: #4a4a4a; color: white; }
+        .ai-Min { background-color: #7f0000; color: white; }
+
+
+        #game-log-container {
+            height: var(--ui-height);
+            background-color: #252525;
+            border-top: 2px solid var(--accent-color);
+            padding: 10px;
+            overflow-y: scroll;
+            box-sizing: border-box;
+            /* For smooth scrolling */
+            scroll-behavior: smooth;
+        }
+
+        #game-log p {
+            margin: 0 0 5px 0;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        
+        .log-info { color: #3498db; }
+        .log-event { color: var(--warn-color); }
+        .log-death { color: var(--danger-color); }
+        .log-survive { color: var(--safe-color); }
+
+        /* Map Elements */
+        .map-element {
+            position: absolute;
+            box-sizing: border-box;
+        }
+        .ground {
+            background-color: #5d4037;
+            bottom: 0;
+            height: 20px;
+            width: 100%;
+        }
+        .building {
+            background-color: #7f8c8d;
+            border: 2px solid #57606f;
+        }
+        .climbable {
+            background-image: linear-gradient(45deg, #95a5a6 25%, transparent 25%), linear-gradient(-45deg, #95a5a6 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #95a5a6 75%), linear-gradient(-45deg, transparent 75%, #95a5a6 75%);
+            background-size: 10px 10px;
+            background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
+        }
+        .underpass-roof {
+            z-index: 20; /* Above players */
+        }
+        .platform {
+             background-color: #8d6e63;
+        }
+        .mountain {
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+            background-color: #616161;
+            border: none;
+        }
+
+        /* Disasters */
+        .disaster-element {
+            position: absolute;
+            z-index: 50;
+        }
+        .flood, .tsunami {
+            background-color: rgba(0, 100, 200, 0.7);
+            bottom: 0;
+            width: 100%;
+            height: 0;
+            transition: height 10s linear;
+        }
+        .meteor {
+            width: 15px;
+            height: 15px;
+            background-color: #e67e22;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #d35400;
+            animation: fall 1s linear;
+        }
+        @keyframes fall {
+            from { transform: translateY(-30px); }
+            to { transform: translateY(var(--game-height)); }
+        }
+        .acid-rain {
+             width: 2px;
+            height: 10px;
+            background-color: #a2de00;
+            animation: fall 0.5s linear infinite;
+        }
+        .lava {
+            background-color: #ff4500;
+            box-shadow: 0 0 20px #ff6347;
+            bottom: 0;
+            width: 100%;
+            height: 0;
+            transition: height 15s linear;
+        }
+        .earthquake-shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both infinite;
+        }
+        @keyframes shake {
+          10%, 90% { transform: translate3d(-1px, 0, 0); }
+          20%, 80% { transform: translate3d(2px, 0, 0); }
+          30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+          40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+        .sandstorm-overlay, .blizzard-overlay {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 5s;
+            pointer-events: none;
+        }
+        .sandstorm-overlay { background: radial-gradient(ellipse at center, rgba(210,180,140,0.7) 0%,rgba(139,69,19,0.9) 100%); }
+        .blizzard-overlay { background: radial-gradient(ellipse at center, rgba(255,255,255,0.8) 0%,rgba(176,224,230,0.95) 100%); }
+        .tornado {
+            clip-path: polygon(20% 0, 80% 0, 100% 100%, 0% 100%);
+            background-color: rgba(128, 128, 128, 0.6);
+            height: 100%;
+            width: 100px;
+            bottom: 0;
+            transition: left 10s linear;
+        }
+        .fire {
+            width: 25px;
+            height: 35px;
+            background-color: orangered;
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            animation: flame 1s infinite;
+            bottom: 15px; /* sit on ground */
+        }
+        @keyframes flame {
+            0% { transform: scale(1, 1) rotate(0deg); }
+            50% { transform: scale(1.1, 0.9) rotate(5deg); }
+            100% { transform: scale(1, 1) rotate(0deg); }
+        }
+        .thunderbolt {
+            width: 10px;
+            height: 100%;
+            background: linear-gradient(yellow, gold);
+            animation: flash 0.2s linear;
+        }
+        @keyframes flash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        .plague-aura {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: rgba(142, 68, 173, 0.3);
+            border-radius: 50%;
+            top: -10px;
+            left: -10px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.9); opacity: 0.5; }
+            70% { transform: scale(1.2); opacity: 0.2; }
+            100% { transform: scale(0.9); opacity: 0.5; }
+        }
+        .sinkhole {
+            background-color: #3e2723;
+            border-radius: 50%;
+            transform: scale(0);
+            transition: transform 3s ease-in;
+            border: 5px dashed var(--warn-color);
+        }
+        .solar-flare {
+            background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(255,165,0,0.7) 50%, rgba(255,69,0,0) 70%);
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            animation: flare-pulse 5s ease-in-out;
+        }
+        @keyframes flare-pulse {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <div id="status-bar">
+            <span id="map-name">Map: Loading...</span>
+            <span id="disaster-name">Disaster: ---</span>
+            <span id="timer">Time: 0</span>
+        </div>
+        <div id="game-world"></div>
+        <div id="game-log-container">
+            <div id="game-log"></div>
+        </div>
+    </div>
+
+    <script>
+        const gameWorld = document.getElementById('game-world');
+        const gameLog = document.getElementById('game-log');
+        const mapNameEl = document.getElementById('map-name');
+        const disasterNameEl = document.getElementById('disaster-name');
+        const timerEl = document.getElementById('timer');
+
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 500;
+        const PLAYER_SPEED = 5;
+        let G_GRAVITY = 1;
+        const JUMP_FORCE = 16;
+        const PLAYER_COUNT = 10;
+        const PLAYER_WIDTH = 20;
+        const PLAYER_HEIGHT = 20;
+        
+        const GAME_STATE = {
+            INTERMISSION: 'intermission',
+            ROUND_STARTING: 'starting',
+            ROUND_ACTIVE: 'active',
+            ROUND_END: 'end'
+        };
+
+        let gameState = GAME_STATE.INTERMISSION;
+        let timer = 15;
+        let players = [];
+        let keys = {};
+        let currentMap = null;
+        let currentDisaster = null;
+
+        const AI_LEVELS = {
+            Max: { name: 'Max', colorClass: 'ai-Max', smarts: 1.0 },
+            Med3: { name: 'Med 3', colorClass: 'ai-Med3', smarts: 0.85 },
+            Med2: { name: 'Med 2', colorClass: 'ai-Med2', smarts: 0.65 },
+            Med1: { name: 'Med 1', colorClass: 'ai-Med1', smarts: 0.35 },
+            Min: { name: 'Min', colorClass: 'ai-Min', smarts: 0.0 }
+        };
+        const PLAYER_EMOJIS = ['😀', '😎', '🤓', '👽', '🤖', '🧑‍🚀', '🎃', '🤡', '👻', '🐸'];
+
+        // --- MAPS ---
+        const maps = [
+            {
+                name: "Highrise Heights",
+                build: () => {
+                    gameWorld.innerHTML = `
+                        <div class="map-element ground"></div>
+                        <div class="map-element building climbable" style="bottom: 20px; left: 600px; width: 100px; height: 480px;"></div>
+                        <div class="map-element building" style="bottom: 20px; left: 100px; width: 150px; height: 80px;"></div>
+                        <div class="map-element platform" style="bottom: 180px; left: 300px; width: 150px; height: 20px;"></div>
+                    `;
+                },
+                getColliders: () => [
+                    { x: 0, y: 0, width: GAME_WIDTH, height: 20, type: 'ground' },
+                    { x: 600, y: 20, width: 100, height: 480, type: 'climbable' },
+                    { x: 100, y: 20, width: 150, height: 80, type: 'solid' },
+                    { x: 300, y: 180, width: 150, height: 20, type: 'solid' }
+                ],
+                spawnPoints: () => ({ x: Math.random() * 400 + 50, y: 30 })
+            },
+            {
+                name: "Suburban Shade",
+                build: () => {
+                    gameWorld.innerHTML = `
+                        <div class="map-element ground"></div>
+                        <div class="map-element building underpass-roof" style="bottom: 80px; left: 250px; width: 300px; height: 20px;"></div>
+                        <div class="map-element building" style="bottom: 20px; left: 250px; width: 20px; height: 60px;"></div>
+                        <div class="map-element building" style="bottom: 20px; left: 530px; width: 20px; height: 60px;"></div>
+                        <div class="map-element building" style="bottom: 20px; left: 50px; width: 80px; height: 60px;"></div>
+                        <div class="map-element building" style="bottom: 20px; left: 670px; width: 80px; height: 60px;"></div>
+                    `;
+                },
+                getColliders: () => [
+                    { x: 0, y: 0, width: GAME_WIDTH, height: 20, type: 'ground' },
+                    { x: 250, y: 80, width: 300, height: 20, type: 'roof' }, // Roof part
+                    { x: 250, y: 20, width: 20, height: 60, type: 'solid' }, // Left pillar
+                    { x: 530, y: 20, width: 20, height: 60, type: 'solid' }, // Right pillar
+                    { x: 50, y: 20, width: 80, height: 60, type: 'solid' },
+                    { x: 670, y: 20, width: 80, height: 60, type: 'solid' }
+                ],
+                spawnPoints: () => ({ x: Math.random() * 700 + 50, y: 30 })
+            },
+            {
+                name: "Volcano View",
+                build: () => {
+                    gameWorld.innerHTML = `
+                        <div class="map-element ground" style="width: 250px; left: 0;"></div>
+                        <div class="map-element ground" style="width: 250px; right: 0;"></div>
+                        <div class="map-element mountain" style="bottom: 20px; left: 275px; width: 250px; height: 300px;"></div>
+                    `;
+                },
+                 getColliders: () => [
+                    { x: 0, y: 0, width: 250, height: 20, type: 'ground' },
+                    { x: 550, y: 0, width: 250, height: 20, type: 'ground' },
+                    { x: 275, y: 20, width: 250, height: 300, type: 'climbable' }
+                 ],
+                spawnPoints: () => {
+                    const side = Math.random() > 0.5;
+                    return { x: side ? Math.random() * 200 : 550 + Math.random() * 200, y: 30 };
+                }
+            }
+        ];
+        
+        // --- DISASTERS ---
+        const disasters = [
+            { name: "Tsunami 🌊", warning: "The sea is receding ominously... Head for high ground!", duration: 15, start: function() { this.el = document.createElement('div'); this.el.className = 'disaster-element tsunami'; gameWorld.appendChild(this.el); setTimeout(() => this.el.style.height = `400px`, 100); }, update: (p) => p.y < 400, end: function() { this.el.remove(); }, getSafeZone: (map) => { if(map.name === "Highrise Heights") return { x: 650, y: 450 }; if(map.name === "Suburban Shade") return { x: 400, y: 100 }; if(map.name === "Volcano View") return { x: 400, y: 320 }; }},
+            { name: "Flood 💧", warning: "Water levels are rising slowly. Seek higher ground.", duration: 30, start: function() { this.el = document.createElement('div'); this.el.className = 'disaster-element flood'; this.el.style.transition = 'height 25s linear'; gameWorld.appendChild(this.el); setTimeout(() => this.el.style.height = `300px`, 100); }, update: (p) => p.y < 300, end: function() { this.el.remove(); }, getSafeZone: (map) => disasters[0].getSafeZone(map) },
+            { name: "Volcano 🌋", warning: "The ground rumbles... The mountain looks angry!", duration: 20, start: function() { this.lava = document.createElement('div'); this.lava.className = 'disaster-element lava'; if (currentMap.name === "Volcano View") { gameWorld.appendChild(this.lava); setTimeout(() => this.lava.style.height = `250px`, 100); } this.interval = setInterval(() => { const meteor = document.createElement('div'); meteor.className = 'disaster-element meteor'; const startX = currentMap.name === "Volcano View" ? 400 + (Math.random()*100-50) : Math.random() * GAME_WIDTH; meteor.style.left = `${startX}px`; meteor.style.top = `${currentMap.name === "Volcano View" ? 180 : -20}px`; gameWorld.appendChild(meteor); setTimeout(() => meteor.remove(), 1000); }, 500); }, update: function(p) { if (currentMap.name === "Volcano View" && p.y < 250) return true; const meteors = document.querySelectorAll('.meteor'); for (const meteor of meteors) { const mRect = meteor.getBoundingClientRect(); const pRect = p.element.getBoundingClientRect(); if (mRect.left < pRect.right && mRect.right > pRect.left && mRect.top < pRect.bottom && mRect.bottom > pRect.top) return true; } }, end: function() { clearInterval(this.interval); this.lava?.remove(); }, getSafeZone: (map) => { if(map.name === "Volcano View") return Math.random() > 0.5 ? {x: 100, y: 20} : {x: 700, y: 20}; return { x: Math.random() * GAME_WIDTH, y: 20 }; }},
+            { name: "Meteor Shower ☄️", warning: "The sky is falling! Keep moving!", duration: 25, start: function() { this.interval = setInterval(() => { const meteor = document.createElement('div'); meteor.className = 'disaster-element meteor'; meteor.style.left = `${Math.random() * GAME_WIDTH}px`; meteor.style.top = `-20px`; gameWorld.appendChild(meteor); setTimeout(() => meteor.remove(), 1500); }, 200); }, update: function(p) { const meteors = document.querySelectorAll('.meteor'); for (const meteor of meteors) { const mRect = meteor.getBoundingClientRect(); const pRect = p.element.getBoundingClientRect(); if (mRect.left < pRect.right && mRect.right > pRect.left && mRect.top < pRect.bottom && mRect.bottom > pRect.top) return true; }}, end: function() { clearInterval(this.interval); }, getSafeZone: (map) => ({ x: Math.random() * GAME_WIDTH, y: 20 }) },
+            { name: "Acid Rain 🧪", warning: "The clouds look sickly green. Find shelter!", duration: 20, start: function() { this.interval = setInterval(() => { for(let i=0; i<10; i++) { const drop = document.createElement('div'); drop.className = 'disaster-element acid-rain'; drop.style.left = `${Math.random() * GAME_WIDTH}px`; drop.style.top = `-20px`; gameWorld.appendChild(drop); setTimeout(() => drop.remove(), 1000); }}, 100); }, update: function(p) { const roofs = currentMap.getColliders().filter(c => c.type === 'roof'); for(const roof of roofs) { if (p.x + PLAYER_WIDTH > roof.x && p.x < roof.x + roof.width && p.y < roof.y + roof.height) return false; } return true; }, end: function() { clearInterval(this.interval); }, getSafeZone: (map) => { if(map.name === "Suburban Shade") return { x: 400, y: 30 }; return { x: Math.random() * GAME_WIDTH, y: 20 }; }},
+            { name: "Earthquake 💥", warning: "The earth is groaning... Stay away from tall structures!", duration: 15, start: function() { gameWorld.classList.add('earthquake-shake'); this.shakingStructures = currentMap.getColliders().filter(c => c.height > 100); }, update: function(p) { for (const structure of this.shakingStructures) { if (p.x > structure.x - 30 && p.x < structure.x + structure.width + 30) return true; } }, end: function() { gameWorld.classList.remove('earthquake-shake'); }, getSafeZone: (map) => { if(map.name === "Highrise Heights") return { x: 300, y: 20 }; return { x: 150, y: 20 }; }},
+            { name: "Sandstorm 🌪️", warning: "A huge cloud of dust approaches! It's hard to see!", duration: 20, start: function() { this.el = document.createElement('div'); this.el.className='sandstorm-overlay'; gameWorld.appendChild(this.el); setTimeout(() => this.el.style.opacity = 1, 100); }, update: () => false, end: function() { this.el.remove() }, getSafeZone: (map) => ({ x: 400, y: 20 }) },
+            { name: "Blizzard 🌨️", warning: "A fierce blizzard is coming! It's getting cold and hard to see.", duration: 20, start: function() { this.el = document.createElement('div'); this.el.className='blizzard-overlay'; gameWorld.appendChild(this.el); setTimeout(() => this.el.style.opacity = 1, 100); }, update: (p) => { if(Math.random() < 0.001) p.vy = -5; return false; }, end: function() { this.el.remove() }, getSafeZone: (map) => ({ x: 400, y: 20 }) },
+            { name: "Tornado 🌀", warning: "A tornado has been spotted! Run!", duration: 20, start: function() { this.el = document.createElement('div'); this.el.className='disaster-element tornado'; this.dir = Math.random() > 0.5; this.el.style.left = this.dir ? '-100px' : `${GAME_WIDTH}px`; gameWorld.appendChild(this.el); setTimeout(() => this.el.style.left = this.dir ? `${GAME_WIDTH}px` : '-100px', 100); }, update: function(p) { const tRect = this.el.getBoundingClientRect(); const pRect = p.element.getBoundingClientRect(); return tRect.left < pRect.right && tRect.right > pRect.left; }, end: function() { this.el.remove() }, getSafeZone: (map) => ({ x: 400, y: 20 }) },
+            { name: "Fire 🔥", warning: "Fire is spreading across the map!", duration: 25, start: function() { this.fires = []; this.interval = setInterval(() => { const x = Math.random() * GAME_WIDTH; const fire = document.createElement('div'); fire.className='disaster-element fire'; fire.style.left = `${x}px`; gameWorld.appendChild(fire); this.fires.push({x, el: fire}); }, 1000); }, update: function(p) { for(const fire of this.fires) { if (Math.abs(p.x - fire.x) < 20 && p.y < 35) return true; } }, end: function() { clearInterval(this.interval); this.fires.forEach(f => f.el.remove()); } , getSafeZone: (map) => ({ x: Math.random() * GAME_WIDTH, y: 20 }) },
+            { name: "Thunderstorm ⚡", warning: "A thunderstorm is brewing. Don't get struck by lightning!", duration: 20, start: function() { this.interval = setInterval(() => { const targets = players.filter(p=>p.isAlive); if (targets.length === 0) return; const targetPlayer = targets[Math.floor(Math.random() * targets.length)]; const x = targetPlayer.x; const bolt = document.createElement('div'); bolt.className='disaster-element thunderbolt'; bolt.style.left = `${x}px`; gameWorld.appendChild(bolt); setTimeout(() => bolt.remove(), 200); }, 1500); }, update: function(p) { const bolts = document.querySelectorAll('.thunderbolt'); for(const bolt of bolts) { if(Math.abs(p.x - parseFloat(bolt.style.left)) < 15) return true; } }, end: function() { clearInterval(this.interval); }, getSafeZone: (map) => ({ x: Math.random() * GAME_WIDTH, y: 20 }) },
+            { name: "Plague 🤢", warning: "A deadly plague is spreading. Keep your distance from others!", duration: 30, start: function() { const patientZero = players[Math.floor(Math.random() * players.length)]; patientZero.infected = true; const aura = document.createElement('div'); aura.className = 'plague-aura'; patientZero.element.appendChild(aura); patientZero.aura = aura; }, update: function(p) { if (!p.infected) return false; for (const other of players) { if (!other.isAlive || other.infected || other === p) continue; if (Math.hypot(p.x - other.x, p.y - other.y) < 40) { other.infected = true; const aura = document.createElement('div'); aura.className = 'plague-aura'; other.element.appendChild(aura); other.aura = aura; logMessage(`${other.emoji} has been infected!`, 'log-death'); } } return Math.random() < 0.001; }, end: function() { players.forEach(p => {p.infected = false; p.aura?.remove(); p.aura=null;}); }, getSafeZone: (map) => ({ x: Math.random() * GAME_WIDTH, y: Math.random() * GAME_HEIGHT }) },
+            { name: "Sinkhole ⚫", warning: "The ground feels unstable... a sinkhole might form!", duration: 15, start: function() { this.x = Math.random() * (GAME_WIDTH - 200) + 100; this.radius = 150; this.el = document.createElement('div'); this.el.className='disaster-element sinkhole'; this.el.style.left = `${this.x - this.radius}px`; this.el.style.bottom = `${0 - this.radius + 10}px`; this.el.style.width = `${this.radius * 2}px`; this.el.style.height = `${this.radius * 2}px`; gameWorld.appendChild(this.el); setTimeout(() => {this.el.style.transform = 'scale(1)'; this.el.style.border = 'none';}, 2000); }, update: function(p) { if (this.el.style.transform !== 'scale(1)') return false; const dist = Math.hypot(p.x - this.x, p.y - 10); return dist < this.radius; }, end: function() { this.el.remove(); }, getSafeZone: (map) => { if (this.x > 400) return {x: 100, y:20}; else return {x: 700, y: 20}; }},
+            { name: "Gravity Shift 😵‍💫", warning: "Everything feels... light. Gravity is fluctuating!", duration: 25, start: function() { G_GRAVITY = 0.2; }, update: () => false, end: function() { G_GRAVITY = 1; }, getSafeZone: (map) => ({ x: 400, y: 400 }) },
+            { name: "Solar Flare ☀️", warning: "A powerful solar flare is heading for us! It will burn exposed areas!", duration: 10, start: function() { this.el = document.createElement('div'); this.el.className='disaster-element solar-flare'; gameWorld.appendChild(this.el); }, update: function(p) { const roofs = currentMap.getColliders().filter(c => c.type === 'roof'); for (const roof of roofs) { if (p.x + PLAYER_WIDTH > roof.x && p.x < roof.x + roof.width) return false; } return true; }, end: function() { this.el.remove(); }, getSafeZone: (map) => { if(map.name === "Suburban Shade") return { x: 400, y: 30 }; return { x: 400, y: 20 }; } },
+        ];
+        
+        function logMessage(msg, className) {
+            const p = document.createElement('p');
+            p.textContent = msg;
+            p.className = className;
+            gameLog.appendChild(p);
+            gameLog.parentElement.scrollTop = gameLog.parentElement.scrollHeight;
+        }
+
+        function createPlayer(isUser = false) {
+            const element = document.createElement('div');
+            element.className = 'player';
+            const emoji = PLAYER_EMOJIS[players.length % PLAYER_EMOJIS.length];
+            element.textContent = emoji;
+            gameWorld.appendChild(element);
+
+            const label = document.createElement('div');
+            label.className = 'player-label';
+            element.appendChild(label);
+            
+            const aiLevelKeys = Object.keys(AI_LEVELS);
+            const aiLevel = isUser ? null : AI_LEVELS[aiLevelKeys[Math.floor(Math.random() * aiLevelKeys.length)]];
+
+            if(aiLevel) {
+                 label.textContent = aiLevel.name;
+                 label.classList.add(aiLevel.colorClass);
+            } else {
+                label.textContent = "You";
+                label.style.backgroundColor = 'blue';
+                label.style.color = 'white';
+            }
+
+            const player = {
+                element, emoji, x: 0, y: 0, vx: 0, vy: 0,
+                isGrounded: false, isAlive: true, onClimbable: false, isUser,
+                aiLevel, aiTarget: null, aiMoveDir: 0, aiLastActionTime: 0
+            };
+            return player;
+        }
+
+        function updatePlayer(p) {
+            if (!p.isAlive) return;
+
+            // --- AI & Input ---
+            if (p.isUser) {
+                p.vx = 0;
+                if (keys['ArrowLeft'] || keys['a']) p.vx = -PLAYER_SPEED;
+                if (keys['ArrowRight'] || keys['d']) p.vx = PLAYER_SPEED;
+                if ((keys['ArrowUp'] || keys['w'] || keys[' ']) && p.isGrounded) {
+                    p.vy = JUMP_FORCE;
+                }
+            } else {
+                updateAI(p);
+            }
+            
+            // --- Physics ---
+            p.onClimbable = false;
+            let isClimbing = false;
+            const colliders = currentMap.getColliders();
+            for (const col of colliders) {
+                if (col.type === 'climbable' && p.x + PLAYER_WIDTH > col.x && p.x < col.x + col.width && p.y + PLAYER_HEIGHT > col.y && p.y < col.y + col.height) {
+                    p.onClimbable = true;
+                    break;
+                }
+            }
+
+            if(p.onClimbable && ((p.isUser && (keys['ArrowUp'] || keys['w'])) || (!p.isUser && p.aiWantsToClimb))) {
+                p.vy = PLAYER_SPEED;
+                isClimbing = true;
+            } else {
+                p.vy -= G_GRAVITY;
+            }
+
+            p.x += p.vx;
+            p.y += p.vy;
+
+            p.isGrounded = false;
+            
+            // --- Collision Detection & Resolution ---
+            for (const col of colliders) {
+                const pLeft = p.x, pRight = p.x + PLAYER_WIDTH, pBottom = p.y, pTop = p.y + PLAYER_HEIGHT;
+                const cLeft = col.x, cRight = col.x + col.width, cBottom = col.y, cTop = col.y + col.height;
+
+                if (pRight > cLeft && pLeft < cRight && pTop > cBottom && pBottom < cTop) {
+                    const overlapX = (p.vx > 0) ? pRight - cLeft : cRight - pLeft;
+                    const overlapY = (p.vy > 0) ? pTop - cBottom : cTop - pBottom;
+                    
+                    if (overlapY < overlapX && !isClimbing) {
+                         if (p.vy > 0 && pBottom < cTop) { 
+                            p.y = cBottom - PLAYER_HEIGHT;
+                            p.vy = 0;
+                        } else if (p.vy <= 0) { 
+                            p.y = cTop;
+                            p.vy = 0;
+                            p.isGrounded = true;
+                        }
+                    } else if (col.type !== 'climbable') {
+                       if (p.vx > 0) p.x = cLeft - PLAYER_WIDTH;
+                       else if (p.vx < 0) p.x = cRight;
+                       p.vx = 0;
+                    }
+                }
+            }
+            
+            // World bounds
+            if (p.x < 0) { p.x = 0; p.vx = 0; }
+            if (p.x > GAME_WIDTH - PLAYER_WIDTH) { p.x = GAME_WIDTH - PLAYER_WIDTH; p.vx = 0; }
+            if (p.y < -50) killPlayer(p);
+
+            p.element.style.left = `${p.x}px`;
+            p.element.style.bottom = `${p.y}px`;
+        }
+
+        function updateAI(p) {
+            const now = Date.now();
+            if (now - p.aiLastActionTime < 300) return;
+            p.aiLastActionTime = now;
+
+            if (!p.aiTarget) {
+                if(gameState === GAME_STATE.ROUND_ACTIVE) {
+                     if (Math.random() < p.aiLevel.smarts) {
+                        p.aiTarget = currentDisaster.getSafeZone(currentMap);
+                    } else {
+                        // Failed smarts check, go somewhere random
+                        p.aiTarget = { x: Math.random() * GAME_WIDTH, y: 20 };
+                    }
+                } else {
+                     p.aiTarget = { x: Math.random() * GAME_WIDTH, y: 20 };
+                }
+            }
+
+            p.aiWantsToClimb = false;
+            if (p.aiTarget) {
+                const dist_x = p.aiTarget.x - p.x;
+                const dist_y = p.aiTarget.y - p.y;
+                
+                if (Math.abs(dist_x) > 20) {
+                    p.aiMoveDir = Math.sign(dist_x);
+                } else {
+                    p.aiMoveDir = 0;
+                    if(Math.abs(dist_y) < 50) p.aiTarget = null; // Reached target
+                }
+                
+                if (dist_y > 20 && p.isGrounded) {
+                    p.vy = JUMP_FORCE;
+                }
+                if (dist_y > 10 && p.onClimbable) {
+                    p.aiWantsToClimb = true;
+                }
+            } else {
+                p.aiMoveDir = Math.floor(Math.random()*3) - 1;
+            }
+            
+            p.vx = p.aiMoveDir * PLAYER_SPEED;
+        }
+
+        function killPlayer(p) {
+            if (!p.isAlive) return;
+            p.isAlive = false;
+            p.element.style.transform = 'rotate(90deg)';
+            p.element.style.opacity = '0.5';
+            logMessage(`${p.emoji} ${p.isUser ? '(You)' : ''} has died!`, 'log-death');
+        }
+
+        function resetPlayer(p) {
+            p.isAlive = true;
+            p.infected = false;
+            p.aura?.remove();
+            p.aura = null;
+            p.element.style.transform = 'rotate(0deg)';
+            p.element.style.opacity = '1';
+            const spawn = currentMap.spawnPoints();
+            p.x = spawn.x;
+            p.y = spawn.y;
+            p.vx = 0;
+            p.vy = 0;
+            p.aiTarget = null;
+        }
+
+        function startGameRound() {
+            gameState = GAME_STATE.ROUND_STARTING;
+            timer = 5;
+            G_GRAVITY = 1; // Reset gravity
+            
+            // Clear old stuff
+            gameWorld.innerHTML = '';
+            
+            currentMap = maps[Math.floor(Math.random() * maps.length)];
+            currentMap.build();
+            mapNameEl.textContent = `Map: ${currentMap.name}`;
+
+            if(players.length === 0) {
+                for (let i = 0; i < PLAYER_COUNT; i++) {
+                    players.push(createPlayer(i === 0));
+                }
+            }
+            players.forEach(p => gameWorld.appendChild(p.element));
+            players.forEach(resetPlayer);
+            
+            currentDisaster = disasters[Math.floor(Math.random() * disasters.length)];
+            disasterNameEl.textContent = `Disaster: ---`;
+            
+            logMessage(`Next round on: ${currentMap.name}.`, 'log-info');
+            logMessage(`Prepare yourselves!`, 'log-info');
+        }
+        
+        // Main Game Loop (Physics and Rendering)
+        function gameLoop() {
+            if (gameState === GAME_STATE.ROUND_ACTIVE || gameState === GAME_STATE.ROUND_STARTING) {
+                players.forEach(p => {
+                    if (p.isAlive) updatePlayer(p);
+                });
+            }
+             if (gameState === GAME_STATE.ROUND_ACTIVE) {
+                 players.forEach(p => {
+                    if (p.isAlive && currentDisaster.update(p)) {
+                        killPlayer(p);
+                    }
+                });
+             }
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Slower loop for game state logic and timers
+        function tick() {
+            timer--;
+            timerEl.textContent = `Time: ${timer}`;
+
+            if (gameState === GAME_STATE.INTERMISSION) {
+                if (timer <= 0) {
+                    startGameRound();
+                }
+            } 
+            else if (gameState === GAME_STATE.ROUND_STARTING) {
+                if (timer <= 0) {
+                    gameState = GAME_STATE.ROUND_ACTIVE;
+                    timer = currentDisaster.duration;
+                    disasterNameEl.innerHTML = `Disaster: ${currentDisaster.name}`;
+                    logMessage(`DISASTER: ${currentDisaster.warning}`, 'log-event');
+                    currentDisaster.start();
+                }
+            } 
+            else if (gameState === GAME_STATE.ROUND_ACTIVE) {
+                const aliveCount = players.filter(p => p.isAlive).length;
+                if (timer <= 0 || aliveCount === 0) {
+                    gameState = GAME_STATE.ROUND_END;
+                    timer = 10;
+                    currentDisaster.end();
+                    
+                    const survivors = players.filter(p => p.isAlive);
+                    if(survivors.length > 0) {
+                        const survivorNames = survivors.map(p => p.emoji + (p.isUser ? ' (You)' : '')).join(', ');
+                        logMessage(`Survivors: ${survivorNames}`, 'log-survive');
+                    } else {
+                        logMessage('No one survived!', 'log-death');
+                    }
+                }
+            } 
+            else if (gameState === GAME_STATE.ROUND_END) {
+                if (timer <= 0) {
+                    gameState = GAME_STATE.INTERMISSION;
+                    timer = 15;
+                    disasterNameEl.textContent = `Disaster: ---`;
+                    logMessage('--------------------', 'log-info');
+                    logMessage('Intermission...', 'log-info');
+                }
+            }
+        }
+
+        function init() {
+            logMessage('Welcome to 2D Disaster Survival!', 'log-info');
+            logMessage('Use Arrow Keys or WAD to move and jump.', 'log-info');
+            logMessage('Survive the round!', 'log-info');
+            
+            window.addEventListener('keydown', e => keys[e.key] = true);
+            window.addEventListener('keyup', e => keys[e.key] = false);
+            
+            setInterval(tick, 1000); 
+            requestAnimationFrame(gameLoop);
+
+            startGameRound();
+            gameState = GAME_STATE.INTERMISSION;
+            timer = 15;
+            disasterNameEl.textContent = 'Disaster: ---';
+        }
+
+        init();
+    </script>
+</body>
+</html>

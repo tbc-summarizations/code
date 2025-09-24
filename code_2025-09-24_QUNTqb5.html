@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #222;
+            overflow: hidden;
+            font-family: 'Press Start 2P', cursive, sans-serif; /* A retro-style font */
+            color: white;
+        }
+
+        /* Import a retro font if desired, or use a system font */
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        #game-container {
+            width: 400px;
+            height: 600px;
+            background-color: #444;
+            border: 5px solid #888;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+        }
+
+        #road {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                to bottom,
+                #333 0px,
+                #333 50px,
+                #555 50px,
+                #555 100px
+            );
+            background-size: 100% 100px;
+            animation: roadScroll 2s linear infinite;
+        }
+
+        @keyframes roadScroll {
+            from { background-position: 0 0; }
+            to { background-position: 0 100px; }
+        }
+
+        #player-car {
+            position: absolute;
+            bottom: 30px;
+            left: calc(50% - 25px); /* Center the car initially */
+            width: 50px;
+            height: 80px;
+            background-color: transparent; /* Using emoji, so background is not strictly needed */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3em; /* Size for the emoji */
+            z-index: 10;
+            transition: left 0.05s linear; /* Smooth car movement */
+        }
+
+        .obstacle {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background-color: transparent; /* Using emoji */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5em; /* Size for the emoji */
+            z-index: 5;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 1.2em;
+            z-index: 15;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 2em;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.85);
+            padding: 20px 40px;
+            border-radius: 15px;
+            display: none; /* Hidden by default */
+            z-index: 20;
+            cursor: pointer;
+            line-height: 1.5;
+        }
+
+        #game-over span {
+            display: block;
+            font-size: 0.6em;
+            margin-top: 10px;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="road"></div>
+        <div id="player-car">🚗</div>
+        <div id="score">Score: 0</div>
+        <div id="game-over">
+            Game Over!
+            <span style="font-size: 0.5em;">Click to Restart</span>
+        </div>
+    </div>
+
+    <script>
+        const gameContainer = document.getElementById('game-container');
+        const playerCar = document.getElementById('player-car');
+        const scoreDisplay = document.getElementById('score');
+        const gameOverDisplay = document.getElementById('game-over');
+        const road = document.getElementById('road');
+
+        let carX = gameContainer.offsetWidth / 2 - playerCar.offsetWidth / 2;
+        const carMoveAmount = 20; // How much the car moves per key press
+        const gameWidth = gameContainer.offsetWidth;
+        const gameHeight = gameContainer.offsetHeight;
+
+        let obstacles = [];
+        let score = 0;
+        let gameOver = false;
+        let obstacleSpawnInterval;
+        let animationFrameId; // To store requestAnimationFrame ID
+
+        // Player car movement
+        document.addEventListener('keydown', (e) => {
+            if (gameOver) return;
+
+            if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
+                carX -= carMoveAmount;
+            } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
+                carX += carMoveAmount;
+            }
+
+            // Keep car within bounds
+            carX = Math.max(0, Math.min(gameWidth - playerCar.offsetWidth, carX));
+            playerCar.style.left = `${carX}px`;
+        });
+
+        function createObstacle() {
+            if (gameOver) return;
+
+            const obstacle = document.createElement('div');
+            obstacle.classList.add('obstacle');
+            obstacle.innerHTML = '🔲'; // Square emoji for obstacle
+            const obstacleWidth = 60; // Based on CSS
+            obstacle.style.left = `${Math.random() * (gameWidth - obstacleWidth)}px`; // Random X position
+            obstacle.style.top = `-80px`; // Start above the screen
+            gameContainer.appendChild(obstacle);
+            obstacles.push({ element: obstacle, y: -80, speed: 2 + Math.random() * 3 }); // Random speed
+        }
+
+        function updateGame() {
+            if (gameOver) {
+                cancelAnimationFrame(animationFrameId);
+                return;
+            }
+
+            // Update obstacles
+            for (let i = 0; i < obstacles.length; i++) {
+                const obs = obstacles[i];
+                obs.y += obs.speed;
+                obs.element.style.top = `${obs.y}px`;
+
+                // Remove if off-screen
+                if (obs.y > gameHeight) {
+                    obs.element.remove();
+                    obstacles.splice(i, 1);
+                    i--; // Adjust index due to splice
+                    score++;
+                    scoreDisplay.textContent = `Score: ${score}`;
+                } else {
+                    // Collision detection
+                    const carRect = playerCar.getBoundingClientRect();
+                    const obsRect = obs.element.getBoundingClientRect();
+
+                    // Adjust rects to be relative to gameContainer for simpler logic if needed
+                    // But getBoundingClientRect already gives viewport relative, which is fine for overlap check.
+                    if (
+                        carRect.left < obsRect.right &&
+                        carRect.right > obsRect.left &&
+                        carRect.top < obsRect.bottom &&
+                        carRect.bottom > obsRect.top
+                    ) {
+                        endGame();
+                        return; // Exit if game over
+                    }
+                }
+            }
+
+            animationFrameId = requestAnimationFrame(updateGame);
+        }
+
+        function startGame() {
+            gameOver = false;
+            score = 0;
+            scoreDisplay.textContent = `Score: 0`;
+            gameOverDisplay.style.display = 'none';
+            road.style.animationPlayState = 'running'; // Ensure road animation is running
+
+            // Clear existing obstacles
+            obstacles.forEach(obs => obs.element.remove());
+            obstacles = [];
+
+            // Reset car position
+            carX = gameContainer.offsetWidth / 2 - playerCar.offsetWidth / 2;
+            playerCar.style.left = `${carX}px`;
+
+            // Start spawning obstacles
+            // Clear any existing interval first to prevent multiple intervals
+            if (obstacleSpawnInterval) {
+                clearInterval(obstacleSpawnInterval);
+            }
+            obstacleSpawnInterval = setInterval(createObstacle, 1000); // Every 1 second
+
+            // Start game loop
+            // Clear any existing animation frame first
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            animationFrameId = requestAnimationFrame(updateGame);
+        }
+
+        function endGame() {
+            gameOver = true;
+            clearInterval(obstacleSpawnInterval);
+            cancelAnimationFrame(animationFrameId); // Stop the game loop
+            gameOverDisplay.style.display = 'block';
+            road.style.animationPlayState = 'paused'; // Pause road animation
+        }
+
+        // Start the game when the page loads
+        startGame();
+
+        // Allow restarting by clicking game over message
+        gameOverDisplay.addEventListener('click', startGame);
+
+    </script>
+</body>
+</html>
